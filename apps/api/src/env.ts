@@ -5,7 +5,7 @@ const schema = z.object({
   JWT_SECRET: z.string().min(32, "JWT_SECRET must be at least 32 characters"),
   CODE_PEPPER: z.string().min(16, "CODE_PEPPER must be at least 16 characters"),
   RESEND_API_KEY: z.string().optional(),
-  MAIL_FROM: z.string().default("Dandelist <signin@dandelist.com>"),
+  MAIL_FROM: z.string().default("Dandelist <signin@knightaiav.com>"),
   JUDGE_EMAIL: z.string().email().optional(),
   JUDGE_CODE: z.string().regex(/^\d{6}$/).optional(),
   MODEL_API_KEY: z.string().optional(),
