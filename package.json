@@ -1,7 +1,7 @@
 {
   "name": "dandelist",
   "private": true,
-  "packageManager": "pnpm@10.17.1",
+  "packageManager": "pnpm@10.34.6",
   "engines": {
     "node": ">=22"
   },

@@ -5,6 +5,12 @@ packages:
 # Refuse any package version published less than 14 days ago (minutes).
 minimumReleaseAge: 20160
 
+# Transitive dependencies may only come from the registry, never git URLs or tarballs.
+blockExoticSubdeps: true
+
+# Refuse a package version whose publish is less trusted than earlier versions of it.
+trustPolicy: no-downgrade
+
 # Only these dependencies may run install scripts.
 onlyBuiltDependencies:
   - esbuild
