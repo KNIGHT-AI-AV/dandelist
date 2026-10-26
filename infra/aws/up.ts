@@ -67,7 +67,12 @@ async function network(): Promise<{ sgId: string; subnetGroup: string }> {
   if (!vpc?.VpcId) throw new Error("No default VPC in us-east-1");
   let sg = (await ec2.send(new DescribeSecurityGroupsCommand({ Filters: [{ Name: "group-name", Values: ["dandelist-db"] }, { Name: "vpc-id", Values: [vpc.VpcId] }] }))).SecurityGroups?.[0];
   if (!sg) {
-    const { GroupId } = await ec2.send(new CreateSecurityGroupCommand({ GroupName: "dandelist-db", Description: "Dandelist Postgres, TLS-only", VpcId: vpc.VpcId }));
+    const { GroupId } = await ec2.send(new CreateSecurityGroupCommand({
+      GroupName: "dandelist-db",
+      Description: "Dandelist Postgres, TLS-only",
+      VpcId: vpc.VpcId,
+      TagSpecifications: [{ ResourceType: "security-group", Tags: TAGS }],
+    }));
     // App Runner has no fixed egress IPs without a NAT gateway, so Postgres is reachable publicly; RDS for
     // Postgres 15+ enforces TLS by default and the password is 40 random characters.
     await ec2.send(new AuthorizeSecurityGroupIngressCommand({ GroupId, IpPermissions: [{ IpProtocol: "tcp", FromPort: 5432, ToPort: 5432, IpRanges: [{ CidrIp: "0.0.0.0/0", Description: "Postgres over TLS" }] }] }));
