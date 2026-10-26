@@ -57,7 +57,8 @@ export function authRoutes(deps: AuthDeps) {
   const { db } = deps;
   const startsPerIp = new RateLimiter(10, 60 * 60 * 1000);
   const verifiesPerIp = new RateLimiter(30, 60 * 60 * 1000);
-  const sendsGlobal = new RateLimiter(300, 60 * 60 * 1000);
+  const sendsNew = new RateLimiter(300, 60 * 60 * 1000);
+  const sendsKnown = new RateLimiter(1000, 60 * 60 * 1000);
   const ip = (c: { req: { header(n: string): string | undefined } }) => clientIp(c.req.header("X-Forwarded-For"));
 
   async function issueSession(userId: string) {
@@ -86,9 +87,16 @@ export function authRoutes(deps: AuthDeps) {
     if (Number(recent.rows[0]?.n ?? 0) >= MAX_CODES_PER_HOUR) return c.body(null, 204);
 
     const isJudge = deps.judge && email === normalizeEmail(deps.judge.email);
-    // The global cap only throttles brand-new addresses, so a flood of fake signups can't block existing users.
-    const known = (await db.query("select 1 from users where email = $1", [email])).rows.length > 0;
-    if (!isJudge && !known && !sendsGlobal.take("new", nowMs)) return c.json({ error: "Sign-up is busy right now. Try again in a few minutes." }, 429);
+    // Separate hourly send budgets for new and existing addresses, so a flood of fake signups can't starve
+    // existing users. Hitting either one answers exactly like a normal send, so the reply never reveals
+    // whether an account exists.
+    if (!isJudge) {
+      const known = (await db.query("select 1 from users where email = $1", [email])).rows.length > 0;
+      if (!(known ? sendsKnown : sendsNew).take("all", nowMs)) {
+        console.warn(`sign-in email budget reached (${known ? "existing" : "new"} addresses); skipping send`);
+        return c.body(null, 204);
+      }
+    }
     const code = isJudge ? deps.judge!.code : newCode();
     const expires = new Date(nowMs + CODE_TTL_MS).toISOString();
     await db.query("insert into email_codes (email, code_hash, expires_at, created_at) values ($1, $2, $3, $4)", [
