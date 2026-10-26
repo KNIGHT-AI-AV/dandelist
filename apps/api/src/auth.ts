@@ -2,6 +2,7 @@ import { Hono, type MiddlewareHandler } from "hono";
 import { z } from "zod";
 import type { Db } from "./db";
 import type { Mailer } from "./mailer";
+import { RateLimiter, clientIp } from "./ratelimit";
 import {
   CODE_TTL_MS,
   MAX_CODE_ATTEMPTS,
@@ -54,6 +55,10 @@ export function requireAuth(deps: Pick<AuthDeps, "db" | "jwtSecret" | "now">): M
 export function authRoutes(deps: AuthDeps) {
   const app = new Hono<{ Variables: AuthVars }>();
   const { db } = deps;
+  const startsPerIp = new RateLimiter(10, 60 * 60 * 1000);
+  const verifiesPerIp = new RateLimiter(30, 60 * 60 * 1000);
+  const sendsGlobal = new RateLimiter(300, 60 * 60 * 1000);
+  const ip = (c: { req: { header(n: string): string | undefined } }) => clientIp(c.req.header("X-Forwarded-For"));
 
   async function issueSession(userId: string) {
     const { token, hash } = newRefreshToken();
@@ -70,14 +75,20 @@ export function authRoutes(deps: AuthDeps) {
   app.post("/email/start", async (c) => {
     const parsed = emailBody.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: "Enter a valid email address." }, 400);
+    const nowMs = deps.now().getTime();
+    if (!startsPerIp.take(ip(c), nowMs)) return c.json({ error: "Too many sign-in attempts from this network. Try again in an hour." }, 429);
     const email = normalizeEmail(parsed.data.email);
-    const hourAgo = new Date(deps.now().getTime() - 60 * 60 * 1000).toISOString();
+
+    // Past the per-email cap we stop sending but still answer 204, so a stranger can't lock someone out:
+    // the codes already in their inbox keep working.
+    const hourAgo = new Date(nowMs - 60 * 60 * 1000).toISOString();
     const recent = await db.query<{ n: string }>("select count(*) as n from email_codes where email = $1 and created_at > $2", [email, hourAgo]);
-    if (Number(recent.rows[0]?.n ?? 0) >= MAX_CODES_PER_HOUR) return c.json({ error: "Too many codes requested. Wait an hour and try again." }, 429);
+    if (Number(recent.rows[0]?.n ?? 0) >= MAX_CODES_PER_HOUR) return c.body(null, 204);
 
     const isJudge = deps.judge && email === normalizeEmail(deps.judge.email);
+    if (!isJudge && !sendsGlobal.take("all", nowMs)) return c.json({ error: "Sign-in is busy right now. Try again in a few minutes." }, 429);
     const code = isJudge ? deps.judge!.code : newCode();
-    const expires = new Date(deps.now().getTime() + CODE_TTL_MS).toISOString();
+    const expires = new Date(nowMs + CODE_TTL_MS).toISOString();
     await db.query("insert into email_codes (email, code_hash, expires_at, created_at) values ($1, $2, $3, $4)", [
       email,
       hashCode(deps.codePepper, email, code),
@@ -91,19 +102,24 @@ export function authRoutes(deps: AuthDeps) {
   app.post("/email/verify", async (c) => {
     const parsed = verifyBody.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: "Enter the 6-digit code from your email." }, 400);
+    if (!verifiesPerIp.take(ip(c), deps.now().getTime())) return c.json({ error: "Too many tries from this network. Try again in an hour." }, 429);
     const email = normalizeEmail(parsed.data.email);
-    const { rows } = await db.query<{ id: string; code_hash: string; attempts: number }>(
-      "select id, code_hash, attempts from email_codes where email = $1 and consumed_at is null and expires_at > $2 order by created_at desc limit 1",
-      [email, deps.now().toISOString()],
+    const now = deps.now().toISOString();
+    const active = await db.query("select 1 from email_codes where email = $1 and consumed_at is null and expires_at > $2 limit 1", [email, now]);
+    if (!active.rows.length) return c.json({ error: "That code has expired. Request a new one." }, 400);
+
+    // Every try counts against every active code, atomically, before any comparison: parallel guesses can't
+    // exceed the limit, and any code still in the inbox works.
+    const counted = await db.query<{ id: string; code_hash: string }>(
+      "update email_codes set attempts = attempts + 1 where email = $1 and consumed_at is null and expires_at > $2 and attempts < $3 returning id, code_hash",
+      [email, now, MAX_CODE_ATTEMPTS],
     );
-    const row = rows[0];
-    if (!row) return c.json({ error: "That code has expired. Request a new one." }, 400);
-    if (row.attempts >= MAX_CODE_ATTEMPTS) return c.json({ error: "Too many wrong tries. Request a new code." }, 400);
-    if (!sameHash(row.code_hash, hashCode(deps.codePepper, email, parsed.data.code))) {
-      await db.query("update email_codes set attempts = attempts + 1 where id = $1", [row.id]);
-      return c.json({ error: "That code doesn't match. Check the email and try again." }, 400);
-    }
-    await db.query("update email_codes set consumed_at = $2 where id = $1", [row.id, deps.now().toISOString()]);
+    if (!counted.rows.length) return c.json({ error: "Too many wrong tries. Request a new code." }, 400);
+    const submitted = hashCode(deps.codePepper, email, parsed.data.code);
+    const row = counted.rows.find((r) => sameHash(r.code_hash, submitted));
+    if (!row) return c.json({ error: "That code doesn't match. Check the email and try again." }, 400);
+    const consumed = await db.query("update email_codes set consumed_at = $2 where id = $1 and consumed_at is null returning id", [row.id, now]);
+    if (!consumed.rows.length) return c.json({ error: "That code was already used. Request a new one." }, 400);
     await db.query("insert into users (email) values ($1) on conflict (email) do nothing", [email]);
     const user = (await db.query<{ id: string; email: string }>("select id, email from users where email = $1", [email])).rows[0]!;
     return c.json({ user, ...(await issueSession(user.id)) });

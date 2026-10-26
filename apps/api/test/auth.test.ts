@@ -76,9 +76,38 @@ describe("email-code sign-in", () => {
     expect(res.status).toBe(400);
   });
 
-  it("limits code requests to five an hour", async () => {
+  it("stops emailing after five codes an hour without locking the owner out", async () => {
     for (let i = 0; i < 5; i++) expect((await post("/auth/email/start", { email: "di@example.com" })).status).toBe(204);
-    expect((await post("/auth/email/start", { email: "di@example.com" })).status).toBe(429);
+    expect((await post("/auth/email/start", { email: "di@example.com" })).status).toBe(204);
+    expect(mail).toHaveLength(5);
+    const res = await post("/auth/email/verify", { email: "di@example.com", code: mail.at(-1)!.code });
+    expect(res.status).toBe(200);
+  });
+
+  it("limits sign-in starts per network", async () => {
+    const fromIp = (email: string) =>
+      app.request("/auth/email/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Forwarded-For": "6.6.6.6, 203.0.113.9" },
+        body: JSON.stringify({ email }),
+      });
+    for (let i = 0; i < 10; i++) expect((await fromIp(`u${i}@example.com`)).status).toBe(204);
+    expect((await fromIp("u10@example.com")).status).toBe(429);
+    expect((await post("/auth/email/start", { email: "other@example.com" })).status).toBe(204);
+  });
+
+  it("caps parallel wrong guesses at five and never reuses a code", async () => {
+    await post("/auth/email/start", { email: "ed@example.com" });
+    const code = mail.at(-1)!.code;
+    const wrong = code === "000000" ? "111111" : "000000";
+    await Promise.all(Array.from({ length: 10 }, () => post("/auth/email/verify", { email: "ed@example.com", code: wrong })));
+    expect((await db.query("select attempts from email_codes where email = $1", ["ed@example.com"])).rows[0]).toEqual({ attempts: 5 });
+    expect((await post("/auth/email/verify", { email: "ed@example.com", code })).status).toBe(400);
+
+    await post("/auth/email/start", { email: "fi@example.com" });
+    const good = mail.at(-1)!.code;
+    expect((await post("/auth/email/verify", { email: "fi@example.com", code: good })).status).toBe(200);
+    expect((await post("/auth/email/verify", { email: "fi@example.com", code: good })).status).toBe(400);
   });
 
   it("lets the judge account in with its fixed code and sends no email", async () => {
