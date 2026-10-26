@@ -1,0 +1,23 @@
+{
+  "name": "@dandelist/infra-aws",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "whoami": "tsx whoami.ts",
+    "provision": "tsx up.ts"
+  },
+  "dependencies": {
+    "@aws-sdk/client-apprunner": "^3.1150.0",
+    "@aws-sdk/client-ec2": "^3.1150.0",
+    "@aws-sdk/client-rds": "^3.1150.0",
+    "@aws-sdk/client-s3": "^3.1150.0",
+    "@aws-sdk/client-secrets-manager": "^3.1150.0",
+    "@aws-sdk/client-sts": "^3.1150.0",
+    "tsx": "^4.23.15"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "typescript": "^5.9.3"
+  }
+}

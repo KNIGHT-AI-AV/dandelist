@@ -1,0 +1,25 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    { "Sid": "AppRunner", "Effect": "Allow", "Action": "apprunner:*", "Resource": "*" },
+    { "Sid": "EcrAuth", "Effect": "Allow", "Action": ["ecr:GetAuthorizationToken", "ecr:CreateRepository", "ecr:DescribeRepositories"], "Resource": "*" },
+    { "Sid": "EcrRepo", "Effect": "Allow", "Action": "ecr:*", "Resource": "arn:aws:ecr:*:ACCOUNT_ID:repository/dandelist*" },
+    { "Sid": "Rds", "Effect": "Allow", "Action": "rds:*", "Resource": [
+      "arn:aws:rds:*:ACCOUNT_ID:db:dandelist*",
+      "arn:aws:rds:*:ACCOUNT_ID:subgrp:dandelist*",
+      "arn:aws:rds:*:ACCOUNT_ID:snapshot:dandelist*",
+      "arn:aws:rds:*:ACCOUNT_ID:pg:dandelist*"
+    ] },
+    { "Sid": "RdsShared", "Effect": "Allow", "Action": ["rds:Describe*", "rds:CreateDBSubnetGroup", "rds:AddTagsToResource", "rds:ListTagsForResource"], "Resource": "*" },
+    { "Sid": "Network", "Effect": "Allow", "Action": ["ec2:Describe*", "ec2:CreateSecurityGroup", "ec2:AuthorizeSecurityGroupIngress", "ec2:CreateTags", "ec2:CreateVpcEndpoint"], "Resource": "*" },
+    { "Sid": "S3", "Effect": "Allow", "Action": "s3:*", "Resource": ["arn:aws:s3:::dandelist-*", "arn:aws:s3:::dandelist-*/*"] },
+    { "Sid": "S3Account", "Effect": "Allow", "Action": ["s3:ListAllMyBuckets", "s3:CreateBucket"], "Resource": "*" },
+    { "Sid": "Secrets", "Effect": "Allow", "Action": "secretsmanager:*", "Resource": "arn:aws:secretsmanager:*:ACCOUNT_ID:secret:dandelist*" },
+    { "Sid": "SecretsAccount", "Effect": "Allow", "Action": ["secretsmanager:CreateSecret", "secretsmanager:ListSecrets", "secretsmanager:GetRandomPassword"], "Resource": "*" },
+    { "Sid": "Roles", "Effect": "Allow", "Action": ["iam:CreateRole", "iam:GetRole", "iam:AttachRolePolicy", "iam:DetachRolePolicy", "iam:PutRolePolicy", "iam:DeleteRolePolicy", "iam:PassRole", "iam:TagRole", "iam:ListAttachedRolePolicies", "iam:ListRolePolicies"], "Resource": "arn:aws:iam::ACCOUNT_ID:role/dandelist-*" },
+    { "Sid": "ServiceLinkedRoles", "Effect": "Allow", "Action": "iam:CreateServiceLinkedRole", "Resource": "*", "Condition": { "StringLike": { "iam:AWSServiceName": ["apprunner.amazonaws.com", "rds.amazonaws.com"] } } },
+    { "Sid": "Logs", "Effect": "Allow", "Action": ["logs:DescribeLogGroups", "logs:DescribeLogStreams", "logs:GetLogEvents", "logs:FilterLogEvents"], "Resource": "*" },
+    { "Sid": "CostRead", "Effect": "Allow", "Action": ["budgets:ViewBudget", "ce:GetCostAndUsage"], "Resource": "*" },
+    { "Sid": "Whoami", "Effect": "Allow", "Action": "sts:GetCallerIdentity", "Resource": "*" }
+  ]
+}
