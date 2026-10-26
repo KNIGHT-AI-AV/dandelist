@@ -7,7 +7,8 @@
     "whoami": "tsx whoami.ts",
     "provision": "tsx up.ts",
     "migrate": "tsx migrate.ts",
-    "deploy": "tsx deploy.ts"
+    "deploy": "tsx deploy.ts",
+    "smoke": "tsx smoke.ts"
   },
   "dependencies": {
     "@aws-sdk/client-apprunner": "^3.1150.0",
