@@ -1,0 +1,10 @@
+**/node_modules
+**/.expo
+**/dist
+**/.env
+**/.env.*
+.git
+.claude
+# The app isn't part of the API image, but pnpm needs its manifest to match the lockfile.
+apps/mobile/*
+!apps/mobile/package.json

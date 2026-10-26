@@ -1,0 +1,15 @@
+# CodeBuild project dandelist-api-image: builds the API image from this public repo and pushes it to ECR,
+# where App Runner picks up :latest automatically.
+version: 0.2
+env:
+  shell: bash
+phases:
+  pre_build:
+    commands:
+      - aws ecr get-login-password --region "$AWS_DEFAULT_REGION" | docker login --username AWS --password-stdin "${REPO_URI%%/*}"
+  build:
+    commands:
+      - docker build -f apps/api/Dockerfile -t "$REPO_URI:latest" -t "$REPO_URI:${CODEBUILD_RESOLVED_SOURCE_VERSION:0:12}" .
+  post_build:
+    commands:
+      - docker push --all-tags "$REPO_URI"
