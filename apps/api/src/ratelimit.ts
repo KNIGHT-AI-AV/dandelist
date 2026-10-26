@@ -29,7 +29,11 @@ export class RateLimiter {
   }
 }
 
-/** The client address as Railway's edge saw it: the last X-Forwarded-For hop, which the client cannot forge. */
+/**
+ * The client address as Railway's edge saw it: the last X-Forwarded-For hop, which the edge appends and the client
+ * cannot forge. This holds only because the API is reachable solely through Railway's public edge; if it is ever
+ * exposed another way, read the socket address instead.
+ */
 export function clientIp(forwardedFor: string | undefined, fallback = "unknown"): string {
   const hops = (forwardedFor ?? "").split(",").map((s) => s.trim()).filter(Boolean);
   return hops.at(-1) ?? fallback;

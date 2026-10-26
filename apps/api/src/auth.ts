@@ -86,7 +86,9 @@ export function authRoutes(deps: AuthDeps) {
     if (Number(recent.rows[0]?.n ?? 0) >= MAX_CODES_PER_HOUR) return c.body(null, 204);
 
     const isJudge = deps.judge && email === normalizeEmail(deps.judge.email);
-    if (!isJudge && !sendsGlobal.take("all", nowMs)) return c.json({ error: "Sign-in is busy right now. Try again in a few minutes." }, 429);
+    // The global cap only throttles brand-new addresses, so a flood of fake signups can't block existing users.
+    const known = (await db.query("select 1 from users where email = $1", [email])).rows.length > 0;
+    if (!isJudge && !known && !sendsGlobal.take("new", nowMs)) return c.json({ error: "Sign-up is busy right now. Try again in a few minutes." }, 429);
     const code = isJudge ? deps.judge!.code : newCode();
     const expires = new Date(nowMs + CODE_TTL_MS).toISOString();
     await db.query("insert into email_codes (email, code_hash, expires_at, created_at) values ($1, $2, $3, $4)", [
