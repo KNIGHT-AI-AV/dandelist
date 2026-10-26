@@ -100,24 +100,27 @@ if (exists) await cb.send(new UpdateProjectCommand(project));
 else await cb.send(new CreateProjectCommand(project));
 if (!exists) console.log(`created build project ${PROJECT}`);
 
-const buildId = (await cb.send(new StartBuildCommand({ projectName: PROJECT, sourceVersion: "main" }))).build!.id!;
-console.log(`building image (${buildId.split(":")[1]})`);
-let build;
-for (;;) {
-  await sleep(15_000);
-  build = (await cb.send(new BatchGetBuildsCommand({ ids: [buildId] }))).builds![0]!;
-  if (build.buildStatus !== "IN_PROGRESS") break;
-  console.log(`  ${build.currentPhase?.toLowerCase()}`);
-}
-if (build.buildStatus !== "SUCCEEDED") {
-  const { groupName, streamName } = build.logs ?? {};
-  if (groupName && streamName) {
-    const events = (await new CloudWatchLogsClient({ region, credentials }).send(new GetLogEventsCommand({ logGroupName: groupName, logStreamName: streamName, startFromHead: false, limit: 40 }))).events ?? [];
-    console.log(events.map((e) => e.message?.trimEnd()).join("\n"));
+// SKIP_BUILD=1 redeploys the image already in ECR, for retries after a failure past this point.
+if (!process.env.SKIP_BUILD) {
+  const buildId = (await cb.send(new StartBuildCommand({ projectName: PROJECT, sourceVersion: "main" }))).build!.id!;
+  console.log(`building image (${buildId.split(":")[1]})`);
+  let build;
+  for (;;) {
+    await sleep(15_000);
+    build = (await cb.send(new BatchGetBuildsCommand({ ids: [buildId] }))).builds![0]!;
+    if (build.buildStatus !== "IN_PROGRESS") break;
+    console.log(`  ${build.currentPhase?.toLowerCase()}`);
   }
-  throw new Error(`image build ${build.buildStatus}`);
+  if (build.buildStatus !== "SUCCEEDED") {
+    const { groupName, streamName } = build.logs ?? {};
+    if (groupName && streamName) {
+      const events = (await new CloudWatchLogsClient({ region, credentials }).send(new GetLogEventsCommand({ logGroupName: groupName, logStreamName: streamName, startFromHead: false, limit: 40 }))).events ?? [];
+      console.log(events.map((e) => e.message?.trimEnd()).join("\n"));
+    }
+    throw new Error(`image build ${build.buildStatus}`);
+  }
+  console.log(`image pushed: ${repoUri}:latest`);
 }
-console.log(`image pushed: ${repoUri}:latest`);
 
 // Service
 const source: SourceConfiguration = {
