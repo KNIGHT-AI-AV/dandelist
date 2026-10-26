@@ -11,3 +11,5 @@ coverage/
 *.tsbuildinfo
 ios/
 android/
+.claude/
+expo-env.d.ts

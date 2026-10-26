@@ -1,11 +1,11 @@
 import { serve } from "@hono/node-server";
 import { createApp } from "./app";
-import { migrate, pgDb } from "./db";
+import { migrate, openDb } from "./db";
 import { readEnv } from "./env";
 import { consoleMailer, resendMailer } from "./mailer";
 
 const env = readEnv();
-const db = pgDb(env.DATABASE_URL);
+const db = await openDb(env.DATABASE_URL);
 const applied = await migrate(db);
 if (applied.length) console.log(`migrations applied: ${applied.join(", ")}`);
 

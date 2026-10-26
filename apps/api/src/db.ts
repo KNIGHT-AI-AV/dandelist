@@ -21,6 +21,19 @@ export function pgDb(connectionString: string): Db & { end(): Promise<void> } {
   };
 }
 
+/** Opens Postgres, or for local development a PGlite database when DATABASE_URL is `pglite:<dir>` (or `pglite:` for memory). */
+export async function openDb(url: string): Promise<Db & { end(): Promise<void> }> {
+  if (!url.startsWith("pglite:")) return pgDb(url);
+  const { PGlite } = await import("@electric-sql/pglite");
+  const dir = url.slice("pglite:".length);
+  const lite = dir ? new PGlite(dir) : new PGlite();
+  return {
+    query: <T>(text: string, params?: unknown[]) => lite.query(text, params) as Promise<{ rows: T[] }>,
+    exec: (sql: string) => lite.exec(sql),
+    end: () => lite.close(),
+  };
+}
+
 const SQL_DIR = fileURLToPath(new URL("../sql", import.meta.url));
 
 /** Applies every sql/NNN_*.sql file once, in name order. */
