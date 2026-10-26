@@ -67,7 +67,7 @@ export default function NewWish() {
 
       {preview ? (
         <Card>
-          <Text style={[type.small, { color: p.muted, fontWeight: "600" }]}>What it really costs</Text>
+          <Text style={[type.label, { color: p.muted }]}>What it really costs</Text>
           <Row label="Upfront" value={formatCents(upfrontCents ?? 0)} />
           <Row label="Every month" value={formatCents(preview.monthly)} hint="The running cost you'd actually pay" />
           <Row label={`Over ${years} ${years === 1 ? "year" : "years"}`} value={formatCents(preview.total)} />

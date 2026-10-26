@@ -33,7 +33,7 @@ export function Field({ label, ...props }: TextInputProps & { label: string }) {
   const p = usePalette();
   return (
     <View style={{ gap: space.xs }}>
-      <Text style={[type.small, { color: p.muted, fontWeight: "600" }]}>{label}</Text>
+      <Text style={[type.label, { color: p.muted }]}>{label}</Text>
       <TextInput
         accessibilityLabel={label}
         placeholderTextColor={p.muted}
@@ -58,20 +58,20 @@ export function Button({ label, onPress, busy = false, kind = "primary", disable
         alignItems: "center",
         justifyContent: "center",
         paddingHorizontal: space.lg,
-        backgroundColor: primary ? p.ink : "transparent",
+        backgroundColor: primary ? p.accent : "transparent",
         borderWidth: primary ? 0 : 1,
         borderColor: p.line,
         opacity: disabled ? 0.5 : pressed ? 0.85 : 1,
       })}
     >
-      {busy ? <ActivityIndicator color={primary ? p.bg : p.ink} /> : <Text style={[type.body, { fontWeight: "600", color: primary ? p.bg : p.ink }]}>{label}</Text>}
+      {busy ? <ActivityIndicator color={primary ? p.onAccent : p.ink} /> : <Text style={[type.label, { fontSize: 15, color: primary ? p.onAccent : p.ink }]}>{label}</Text>}
     </Pressable>
   );
 }
 
 export function Card({ children }: { children: ReactNode }) {
   const p = usePalette();
-  return <View style={{ backgroundColor: p.surface, borderRadius: radius.md, borderWidth: 1, borderColor: p.line, padding: space.lg, gap: space.sm }}>{children}</View>;
+  return <View style={{ backgroundColor: p.glass, borderRadius: radius.md, borderWidth: 1, borderColor: p.line, padding: space.lg, gap: space.sm }}>{children}</View>;
 }
 
 export function Row({ label, value, hint }: { label: string; value: string; hint?: string }) {
@@ -91,7 +91,7 @@ export function Segmented<T extends string>({ options, value, onChange, label }:
   const p = usePalette();
   return (
     <View style={{ gap: space.xs }}>
-      <Text style={[type.small, { color: p.muted, fontWeight: "600" }]}>{label}</Text>
+      <Text style={[type.label, { color: p.muted }]}>{label}</Text>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.sm }} accessibilityRole="radiogroup" accessibilityLabel={label}>
         {options.map((o) => {
           const on = o.value === value;

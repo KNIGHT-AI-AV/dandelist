@@ -30,7 +30,7 @@ export default function Wishes() {
       ) : (
         <>
           <Card>
-            <Text style={[type.small, { color: p.muted, fontWeight: "600" }]}>{`Your life list · ${wishes.length} ${wishes.length === 1 ? "wish" : "wishes"}`}</Text>
+            <Text style={[type.label, { color: p.muted }]}>{`Your life list · ${wishes.length} ${wishes.length === 1 ? "wish" : "wishes"}`}</Text>
             <Row label="Upfront" value={formatCents(upfrontCashCents(items))} />
             <Row label="Every month" value={formatCents(monthly)} hint="Running costs you'd actually pay" />
             <Row label="Over 5 years" value={formatCents(horizonCashOutlay(items, 5))} />
