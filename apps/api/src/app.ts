@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { authRoutes, requireAuth, type AuthDeps, type AuthVars } from "./auth";
+import { wishRoutes } from "./wishes";
 
 export interface AppDeps extends AuthDeps {
   webOrigins: string[];
@@ -18,6 +19,7 @@ export function createApp(deps: AppDeps) {
   });
 
   app.route("/auth", authRoutes(deps));
+  app.route("/wishes", wishRoutes(deps));
 
   app.use("/me", requireAuth(deps));
   app.get("/me", async (c) => {

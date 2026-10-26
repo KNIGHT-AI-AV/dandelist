@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -9,8 +10,16 @@ export interface Db {
   exec(sql: string): Promise<unknown>;
 }
 
+const RDS_CA = fileURLToPath(new URL("../certs/rds-global-bundle.pem", import.meta.url));
+
+/** RDS certificates chain to Amazon's own CAs, which Node doesn't trust by default; verify against the bundle AWS publishes. */
+function tlsFor(connectionString: string): pg.PoolConfig["ssl"] {
+  const host = new URL(connectionString).hostname;
+  return host.endsWith(".rds.amazonaws.com") ? { ca: readFileSync(RDS_CA, "utf8"), rejectUnauthorized: true } : undefined;
+}
+
 export function pgDb(connectionString: string): Db & { end(): Promise<void> } {
-  const pool = new pg.Pool({ connectionString, max: 10 });
+  const pool = new pg.Pool({ connectionString, ssl: tlsFor(connectionString), max: 10 });
   return {
     query: async <T>(text: string, params?: unknown[]) => {
       const r = await pool.query(text, params as unknown[]);

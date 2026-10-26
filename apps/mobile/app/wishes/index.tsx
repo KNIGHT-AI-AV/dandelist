@@ -1,17 +1,18 @@
 import { horizonCashOutlay, recurringBreakdown, upfrontCashCents } from "@dandelist/cost";
 import { Redirect, router } from "expo-router";
-import { Text, View } from "react-native";
-import { Body, Button, Card, Row, Screen, Title } from "../../components/ui";
+import { ActivityIndicator, Text, View } from "react-native";
+import { Body, Button, Card, ErrorText, Row, Screen, Title } from "../../components/ui";
 import { useAuth } from "../../lib/auth";
 import { formatCents } from "../../lib/money";
 import { space, type, usePalette } from "../../lib/theme";
 import { useWishes } from "../../lib/wishes";
 
 const KIND_LABEL = { buy: "Buy", own: "Own", do: "Do", visit: "Visit" } as const;
+const TIER_LABEL = { must: "Must", nice: "Nice", dream: "Dream" } as const;
 
 export default function Wishes() {
   const auth = useAuth();
-  const { wishes } = useWishes();
+  const { wishes, status, error, reload } = useWishes();
   const p = usePalette();
   if (auth.status === "signedOut") return <Redirect href="/sign-in" />;
 
@@ -21,7 +22,14 @@ export default function Wishes() {
   return (
     <Screen>
       <Title>Wishes</Title>
-      {wishes.length === 0 ? (
+      {status === "loading" && wishes.length === 0 ? (
+        <ActivityIndicator color={p.accent} />
+      ) : status === "error" ? (
+        <Card>
+          <ErrorText>{error}</ErrorText>
+          <Button label="Try again" onPress={() => reload()} />
+        </Card>
+      ) : wishes.length === 0 ? (
         <Card>
           <Text style={[type.title, { color: p.ink }]}>Add your first wish</Text>
           <Body muted>Something to buy, a place to visit, a thing to do. Dandelist shows what it costs upfront, every month, and over the years.</Body>
@@ -41,7 +49,7 @@ export default function Wishes() {
               <Card key={w.id}>
                 <View style={{ flexDirection: "row", justifyContent: "space-between", gap: space.md }}>
                   <Text style={[type.title, { color: p.ink, flexShrink: 1 }]}>{w.name}</Text>
-                  <Text style={[type.small, { color: p.muted }]}>{KIND_LABEL[w.kind]}</Text>
+                  <Text style={[type.small, { color: p.muted }]}>{`${KIND_LABEL[w.kind]} · ${TIER_LABEL[w.tier]}`}</Text>
                 </View>
                 <Row label="Upfront" value={formatCents(w.item.upfrontCents)} />
                 {w.item.recurring.length ? <Row label="Monthly" value={formatCents(recurringBreakdown([w.item]).perMonth)} /> : null}

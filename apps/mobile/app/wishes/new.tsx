@@ -5,13 +5,18 @@ import { Text } from "react-native";
 import { Body, Button, Card, ErrorText, Field, Row, Screen, Segmented, Title } from "../../components/ui";
 import { formatCents, parseDollars } from "../../lib/money";
 import { type, usePalette } from "../../lib/theme";
-import { useWishes, type WishKind } from "../../lib/wishes";
+import { useWishes, type WishKind, type WishTier } from "../../lib/wishes";
 
 const KINDS: { value: WishKind; label: string }[] = [
   { value: "buy", label: "Buy" },
   { value: "own", label: "Own" },
   { value: "do", label: "Do" },
   { value: "visit", label: "Visit" },
+];
+const TIERS: { value: WishTier; label: string }[] = [
+  { value: "must", label: "Must" },
+  { value: "nice", label: "Nice" },
+  { value: "dream", label: "Dream" },
 ];
 const PERIODS: { value: Period; label: string }[] = [
   { value: "month", label: "Monthly" },
@@ -30,11 +35,13 @@ export default function NewWish() {
   const p = usePalette();
   const [name, setName] = useState("");
   const [kind, setKind] = useState<WishKind>("buy");
+  const [tier, setTier] = useState<WishTier>("nice");
   const [price, setPrice] = useState("");
   const [running, setRunning] = useState("");
   const [period, setPeriod] = useState<Period>("month");
   const [horizon, setHorizon] = useState("5");
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   const upfrontCents = price.trim() ? parseDollars(price) : 0;
   const recurringCents = running.trim() ? parseDollars(running) : 0;
@@ -47,12 +54,20 @@ export default function NewWish() {
     return { monthly: recurringBreakdown([item]).perMonth, total, equivalent: equivalentMonthly(total, years) };
   }, [upfrontCents, recurringCents, period, years]);
 
-  function save() {
+  async function save() {
     if (!name.trim()) return setError("Give the wish a name.");
     if (upfrontCents === null) return setError("Enter the price as a number, like 2400 or 2,400.50.");
     if (recurringCents === null) return setError("Enter the running cost as a number, or leave it empty.");
-    add({ name, kind, upfrontCents, recurringCents, period });
-    router.back();
+    setBusy(true);
+    setError(null);
+    try {
+      await add({ name, kind, tier, upfrontCents, recurringCents, period });
+      router.back();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't save the wish.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -60,6 +75,7 @@ export default function NewWish() {
       <Title>New wish</Title>
       <Field label="What is it?" value={name} onChangeText={setName} placeholder="Leica Q3, a week in Lisbon…" />
       <Segmented<WishKind> label="Type" options={KINDS} value={kind} onChange={setKind} />
+      <Segmented<WishTier> label="How much you want it" options={TIERS} value={tier} onChange={setTier} />
       <Field label="Price upfront (USD)" value={price} onChangeText={setPrice} keyboardType="decimal-pad" inputMode="decimal" placeholder="2,400" />
       <Field label="Running cost (USD, optional)" value={running} onChangeText={setRunning} keyboardType="decimal-pad" inputMode="decimal" placeholder="30" />
       <Segmented<Period> label="Running cost is paid" options={PERIODS} value={period} onChange={setPeriod} />
@@ -78,7 +94,7 @@ export default function NewWish() {
       )}
 
       <ErrorText>{error}</ErrorText>
-      <Button label="Save wish" onPress={save} />
+      <Button label="Save wish" busy={busy} onPress={save} />
       <Button label="Cancel" kind="quiet" onPress={() => router.back()} />
     </Screen>
   );

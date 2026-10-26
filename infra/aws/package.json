@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "whoami": "tsx whoami.ts",
-    "provision": "tsx up.ts"
+    "provision": "tsx up.ts",
+    "migrate": "tsx migrate.ts"
   },
   "dependencies": {
     "@aws-sdk/client-apprunner": "^3.1150.0",
