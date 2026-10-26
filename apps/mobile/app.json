@@ -15,7 +15,7 @@
     "android": {
       "package": "com.knightaiav.dandelist",
       "adaptiveIcon": {
-        "backgroundColor": "#15171C",
+        "backgroundColor": "#0E0F11",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -27,7 +27,10 @@
       "output": "single",
       "bundler": "metro"
     },
-    "plugins": ["expo-router", "expo-secure-store"],
+    "plugins": [
+      "expo-router",
+      "expo-secure-store"
+    ],
     "experiments": {
       "typedRoutes": false
     }

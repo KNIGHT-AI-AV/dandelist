@@ -1,5 +1,6 @@
 import { Redirect } from "expo-router";
 import { useState } from "react";
+import { Image } from "react-native";
 import { Body, Button, ErrorText, Field, Screen, Title } from "../components/ui";
 import { useAuth } from "../lib/auth";
 
@@ -28,7 +29,7 @@ export default function SignIn() {
   if (!sentTo) {
     return (
       <Screen>
-        <Title>Dandelist</Title>
+        <Image source={require("../assets/wordmark.png")} style={{ width: 260, height: 98, marginLeft: -26 }} resizeMode="contain" accessibilityRole="header" accessibilityLabel="Dandelist" />
         <Body muted>Price the life you want. Sign in with your email to keep your wishes.</Body>
         <Field label="Email" value={email} onChangeText={setEmail} autoCapitalize="none" autoComplete="email" keyboardType="email-address" inputMode="email" placeholder="you@example.com" onSubmitEditing={() => run(async () => { await auth.startEmail(email); setSentTo(email.trim()); })} />
         <ErrorText>{error}</ErrorText>
