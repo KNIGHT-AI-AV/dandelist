@@ -1,0 +1,14 @@
+{
+  "name": "dandelist",
+  "private": true,
+  "packageManager": "pnpm@10.17.1",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "pnpm -r --if-present test",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "api:dev": "pnpm --filter @dandelist/api dev",
+    "meta:smoke": "pnpm --filter @dandelist/meta smoke"
+  }
+}

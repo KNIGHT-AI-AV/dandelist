@@ -1,0 +1,10 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+
+# Refuse any package version published less than 14 days ago (minutes).
+minimumReleaseAge: 20160
+
+# Only these dependencies may run install scripts.
+onlyBuiltDependencies:
+  - esbuild
