@@ -9,6 +9,13 @@ const db = await openDb(env.DATABASE_URL);
 const applied = await migrate(db);
 if (applied.length) console.log(`migrations applied: ${applied.join(", ")}`);
 
+for (const [name, id, secret] of [
+  ["Google", env.GOOGLE_CLIENT_ID, env.GOOGLE_CLIENT_SECRET],
+  ["GitHub", env.GITHUB_CLIENT_ID, env.GITHUB_CLIENT_SECRET],
+] as const) {
+  if (!!id !== !!secret) console.warn(`${name} sign-in needs both its client id and its client secret; it stays off`);
+}
+
 const app = createApp({
   db,
   mailer: env.RESEND_API_KEY ? resendMailer(env.RESEND_API_KEY, env.MAIL_FROM) : consoleMailer(),
@@ -19,6 +26,13 @@ const app = createApp({
   meta: env.MODEL_API_KEY ? { apiKey: env.MODEL_API_KEY } : undefined,
   spendCaps: { dailyUsd: env.SPEND_DAILY_USD, totalUsd: env.SPEND_TOTAL_USD },
   webOrigins: env.WEB_ORIGINS.split(",").map((s) => s.trim()).filter(Boolean),
+  oauth: {
+    apiUrl: env.PUBLIC_API_URL,
+    production: env.NODE_ENV === "production",
+    google: env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET ? { clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET } : undefined,
+    github: env.GITHUB_CLIENT_ID && env.GITHUB_CLIENT_SECRET ? { clientId: env.GITHUB_CLIENT_ID, clientSecret: env.GITHUB_CLIENT_SECRET } : undefined,
+    apple: { servicesId: env.APPLE_SERVICES_ID, bundleId: env.APPLE_BUNDLE_ID || undefined },
+  },
 });
 
 serve({ fetch: app.fetch, port: env.PORT }, (info) => console.log(`dandelist api listening on ${info.port}`));

@@ -51,6 +51,17 @@ async function secret(name: string, value: () => Promise<string>): Promise<strin
   return arn;
 }
 
+/** Returns the secret's ARN when it exists and isn't scheduled for deletion. Never creates one. */
+async function existingSecret(name: string): Promise<string | undefined> {
+  try {
+    const s = await sm.send(new DescribeSecretCommand({ SecretId: name }));
+    return s.DeletedDate ? undefined : s.ARN;
+  } catch (e) {
+    if ((e as { name?: string }).name === "ResourceNotFoundException") return undefined;
+    throw e;
+  }
+}
+
 const random = async (length: number) =>
   (await sm.send(new GetRandomPasswordCommand({ PasswordLength: length, ExcludePunctuation: true }))).RandomPassword!;
 
@@ -60,7 +71,7 @@ async function databaseUrl(): Promise<string> {
   return `postgres://${encodeURIComponent(username)}:${encodeURIComponent(password)}@${db.Endpoint!.Address}:${db.Endpoint!.Port ?? 5432}/dandelist`;
 }
 
-const secrets = {
+const secrets: Record<string, string> = {
   DATABASE_URL: await secret("dandelist/api/database-url", databaseUrl),
   JWT_SECRET: await secret("dandelist/api/jwt-secret", () => random(64)),
   CODE_PEPPER: await secret("dandelist/api/code-pepper", () => random(32)),
@@ -68,6 +79,33 @@ const secrets = {
   RESEND_API_KEY: await secret("dandelist/api/resend-key", async () => vault("accounting/resend-api-key")),
   MODEL_API_KEY: await secret("dandelist/api/model-key", async () => vault("accounting/meta-model-api")),
 };
+
+// Social sign-in. The owner creates each provider's OAuth client and stores its secret under these names; until a
+// secret exists the provider stays off. This script only reads them.
+for (const [key, name] of [
+  ["GOOGLE_CLIENT_SECRET", "dandelist/api/google-client-secret"],
+  ["GITHUB_CLIENT_SECRET", "dandelist/api/github-client-secret"],
+] as const) {
+  const arn = await existingSecret(name);
+  if (arn) secrets[key] = arn;
+}
+
+const existing = (await ar.send(new ListServicesCommand({}))).ServiceSummaryList?.find((s) => s.ServiceName === SERVICE);
+
+// Client IDs aren't secret, so they travel as plain variables. Pass them to a deploy
+// (GOOGLE_CLIENT_ID=... pnpm --filter @dandelist/infra-aws run deploy); later deploys keep what the service already has.
+const running = existing
+  ? ((await ar.send(new DescribeServiceCommand({ ServiceArn: existing.ServiceArn! }))).Service?.SourceConfiguration?.ImageRepository?.ImageConfiguration?.RuntimeEnvironmentVariables ?? {})
+  : {};
+const signInIds: Record<string, string> = {};
+for (const key of ["GOOGLE_CLIENT_ID", "GITHUB_CLIENT_ID", "APPLE_SERVICES_ID", "APPLE_BUNDLE_ID"]) {
+  const value = process.env[key]?.trim() || running[key];
+  if (value) signInIds[key] = value;
+}
+const onOff = (on: unknown) => (on ? "on" : "off");
+console.log(
+  `sign-in providers: google ${onOff(signInIds.GOOGLE_CLIENT_ID && secrets.GOOGLE_CLIENT_SECRET)}, github ${onOff(signInIds.GITHUB_CLIENT_ID && secrets.GITHUB_CLIENT_SECRET)}, apple web ${onOff(signInIds.APPLE_SERVICES_ID)}, apple iOS on`,
+);
 
 // Image repository
 let repoUri: string;
@@ -135,6 +173,8 @@ const source: SourceConfiguration = {
         WEB_ORIGINS: "https://dandelist.knightaiav.com,https://dandelist.pages.dev,https://dandelist.com,https://www.dandelist.com,http://localhost:8081",
         SPEND_DAILY_USD: "10",
         SPEND_TOTAL_USD: "120",
+        PUBLIC_API_URL: "https://api.dandelist.knightaiav.com",
+        ...signInIds,
       },
       RuntimeEnvironmentSecrets: secrets,
     },
@@ -145,7 +185,6 @@ const source: SourceConfiguration = {
 const instance = { Cpu: "0.25 vCPU", Memory: "0.5 GB", InstanceRoleArn: role("dandelist-apprunner-instance") };
 const health = { Protocol: "HTTP" as const, Path: "/healthz", Interval: 10, Timeout: 5, HealthyThreshold: 1, UnhealthyThreshold: 5 };
 
-const existing = (await ar.send(new ListServicesCommand({}))).ServiceSummaryList?.find((s) => s.ServiceName === SERVICE);
 let arn: string;
 if (!existing) {
   arn = (await ar.send(new CreateServiceCommand({ ServiceName: SERVICE, SourceConfiguration: source, InstanceConfiguration: instance, HealthCheckConfiguration: health, Tags: TAGS }))).Service!.ServiceArn!;

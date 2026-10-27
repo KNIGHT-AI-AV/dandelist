@@ -2,6 +2,7 @@ import { Hono, type MiddlewareHandler } from "hono";
 import { z } from "zod";
 import type { Db } from "./db";
 import type { Mailer } from "./mailer";
+import { oauthRoutes, type OAuthConfig } from "./oauth";
 import { RateLimiter, clientIp } from "./ratelimit";
 import {
   CODE_TTL_MS,
@@ -25,6 +26,10 @@ export interface AuthDeps {
   codePepper: string;
   judge?: { email: string; code: string };
   now: () => Date;
+  /** Google, GitHub and Apple sign-in; each provider stays off until its settings are present. */
+  oauth?: OAuthConfig;
+  /** Web app origins; each may receive social sign-in tickets at /auth/callback. */
+  webOrigins?: string[];
 }
 
 export type AuthVars = { userId: string; sessionId: string };
@@ -146,6 +151,8 @@ export function authRoutes(deps: AuthDeps) {
     if (!old) return c.json({ error: "Sign in again to continue." }, 401);
     return c.json(await issueSession(old.user_id));
   });
+
+  app.route("/", oauthRoutes(deps, issueSession));
 
   app.use("/logout", requireAuth(deps));
   app.post("/logout", async (c) => {

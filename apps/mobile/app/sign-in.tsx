@@ -1,20 +1,25 @@
-import { Redirect } from "expo-router";
+import { Redirect, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import { KeyboardAvoidingView, Platform, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Backdrop, ErrorLine, Eyebrow, GlassField, Grain, PrimaryButton, QuietButton, Shade } from "../components/lux";
-import { useAuth } from "../lib/auth";
+import { SignInOptions } from "../components/sign-in-options";
+import { signInErrorMessage, useAuth, useSignInOptions, type ProviderId, type SignInOption } from "../lib/auth";
 import { fonts, usePalette } from "../lib/theme";
 
 export default function SignIn() {
   const auth = useAuth();
   const p = usePalette();
   const insets = useSafeAreaInsets();
+  const options = useSignInOptions();
+  // A provider sign-in that came back without a ticket lands here with a reason code.
+  const { error: returnedError } = useLocalSearchParams<{ error?: string }>();
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [sentTo, setSentTo] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [provider, setProvider] = useState<ProviderId | null>(null);
+  const [error, setError] = useState<string | null>(() => signInErrorMessage(typeof returnedError === "string" ? returnedError : null));
 
   if (auth.status === "signedIn") return <Redirect href="/wishes" />;
 
@@ -31,6 +36,19 @@ export default function SignIn() {
   }
   const sendCode = () => run(async () => { await auth.startEmail(email); setSentTo(email.trim()); });
 
+  async function continueWith(option: SignInOption) {
+    setProvider(option.id);
+    setError(null);
+    try {
+      if (option.native) await auth.signInWithApple();
+      else await auth.signInWith(option.id);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Something went wrong. Try again.");
+    } finally {
+      setProvider(null);
+    }
+  }
+
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
       <Backdrop source={require("../assets/backdrop.jpg")} />
@@ -44,9 +62,10 @@ export default function SignIn() {
                 Price the life{"\n"}you <Text style={{ fontFamily: fonts.displayItalic, color: p.accent }}>want</Text>.
               </Text>
               <Text style={{ fontFamily: fonts.body, fontSize: 15, lineHeight: 21, color: p.ink2 }}>Your agent finds the real price of everything you want, and what it costs over the years.</Text>
+              {options ? <SignInOptions options={options} pending={provider} disabled={busy} onChoose={continueWith} /> : null}
               <GlassField label="Email" value={email} onChangeText={setEmail} autoCapitalize="none" autoComplete="email" keyboardType="email-address" inputMode="email" placeholder="you@example.com" onSubmitEditing={sendCode} />
               <ErrorLine>{error}</ErrorLine>
-              <PrimaryButton label="Email me a code" busy={busy} disabled={!email.includes("@")} onPress={sendCode} />
+              <PrimaryButton label="Email me a code" busy={busy} disabled={!email.includes("@") || provider !== null} onPress={sendCode} />
             </>
           ) : (
             <>
