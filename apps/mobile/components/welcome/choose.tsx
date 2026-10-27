@@ -19,8 +19,6 @@ const STANDBY: Record<string, number> = {
 };
 const standbyFor = (e: Entry) => STANDBY[e.category] ?? require("../../assets/standby/object.jpg");
 const monthly = (e: Entry) => recurringBreakdown([toItem(e)]).perMonth;
-/** Keeps the last two words of a headline together, so a word is never left alone on its own line. */
-const tie = (s: string) => s.replace(/ (\S+)$/, " $1");
 
 /** The source line every card carries: where the price was checked, and when; estimates say so. */
 function Source({ e }: { e: Entry }) {
@@ -80,7 +78,7 @@ export function FirstPick({ entries, onPick }: { entries: Entry[]; onPick(e: Ent
       <Rise style={{ paddingHorizontal: gutter, gap: layout.stack.tight, width: "100%", maxWidth: wide ? Math.max(cardW * 3 + 32, 0) + 2 * gutter : undefined, alignSelf: "center" }}>
         <Eyebrow>Your first pick</Eyebrow>
         <Text accessibilityRole="header" style={[t.title1, { color: p.ink }]}>
-          Start with one you'd say <Text style={{ fontFamily: fonts.displayItalic, color: p.accentText }}>yes</Text>&nbsp;to.
+          Start with one you'd say <Text style={{ fontFamily: fonts.displayItalic, color: p.accentText }}>yes</Text> to.
         </Text>
       </Rise>
       {wide ? (
@@ -181,7 +179,7 @@ export function Horizon({ value, onPick }: { value: number | null | undefined; o
       <Rise style={{ gap: layout.stack.tight }}>
         <Eyebrow>Your horizon</Eyebrow>
         <Text accessibilityRole="header" style={[t.title1, { color: p.ink }]}>
-          When should this life be&nbsp;<Text style={{ fontFamily: fonts.displayItalic, color: p.accentText }}>yours</Text>?
+          When should this life be <Text style={{ fontFamily: fonts.displayItalic, color: p.accentText }}>yours</Text>?
         </Text>
         <Text style={[type.callout, { color: p.ink2, marginTop: 8 }]}>We'll show what changes if it takes longer.</Text>
       </Rise>
@@ -277,7 +275,7 @@ export function Aside({ value, totalCents, onChange, onDone }: { value: number; 
       <Rise style={{ gap: layout.stack.tight }}>
         <Eyebrow>Each month</Eyebrow>
         <Text accessibilityRole="header" style={[t.title1, { color: p.ink }]}>
-          {tie("What could you set aside each month?")}
+          {"What could you set aside each month?"}
         </Text>
         <Text style={[type.callout, { color: p.ink2, marginTop: 8 }]}>It turns the price into a date. It stays on this device until you save.</Text>
       </Rise>

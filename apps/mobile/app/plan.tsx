@@ -55,7 +55,7 @@ export default function Plan() {
       <ScrollView contentContainerStyle={{ paddingTop: insets.top + layout.contentTop, paddingBottom: insets.bottom + 40, paddingHorizontal: gutter, gap: 20, width: "100%", maxWidth: layout.list + 2 * gutter, alignSelf: "center" }}>
         <View style={{ gap: layout.stack.tight }}>
           <Eyebrow>The plan</Eyebrow>
-          <Text accessibilityRole="header" style={[t.title1, { color: p.ink }]}>When you can have it&nbsp;all</Text>
+          <Text accessibilityRole="header" style={[t.title1, { color: p.ink }]}>When you can have it all</Text>
         </View>
         <GlassField label="You put aside each month" value={aside} onChangeText={save} keyboardType="decimal-pad" inputMode="decimal" placeholder="$3,000" inputStyle={[type.title2, { fontVariant: ["tabular-nums"] }]} />
         {aside.trim() && monthly === null ? <Text style={[type.footnote, { color: p.danger }]}>Enter an amount, like 3000.</Text> : null}

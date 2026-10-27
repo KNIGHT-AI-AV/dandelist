@@ -246,7 +246,7 @@ export function CodeSheet({ startEmail, verifyEmail, onClose, extra }: { startEm
                   {extra}
                   <GlassField label="Email" value={email} onChangeText={setEmail} autoFocus={!extra} autoCapitalize="none" autoComplete="email" keyboardType="email-address" inputMode="email" placeholder="you@example.com" onSubmitEditing={() => send()} />
                   <ErrorLine>{error}</ErrorLine>
-                  <PrimaryButton label="Send code" busyLabel="Sending…" busy={busy} disabled={!email.includes("@")} onPress={() => send()} />
+                  <PrimaryButton label="Send code" busyLabel="Sending..." busy={busy} disabled={!email.includes("@")} onPress={() => send()} />
                 </>
               ) : (
                 <>
@@ -282,7 +282,7 @@ export function CodeSheet({ startEmail, verifyEmail, onClose, extra }: { startEm
                   <ErrorLine>{error}</ErrorLine>
                   <View style={{ flexDirection: "row", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
                     {Platform.OS !== "web" ? <QuietButton label="Open Mail" onPress={() => Linking.openURL(Platform.OS === "ios" ? "message://" : "mailto:")} /> : null}
-                    <QuietButton label={resendIn ? `Resend in ${resendIn} s` : "Resend code"} onPress={() => !resendIn && send(sentTo)} />
+                    <QuietButton label={resendIn ? `Resend in ${resendIn} s` : "Resend code"} onPress={() => !resendIn && send(sentTo)} />
                     <QuietButton label="Use a different email" onPress={() => { setSentTo(null); setCode(""); setError(null); }} />
                   </View>
                   <Text style={[type.footnote, { color: p.ink3 }]}>Not there? Check spam.</Text>

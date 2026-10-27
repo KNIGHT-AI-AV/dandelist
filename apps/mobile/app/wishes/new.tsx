@@ -231,7 +231,7 @@ export default function NewWish() {
         </KeyboardAvoidingView>
         <EdgeFade height={dock} />
         <View pointerEvents="box-none" style={{ position: "absolute", left: gutter, right: gutter, bottom: insets.bottom + 20, alignItems: "center" }}>
-          <PrimaryButton label={stage === "describe" ? "Find the real price" : "Research the price"} busyLabel="Reading your wish…" busy={reading} onPress={stage === "describe" ? read : research} />
+          <PrimaryButton label={stage === "describe" ? "Find the real price" : "Research the price"} busyLabel="Reading your wish..." busy={reading} onPress={stage === "describe" ? read : research} />
         </View>
         <Grain />
       </View>

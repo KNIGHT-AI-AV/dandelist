@@ -168,7 +168,7 @@ export default function LifeList() {
               <Backdrop source={require("../../assets/backdrop.jpg")} />
               <Shade from={0.1} />
               <Eyebrow color={p.ink}>Your first wish</Eyebrow>
-              <Text style={[t.title1, { color: p.ink }]}>Price the life you&nbsp;want.</Text>
+              <Text style={[t.title1, { color: p.ink }]}>Price the life you want.</Text>
               <Text style={[type.callout, { color: p.ink2 }]}>Tell the agent what you want. It finds the real price and what it costs over the years.</Text>
             </View>
           ) : (
@@ -181,7 +181,7 @@ export default function LifeList() {
       <View pointerEvents="box-none" style={{ position: "absolute", left: 0, right: 0, bottom: insets.bottom + 16, alignItems: "center", paddingHorizontal: 16 }}>
         <Pressable accessibilityRole="button" accessibilityLabel="Tell me what you want" onPress={() => router.push("/wishes/new")} style={{ width: "100%", maxWidth: layout.list }}>
           <Glass intensity={60} style={{ height: 58, borderRadius: radius.pill, flexDirection: "row", alignItems: "center", paddingLeft: 20, paddingRight: 8 }}>
-            <Text style={[type.body, { flex: 1, color: p.ink2 }]}>Tell me what you want…</Text>
+            <Text style={[type.body, { flex: 1, color: p.ink2 }]}>Tell me what you want...</Text>
             <View style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: p.ink, alignItems: "center", justifyContent: "center" }}>
               <Icon name="plus" color={p.onAccent} />
             </View>

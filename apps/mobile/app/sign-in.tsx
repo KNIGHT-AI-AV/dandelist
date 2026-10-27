@@ -67,7 +67,7 @@ export default function SignIn() {
               {options ? <SignInOptions options={options} pending={provider} disabled={busy} onChoose={continueWith} /> : null}
               <GlassField label="Email" value={email} onChangeText={setEmail} autoCapitalize="none" autoComplete="email" keyboardType="email-address" inputMode="email" placeholder="you@example.com" onSubmitEditing={sendCode} />
               <ErrorLine>{error}</ErrorLine>
-              <PrimaryButton label="Email me a code" busyLabel="Sending…" busy={busy} disabled={!email.includes("@") || provider !== null} onPress={sendCode} />
+              <PrimaryButton label="Email me a code" busyLabel="Sending..." busy={busy} disabled={!email.includes("@") || provider !== null} onPress={sendCode} />
             </>
           ) : (
             <>
