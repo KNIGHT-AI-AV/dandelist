@@ -6,6 +6,7 @@ import { AgentDot, ErrorLine, Eyebrow, Glass, Grain, Photo, QuietButton, Shade }
 import { Statement, Take } from "../../components/statement";
 import { useAuth } from "../../lib/auth";
 import { fonts, usePalette } from "../../lib/theme";
+import { webOnly } from "../../lib/dream";
 import { useWishes } from "../../lib/wishes";
 import { KIND_LABEL, TIER_LABEL, agentLine } from "../../lib/words";
 
@@ -66,7 +67,7 @@ export default function WishDetail() {
               <Text style={{ fontFamily: fonts.body, fontSize: 12.5, color: p.ink3 }}>{`Listed at ${a.source.price.toLocaleString("en-US")} ${a.source.currency}, converted at ${a.source.rate} on ${a.source.rateDate}.`}</Text>
             ) : null}
             {a ? (
-              <Pressable accessibilityRole="link" onPress={() => Linking.openURL(a.url)} hitSlop={8} style={{ alignSelf: "flex-start" }}>
+              <Pressable accessibilityRole="link" onPress={() => webOnly(a.url) && Linking.openURL(webOnly(a.url))} hitSlop={8} style={{ alignSelf: "flex-start" }}>
                 <Text style={{ fontFamily: fonts.label, fontSize: 13.5, color: p.accent }}>Open the source page</Text>
               </Pressable>
             ) : null}

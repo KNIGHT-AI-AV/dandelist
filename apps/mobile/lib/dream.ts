@@ -69,15 +69,26 @@ export function wishFrom(w: Extract<Widget, { kind: "wish_ready" }>["wish"]): Ne
       agent: {
         runId: "dream",
         seller: w.seller ?? "",
-        url: w.url ?? "",
+        url: webOnly(w.url),
         status: w.status,
         checkedAt,
-        ...(w.images[0] ? { imageUrl: w.images[0].url } : {}),
+        ...(webOnly(w.images[0]?.url) ? { imageUrl: webOnly(w.images[0]?.url) } : {}),
         explanation: "",
         source: { currency: "USD", price: w.upfrontCents / 100, rate: 1, rateDate: checkedAt.slice(0, 10) },
       },
     },
   };
+}
+
+/** Links come from the agent, so anything that isn't an http(s) address is dropped. */
+export function webOnly(url: string | undefined | null): string {
+  if (!url) return "";
+  try {
+    const u = new URL(url);
+    return u.protocol === "https:" || u.protocol === "http:" ? u.toString() : "";
+  } catch {
+    return "";
+  }
 }
 
 /**

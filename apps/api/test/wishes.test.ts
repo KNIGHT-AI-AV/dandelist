@@ -94,3 +94,15 @@ describe("wishes", () => {
     expect((await db.query("select count(*) as n from wishes")).rows[0]).toEqual({ n: 0 });
   });
 });
+
+describe("wish links", () => {
+  it("stores only web addresses for a wish's source and image", async () => {
+    const { webLinksOnly } = await import("../src/wishes");
+    expect(webLinksOnly({ agent: { url: "https://www.rolex.com/x", imageUrl: "https://media.rolex.com/a.jpg" } })).toBe(true);
+    expect(webLinksOnly({ agent: { url: "" } })).toBe(true);
+    expect(webLinksOnly({})).toBe(true);
+    expect(webLinksOnly({ agent: { url: "javascript:alert(1)" } })).toBe(false);
+    expect(webLinksOnly({ agent: { url: "intent://evil#Intent;end" } })).toBe(false);
+    expect(webLinksOnly({ agent: { imageUrl: "file:///etc/passwd" } })).toBe(false);
+  });
+});

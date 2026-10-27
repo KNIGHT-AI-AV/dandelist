@@ -1,5 +1,12 @@
 import { Hono } from "hono";
 import { z } from "zod";
+
+/** A wish's source and image links are opened and shown by the app, so only http(s) addresses are stored. */
+export function webLinksOnly(details: Record<string, unknown>): boolean {
+  const agent = details.agent as { url?: unknown; imageUrl?: unknown } | undefined;
+  if (!agent) return true;
+  return [agent.url, agent.imageUrl].every((u) => u === undefined || u === "" || (typeof u === "string" && /^https?:\/\//i.test(u) && URL.canParse(u)));
+}
 import { requireAuth, type AuthDeps, type AuthVars } from "./auth";
 
 export const MAX_WISHES_PER_USER = 500;
@@ -23,7 +30,11 @@ const createBody = z.object({
   recurring: recurring.default([]),
   resaleCents: z.number().int().min(0).max(MAX_CENTS).nullable().optional(),
   // What the agent found: chosen price option, sources, explanation. Kept small so a row stays cheap to read.
-  details: z.record(z.unknown()).refine((d) => JSON.stringify(d).length <= 20_000, "Too much detail.").optional(),
+  details: z
+    .record(z.unknown())
+    .refine((d) => JSON.stringify(d).length <= 20_000, "Too much detail.")
+    .refine(webLinksOnly, "Links must be web addresses.")
+    .optional(),
 });
 
 const patchBody = createBody.partial().refine((b) => Object.keys(b).length > 0, "Nothing to change.");
