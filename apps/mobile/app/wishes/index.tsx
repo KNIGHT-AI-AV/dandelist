@@ -90,6 +90,7 @@ export default function LifeList() {
         {menu ? (
           <Glass style={{ marginHorizontal: 12, marginTop: 6, paddingVertical: 4 }}>
             <QuietButton label="The plan" onPress={() => { setMenu(false); router.push("/plan"); }} />
+            <QuietButton label="Theme" onPress={() => { setMenu(false); router.push("/theme"); }} />
             <QuietButton label="Enter a wish yourself" onPress={() => { setMenu(false); router.push("/wishes/manual"); }} />
             <QuietButton label="Sign out" onPress={() => auth.signOut()} />
           </Glass>

@@ -7,10 +7,18 @@ import { StatusBar } from "expo-status-bar";
 import { View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AuthProvider } from "../lib/auth";
-import { usePalette } from "../lib/theme";
+import { ThemeProvider, usePalette } from "../lib/theme";
 import { WishProvider } from "../lib/wishes";
 
 export default function RootLayout() {
+  return (
+    <ThemeProvider>
+      <Root />
+    </ThemeProvider>
+  );
+}
+
+function Root() {
   const p = usePalette();
   const [loaded, error] = useFonts({
     BodoniModa_400Regular,
@@ -26,7 +34,7 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <AuthProvider>
         <WishProvider>
-          <StatusBar style="light" />
+          <StatusBar style={p.scheme === "dark" ? "light" : "dark"} />
           <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: p.bg } }} />
         </WishProvider>
       </AuthProvider>

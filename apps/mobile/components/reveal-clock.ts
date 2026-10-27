@@ -8,6 +8,8 @@ export type Stage = "hunting" | "found" | "sharpening" | "clear";
 export type Treatment = "swirl" | "film" | "frost";
 
 export const CLARITY: Record<Stage, number> = { hunting: 0, found: 0.45, sharpening: 0.75, clear: 1 };
+/** How clear a generated image may get: enough to read, never bare. */
+export const FINISHED = 0.78;
 
 // ease.cinema, cubic-bezier(0.25, 0.1, 0.25, 1), solved numerically so the clock needs no animation library.
 function cinema(t: number): number {

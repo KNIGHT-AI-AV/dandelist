@@ -3,7 +3,8 @@ import { Image } from "expo-image";
 import { useState, type ReactNode } from "react";
 import { StyleSheet, View, type LayoutChangeEvent, type StyleProp, type ViewStyle } from "react-native";
 import { useReducedMotion } from "../lib/motion";
-import { CLARITY, useGlassClock, type Stage, type Treatment } from "./reveal-clock";
+import { usePalette } from "../lib/theme";
+import { CLARITY, FINISHED, useGlassClock, type Stage, type Treatment } from "./reveal-clock";
 
 /**
  * Phone version of the glass reveal; `reveal.tsx` is the web version. One Skia shader bends the picture through
@@ -74,19 +75,20 @@ half4 main(float2 p) {
 const effect = Skia.RuntimeEffect.Make(SKSL);
 const MODE: Record<Treatment, number> = { swirl: 0, film: 1, frost: 2 };
 
-export function GlassReveal({ uri, standby, stage, treatment = "swirl", style, children }: { uri?: string | null; standby: number; stage: Stage; treatment?: Treatment; style?: StyleProp<ViewStyle>; children?: ReactNode }) {
+export function GlassReveal({ uri, standby, stage, treatment = "swirl", finish = false, style, children }: { uri?: string | null; standby: number; stage: Stage; treatment?: Treatment; /** Generated imagery never shows bare: it keeps a fine layer of glass and grain. */ finish?: boolean; style?: StyleProp<ViewStyle>; children?: ReactNode }) {
+  const p = usePalette();
   const reduced = useReducedMotion();
   const [size, setSize] = useState({ width: 0, height: 0 });
   const waiting = useImage(standby);
   const found = useImage(uri ?? null);
   const ready = !!uri && !!found;
-  const { clarity, time } = useGlassClock(ready ? CLARITY[stage] : 0, reduced);
+  const { clarity, time } = useGlassClock(ready ? Math.min(CLARITY[stage], finish ? FINISHED : 1) : !uri && stage === "clear" ? FINISHED : 0, reduced);
   const picture = ready ? found : waiting;
   const onLayout = (e: LayoutChangeEvent) => setSize({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height });
   const clear = ready && clarity >= 0.999;
 
   return (
-    <View style={[{ overflow: "hidden", backgroundColor: "#0A0A0B" }, style]} onLayout={onLayout}>
+    <View style={[{ overflow: "hidden", backgroundColor: p.bg }, style]} onLayout={onLayout}>
       {clear || !effect ? (
         <Image source={uri ? { uri } : standby} style={StyleSheet.absoluteFill} contentFit="cover" blurRadius={clear ? 0 : 24} transition={300} />
       ) : picture && size.width > 0 ? (

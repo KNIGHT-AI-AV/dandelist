@@ -8,16 +8,18 @@ import { AgentWork, Appear, type Result } from "../components/welcome/agent-work
 import { Aside, FirstPick, Horizon, VotePair } from "../components/welcome/choose";
 import { CodeSheet, RevealCard } from "../components/welcome/finale";
 import { LifePill, Segments } from "../components/welcome/kit";
+import { ThemeChooser } from "../components/welcome/theme";
 import { TitleSequence } from "../components/welcome/title";
 import { useAuth } from "../lib/auth";
 import { ease, native, useReducedMotion } from "../lib/motion";
-import { fonts, radius, usePalette } from "../lib/theme";
+import { fonts, radius, usePalette, useTheme } from "../lib/theme";
 import { SignInOptions } from "../components/sign-in-options";
 import { useSignInOptions, type ProviderId, type SignInOption } from "../lib/auth";
-import { loadWelcome, markTitleSeen, picked, saveWelcome, seenTitle, type WelcomeState } from "../lib/welcome";
+import { loadWelcome, markTitleSeen, monthYearLong, picked, saveWelcome, seenTitle, type WelcomeState } from "../lib/welcome";
 
 /** Apple, Google and GitHub in the save sheet; the kept picks are already on this device for after the redirect. */
 function WelcomeSocial() {
+  const p = usePalette();
   const auth = useAuth();
   const options = useSignInOptions();
   const [pending, setPending] = useState<ProviderId | null>(null);
@@ -38,12 +40,12 @@ function WelcomeSocial() {
   return (
     <View style={{ gap: 10 }}>
       <SignInOptions options={options} pending={pending} disabled={!!pending} onChoose={choose} />
-      {error ? <Text style={{ fontFamily: fonts.body, fontSize: 13, color: "#F0A595" }}>{error}</Text> : null}
+      {error ? <Text style={{ fontFamily: fonts.body, fontSize: 13, color: p.danger }}>{error}</Text> : null}
     </View>
   );
 }
 
-type Step = { kind: "title" } | { kind: "first" } | { kind: "vote"; round: number } | { kind: "horizon" } | { kind: "aside" } | { kind: "agent" } | { kind: "reveal" };
+type Step = { kind: "title" } | { kind: "first" } | { kind: "vote"; round: number } | { kind: "horizon" } | { kind: "aside" } | { kind: "agent" } | { kind: "reveal" } | { kind: "theme" };
 
 const SEGMENTS = 7;
 const firstEntries = firstPick.map(entry).filter((e): e is Entry => !!e);
@@ -59,6 +61,7 @@ export default function Welcome() {
   const insets = useSafeAreaInsets();
   const reduced = useReducedMotion();
   const auth = useAuth();
+  const theme = useTheme();
   const [step, setStep] = useState<Step | null>(null);
   const [short, setShort] = useState(false);
   const [state, setState] = useState<WelcomeState>({ picks: [], horizonYears: null, monthlyCents: 100_000 });
@@ -158,6 +161,15 @@ export default function Welcome() {
         </View>
       );
       break;
+    case "theme":
+      body = result ? (
+        <ThemeChooser
+          total={`$${Math.round(result.upfrontCents / 100).toLocaleString("en-US")}`}
+          by={monthYearLong(new Date(`${result.everythingBy}-01T00:00:00`))}
+          onDone={(id) => { theme.set(id); setSheet(true); }}
+        />
+      ) : null;
+      break;
     case "reveal":
       body = result ? (
         <RevealCard
@@ -165,7 +177,7 @@ export default function Welcome() {
           upfrontCents={result.upfrontCents}
           monthlyRunningCents={result.monthlyRunningCents}
           everythingBy={result.everythingBy}
-          onKeep={() => { update({ ...state, kept: true }); setSheet(true); }}
+          onKeep={() => { update({ ...state, kept: true }); setStep({ kind: "theme" }); }}
           onChange={() => { update({ ...state, picks: [] }); setAnswered(0); setResult(null); setStep({ kind: "first" }); }}
         />
       ) : null;
@@ -174,9 +186,9 @@ export default function Welcome() {
 
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
-      <View style={{ flex: 1, paddingTop: step.kind === "title" ? 0 : insets.top + 58, paddingBottom: building ? insets.bottom + 92 : 0 }}>{body}</View>
+      <View style={{ flex: 1, paddingTop: step.kind === "title" || step.kind === "theme" ? 0 : insets.top + 58, paddingBottom: building ? insets.bottom + 92 : 0 }}>{body}</View>
 
-      {step.kind !== "title" ? (
+      {step.kind !== "title" && step.kind !== "theme" ? (
         <View pointerEvents="box-none" style={{ position: "absolute", top: insets.top + 14, left: 20, right: 20, gap: 14 }}>
           <View pointerEvents="box-none" style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
             <Text style={{ fontFamily: fonts.display, fontSize: 19, color: p.ink }}>Dandelist</Text>

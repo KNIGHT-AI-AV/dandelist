@@ -166,7 +166,7 @@ export default function NewWish() {
         {latestImage ? (
           <View style={StyleSheet.absoluteFill}>
             <Photo uri={latestImage} />
-            <View style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(10,10,11,0.62)" }]} />
+            <View style={[StyleSheet.absoluteFill, { backgroundColor: `rgba(${p.bgRgb}, 0.62)` }]} />
           </View>
         ) : (
           <Backdrop source={require("../../assets/backdrop.jpg")} blur={28} dim={0.5} />

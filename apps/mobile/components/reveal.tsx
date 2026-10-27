@@ -2,7 +2,8 @@ import { Asset } from "expo-asset";
 import { createElement as h, useId, useState, type ReactNode } from "react";
 import { StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
 import { useReducedMotion } from "../lib/motion";
-import { CLARITY, useGlassClock, type Stage, type Treatment } from "./reveal-clock";
+import { usePalette } from "../lib/theme";
+import { CLARITY, FINISHED, useGlassClock, type Stage, type Treatment } from "./reveal-clock";
 
 /**
  * Web version of the glass reveal; `reveal.native.tsx` is the Skia version for phones.
@@ -15,11 +16,12 @@ const DISP = asset(require("../assets/glass-swirl-disp.png"));
 const SHINE = asset(require("../assets/glass-swirl.png"));
 const GRAIN = asset(require("../assets/grain.png"));
 
-export function GlassReveal({ uri, standby, stage, treatment = "swirl", style, children }: { uri?: string | null; standby: number; stage: Stage; treatment?: Treatment; style?: StyleProp<ViewStyle>; children?: ReactNode }) {
+export function GlassReveal({ uri, standby, stage, treatment = "swirl", finish = false, style, children }: { uri?: string | null; standby: number; stage: Stage; treatment?: Treatment; /** Generated imagery never shows bare: it keeps a fine layer of glass and grain. */ finish?: boolean; style?: StyleProp<ViewStyle>; children?: ReactNode }) {
+  const p = usePalette();
   const reduced = useReducedMotion();
   const [loaded, setLoaded] = useState<string | null>(null);
   const ready = !!uri && loaded === uri;
-  const { clarity, time } = useGlassClock(ready ? CLARITY[stage] : 0, reduced);
+  const { clarity, time } = useGlassClock(ready ? Math.min(CLARITY[stage], finish ? FINISHED : 1) : !uri && stage === "clear" ? FINISHED : 0, reduced);
   const k = 1 - clarity;
   const id = `glass${useId().replace(/[^a-zA-Z0-9]/g, "")}`;
 
@@ -35,7 +37,7 @@ export function GlassReveal({ uri, standby, stage, treatment = "swirl", style, c
     });
 
   return (
-    <View style={[{ overflow: "hidden", backgroundColor: "#0A0A0B" }, style]}>
+    <View style={[{ overflow: "hidden", backgroundColor: p.bg }, style]}>
       {h(
         "svg",
         { width: 0, height: 0, style: { position: "absolute" }, "aria-hidden": true },
@@ -68,7 +70,7 @@ export function GlassReveal({ uri, standby, stage, treatment = "swirl", style, c
         : null}
       {/* Film grain stays faintly even when clear on the film treatment; it is the finish, not the effect. */}
       {h("div", { style: { position: "absolute", inset: 0, backgroundImage: `url(${GRAIN})`, opacity: treatment === "film" ? 0.25 + 0.45 * k : 0.35 * k, mixBlendMode: "overlay", pointerEvents: "none" } })}
-      {k > 0.02 ? <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: `rgba(10,10,11,${0.18 * k})` }]} /> : null}
+      {k > 0.02 ? <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: `rgba(${p.bgRgb}, ${0.18 * k})` }]} /> : null}
       {children}
     </View>
   );

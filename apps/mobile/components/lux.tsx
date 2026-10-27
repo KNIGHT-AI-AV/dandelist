@@ -43,7 +43,7 @@ export function Glass({ children, style, intensity = 40 }: { children?: ReactNod
     // zIndex 0 makes the panel its own stack, so the blur (at -1) always sits behind the content, including on web,
     // where absolutely positioned layers otherwise paint over inputs and text.
     <View style={[{ borderRadius: radius.md, overflow: "hidden", borderWidth: StyleSheet.hairlineWidth, borderColor: p.hair, zIndex: 0 }, style]}>
-      <BlurView intensity={intensity} tint="dark" style={[StyleSheet.absoluteFill, { zIndex: -1 }]} />
+      <BlurView intensity={intensity} tint={p.scheme} style={[StyleSheet.absoluteFill, { zIndex: -1 }]} />
       <View style={[StyleSheet.absoluteFill, { backgroundColor: p.glassTint, zIndex: -1 }]} />
       {children}
     </View>
@@ -52,10 +52,11 @@ export function Glass({ children, style, intensity = 40 }: { children?: ReactNod
 
 /** Darkens a photograph toward the bottom so type sits on it. */
 export function Shade({ from = 0.3, style }: { from?: number; style?: StyleProp<ViewStyle> }) {
+  const p = usePalette();
   return (
     <LinearGradient
       pointerEvents="none"
-      colors={["rgba(10,10,11,0)", "rgba(10,10,11,0.55)", "rgba(10,10,11,0.96)"]}
+      colors={[`rgba(${p.bgRgb}, 0)`, `rgba(${p.bgRgb}, 0.55)`, `rgba(${p.bgRgb}, 0.96)`]}
       locations={[from, 0.7, 1]}
       style={[StyleSheet.absoluteFill, style]}
     />
@@ -73,16 +74,12 @@ export function Grain() {
   );
 }
 
-const KIND_ART: Record<string, [string, string]> = {
-  buy: ["#2A2520", "#0A0A0B"],
-  own: ["#1F2329", "#0A0A0B"],
-  do: ["#26221B", "#0A0A0B"],
-  visit: ["#1E2622", "#0A0A0B"],
-};
 
 /** A wish photograph, or a quiet gradient when the agent found none. */
 export function Photo({ uri, kind = "buy", style, contentPosition }: { uri?: string | null; kind?: string; style?: StyleProp<ViewStyle>; contentPosition?: ImageContentPosition }) {
-  const [a, b] = KIND_ART[kind] ?? KIND_ART.buy!;
+  const p = usePalette();
+  // A quiet gradient in the theme's own tones stands in until a photograph exists.
+  const [a, b] = [p.surface, p.bg];
   return (
     <View style={[StyleSheet.absoluteFill, style]}>
       <LinearGradient colors={[a, b]} start={{ x: 0.2, y: 0 }} end={{ x: 0.8, y: 1 }} style={StyleSheet.absoluteFill} />
@@ -165,10 +162,11 @@ export function GlassField({ label, style, inputStyle, ...props }: TextInputProp
 
 /** A bundled photograph that fills its parent. */
 export function Backdrop({ source, blur = 0, dim = 0 }: { source: number; blur?: number; dim?: number }) {
+  const p = usePalette();
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
       <Image source={source} style={StyleSheet.absoluteFill} contentFit="cover" blurRadius={blur} accessibilityIgnoresInvertColors />
-      {dim ? <View style={[StyleSheet.absoluteFill, { backgroundColor: `rgba(10,10,11,${dim})` }]} /> : null}
+      {dim ? <View style={[StyleSheet.absoluteFill, { backgroundColor: `rgba(${p.bgRgb}, ${dim})` }]} /> : null}
     </View>
   );
 }

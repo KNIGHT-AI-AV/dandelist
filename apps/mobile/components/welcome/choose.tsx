@@ -255,11 +255,11 @@ export function Aside({ value, totalCents, onChange, onDone }: { value: number; 
           onAccessibilityAction={(e) => onChange(toCents(Math.max(0, Math.min(1, f + (e.nativeEvent.actionName === "increment" ? 0.05 : -0.05)))))}
           style={{ height: 44, justifyContent: "center" }}
         >
-          <View style={{ height: 2, borderRadius: 1, backgroundColor: "rgba(243,238,228,0.16)" }}>
+          <View style={{ height: 2, borderRadius: 1, backgroundColor: p.track }}>
             <View style={{ height: 2, width: `${f * 100}%`, backgroundColor: p.accent }} />
           </View>
           {DETENTS.map((d) => (
-            <View key={d} pointerEvents="none" style={{ position: "absolute", left: `${toFraction(d) * 100}%`, width: 1, height: 8, backgroundColor: "rgba(243,238,228,0.3)" }} />
+            <View key={d} pointerEvents="none" style={{ position: "absolute", left: `${toFraction(d) * 100}%`, width: 1, height: 8, backgroundColor: `rgba(${p.inkRgb}, 0.3)` }} />
           ))}
           <View pointerEvents="none" style={{ position: "absolute", left: `${f * 100}%`, marginLeft: -13, width: 26, height: 26, borderRadius: 13, backgroundColor: p.ink, shadowColor: "#000", shadowOpacity: 0.5, shadowRadius: 8 }} />
         </View>

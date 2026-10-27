@@ -41,7 +41,7 @@ function ProviderButton({ id, busy, disabled, onPress }: { id: ProviderId; busy:
       {focused ? (
         <View pointerEvents="none" style={{ position: "absolute", top: -4, left: -4, right: -4, bottom: -4, borderRadius: radius.pill, borderWidth: 1, borderColor: p.accent }} />
       ) : null}
-      <Glass intensity={34} style={{ height: HEIGHT, borderRadius: radius.pill, justifyContent: "center", borderColor: hovered && !inactive ? "rgba(243, 238, 228, 0.26)" : p.hair }}>
+      <Glass intensity={34} style={{ height: HEIGHT, borderRadius: radius.pill, justifyContent: "center", borderColor: hovered && !inactive ? `rgba(${p.inkRgb}, 0.26)` : p.hair }}>
         <View style={{ position: "absolute", left: 22, top: 0, bottom: 0, justifyContent: "center" }}>
           <Image source={MARK[id]} style={{ width: 18, height: 18 }} contentFit="contain" accessible={false} />
         </View>

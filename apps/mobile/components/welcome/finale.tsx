@@ -169,7 +169,7 @@ export function CodeSheet({ startEmail, verifyEmail, onClose, extra }: { startEm
 
   return (
     <View style={StyleSheet.absoluteFill}>
-      <Pressable accessibilityLabel="Close" style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(10,10,11,0.45)" }]} onPress={onClose} />
+      <Pressable accessibilityLabel="Close" style={[StyleSheet.absoluteFill, { backgroundColor: `rgba(${p.bgRgb}, 0.45)` }]} onPress={onClose} />
       <Animated.View style={{ position: "absolute", left: 0, right: 0, bottom: 0, transform: [{ translateY: up.interpolate({ inputRange: [0, 1], outputRange: [420, 0] }) }] }}>
         <Glass intensity={70} style={{ borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, borderBottomLeftRadius: 0, borderBottomRightRadius: 0, padding: 24, paddingBottom: insets.bottom + 24, gap: 16, maxWidth: 560, width: "100%", alignSelf: "center" }}>
           {!sentTo ? (
@@ -188,7 +188,7 @@ export function CodeSheet({ startEmail, verifyEmail, onClose, extra }: { startEm
               <Animated.View style={{ transform: [{ translateX: shake }] }}>
                 <Pressable onPress={() => input.current?.focus()} style={{ flexDirection: "row", gap: 8 }} accessibilityLabel="Six-digit code">
                   {Array.from({ length: 6 }, (_, i) => (
-                    <View key={i} style={{ flex: 1, height: 58, borderRadius: radius.sm, borderWidth: StyleSheet.hairlineWidth, borderColor: error ? p.danger : i === code.length ? p.accent : p.hair, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(10,10,11,0.35)" }}>
+                    <View key={i} style={{ flex: 1, height: 58, borderRadius: radius.sm, borderWidth: StyleSheet.hairlineWidth, borderColor: error ? p.danger : i === code.length ? p.accent : p.hair, alignItems: "center", justifyContent: "center", backgroundColor: p.glassTint }}>
                       <Text style={{ fontFamily: fonts.figure, fontSize: 24, color: p.ink }}>{code[i] ?? ""}</Text>
                     </View>
                   ))}

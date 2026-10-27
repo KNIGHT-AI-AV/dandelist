@@ -173,7 +173,7 @@ export function TiltObject({ uri, style, credit }: { uri: string; style?: StyleP
 
   return (
     <View style={[{ overflow: "hidden", alignItems: "center", justifyContent: "center" }, style]} {...pan.panHandlers}>
-      <LinearGradient colors={["#1B1A18", "#0A0A0B"]} start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }} style={StyleSheet.absoluteFill} />
+      <LinearGradient colors={[p.surface, p.bg]} start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }} style={StyleSheet.absoluteFill} />
       {/* The plinth's soft light pool. */}
       <View pointerEvents="none" style={{ position: "absolute", bottom: "14%", width: "62%", height: 26, borderRadius: 999, backgroundColor: "rgba(0,0,0,0.55)", transform: [{ scaleY: 0.5 }] }} />
       <Animated.View style={{ width: "78%", height: "70%", transform: [{ perspective: 900 }, { rotateX }, { rotateY }] }}>
