@@ -1,6 +1,6 @@
 import type { Entry } from "@dandelist/catalogue";
 import { recurringBreakdown } from "@dandelist/cost";
-import { toItem } from "@dandelist/catalogue";
+import { heroOf, toItem } from "@dandelist/catalogue";
 import { useEffect, useRef, useState } from "react";
 import { Animated, PanResponder, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions, type LayoutChangeEvent } from "react-native";
 import { ease, haptic, native, spring, usePress, useReducedMotion } from "../../lib/motion";
@@ -45,7 +45,7 @@ function PhotoCard({ e, onPress, style, big = false }: { e: Entry; onPress(ref: 
   return (
     <Pressable ref={ref} accessibilityRole="button" accessibilityLabel={`${e.name}, ${formatCents(e.upfrontCents)}`} onPressIn={press.onPressIn} onPressOut={press.onPressOut} onPress={() => onPress(ref.current)} style={style}>
       <Animated.View style={{ flex: 1, borderRadius: radius.lg, overflow: "hidden", transform: [{ scale: press.scale }] }}>
-        <GlassReveal uri={e.imageUrl ?? null} standby={standbyFor(e)} stage="clear" treatment="pane" style={StyleSheet.absoluteFill} />
+        <GlassReveal uri={heroOf(e) ?? null} standby={standbyFor(e)} stage="clear" treatment="pane" style={StyleSheet.absoluteFill} />
         <Shade />
         <View style={{ position: "absolute", left: layout.cardPad, right: layout.cardPad, bottom: layout.cardPad, gap: 8 }}>
           <Text style={[type.title2, { color: p.ink }]} numberOfLines={2}>

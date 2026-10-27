@@ -1,4 +1,5 @@
 import type { Entry } from "@dandelist/catalogue";
+import { heroOf } from "@dandelist/catalogue";
 import { formatCents } from "@dandelist/cost";
 import { useEffect, useRef, useState } from "react";
 import { Animated, Linking, PanResponder, Platform, Pressable, StyleSheet, Text, TextInput, View, useWindowDimensions } from "react-native";
@@ -23,7 +24,7 @@ export function RevealCard({ picks, upfrontCents, monthlyRunningCents, everythin
   const card = useRef(new Animated.Value(reduced ? 1 : 0)).current;
   const date = useRef(new Animated.Value(reduced ? 1 : 0)).current;
   const sweep = useRef(new Animated.Value(0)).current;
-  const withPhotos = picks.filter((e) => e.imageUrl);
+  const withPhotos = picks.filter((e) => heroOf(e));
   const shown = withPhotos.length >= 3 ? withPhotos.slice(0, 5) : [withPhotos[0] ?? picks[0]].filter((e): e is Entry => !!e);
   const fans = useRef(shown.map(() => new Animated.Value(reduced ? 1 : 0))).current;
   const [figureW, setFigureW] = useState(0);
@@ -74,7 +75,7 @@ export function RevealCard({ picks, upfrontCents, monthlyRunningCents, everythin
               }}
             >
               <View style={{ flex: 1, borderRadius: radius.sm, overflow: "hidden", borderWidth: StyleSheet.hairlineWidth, borderColor: p.hair }}>
-                <GlassReveal uri={e.imageUrl ?? null} standby={require("../../assets/standby/object.jpg")} stage="clear" treatment="film" style={StyleSheet.absoluteFill} />
+                <GlassReveal uri={heroOf(e) ?? null} standby={require("../../assets/standby/object.jpg")} stage="clear" treatment="film" style={StyleSheet.absoluteFill} />
               </View>
             </Animated.View>
           );

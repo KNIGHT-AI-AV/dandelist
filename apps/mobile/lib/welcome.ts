@@ -1,4 +1,4 @@
-import { entry, toItem, type Entry } from "@dandelist/catalogue";
+import { entry, type Entry, heroOf, toItem } from "@dandelist/catalogue";
 import { fetch as streamingFetch } from "expo/fetch";
 import { Platform } from "react-native";
 import { API_URL } from "./auth";
@@ -50,7 +50,7 @@ export function toWishes(s: WelcomeState): NewWish[] {
         url: e.url,
         status: e.status,
         checkedAt: e.checkedAt,
-        ...(e.imageUrl ? { imageUrl: e.imageUrl } : {}),
+        ...(heroOf(e) ? { imageUrl: heroOf(e) } : {}),
         explanation: "",
         source: { currency: "USD", price: e.upfrontCents / 100, rate: 1, rateDate: e.checkedAt.slice(0, 10) },
       },

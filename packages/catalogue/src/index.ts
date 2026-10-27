@@ -36,6 +36,14 @@ export interface Entry extends Seed {
   };
 }
 
+/** The photograph to lead with: the largest real (not generated) one, else the largest, else the price page's image. */
+export function heroOf(e: Pick<Entry, "media" | "imageUrl">): string | undefined {
+  const all = e.media?.images ?? [];
+  const real = all.filter((i) => !i.generated);
+  const best = [...(real.length ? real : all)].sort((a, b) => (b.width ?? 0) - (a.width ?? 0))[0];
+  return best?.url ?? e.imageUrl;
+}
+
 export const seeds: Seed[] = [
   { id: "porsche-911", ask: "A new Porsche 911 Carrera (current model year), US base price on porsche.com", name: "Porsche 911 Carrera", kind: "buy", category: "drive" },
   { id: "leica-q3", ask: "Leica Q3 camera, new, US price from Leica's own store", name: "Leica Q3", kind: "buy", category: "capture" },
