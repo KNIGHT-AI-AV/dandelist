@@ -68,7 +68,7 @@ export function Trail({ steps, working }: { steps: Step[]; working: boolean }) {
           <View style={{ width: 12, alignItems: "center" }}>
             <Pulse />
           </View>
-          <Text style={[type.small, { color: p.muted }]}>{steps.length ? "Working…" : "Starting the research…"}</Text>
+          <Text style={[type.small, { color: p.muted }]}>{steps.length ? "Working..." : "Starting the research..."}</Text>
         </View>
       ) : null}
     </View>

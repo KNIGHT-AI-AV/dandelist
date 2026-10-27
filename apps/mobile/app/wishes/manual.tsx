@@ -73,7 +73,7 @@ export default function ManualWish() {
   return (
     <Screen>
       <Title>Enter it yourself</Title>
-      <Field label="What is it?" value={name} onChangeText={setName} placeholder="Leica Q3, a week in Lisbon…" />
+      <Field label="What is it?" value={name} onChangeText={setName} placeholder="Leica Q3, a week in Lisbon..." />
       <Segmented<WishKind> label="Type" options={KINDS} value={kind} onChange={setKind} />
       <Segmented<WishTier> label="How much you want it" options={TIERS} value={tier} onChange={setTier} />
       <Field label="Price upfront (USD)" value={price} onChangeText={setPrice} keyboardType="decimal-pad" inputMode="decimal" placeholder="2,400" />

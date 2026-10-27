@@ -158,7 +158,7 @@ export default function NewWish() {
           ))}
         </View>
         <ErrorText>{error}</ErrorText>
-        {stage === "reading" ? <Working label="Reading your wish with Meta's Muse Spark…" /> : <Button label="Find real prices" onPress={read} />}
+        {stage === "reading" ? <Working label="Reading your wish with Meta's Muse Spark..." /> : <Button label="Find real prices" onPress={read} />}
         <Button label="Enter it yourself" kind="quiet" onPress={() => router.push("/wishes/manual")} />
         <Button label="Cancel" kind="quiet" onPress={() => router.back()} />
       </Screen>
