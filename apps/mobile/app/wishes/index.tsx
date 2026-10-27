@@ -71,6 +71,13 @@ export default function LifeList() {
   const p = usePalette();
   const insets = useSafeAreaInsets();
   const [menu, setMenu] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  // App Store rule 5.1.1(v): accounts can be deleted from inside the app. A second tap confirms.
+  const deleteAccount = async () => {
+    if (!confirmDelete) return setConfirmDelete(true);
+    const res = await auth.api("/me", { method: "DELETE" }).catch(() => null);
+    if (res?.ok || res?.status === 204) await auth.signOut();
+  };
   if (auth.status === "signedOut") return <Redirect href="/sign-in" />;
 
   const items = wishes.map((w) => w.item);
@@ -93,6 +100,9 @@ export default function LifeList() {
             <QuietButton label="Theme" onPress={() => { setMenu(false); router.push("/theme"); }} />
             <QuietButton label="Enter a wish yourself" onPress={() => { setMenu(false); router.push("/wishes/manual"); }} />
             <QuietButton label="Sign out" onPress={() => auth.signOut()} />
+            <QuietButton label="Privacy" onPress={() => { setMenu(false); router.push("/privacy"); }} />
+            <QuietButton label="Terms" onPress={() => { setMenu(false); router.push("/terms"); }} />
+            <QuietButton label={confirmDelete ? "Tap again to delete everything" : "Delete my account"} onPress={deleteAccount} />
           </Glass>
         ) : null}
 
