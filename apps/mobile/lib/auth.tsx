@@ -3,6 +3,7 @@ import Constants, { ExecutionEnvironment } from "expo-constants";
 import * as Crypto from "expo-crypto";
 import * as Linking from "expo-linking";
 import * as WebBrowser from "expo-web-browser";
+import { fetch as streamingFetch } from "expo/fetch";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Platform } from "react-native";
 import { getSecret, setSecret } from "./storage";
@@ -37,6 +38,8 @@ interface Auth {
   signOut(): Promise<void>;
   /** fetch against the API with the access token, refreshing once on 401. */
   api(path: string, init?: RequestInit): Promise<Response>;
+  /** Like api, but the response body can be read as a stream (server-sent events) on phones too. */
+  apiStream(path: string, init?: RequestInit): Promise<Response>;
 }
 
 const AuthContext = createContext<Auth | null>(null);
@@ -161,10 +164,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return true;
   }, [takeTokens]);
 
-  const api = useCallback(
-    async (path: string, init: RequestInit = {}) => {
+  const call = useCallback(
+    async (path: string, init: RequestInit = {}, streaming = false) => {
+      // React Native's own fetch can't read a response stream; Expo's can. The web's fetch streams already.
+      const doFetch = (streaming && Platform.OS !== "web" ? streamingFetch : fetch) as typeof fetch;
       const send = () =>
-        fetch(`${API_URL}${path}`, { ...init, headers: { ...(init.headers ?? {}), Authorization: `Bearer ${access.current ?? ""}` } });
+        doFetch(`${API_URL}${path}`, { ...init, headers: { ...(init.headers ?? {}), Authorization: `Bearer ${access.current ?? ""}` } });
       let res = await send();
       if (res.status === 401 && (await refresh())) res = await send();
       if (res.status === 401) {
@@ -175,6 +180,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
     [refresh],
   );
+  const api = useCallback((path: string, init: RequestInit = {}) => call(path, init), [call]);
+  const apiStream = useCallback((path: string, init: RequestInit = {}) => call(path, init, true), [call]);
 
   useEffect(() => {
     (async () => {
@@ -226,6 +233,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       status,
       user,
       api,
+      apiStream,
       redeemTicket,
       async startEmail(email) {
         const res = await post("/auth/email/start", { email }).catch(() => null);
@@ -295,7 +303,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setStatus("signedOut");
       },
     }),
-    [status, user, api, takeTokens, redeemTicket, finishSignIn],
+    [status, user, api, apiStream, takeTokens, redeemTicket, finishSignIn],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
