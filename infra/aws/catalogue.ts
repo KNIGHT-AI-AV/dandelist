@@ -69,6 +69,7 @@ async function price(seed: Seed): Promise<Entry> {
   };
 }
 
+const CURATED = "https://api.dandelist.knightaiav.com/media/";
 const previous = JSON.parse(await readFile(out, "utf8")) as Entry[];
 const results = new Map(previous.map((e) => [e.id, e]));
 const todo = seeds.filter((s) => !only.length || only.includes(s.id));
@@ -78,6 +79,9 @@ for (let i = 0; i < todo.length; i += 2) {
     todo.slice(i, i + 2).map(async (seed) => {
       try {
         const e = await price(seed);
+        // Hand-curated photographs (served from our own media store) survive a re-price.
+        const prev = results.get(seed.id);
+        if (prev?.media?.images[0]?.url.startsWith(CURATED)) Object.assign(e, { media: prev.media, imageUrl: prev.imageUrl });
         results.set(seed.id, e);
         console.log(`ok    ${seed.id}  ${(e.upfrontCents / 100).toFixed(2)}  ${e.status}  ${e.seller}  media:${e.media ? `${e.media.images.length} img${e.media.model3d ? " +3d" : ""}${e.media.cutout ? " +cutout" : ""}` : e.imageUrl ? "og" : "none"}`);
       } catch (err) {

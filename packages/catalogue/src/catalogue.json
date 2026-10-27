@@ -11,38 +11,16 @@
     "seller": "Porsche",
     "url": "https://www.porsche.com/usa/models/911/carrera-models/911-carrera/",
     "checkedAt": "2026-10-27T21:52:48.709Z",
-    "imageUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/ea/2025_Porsche_911_Carrera_S_rear.jpg/3840px-2025_Porsche_911_Carrera_S_rear.jpg",
+    "imageUrl": "https://api.dandelist.knightaiav.com/media/2ac2aa1a62bb6fab970b37c6ca6d752222de2d0870b665777e4b8f5a9a5a5a10.jpg",
     "media": {
       "kind": "vehicle",
-      "cutout": {
-        "url": "https://api.dandelist.knightaiav.com/media/c7a381bf709f4acf43d22d7b3742a5adf357f2c2119ef1b87ee2be0ba5d4c581.png",
-        "from": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/ea/2025_Porsche_911_Carrera_S_rear.jpg/3840px-2025_Porsche_911_Carrera_S_rear.jpg",
-        "model": "sam-3.1",
-        "width": 2048,
-        "height": 931
-      },
       "images": [
         {
-          "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/ea/2025_Porsche_911_Carrera_S_rear.jpg/3840px-2025_Porsche_911_Carrera_S_rear.jpg",
-          "width": 3840,
-          "credit": "TTTNIS",
-          "height": 1858,
-          "source": "commons.wikimedia.org",
-          "license": "CC0"
-        },
-        {
-          "url": "https://encrypted-tbn2.gstatic.com/shopping?q=tbn:ANd9GcQ1TMXdgA3d4ptzSkO83khLQfqnJaOADVjW8jZFOzKPk0fTNpJnp1Dup-M92WRE8fQWM0RS6pYwb27SumPBKIQAhaLUrBp0YZUi_XYvKxL6xcpoI2Xi5vNW",
-          "width": 401,
-          "credit": "Suncoast Porsche Parts",
-          "height": 259,
-          "source": "Google Shopping"
-        },
-        {
-          "url": "https://encrypted-tbn0.gstatic.com/shopping?q=tbn:ANd9GcS8utYD1dRihwkCT3Xbiixa9s0hzyiFrwZrrr6moTHj80zbaQszgfzOmuLaY5QKwKVyrNw_TcJmiMWMO-6BHDkViWipGoQnLYnhctKfgWDo696iIjUT7IjipQ",
-          "width": 401,
-          "credit": "Suncoast Porsche Parts",
-          "height": 259,
-          "source": "Google Shopping"
+          "url": "https://api.dandelist.knightaiav.com/media/2ac2aa1a62bb6fab970b37c6ca6d752222de2d0870b665777e4b8f5a9a5a5a10.jpg",
+          "width": 2048,
+          "height": 2048,
+          "source": "porsche.com",
+          "credit": "Porsche"
         }
       ]
     }
@@ -59,7 +37,19 @@
     "seller": "Leica Camera USA",
     "url": "https://leicacamerausa.com/leica-q3-black.html",
     "checkedAt": "2026-10-27T13:55:50.823Z",
-    "imageUrl": "https://cdn11.bigcommerce.com/s-r16b86mn51/products/9495/images/26511/19080_Leica_Q3_front_1920x1440__88890.1683815147.386.513.jpg?c=2"
+    "imageUrl": "https://api.dandelist.knightaiav.com/media/e135d1bab9b4ca0ed59b1c737ad435c56a7e779e7ae2fe33998534f0cb12fef1.jpg",
+    "media": {
+      "kind": "product",
+      "images": [
+        {
+          "url": "https://api.dandelist.knightaiav.com/media/e135d1bab9b4ca0ed59b1c737ad435c56a7e779e7ae2fe33998534f0cb12fef1.jpg",
+          "width": 2048,
+          "height": 2048,
+          "source": "leica-camera.com",
+          "credit": "Leica Camera"
+        }
+      ]
+    }
   },
   {
     "id": "lisbon-month",
@@ -73,7 +63,20 @@
     "seller": "Flatio",
     "url": "https://www.flatio.com/",
     "checkedAt": "2026-10-27T13:56:54.119Z",
-    "imageUrl": "https://www.flatio.com/cdn/images/logo/flatio_logo_meta_v2.png"
+    "imageUrl": "https://api.dandelist.knightaiav.com/media/2ff3a1bd237af71f4bd952d794b4d6ae842120b744472097f98aa5bad61f8ad6.jpg",
+    "media": {
+      "kind": "place",
+      "images": [
+        {
+          "url": "https://api.dandelist.knightaiav.com/media/2ff3a1bd237af71f4bd952d794b4d6ae842120b744472097f98aa5bad61f8ad6.jpg",
+          "width": 2400,
+          "height": 1600,
+          "source": "commons.wikimedia.org",
+          "credit": "NorbertNagel",
+          "license": "CC BY-SA 4.0"
+        }
+      ]
+    }
   },
   {
     "id": "rolex-submariner",
@@ -87,38 +90,16 @@
     "seller": "Rolex",
     "url": "https://www.rolex.com/en-us/watches/submariner/m126610ln-0001",
     "checkedAt": "2026-10-27T21:54:09.048Z",
-    "imageUrl": "https://media.rolex.com/image/upload/f_auto/t_v7-cover-majesty-landscape/c_limit,w_1920/v1/a677b2c664f6/catalogue/2026/upright-c/m126610ln-0001",
+    "imageUrl": "https://api.dandelist.knightaiav.com/media/f38d1bc3f0718631bca7a5e8dbd4bec7c4018a04f2bddff9eb9229641138f058.jpg",
     "media": {
       "kind": "product",
-      "cutout": {
-        "url": "https://api.dandelist.knightaiav.com/media/d6e1848513ecba74fa6d92a5ec2161bbbd79b32eee492d62d9dda5463da4aaab.png",
-        "from": "https://media.rolex.com/image/upload/f_auto/t_v7-cover-majesty-landscape/c_limit,w_1920/v1/a677b2c664f6/catalogue/2026/upright-c/m126610ln-0001",
-        "model": "sam-3.1",
-        "width": 886,
-        "height": 1510
-      },
       "images": [
         {
-          "url": "https://media.rolex.com/image/upload/f_auto/t_v7-cover-majesty-landscape/c_limit,w_1920/v1/a677b2c664f6/catalogue/2026/upright-c/m126610ln-0001",
-          "clean": true,
+          "url": "https://api.dandelist.knightaiav.com/media/f38d1bc3f0718631bca7a5e8dbd4bec7c4018a04f2bddff9eb9229641138f058.jpg",
           "width": 1451,
-          "credit": "Rolex",
           "height": 2160,
-          "source": "rolex.com"
-        },
-        {
-          "url": "https://encrypted-tbn2.gstatic.com/shopping?q=tbn:ANd9GcTPnLvM3IYt4Tv_dZVX5sDWE4igTJf4WAkVcf8Y3rkO_vf__lkBnAbxzVm58soLIo8HIuMtVRR5S0orHKB5aQnFRhvLpSn9Qc-qv57V4KoLIaYJC2mVFylh",
-          "width": 426,
-          "credit": "Mr. Alex Jewelry",
-          "height": 426,
-          "source": "Google Shopping"
-        },
-        {
-          "url": "https://encrypted-tbn3.gstatic.com/shopping?q=tbn:ANd9GcQEFU00yRwxU8jQHrJdo9i-PuR4tsN20YuzOXjQBrf9MR6Bp_o15DR9tIqwrQp3q-1iLERMpHjp618BkOCom5SmY6Lnu041mIedoXwk1o02pifyP9hd-BCdpA",
-          "width": 426,
-          "credit": "Wrist Aficionado",
-          "height": 426,
-          "source": "Google Shopping"
+          "source": "rolex.com",
+          "credit": "Rolex"
         }
       ]
     }
@@ -135,73 +116,16 @@
     "seller": "flights.com + KAYAK",
     "url": "https://www.flights.com/?redirect=true",
     "checkedAt": "2026-10-27T21:55:25.877Z",
-    "imageUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/de/Water_reflection_of_Kinkaku-ji_Temple_a_sunny_day%2C_Kyoto%2C_Japan.jpg/3840px-Water_reflection_of_Kinkaku-ji_Temple_a_sunny_day%2C_Kyoto%2C_Japan.jpg",
+    "imageUrl": "https://api.dandelist.knightaiav.com/media/18675cec3b0ac062fbd1fb493332ab9312e9641cbcadbd3434a82267a17f8303.jpg",
     "media": {
       "kind": "place",
       "images": [
         {
-          "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/de/Water_reflection_of_Kinkaku-ji_Temple_a_sunny_day%2C_Kyoto%2C_Japan.jpg/3840px-Water_reflection_of_Kinkaku-ji_Temple_a_sunny_day%2C_Kyoto%2C_Japan.jpg",
-          "width": 3840,
-          "credit": "Basile Morin",
-          "height": 2160,
+          "url": "https://api.dandelist.knightaiav.com/media/18675cec3b0ac062fbd1fb493332ab9312e9641cbcadbd3434a82267a17f8303.jpg",
+          "width": 2400,
+          "height": 1477,
           "source": "commons.wikimedia.org",
-          "license": "CC BY-SA 4.0"
-        },
-        {
-          "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/0e/Torii_path_with_lantern_at_Fushimi_Inari_Taisha_Shrine%2C_Kyoto%2C_Japan.jpg/3840px-Torii_path_with_lantern_at_Fushimi_Inari_Taisha_Shrine%2C_Kyoto%2C_Japan.jpg",
-          "width": 3840,
-          "credit": "Basile Morin",
-          "height": 2560,
-          "source": "commons.wikimedia.org",
-          "license": "CC BY-SA 4.0"
-        },
-        {
-          "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/83/Kiyomizu-dera%2C_Kyoto%2C_November_2016_-01.jpg/3840px-Kiyomizu-dera%2C_Kyoto%2C_November_2016_-01.jpg",
-          "width": 3840,
-          "credit": "Martin Falbisoner",
-          "height": 2363,
-          "source": "commons.wikimedia.org",
-          "license": "CC BY-SA 4.0"
-        },
-        {
-          "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/4a/Bamboo_Forest%2C_Arashiyama%2C_Kyoto%2C_Japan.jpg/3840px-Bamboo_Forest%2C_Arashiyama%2C_Kyoto%2C_Japan.jpg",
-          "width": 3840,
-          "credit": "Basile Morin",
-          "height": 2560,
-          "source": "commons.wikimedia.org",
-          "license": "CC BY-SA 4.0"
-        },
-        {
-          "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/ed/Yasaka-dori_early_morning_with_street_lanterns_and_the_Tower_of_Yasaka_%28Hokan-ji_Temple%29%2C_Kyoto%2C_Japan.jpg/3840px-Yasaka-dori_early_morning_with_street_lanterns_and_the_Tower_of_Yasaka_%28Hokan-ji_Temple%29%2C_Kyoto%2C_Japan.jpg",
-          "width": 3840,
-          "credit": "Basile Morin",
-          "height": 2560,
-          "source": "commons.wikimedia.org",
-          "license": "CC BY-SA 4.0"
-        },
-        {
-          "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/99/Sunlight_through_clouds_and_view_of_Ginkaku-ji_Temple_from_above%2C_Kyoto%2C_Japan.jpg/3840px-Sunlight_through_clouds_and_view_of_Ginkaku-ji_Temple_from_above%2C_Kyoto%2C_Japan.jpg",
-          "width": 3840,
-          "credit": "Basile Morin",
-          "height": 2560,
-          "source": "commons.wikimedia.org",
-          "license": "CC BY-SA 4.0"
-        },
-        {
-          "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/ab/Togetsu-kyo_bridge_at_dusk%2C_Kyoto%2C_Japan.jpg/3840px-Togetsu-kyo_bridge_at_dusk%2C_Kyoto%2C_Japan.jpg",
-          "width": 3840,
-          "credit": "Basile Morin",
-          "height": 2560,
-          "source": "commons.wikimedia.org",
-          "license": "CC BY-SA 4.0"
-        },
-        {
-          "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/25/Wooden_and_bamboo_facades_of_dwellings_with_sudare_in_a_cobbled_street_of_Gion%2C_perspective_effect_with_vanishing_point%2C_Kyoto%2C_Japan.jpg/3840px-Wooden_and_bamboo_facades_of_dwellings_with_sudare_in_a_cobbled_street_of_Gion%2C_perspective_effect_with_vanishing_point%2C_Kyoto%2C_Japan.jpg",
-          "width": 3840,
-          "credit": "Wikimedia Commons contributor",
-          "height": 2560,
-          "source": "commons.wikimedia.org",
-          "license": "CC BY-SA 4.0"
+          "license": "kyoto-autumn"
         }
       ]
     }
@@ -224,7 +148,19 @@
     "seller": "onepeloton.com",
     "url": "https://www.onepeloton.com/shop/bike-plus",
     "checkedAt": "2026-10-27T13:56:54.318Z",
-    "imageUrl": "https://images.ctfassets.net/7vk8puwnesgc/2xURCMwD091uJI4uqrh3UN/755365da4bcac7fff2bc5102f5976530/Metadata-Bike_.jpg"
+    "imageUrl": "https://api.dandelist.knightaiav.com/media/87f3add9014cc6466396ce2cc7c263c494bc3d4306565009426086f140672795.jpg",
+    "media": {
+      "kind": "product",
+      "images": [
+        {
+          "url": "https://api.dandelist.knightaiav.com/media/87f3add9014cc6466396ce2cc7c263c494bc3d4306565009426086f140672795.jpg",
+          "width": 2400,
+          "height": 1260,
+          "source": "onepeloton.com",
+          "credit": "Peloton"
+        }
+      ]
+    }
   },
   {
     "id": "rimowa-cabin",
@@ -237,7 +173,20 @@
     "status": "estimate",
     "seller": "rimowa.com",
     "url": "https://www.rimowa.com/us/en/luggage/colour/silver/cabin/92553004.html",
-    "checkedAt": "2026-10-27T13:58:02.241Z"
+    "checkedAt": "2026-10-27T13:58:02.241Z",
+    "media": {
+      "kind": "product",
+      "images": [
+        {
+          "url": "https://api.dandelist.knightaiav.com/media/ce2b91a4f6894d9baf9710b0c116fd1e24da8fb4c679c498bc484614ca490e76.jpg",
+          "width": 2048,
+          "height": 2048,
+          "source": "rimowa.com",
+          "credit": "RIMOWA"
+        }
+      ]
+    },
+    "imageUrl": "https://api.dandelist.knightaiav.com/media/ce2b91a4f6894d9baf9710b0c116fd1e24da8fb4c679c498bc484614ca490e76.jpg"
   },
   {
     "id": "range-rover-sport",
@@ -251,7 +200,26 @@
     "seller": "Land Rover USA",
     "url": "https://www.rangerover.com/en-us/index.html?dclid=CM3RzMum5IgDFbEHaAgdj8gARA",
     "checkedAt": "2026-10-27T13:56:36.320Z",
-    "imageUrl": "https://www.rangerover.com/content/dam/lrdx/global/l460/27my/int/L46027GL_01_L460_27MY_BEV_BGG_EXT_HERO_Front_3_4.jpg"
+    "imageUrl": "https://api.dandelist.knightaiav.com/media/f831e9dbb86ef056c6aee654f67b7b461d3c859ff1a85f49312e547c02ded061.jpg",
+    "media": {
+      "kind": "vehicle",
+      "images": [
+        {
+          "url": "https://api.dandelist.knightaiav.com/media/f831e9dbb86ef056c6aee654f67b7b461d3c859ff1a85f49312e547c02ded061.jpg",
+          "width": 2048,
+          "height": 2048,
+          "source": "rangerover.com",
+          "credit": "Land Rover"
+        }
+      ],
+      "cutout": {
+        "url": "https://api.dandelist.knightaiav.com/media/7b70f037793276a0c7ac4a7ce5b5226c0ad4af940d0882a17d9d56cf445c27c0.png",
+        "width": 1545,
+        "height": 864,
+        "from": "https://www.rangerover.com/content/dam/lrdx/global/l461/26my/int/L46126GL_303105617_SV_CORE_F34_ARROIOS_16x9.jpg",
+        "model": "sam-3.1"
+      }
+    }
   },
   {
     "id": "amalfi-week",
@@ -264,7 +232,21 @@
     "status": "verified",
     "seller": "Hotel Poseidon",
     "url": "https://www.positanohotelspage.com/en/",
-    "checkedAt": "2026-10-27T13:57:44.124Z"
+    "checkedAt": "2026-10-27T13:57:44.124Z",
+    "media": {
+      "kind": "place",
+      "images": [
+        {
+          "url": "https://api.dandelist.knightaiav.com/media/9bc14f198e35e95cf5c06ebdec0903b75dbb17aebdcf3b936cd7a0d0615edecf.jpg",
+          "width": 2400,
+          "height": 1472,
+          "source": "commons.wikimedia.org",
+          "credit": "Bernard Gagnon",
+          "license": "CC BY 4.0"
+        }
+      ]
+    },
+    "imageUrl": "https://api.dandelist.knightaiav.com/media/9bc14f198e35e95cf5c06ebdec0903b75dbb17aebdcf3b936cd7a0d0615edecf.jpg"
   },
   {
     "id": "eames-lounge",
@@ -278,7 +260,26 @@
     "seller": "Herman Miller",
     "url": "https://www.veganfoodandliving.com/news/eames-lounge-chair-vegan-bamboo-upholstery/",
     "checkedAt": "2026-10-27T14:02:16.093Z",
-    "imageUrl": "https://www.veganfoodandliving.com/wp-content/uploads/2024/07/Eames-Lounge-Chair-and-Ottoman.jpg"
+    "imageUrl": "https://api.dandelist.knightaiav.com/media/4583445617fa8ded6f0c9972e36f94ceb792134195b55fbef087c6445e310570.jpg",
+    "media": {
+      "kind": "product",
+      "images": [
+        {
+          "url": "https://api.dandelist.knightaiav.com/media/4583445617fa8ded6f0c9972e36f94ceb792134195b55fbef087c6445e310570.jpg",
+          "width": 2048,
+          "height": 2048,
+          "source": "hermanmiller.com",
+          "credit": "Herman Miller"
+        }
+      ],
+      "cutout": {
+        "url": "https://api.dandelist.knightaiav.com/media/6cebb106d93e9528f982661df1f5c175a465bb6a145af55a60f25dbb1867f54d.png",
+        "width": 1837,
+        "height": 1741,
+        "from": "https://images.hermanmiller.group/asset/51f9c4c7-a3ec-4d1f-9cfc-0c400937d965/W/HM_5667_9121537_palisander_black_p.png",
+        "model": "sam-3.1"
+      }
+    }
   },
   {
     "id": "vision-pro",
@@ -292,6 +293,26 @@
     "seller": "apple.com",
     "url": "https://www.apple.com/shop/buy-vision/apple-vision-pro",
     "checkedAt": "2026-10-27T14:01:59.157Z",
-    "imageUrl": "https://store.storeimages.cdn-apple.com/1/as-images.apple.com/is/vision-pro-gallery-measure-dual-knit-202510?wid=1200&amp;hei=630&amp;fmt=jpeg&amp;qlt=95&amp;.v=1758586787993"
+    "imageUrl": "https://api.dandelist.knightaiav.com/media/434c5de4a33f9bb35b970d280e33d80b79a5ee46c4fff83e8e3addb287d1d35d.jpg",
+    "media": {
+      "kind": "product",
+      "images": [
+        {
+          "url": "https://api.dandelist.knightaiav.com/media/434c5de4a33f9bb35b970d280e33d80b79a5ee46c4fff83e8e3addb287d1d35d.jpg",
+          "width": 2048,
+          "height": 2048,
+          "source": "commons.wikimedia.org",
+          "credit": "AzureSaturn",
+          "license": "CC0"
+        }
+      ],
+      "cutout": {
+        "url": "https://api.dandelist.knightaiav.com/media/e20abbea99a665068ae9493c691543d3333ade9662cb6025dfd189a8703f8d9b.png",
+        "width": 1861,
+        "height": 1897,
+        "from": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/8d/Apple_Vision_Pro_%28M5%2C_2025%29_with_Dual_Knit_Band_on_Display.jpg/3840px-Apple_Vision_Pro_%28M5%2C_2025%29_with_Dual_Knit_Band_on_Display.jpg",
+        "model": "sam-3.1"
+      }
+    }
   }
 ]

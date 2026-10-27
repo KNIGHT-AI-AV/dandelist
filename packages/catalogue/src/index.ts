@@ -36,12 +36,10 @@ export interface Entry extends Seed {
   };
 }
 
-/** The photograph to lead with: the largest real (not generated) one, else the largest, else the price page's image. */
+/** The photograph to lead with: the first real (not generated) one, since images are kept best first; else the price page's. */
 export function heroOf(e: Pick<Entry, "media" | "imageUrl">): string | undefined {
   const all = e.media?.images ?? [];
-  const real = all.filter((i) => !i.generated);
-  const best = [...(real.length ? real : all)].sort((a, b) => (b.width ?? 0) - (a.width ?? 0))[0];
-  return best?.url ?? e.imageUrl;
+  return (all.find((i) => !i.generated) ?? all[0])?.url ?? e.imageUrl;
 }
 
 export const seeds: Seed[] = [
