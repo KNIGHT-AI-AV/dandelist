@@ -106,7 +106,23 @@ export function EdgeFade({ height }: { height: number }) {
   );
 }
 
-const GRAIN_URI = Platform.OS === "web" ? Asset.fromModule(grain).uri : "";
+/**
+ * Text protection over a photograph (UI audit P1-22, HIG's dimming layer): a soft 35% wash behind a title block
+ * that rises from nothing, so the type reads without a visible box.
+ */
+export function Protect() {
+  const p = usePalette();
+  return (
+    <LinearGradient
+      pointerEvents="none"
+      colors={[`rgba(${p.bgRgb}, 0)`, `rgba(${p.bgRgb}, 0.35)`, `rgba(${p.bgRgb}, 0.35)`]}
+      locations={[0, 0.45, 1]}
+      style={{ position: "absolute", left: -400, right: -400, top: -56, bottom: -16 }}
+    />
+  );
+}
+
+const GRAIN_URI =Platform.OS === "web" ? Asset.fromModule(grain).uri : "";
 
 /** Fine film grain over a screen; purely visual. The web tiles it with CSS. */
 export function Grain() {
@@ -252,7 +268,7 @@ export function QuietButton({ label, onPress, style, color }: { label: string; o
   const press = usePress(0.97);
   return (
     <Pressable accessibilityRole="button" onPress={onPress} onPressIn={press.onPressIn} onPressOut={press.onPressOut} hitSlop={6} style={style}>
-      <Animated.View style={{ minHeight: 44, alignItems: "center", justifyContent: "center", paddingHorizontal: 4, transform: [{ scale: press.scale }] }}>
+      <Animated.View style={{ minHeight: 44, alignItems: "center", justifyContent: "center", transform: [{ scale: press.scale }] }}>
         <Text style={[type.label, { color: color ?? p.ink2 }]}>{label}</Text>
       </Animated.View>
     </Pressable>

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ledger } from "../../components/ledger";
-import { AgentDot, Backdrop, Chip, EdgeFade, ErrorLine, Eyebrow, Glass, Grain, Hairline, IconButton, Money, Photo, PrimaryButton, QuietButton, Shade } from "../../components/lux";
+import { AgentDot, Backdrop, Chip, EdgeFade, ErrorLine, Eyebrow, Glass, Grain, Hairline, IconButton, Money, Photo, PrimaryButton, Protect, QuietButton, Shade } from "../../components/lux";
 import { Statement, Take } from "../../components/statement";
 import { getRun, interpretWish, startResearch, type Answer, type Draft, type PriceOption, type Question, type Run, type Step } from "../../lib/agent";
 import { useAuth } from "../../lib/auth";
@@ -255,7 +255,7 @@ export default function NewWish() {
         </View>
         <View style={[column, { marginTop: -150, gap: layout.stack.tight }]}>
           {/* Text protection over the photo: a 35% dimming layer behind the title block (HIG Materials, P1-22). */}
-          <View pointerEvents="none" style={{ position: "absolute", left: 0, right: 0, top: -24, bottom: -16, backgroundColor: `rgba(${p.bgRgb}, 0.35)`, borderRadius: radius.lg }} />
+          <Protect />
           <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
             {working ? <AgentDot busy /> : null}
             <Eyebrow>{working ? `Researching · ${clock} · Meta Muse Spark` : run?.status === "error" ? "Research stopped" : `${KIND_LABEL[draft?.kind ?? "buy"]} · what it costs`}</Eyebrow>

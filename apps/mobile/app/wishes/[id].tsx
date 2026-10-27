@@ -2,7 +2,7 @@ import { Redirect, router, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { Animated, Linking, PanResponder, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { AgentDot, Breathing, ErrorLine, Eyebrow, Grain, IconButton, Photo, QuietButton, Shade } from "../../components/lux";
+import { AgentDot, Breathing, ErrorLine, Eyebrow, Grain, IconButton, Photo, Protect, QuietButton, Shade } from "../../components/lux";
 import { Statement, Take } from "../../components/statement";
 import { useAuth } from "../../lib/auth";
 import { FLICK, ease, native, spring, useReducedMotion } from "../../lib/motion";
@@ -119,7 +119,7 @@ export default function WishDetail() {
         <Animated.View style={{ opacity: page, transform: [{ translateY: page.interpolate({ inputRange: [0, 1], outputRange: [16, 0] }) }] }}>
           <View style={{ marginTop: -150, paddingHorizontal: gutter, gap: layout.stack.tight, width: "100%", maxWidth: layout.list + 2 * gutter, alignSelf: "center" }}>
             {/* Text protection over the photo: a 35% dimming layer behind the title block (HIG Materials, P1-22). */}
-            <View pointerEvents="none" style={{ position: "absolute", left: 0, right: 0, top: -24, bottom: -16, backgroundColor: `rgba(${p.bgRgb}, 0.35)`, borderRadius: radius.lg }} />
+            <Protect />
             <Eyebrow>{[KIND_LABEL[w.kind], TIER_LABEL[w.tier], a?.seller].filter(Boolean).join(" · ")}</Eyebrow>
             <Text accessibilityRole="header" style={[t.title1, { color: p.ink }]}>{w.name}</Text>
           </View>
