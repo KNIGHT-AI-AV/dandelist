@@ -792,14 +792,14 @@ describe("dream safety", () => {
 });
 
 describe("spend caps", () => {
-  it("lets the shared judge account spend up to the service's daily cap, everyone else one person's share", async () => {
+  it("gives the shared judge account a bounded share of the daily cap, everyone else one person's allowance", async () => {
     const pg = new PGlite();
     const d: Db = { query: async (sql, params) => (await pg.query(sql, params)) as never, exec: async (sql) => void (await pg.exec(sql)) } as Db;
     await migrate(d);
     const id = async (email: string) => (await d.query<{ id: string }>("insert into users (email) values ($1) returning id", [email])).rows[0]!.id;
     const caps = { dailyUsd: 10, totalUsd: 120 };
     const judge = { email: "judge@dandelist.com" };
-    expect(await userCapUsd(d, await id("judge@dandelist.com"), 2, judge, caps)).toBe(10);
+    expect(await userCapUsd(d, await id("judge@dandelist.com"), 2, judge, caps)).toBe(6);
     expect(await userCapUsd(d, await id("ada@example.com"), 2, judge, caps)).toBe(2);
     expect(await userCapUsd(d, await id("bo@example.com"), 2, undefined, caps)).toBe(2);
   });
