@@ -7,7 +7,7 @@ import type { Meta } from "../agent/agent";
 import { USER_DAILY_USD, type AgentDeps } from "../agent/routes";
 import { publicFetch } from "../agent/tools";
 import { requireAuth, type AuthVars } from "../auth";
-import { SpendLimitError, assertBudget, assertUserBudget, recordSpend } from "../spend";
+import { assertBudget, assertUserBudget, recordSpend, SpendLimitError, userCapUsd } from "../spend";
 import { deckWidget, runTurn } from "./agent";
 import { TurnBudget, TurnLimitError, type ApifyConfig, type DreamCtx } from "./context";
 import { homeSchema, lifeBody, readLife, writeLife } from "./life";
@@ -85,7 +85,7 @@ export function dreamRoutes(deps: DreamDeps) {
     const now = deps.now();
     try {
       await assertBudget(db, caps, now);
-      await assertUserBudget(db, userId, USER_DAILY_USD, now);
+      await assertUserBudget(db, userId, await userCapUsd(db, userId, USER_DAILY_USD, deps.judge, caps), now);
     } catch (e) {
       return c.json({ error: friendly(e) }, 429);
     }
@@ -114,7 +114,7 @@ export function dreamRoutes(deps: DreamDeps) {
       responses: async (b) => {
         budget.meta();
         await assertBudget(db, caps, deps.now());
-        await assertUserBudget(db, userId, USER_DAILY_USD, deps.now());
+        await assertUserBudget(db, userId, await userCapUsd(db, userId, USER_DAILY_USD, deps.judge, caps), deps.now());
         return client.responses(b);
       },
     };

@@ -3,7 +3,7 @@ import { MetaApiError, MetaClient } from "@dandelist/meta";
 import { Hono } from "hono";
 import { z } from "zod";
 import { requireAuth, type AuthDeps, type AuthVars } from "../auth";
-import { SpendLimitError, assertBudget, assertUserBudget, recordSpend, type SpendCaps } from "../spend";
+import { assertBudget, assertUserBudget, recordSpend, SpendLimitError, userCapUsd, type SpendCaps } from "../spend";
 import { answerSchema, clarify, draftSchema, interpret, research, type Meta, type Step } from "./agent";
 import type { Fetcher } from "./tools";
 
@@ -74,7 +74,7 @@ export function agentRoutes(deps: AgentDeps) {
     return {
       responses: async (body) => {
         await assertBudget(db, caps, deps.now());
-        await assertUserBudget(db, userId, USER_DAILY_USD, deps.now());
+        await assertUserBudget(db, userId, await userCapUsd(db, userId, USER_DAILY_USD, deps.judge, caps), deps.now());
         return client.responses(body);
       },
     };
@@ -122,7 +122,7 @@ export function agentRoutes(deps: AgentDeps) {
 
     try {
       await assertBudget(db, caps, now);
-      await assertUserBudget(db, userId, USER_DAILY_USD, now);
+      await assertUserBudget(db, userId, await userCapUsd(db, userId, USER_DAILY_USD, deps.judge, caps), now);
     } catch (e) {
       return c.json({ error: friendly(e) }, 429);
     }

@@ -46,3 +46,13 @@ export async function assertUserBudget(db: Db, userId: string, capUsd: number, n
   ]);
   if (Number(rows[0]?.spent ?? 0) >= capUsd) throw new SpendLimitError("user");
 }
+
+/**
+ * The cap for one account in any 24 hours. Every judge signs in to the same judge account, so it may spend up to the
+ * service's own daily cap rather than one person's share; everyone else gets `personUsd`.
+ */
+export async function userCapUsd(db: Db, userId: string, personUsd: number, judge: { email: string } | undefined, caps: SpendCaps): Promise<number> {
+  if (!judge) return personUsd;
+  const { rows } = await db.query<{ email: string | null }>("select email from users where id = $1", [userId]);
+  return rows[0]?.email?.toLowerCase() === judge.email.toLowerCase() ? Math.max(personUsd, caps.dailyUsd) : personUsd;
+}
