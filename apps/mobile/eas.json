@@ -1,14 +1,24 @@
 {
-  "cli": { "version": ">= 24.0.0", "appVersionSource": "remote" },
+  "cli": {
+    "version": ">= 24.0.0",
+    "appVersionSource": "remote"
+  },
   "build": {
     "production": {
       "distribution": "store",
       "autoIncrement": true,
       "credentialsSource": "local",
-      "env": { "EXPO_PUBLIC_API_URL": "https://api.dandelist.knightaiav.com" }
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://api.dandelist.knightaiav.com"
+      }
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "ios": {
+        "ascAppId": "6827360772",
+        "appleTeamId": "9NB97BZDR3"
+      }
+    }
   }
 }
