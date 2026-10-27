@@ -1,12 +1,12 @@
 import { equivalentMonthly, horizonCashOutlay, recurringBreakdown, type Item, type Period } from "@dandelist/cost";
 import { router } from "expo-router";
 import { useMemo, useState } from "react";
-import { ScrollView, Text, View } from "react-native";
+import { ScrollView, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Choice, ErrorLine, Eyebrow, GlassField, PrimaryButton, QuietButton } from "../../components/lux";
+import { Chip, ErrorLine, Eyebrow, GlassField, PrimaryButton, QuietButton } from "../../components/lux";
 import { Statement } from "../../components/statement";
-import { formatCents, parseDollars } from "../../lib/money";
-import { fonts, usePalette } from "../../lib/theme";
+import { parseDollars } from "../../lib/money";
+import { layout, type, usePalette, useType } from "../../lib/theme";
 import { useWishes, type WishKind, type WishTier } from "../../lib/wishes";
 
 const KINDS: { value: WishKind; label: string }[] = [
@@ -35,7 +35,10 @@ const HORIZONS = [
 export default function ManualWish() {
   const { add } = useWishes();
   const p = usePalette();
+  const t = useType();
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const gutter = layout.gutter(width);
   const [name, setName] = useState("");
   const [kind, setKind] = useState<WishKind>("buy");
   const [tier, setTier] = useState<WishTier>("nice");
@@ -78,7 +81,7 @@ export default function ManualWish() {
       <Eyebrow>{label}</Eyebrow>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
         {options.map((o) => (
-          <Choice key={o.value} label={o.label} selected={o.value === value} onPress={() => onChange(o.value)} />
+          <Chip key={o.value} label={o.label} selected={o.value === value} onPress={() => onChange(o.value)} />
         ))}
       </View>
     </View>
@@ -86,9 +89,11 @@ export default function ManualWish() {
 
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
-      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingTop: insets.top + 64, paddingBottom: insets.bottom + 40, paddingHorizontal: 24, gap: 18, width: "100%", maxWidth: 520, alignSelf: "center" }}>
-        <Eyebrow>New wish</Eyebrow>
-        <Text accessibilityRole="header" style={{ fontFamily: fonts.display, fontSize: 42, lineHeight: 44, color: p.ink }}>Enter it yourself</Text>
+      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingTop: insets.top + layout.contentTop, paddingBottom: insets.bottom + 40, paddingHorizontal: gutter, gap: 20, width: "100%", maxWidth: layout.list + 2 * gutter, alignSelf: "center" }}>
+        <View style={{ gap: layout.stack.tight }}>
+          <Eyebrow>New wish</Eyebrow>
+          <Text accessibilityRole="header" style={[t.title1, { color: p.ink }]}>Enter it yourself</Text>
+        </View>
         <GlassField label="What is it?" value={name} onChangeText={setName} placeholder="Leica Q3, a week in Lisbon..." />
         {choiceRow("Type", KINDS, kind, setKind)}
         {choiceRow("How much you want it", TIERS, tier, setTier)}
@@ -99,10 +104,10 @@ export default function ManualWish() {
         {preview ? (
           <Statement item={{ id: "preview", upfrontCents: upfrontCents ?? 0, recurring: recurringCents ? [{ amountCents: recurringCents, period }] : [] }} years={years} />
         ) : (
-          <Text style={{ fontFamily: fonts.body, fontSize: 14, color: p.ink2 }}>Enter amounts as numbers to see the costs.</Text>
+          <Text style={[type.callout, { color: p.ink2 }]}>Enter amounts as numbers to see the costs.</Text>
         )}
         <ErrorLine>{error}</ErrorLine>
-        <PrimaryButton label="Save wish" busy={busy} onPress={save} />
+        <PrimaryButton label="Save wish" commit busy={busy} onPress={save} />
         <QuietButton label="Cancel" onPress={() => (router.canGoBack() ? router.back() : router.replace("/wishes"))} />
       </ScrollView>
     </View>

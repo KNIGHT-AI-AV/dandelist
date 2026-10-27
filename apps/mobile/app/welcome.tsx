@@ -1,20 +1,19 @@
 import { entry, firstPick, pairs, type Entry } from "@dandelist/catalogue";
 import { router } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { Animated, Pressable, Text, View } from "react-native";
+import { Animated, Pressable, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Grain } from "../components/lux";
+import { Grain, PrimaryButton, Wordmark } from "../components/lux";
+import { SignInOptions } from "../components/sign-in-options";
 import { AgentWork, Appear, type Result } from "../components/welcome/agent-work";
 import { Aside, FirstPick, Horizon, VotePair } from "../components/welcome/choose";
 import { CodeSheet, RevealCard } from "../components/welcome/finale";
 import { LifePill, Segments } from "../components/welcome/kit";
 import { ThemeChooser } from "../components/welcome/theme";
 import { TitleSequence } from "../components/welcome/title";
-import { useAuth } from "../lib/auth";
-import { ease, native, useReducedMotion } from "../lib/motion";
-import { fonts, radius, usePalette, useTheme } from "../lib/theme";
-import { SignInOptions } from "../components/sign-in-options";
-import { useSignInOptions, type ProviderId, type SignInOption } from "../lib/auth";
+import { useAuth, useSignInOptions, type ProviderId, type SignInOption } from "../lib/auth";
+import { ease, native, spring, step as stepMotion, useReducedMotion } from "../lib/motion";
+import { layout, type, usePalette, useTheme } from "../lib/theme";
 import { loadWelcome, markTitleSeen, monthYearLong, picked, saveWelcome, seenTitle, type WelcomeState } from "../lib/welcome";
 
 /** Apple, Google and GitHub in the save sheet; the kept picks are already on this device for after the redirect. */
@@ -38,9 +37,9 @@ function WelcomeSocial() {
     }
   };
   return (
-    <View style={{ gap: 10 }}>
+    <View style={{ gap: 12 }}>
       <SignInOptions options={options} pending={pending} disabled={!!pending} onChoose={choose} />
-      {error ? <Text style={{ fontFamily: fonts.body, fontSize: 13, color: p.danger }}>{error}</Text> : null}
+      {error ? <Text style={[type.footnote, { color: p.danger }]}>{error}</Text> : null}
     </View>
   );
 }
@@ -55,10 +54,14 @@ const pairEntries = pairs.map(([a, b]) => [entry(a), entry(b)]).filter((pr): pr 
  * The pre-login experience (onboarding research, 2026-10-27): a short title sequence, then the person builds the
  * life they want from real, sourced prices, watches the agent price it, sees the date, and only then saves it.
  * Everything chosen here becomes wishes on the new account.
+ *
+ * Steps fly instead of teleporting (UI audit P1-16): the old step leaves left in 150 ms, the new one arrives from
+ * the right in 320 ms, and going back mirrors it. The header, the progress segments and the Life pill stay put.
  */
 export default function Welcome() {
   const p = usePalette();
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
   const reduced = useReducedMotion();
   const auth = useAuth();
   const theme = useTheme();
@@ -70,6 +73,11 @@ export default function Welcome() {
   const [sheet, setSheet] = useState(false);
   const [flight, setFlight] = useState<{ text: string; from: { x: number; y: number }; to: { x: number; y: number } } | null>(null);
   const fly = useRef(new Animated.Value(0)).current;
+  const stage = useRef(new Animated.Value(1)).current;
+  const shift = useRef(new Animated.Value(0)).current;
+  // Behind the save sheet the page settles back a little (UI audit P1-13).
+  const behind = useRef(new Animated.Value(1)).current;
+  const moving = useRef(false);
   const pill = useRef<View | null>(null);
 
   useEffect(() => {
@@ -89,6 +97,26 @@ export default function Welcome() {
   const update = (next: WelcomeState) => {
     setState(next);
     void saveWelcome(next);
+  };
+
+  /** Leaves the current step and brings in the next one; `back` mirrors the direction. */
+  const go = (next: Step, back = false) => {
+    if (moving.current) return;
+    moving.current = true;
+    const d = back ? -1 : 1;
+    const enter = () => {
+      setStep(next);
+      stage.setValue(0);
+      shift.setValue(reduced ? 0 : stepMotion.inX * d);
+      Animated.parallel([
+        Animated.timing(stage, { toValue: 1, duration: reduced ? 160 : stepMotion.inMs, easing: ease.out, useNativeDriver: native }),
+        Animated.timing(shift, { toValue: 0, duration: reduced ? 0 : stepMotion.inMs, easing: ease.out, useNativeDriver: native }),
+      ]).start(() => (moving.current = false));
+    };
+    Animated.parallel([
+      Animated.timing(stage, { toValue: 0, duration: reduced ? 100 : stepMotion.outMs, easing: ease.out, useNativeDriver: native }),
+      Animated.timing(shift, { toValue: reduced ? 0 : stepMotion.outX * d, duration: reduced ? 0 : stepMotion.outMs, easing: ease.out, useNativeDriver: native }),
+    ]).start(enter);
   };
 
   /** The chosen price flies along a short arc into the Life meter, then the meter rolls up. */
@@ -111,18 +139,27 @@ export default function Welcome() {
     );
   };
 
+  useEffect(() => {
+    Animated.spring(behind, { toValue: sheet && !reduced ? 0.96 : 1, ...spring.settle, useNativeDriver: native }).start();
+  }, [sheet, reduced, behind]);
+
   if (!step) return <View style={{ flex: 1, backgroundColor: p.bg }} />;
 
   const total = picked(state).reduce((s, e) => s + e.upfrontCents, 0);
-  const building = step.kind === "first" || step.kind === "vote" || step.kind === "horizon" || step.kind === "aside";
+  const building = step.kind === "first" || step.kind === "vote" || step.kind === "horizon" || step.kind === "aside" || step.kind === "agent";
+  const framed = step.kind !== "title" && step.kind !== "theme";
+  const gutter = layout.gutter(width);
+  // The header and segments sit on the step's own column: three cards across on wide screens, else 560.
+  const headerColumn = width >= 760 && (step.kind === "first" || step.kind === "vote") ? 932 : layout.column;
+  const pillSpace = layout.control.meter + 32;
 
   let body: React.ReactNode;
   switch (step.kind) {
     case "title":
-      body = <TitleSequence hero={firstEntries[0]!} short={short} onDone={() => { void markTitleSeen(); setStep({ kind: "first" }); }} />;
+      body = <TitleSequence hero={firstEntries[0]!} short={short} onDone={() => { void markTitleSeen(); go({ kind: "first" }); }} />;
       break;
     case "first":
-      body = <FirstPick entries={firstEntries} onPick={(e, from) => launch([e], from, () => { setAnswered(1); setStep({ kind: "vote", round: 0 }); })} />;
+      body = <FirstPick entries={firstEntries} onPick={(e, from) => launch([e], from, () => { setAnswered(1); go({ kind: "vote", round: 0 }); })} />;
       break;
     case "vote": {
       const [a, b] = pairEntries[step.round]!;
@@ -136,7 +173,7 @@ export default function Welcome() {
           onVote={(chosen, from) =>
             launch(chosen, from, () => {
               setAnswered(2 + step.round);
-              setStep(step.round + 1 < pairEntries.length ? { kind: "vote", round: step.round + 1 } : { kind: "horizon" });
+              go(step.round + 1 < pairEntries.length ? { kind: "vote", round: step.round + 1 } : { kind: "horizon" });
             })
           }
         />
@@ -144,19 +181,19 @@ export default function Welcome() {
       break;
     }
     case "horizon":
-      body = <Horizon value={answered >= 6 ? state.horizonYears : undefined} onPick={(years) => { update({ ...state, horizonYears: years }); setAnswered(6); setTimeout(() => setStep({ kind: "aside" }), 250); }} />;
+      body = <Horizon value={answered >= 6 ? state.horizonYears : undefined} onPick={(years) => { update({ ...state, horizonYears: years }); setAnswered(6); setTimeout(() => go({ kind: "aside" }), 200); }} />;
       break;
     case "aside":
-      body = <Aside value={state.monthlyCents} totalCents={Math.max(total, 1)} onChange={(c) => update({ ...state, monthlyCents: c })} onDone={() => { setAnswered(7); setStep({ kind: "agent" }); }} />;
+      body = <Aside value={state.monthlyCents} totalCents={Math.max(total, 1)} onChange={(c) => update({ ...state, monthlyCents: c })} onDone={() => { setAnswered(7); go({ kind: "agent" }); }} />;
       break;
     case "agent":
       body = (
         <View style={{ flex: 1 }}>
           <AgentWork state={state} onResult={setResult} onFollowUp={(name) => update({ ...state, last: name ? picked(state).find((e) => e.name === name)?.id : undefined })} />
           <Appear when={!!result}>
-            <Pressable accessibilityRole="button" onPress={() => setStep({ kind: "reveal" })} style={({ pressed }) => ({ alignSelf: "center", marginBottom: insets.bottom + 24, height: 54, paddingHorizontal: 32, borderRadius: radius.pill, backgroundColor: p.ink, justifyContent: "center", opacity: pressed ? 0.85 : 1 })}>
-              <Text style={{ fontFamily: fonts.label, fontSize: 15, color: p.onAccent }}>See my life</Text>
-            </Pressable>
+            <View style={{ paddingHorizontal: gutter, paddingBottom: 16 }}>
+              <PrimaryButton label="See my life" onPress={() => go({ kind: "reveal" })} />
+            </View>
           </Appear>
         </View>
       );
@@ -164,7 +201,7 @@ export default function Welcome() {
     case "theme":
       body = result ? (
         <ThemeChooser
-          total={`$${Math.round(result.upfrontCents / 100).toLocaleString("en-US")}`}
+          totalCents={result.upfrontCents}
           by={monthYearLong(new Date(`${result.everythingBy}-01T00:00:00`))}
           onDone={(id) => { theme.set(id); setSheet(true); }}
         />
@@ -177,8 +214,8 @@ export default function Welcome() {
           upfrontCents={result.upfrontCents}
           monthlyRunningCents={result.monthlyRunningCents}
           everythingBy={result.everythingBy}
-          onKeep={() => { update({ ...state, kept: true }); setStep({ kind: "theme" }); }}
-          onChange={() => { update({ ...state, picks: [] }); setAnswered(0); setResult(null); setStep({ kind: "first" }); }}
+          onKeep={() => { update({ ...state, kept: true }); go({ kind: "theme" }); }}
+          onChange={() => { update({ ...state, picks: [] }); setAnswered(0); setResult(null); go({ kind: "first" }, true); }}
         />
       ) : null;
       break;
@@ -186,39 +223,47 @@ export default function Welcome() {
 
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
-      <View style={{ flex: 1, paddingTop: step.kind === "title" || step.kind === "theme" ? 0 : insets.top + 58, paddingBottom: building ? insets.bottom + 92 : 0 }}>{body}</View>
+      <Animated.View style={{ flex: 1, opacity: stage, borderRadius: sheet ? 24 : 0, overflow: sheet ? "hidden" : "visible", transform: [{ translateX: shift }, { scale: behind }], paddingTop: framed ? insets.top + layout.contentTop : 0, paddingBottom: building ? insets.bottom + pillSpace : 0 }}>{body}</Animated.View>
 
-      {step.kind !== "title" && step.kind !== "theme" ? (
-        <View pointerEvents="box-none" style={{ position: "absolute", top: insets.top + 14, left: 20, right: 20, gap: 14 }}>
-          <View pointerEvents="box-none" style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-            <Text style={{ fontFamily: fonts.display, fontSize: 19, color: p.ink }}>Dandelist</Text>
-            <Pressable accessibilityRole="link" onPress={() => router.push("/sign-in")} hitSlop={10}>
-              <Text style={{ fontFamily: fonts.label, fontSize: 13, color: p.ink2 }}>I have an account</Text>
-            </Pressable>
+      {framed ? (
+        // A 44 pt header bar from the top inset, then the segments at +50, both on the content column (UI audit P0-3).
+        <View pointerEvents="box-none" style={{ position: "absolute", top: insets.top, left: 0, right: 0, alignItems: "center", paddingHorizontal: gutter }}>
+          <View pointerEvents="box-none" style={{ width: "100%", maxWidth: headerColumn }}>
+            <View pointerEvents="box-none" style={{ height: layout.headerBar, flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+              <Wordmark />
+              <Pressable accessibilityRole="link" onPress={() => router.push("/sign-in")} style={{ minHeight: 44, minWidth: 44, justifyContent: "center", alignItems: "flex-end" }}>
+                <Text style={[type.label, { color: p.ink2 }]}>I have an account</Text>
+              </Pressable>
+            </View>
+            {building ? <Segments count={SEGMENTS} done={answered} style={{ marginTop: layout.segmentsTop - layout.headerBar }} /> : null}
           </View>
-          {building ? <Segments count={SEGMENTS} done={answered} /> : null}
         </View>
       ) : null}
 
-      {building ? <LifePill cents={total} onLayoutRef={(v) => (pill.current = v)} style={{ position: "absolute", left: 16, right: 16, bottom: insets.bottom + 16, maxWidth: 520, alignSelf: "center", width: "92%" }} /> : null}
+      {building ? (
+        <View pointerEvents="box-none" style={{ position: "absolute", left: 0, right: 0, bottom: insets.bottom + 16, alignItems: "center", paddingHorizontal: 16 }}>
+          <LifePill cents={total} onLayoutRef={(v) => (pill.current = v)} style={{ width: "100%", maxWidth: layout.list }} />
+        </View>
+      ) : null}
 
       {flight ? (
         <Animated.Text
           pointerEvents="none"
-          style={{
-            position: "absolute",
-            left: 0,
-            top: 0,
-            fontFamily: fonts.figure,
-            fontSize: 20,
-            color: p.accent,
-            transform: [
-              { translateX: fly.interpolate({ inputRange: [0, 1], outputRange: [flight.from.x, flight.to.x] }) },
-              { translateY: Animated.add(fly.interpolate({ inputRange: [0, 1], outputRange: [flight.from.y, flight.to.y] }), fly.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0, -70, 0] })) },
-              { scale: fly.interpolate({ inputRange: [0, 0.2, 1], outputRange: [0.8, 1.1, 0.85] }) },
-            ],
-            opacity: fly.interpolate({ inputRange: [0, 0.1, 0.9, 1], outputRange: [0, 1, 1, 0] }),
-          }}
+          style={[
+            type.cardPrice,
+            {
+              position: "absolute",
+              left: 0,
+              top: 0,
+              color: p.accentText,
+              transform: [
+                { translateX: fly.interpolate({ inputRange: [0, 1], outputRange: [flight.from.x, flight.to.x] }) },
+                { translateY: Animated.add(fly.interpolate({ inputRange: [0, 1], outputRange: [flight.from.y, flight.to.y] }), fly.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0, -70, 0] })) },
+                { scale: fly.interpolate({ inputRange: [0, 0.2, 1], outputRange: [0.8, 1.1, 0.85] }) },
+              ],
+              opacity: fly.interpolate({ inputRange: [0, 0.1, 0.9, 1], outputRange: [0, 1, 1, 0] }),
+            },
+          ]}
         >
           {flight.text}
         </Animated.Text>

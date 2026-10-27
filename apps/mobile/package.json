@@ -10,15 +10,18 @@
     "android": "expo start --android",
     "export:web": "expo export --platform web",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "deploy:web": "node scripts/deploy-web.mjs"
+    "deploy:web": "node scripts/deploy-web.mjs",
+    "test": "node scripts/check-type.mjs && vitest run"
   },
   "dependencies": {
     "@dandelist/catalogue": "workspace:*",
     "@dandelist/cost": "workspace:*",
     "@expo-google-fonts/bodoni-moda": "^0.4.2",
     "@expo-google-fonts/dm-mono": "^0.4.2",
+    "@expo-google-fonts/inter": "0.4.2",
     "@expo-google-fonts/inter-tight": "^0.4.2",
     "@expo/metro-runtime": "~57.0.16",
+    "@react-native-masked-view/masked-view": "0.3.2",
     "@shopify/react-native-skia": "2.6.2",
     "expo": "~57.0.20",
     "expo-apple-authentication": "~57.0.2",
@@ -44,6 +47,7 @@
   },
   "devDependencies": {
     "@types/react": "~19.2.0",
-    "typescript": "^5.6.3"
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.9"
   }
 }

@@ -3,7 +3,7 @@ import { Image } from "expo-image";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Animated, Easing, PanResponder, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { useReducedMotion } from "../lib/motion";
-import { fonts, usePalette } from "../lib/theme";
+import { type, usePalette } from "../lib/theme";
 import { Embed } from "./embed";
 import { Photo } from "./lux";
 
@@ -20,7 +20,7 @@ export type Media = {
 function Credit({ children }: { children: ReactNode }) {
   const p = usePalette();
   return (
-    <Text numberOfLines={1} style={{ position: "absolute", right: 12, bottom: 10, maxWidth: "70%", fontFamily: fonts.body, fontSize: 10, color: p.ink3 }}>
+    <Text numberOfLines={1} style={{ position: "absolute", right: 12, bottom: 10, maxWidth: "70%", ...type.figure, color: p.ink3 }}>
       {children}
     </Text>
   );
@@ -51,7 +51,7 @@ export function Model3D({ model, style }: { model: Model3d; style?: StyleProp<Vi
         <Embed uri={model.embedUrl} title={model.name} onLoad={() => setLoaded(true)} />
       </View>
       <Animated.View pointerEvents="none" style={{ position: "absolute", left: 0, right: 0, bottom: 44, alignItems: "center", opacity: hint }}>
-        <Text style={{ fontFamily: fonts.label, fontSize: 11, letterSpacing: 1.6, color: p.ink, textTransform: "uppercase" }}>{loaded ? "Drag to turn it" : "Loading the 3D model"}</Text>
+        <Text style={[type.eyebrow, { color: p.ink }]}>{loaded ? "Drag to turn it" : "Loading the 3D model"}</Text>
       </Animated.View>
       <Credit>{`3D model by ${model.author} on Sketchfab · ${model.license}`}</Credit>
     </View>
@@ -182,7 +182,7 @@ export function TiltObject({ uri, style, credit }: { uri: string; style?: StyleP
           <LinearGradient colors={["rgba(255,255,255,0)", "rgba(255,248,235,0.55)", "rgba(255,255,255,0)"]} start={{ x: 0, y: 0.3 }} end={{ x: 1, y: 0.7 }} style={StyleSheet.absoluteFill} />
         </Animated.View>
       </Animated.View>
-      <Text pointerEvents="none" style={{ position: "absolute", bottom: 40, fontFamily: fonts.label, fontSize: 10.5, letterSpacing: 1.6, color: p.ink3, textTransform: "uppercase" }}>
+      <Text pointerEvents="none" style={[type.eyebrow, { position: "absolute", bottom: 40, color: p.ink3 }]}>
         Drag to turn
       </Text>
       {credit ? <Credit>{credit}</Credit> : null}

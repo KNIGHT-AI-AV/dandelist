@@ -1,15 +1,14 @@
 import type { Item } from "@dandelist/cost";
 import { router } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ledger } from "../../components/ledger";
-import { AgentDot, Backdrop, Choice, ErrorLine, Eyebrow, Figure, Glass, Grain, Hairline, Photo, PrimaryButton, QuietButton, Shade } from "../../components/lux";
+import { AgentDot, Backdrop, Chip, EdgeFade, ErrorLine, Eyebrow, Glass, Grain, Hairline, IconButton, Money, Photo, PrimaryButton, QuietButton, Shade } from "../../components/lux";
 import { Statement, Take } from "../../components/statement";
 import { getRun, interpretWish, startResearch, type Answer, type Draft, type PriceOption, type Question, type Run, type Step } from "../../lib/agent";
 import { useAuth } from "../../lib/auth";
-import { formatCents } from "../../lib/money";
-import { fonts, radius, space, usePalette } from "../../lib/theme";
+import { fonts, layout, radius, type, usePalette, useType } from "../../lib/theme";
 import { useWishes, type WishTier } from "../../lib/wishes";
 import { KIND_LABEL, hostOf } from "../../lib/words";
 
@@ -19,7 +18,6 @@ const TIERS: { value: WishTier; label: string }[] = [
   { value: "nice", label: "Nice" },
   { value: "dream", label: "Dream" },
 ];
-const MAX_W = 520;
 // The browser draws its own focus box around text fields; the hairline underneath is the focus cue here.
 const NO_OUTLINE = Platform.OS === "web" ? ({ outlineWidth: 0 } as object) : null;
 
@@ -43,7 +41,12 @@ export default function NewWish() {
   const { api } = useAuth();
   const { wishes, add } = useWishes();
   const p = usePalette();
+  const t = useType();
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const gutter = layout.gutter(width);
+  const dock = layout.dockHeight(insets.bottom);
+  const column = { width: "100%" as const, maxWidth: layout.list + 2 * gutter, alignSelf: "center" as const, paddingHorizontal: gutter };
   const [stage, setStage] = useState<Stage>("describe");
   const [text, setText] = useState("");
   const [reading, setReading] = useState(false);
@@ -151,13 +154,7 @@ export default function NewWish() {
   }
 
   const latestImage = wishes.find((w) => w.details.agent?.imageUrl)?.details.agent?.imageUrl;
-  const close = (
-    <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={() => (router.canGoBack() ? router.back() : router.replace("/wishes"))} hitSlop={10} style={{ position: "absolute", top: insets.top + 10, left: 16, zIndex: 10 }}>
-      <Glass style={{ width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center" }}>
-        <Text style={{ fontFamily: fonts.body, fontSize: 18, color: p.ink, marginTop: -2 }}>×</Text>
-      </Glass>
-    </Pressable>
-  );
+  const close = <IconButton icon="close" label="Close" onPress={() => (router.canGoBack() ? router.back() : router.replace("/wishes"))} style={{ position: "absolute", top: insets.top + 4, left: 16, zIndex: 10 }} />;
 
   // Concierge: describe the wish, then answer the agent's questions, over a blurred photograph.
   if (stage === "describe" || stage === "ask") {
@@ -174,11 +171,13 @@ export default function NewWish() {
         <Glass intensity={70} style={[StyleSheet.absoluteFill, { borderRadius: 0, borderWidth: 0 }]} />
         {close}
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }}>
-          <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingTop: insets.top + 70, paddingBottom: insets.bottom + 120, paddingHorizontal: 24, gap: 18, width: "100%", maxWidth: MAX_W, alignSelf: "center" }}>
-            <Eyebrow>New wish</Eyebrow>
-            <Text accessibilityRole="header" style={{ fontFamily: fonts.display, fontSize: 46, lineHeight: 48, color: p.ink, letterSpacing: -0.4 }}>
-              What do you <Text style={{ fontFamily: fonts.displayItalic, color: p.accent }}>want</Text>?
-            </Text>
+          <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={[column, { paddingTop: insets.top + layout.contentTop, paddingBottom: dock, gap: 20 }]}>
+            <View style={{ gap: layout.stack.tight }}>
+              <Eyebrow>New wish</Eyebrow>
+              <Text accessibilityRole="header" style={[t.display, { color: p.ink }]}>
+                What do you <Text style={{ fontFamily: fonts.displayItalic, color: p.accentText }}>want</Text>?
+              </Text>
+            </View>
             {stage === "describe" ? (
               <>
                 <TextInput
@@ -190,11 +189,11 @@ export default function NewWish() {
                   editable={!reading}
                   placeholder="A week at Amanzoe with my wife in May"
                   placeholderTextColor={p.ink3}
-                  style={[{ fontFamily: fonts.displayItalic, fontSize: 23, lineHeight: 31, color: p.ink, minHeight: 96, paddingVertical: 6, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: p.hair, textAlignVertical: "top" }, NO_OUTLINE]}
+                  style={[type.title3, { fontFamily: fonts.titleItalic, color: p.ink, minHeight: 96, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: p.line, textAlignVertical: "top" }, NO_OUTLINE]}
                 />
-                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.sm }}>
+                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
                   {EXAMPLES.map((e) => (
-                    <Choice key={e} label={e} selected={text === e} onPress={reading ? undefined : () => setText(e)} />
+                    <Chip key={e} label={e} selected={text === e} onPress={reading ? undefined : () => setText(e)} />
                   ))}
                 </View>
                 <ErrorLine>{error}</ErrorLine>
@@ -202,23 +201,23 @@ export default function NewWish() {
               </>
             ) : draft ? (
               <>
-                <Text style={{ fontFamily: fonts.displayItalic, fontSize: 23, lineHeight: 31, color: p.ink }}>{text}</Text>
-                <Glass style={{ padding: 16, gap: 12 }}>
+                <Text style={[type.title3, { fontFamily: fonts.titleItalic, color: p.ink }]}>{text}</Text>
+                <Glass style={{ padding: layout.cardPad, gap: 12 }}>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
                     <AgentDot />
-                    <Text style={{ fontFamily: fonts.body, fontSize: 12.5, color: p.ink2 }}>
+                    <Text style={[type.footnote, { color: p.ink2 }]}>
                       {questions.length ? `Your agent · ${questions.length === 1 ? "one quick question" : `${questions.length} quick questions`}` : "Your agent · that's clear enough to price"}
                     </Text>
                   </View>
-                  <Text style={{ fontFamily: fonts.display, fontSize: 24, lineHeight: 27, color: p.ink }}>{draft.title}</Text>
-                  <Text style={{ fontFamily: fonts.body, fontSize: 13, color: p.ink2 }}>{[KIND_LABEL[draft.kind], ...draft.specifics.map((s) => s.value)].join(" · ")}</Text>
+                  <Text style={[type.title2, { color: p.ink }]}>{draft.title}</Text>
+                  <Text style={[type.footnote, { color: p.ink2 }]}>{[KIND_LABEL[draft.kind], ...draft.specifics.map((s) => s.value)].join(" · ")}</Text>
                   {questions.map((q) => (
-                    <View key={q.question} style={{ gap: 10 }}>
+                    <View key={q.question} style={{ gap: 12 }}>
                       <Hairline />
-                      <Text style={{ fontFamily: fonts.body, fontSize: 15, color: p.ink }}>{q.question}</Text>
-                      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.sm }}>
+                      <Text style={[type.callout, { color: p.ink }]}>{q.question}</Text>
+                      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
                         {q.choices.map((c) => (
-                          <Choice key={c} label={c} selected={answers[q.question] === c} onPress={() => setAnswers((a) => ({ ...a, [q.question]: a[q.question] === c ? "" : c }))} />
+                          <Chip key={c} label={c} selected={answers[q.question] === c} onPress={() => setAnswers((a) => ({ ...a, [q.question]: a[q.question] === c ? "" : c }))} />
                         ))}
                       </View>
                     </View>
@@ -230,13 +229,9 @@ export default function NewWish() {
             ) : null}
           </ScrollView>
         </KeyboardAvoidingView>
-        <View style={{ position: "absolute", left: 24, right: 24, bottom: insets.bottom + 20, alignItems: "center" }}>
-          <PrimaryButton
-            label={stage === "describe" ? (reading ? "Reading your wish..." : "Find the real price") : "Research the price"}
-            busy={reading}
-            onPress={stage === "describe" ? read : research}
-            style={{ width: "100%", maxWidth: MAX_W - 48 }}
-          />
+        <EdgeFade height={dock} />
+        <View pointerEvents="box-none" style={{ position: "absolute", left: gutter, right: gutter, bottom: insets.bottom + 20, alignItems: "center" }}>
+          <PrimaryButton label={stage === "describe" ? "Find the real price" : "Research the price"} busyLabel="Reading your wish…" busy={reading} onPress={stage === "describe" ? read : research} />
         </View>
         <Grain />
       </View>
@@ -253,38 +248,37 @@ export default function NewWish() {
 
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
-      <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + (result?.options.length ? 120 : 40) }}>
+      <ScrollView contentContainerStyle={{ paddingBottom: result?.options.length ? dock : insets.bottom + 40 }} style={{ scrollbarWidth: "thin", scrollbarColor: `rgba(${p.inkRgb},0.2) transparent` } as object}>
         <View style={{ height: 440, width: "100%" }}>
           <Photo uri={heroImage} kind={draft?.kind} />
           <Shade from={0.15} />
         </View>
-        <View style={{ marginTop: -150, paddingHorizontal: 24, gap: 8, width: "100%", maxWidth: MAX_W, alignSelf: "center" }}>
-          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-              {working ? <AgentDot /> : null}
-              <Eyebrow>{working ? `Researching · ${clock}` : run?.status === "error" ? "Research stopped" : `${KIND_LABEL[draft?.kind ?? "buy"]} · what it costs`}</Eyebrow>
-            </View>
-            <Eyebrow>Meta Muse Spark</Eyebrow>
+        <View style={[column, { marginTop: -150, gap: layout.stack.tight }]}>
+          {/* Text protection over the photo: a 35% dimming layer behind the title block (HIG Materials, P1-22). */}
+          <View pointerEvents="none" style={{ position: "absolute", left: 0, right: 0, top: -24, bottom: -16, backgroundColor: `rgba(${p.bgRgb}, 0.35)`, borderRadius: radius.lg }} />
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            {working ? <AgentDot busy /> : null}
+            <Eyebrow>{working ? `Researching · ${clock} · Meta Muse Spark` : run?.status === "error" ? "Research stopped" : `${KIND_LABEL[draft?.kind ?? "buy"]} · what it costs`}</Eyebrow>
           </View>
-          <Text accessibilityRole="header" style={{ fontFamily: fonts.display, fontSize: 36, lineHeight: 39, color: p.ink }}>{draft?.title}</Text>
-          {option ? <Text style={{ fontFamily: fonts.body, fontSize: 13, color: p.ink2 }}>{`${option.seller} · ${hostOf(option.url)} · ${option.status === "verified" ? "price checked on the page" : "estimate"}`}</Text> : null}
+          <Text accessibilityRole="header" style={[t.title1, { color: p.ink }]}>{draft?.title}</Text>
+          {option ? <Text style={[type.footnote, { color: p.ink2 }]}>{`${option.seller} · ${hostOf(option.url)} · ${option.status === "verified" ? "price checked on the page" : "estimate"}`}</Text> : null}
         </View>
 
-        <View style={{ paddingHorizontal: 16, marginTop: 18, gap: 18, width: "100%", maxWidth: MAX_W, alignSelf: "center" }}>
+        <View style={[column, { marginTop: 24, gap: 20 }]}>
           {working ? (
-            <View style={{ paddingHorizontal: 8 }}>
+            <View>
               <Ledger steps={run?.steps ?? []} startedAt={run!.createdAt} working />
               {best ? (
-                <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: p.ink3, marginTop: 4, paddingTop: 12, flexDirection: "row", justifyContent: "space-between", alignItems: "baseline" }}>
+                <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: p.ink4, marginTop: 4, paddingTop: 12, flexDirection: "row", justifyContent: "space-between", alignItems: "baseline" }}>
                   <Eyebrow>Best so far</Eyebrow>
-                  <Figure value={formatCents(best.upfrontCents!)} size={32} />
+                  <Money cents={best.upfrontCents!} size="title" align="right" />
                 </View>
               ) : null}
             </View>
           ) : null}
 
           {run?.status === "error" ? (
-            <Glass style={{ padding: 18, gap: 12 }}>
+            <Glass style={{ padding: layout.cardPad, gap: 12 }}>
               <ErrorLine>{run.error}</ErrorLine>
               <PrimaryButton label="Try again" onPress={research} />
             </Glass>
@@ -297,22 +291,22 @@ export default function NewWish() {
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingHorizontal: 2 }}>
                   {result.options.map((o, i) => (
                     <Pressable key={`${o.url}-${i}`} accessibilityRole="radio" accessibilityState={{ selected: i === chosen }} onPress={() => setChosen(i)}>
-                      <Glass style={{ paddingHorizontal: 14, paddingVertical: 10, borderRadius: radius.md, borderColor: i === chosen ? p.ink : p.hair, minWidth: 140, gap: 2 }}>
-                        <Text style={{ fontFamily: fonts.body, fontSize: 12, color: p.ink2 }} numberOfLines={1}>{o.seller}</Text>
-                        <Figure value={formatCents(o.upfrontCents)} size={19} />
-                        <Text style={{ fontFamily: fonts.label, fontSize: 10.5, letterSpacing: 1.2, textTransform: "uppercase", color: o.status === "verified" ? p.accent : p.ink3 }}>{o.status === "verified" ? "Checked" : "Estimate"}</Text>
+                      <Glass style={{ paddingHorizontal: 16, paddingVertical: 12, borderRadius: radius.md, borderWidth: 1, borderColor: i === chosen ? p.ink : p.line, minWidth: 148, gap: 4 }}>
+                        <Text style={[type.footnote, { color: p.ink2 }]} numberOfLines={1}>{o.seller}</Text>
+                        <Money cents={o.upfrontCents} size="card" />
+                        <Text style={[type.eyebrow, { color: o.status === "verified" ? p.accentText : p.ink3 }]}>{o.status === "verified" ? "Checked" : "Estimate"}</Text>
                       </Glass>
                     </Pressable>
                   ))}
                 </ScrollView>
               ) : null}
               <Take>{result.explanation}</Take>
-              {result.note ? <Text style={{ fontFamily: fonts.body, fontSize: 13, lineHeight: 18, color: p.ink2 }}>{result.note}</Text> : null}
+              {result.note ? <Text style={[type.footnote, { color: p.ink2 }]}>{result.note}</Text> : null}
               <View style={{ gap: 8 }}>
                 <Eyebrow>How much you want it</Eyebrow>
-                <View style={{ flexDirection: "row", gap: space.sm }}>
-                  {TIERS.map((t) => (
-                    <Choice key={t.value} label={t.label} selected={tier === t.value} onPress={() => setTier(t.value)} />
+                <View style={{ flexDirection: "row", gap: 8 }}>
+                  {TIERS.map((tr) => (
+                    <Chip key={tr.value} label={tr.label} selected={tier === tr.value} onPress={() => setTier(tr.value)} />
                   ))}
                 </View>
               </View>
@@ -322,8 +316,8 @@ export default function NewWish() {
               <QuietButton label="Start over" onPress={startOver} style={{ alignSelf: "flex-start" }} />
             </>
           ) : result && !result.options.length ? (
-            <Glass style={{ padding: 18, gap: 12 }}>
-              <Text style={{ fontFamily: fonts.body, fontSize: 15, lineHeight: 21, color: p.ink }}>The agent couldn't find a price it could stand behind for this one.</Text>
+            <Glass style={{ padding: layout.cardPad, gap: 12 }}>
+              <Text style={[type.callout, { color: p.ink }]}>The agent couldn't find a price it could stand behind for this one.</Text>
               <PrimaryButton label="Enter it yourself" onPress={() => router.push("/wishes/manual")} />
             </Glass>
           ) : null}
@@ -331,9 +325,12 @@ export default function NewWish() {
       </ScrollView>
       {close}
       {result?.options.length ? (
-        <View style={{ position: "absolute", left: 24, right: 24, bottom: insets.bottom + 20, alignItems: "center" }}>
-          <PrimaryButton label="Add to my life list" busy={saving} onPress={save} style={{ width: "100%", maxWidth: MAX_W - 48 }} />
-        </View>
+        <>
+          <EdgeFade height={dock} />
+          <View pointerEvents="box-none" style={{ position: "absolute", left: gutter, right: gutter, bottom: insets.bottom + 20, alignItems: "center" }}>
+            <PrimaryButton label="Add to my life list" commit busy={saving} onPress={save} />
+          </View>
+        </>
       ) : null}
       <Grain />
     </View>

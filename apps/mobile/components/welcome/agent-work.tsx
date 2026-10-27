@@ -1,21 +1,21 @@
 import { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Animated, Text, View } from "react-native";
+import { Animated, Text, View, useWindowDimensions } from "react-native";
 import { ease, native, useReducedMotion } from "../../lib/motion";
-import { fonts, usePalette } from "../../lib/theme";
+import { fonts, layout, type, usePalette, useType } from "../../lib/theme";
 import { streamPreview, type PreviewEvent, type WelcomeState } from "../../lib/welcome";
-import { AgentDot, Eyebrow, Glass } from "../lux";
+import { AgentDot, Eyebrow, Glass, Icon } from "../lux";
 import { Chip, Rise } from "./kit";
 
 type Row = { id: string; state: "running" | "done"; text: string };
 export type Result = Extract<PreviewEvent, { type: "result" }>;
 
-/** A row enters when the server sends it; "running" shows a spinner until the server says it's done. */
+/** A row enters when the server sends it; "running" breathes the agent's dot until the server says it's done. */
 function AgentRow({ row }: { row: Row }) {
   const p = usePalette();
   return (
     <Rise style={{ flexDirection: "row", alignItems: "center", gap: 12, minHeight: 28 }}>
-      <View style={{ width: 16, alignItems: "center" }}>{row.state === "running" ? <ActivityIndicator size="small" color={p.accent} /> : <Text style={{ fontFamily: fonts.label, fontSize: 13, color: p.accent }}>✓</Text>}</View>
-      <Text style={{ flex: 1, fontFamily: fonts.body, fontSize: 14.5, lineHeight: 20, color: row.state === "running" ? p.ink2 : p.ink }}>{row.text}</Text>
+      <View style={{ width: 17, alignItems: "center" }}>{row.state === "running" ? <AgentDot busy /> : <Icon name="check" color={p.accentText} size={15} />}</View>
+      <Text style={[type.callout, { flex: 1, color: row.state === "running" ? p.ink2 : p.ink }]}>{row.text}</Text>
     </Rise>
   );
 }
@@ -33,7 +33,7 @@ function StreamedNote({ text }: { text: string }) {
     return () => clearInterval(t);
   }, [text, reduced, words.length]);
   return (
-    <Text style={{ fontFamily: fonts.displayItalic, fontSize: 21, lineHeight: 29, color: p.ink }} accessibilityLiveRegion="polite">
+    <Text style={[type.title3, { fontFamily: fonts.titleItalic, color: p.ink }]} accessibilityLiveRegion="polite">
       {words.map((w, i) => (
         <Text key={i} style={{ opacity: i < shown ? 1 : 0 }}>{`${w} `}</Text>
       ))}
@@ -47,6 +47,9 @@ function StreamedNote({ text }: { text: string }) {
  */
 export function AgentWork({ state, onResult, onFollowUp }: { state: WelcomeState; onResult(r: Result): void; onFollowUp(last: string | null): void }) {
   const p = usePalette();
+  const t = useType();
+  const { width } = useWindowDimensions();
+  const gutter = layout.gutter(width);
   const [rows, setRows] = useState<Row[]>([]);
   const [note, setNote] = useState<string | null>(null);
   const [result, setResult] = useState<Result | null>(null);
@@ -86,26 +89,25 @@ export function AgentWork({ state, onResult, onFollowUp }: { state: WelcomeState
   }, []);
 
   return (
-    <View style={{ flex: 1, justifyContent: "center", paddingHorizontal: 28, gap: 22, maxWidth: 560, width: "100%", alignSelf: "center" }}>
-      <Rise style={{ gap: 10 }}>
+    <View style={{ flex: 1, justifyContent: "center", paddingHorizontal: gutter, gap: layout.stack.section - 8, maxWidth: layout.column + 2 * gutter, width: "100%", alignSelf: "center" }}>
+      <Rise style={{ gap: layout.stack.tight }}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-          <AgentDot />
+          <AgentDot busy={!result && !error} />
           <Eyebrow>Your agent · Muse Spark by Meta</Eyebrow>
         </View>
-        <Text accessibilityRole="header" style={{ fontFamily: fonts.display, fontSize: 34, lineHeight: 37, color: p.ink }}>
+        <Text accessibilityRole="header" style={[t.title1, { color: p.ink }]}>
           Pricing your life.
         </Text>
       </Rise>
-      <Glass style={{ padding: 18, gap: 10 }}>
+      <Glass style={{ padding: layout.cardPad, gap: 12, minHeight: 68 }}>
         {rows.map((r) => (
           <AgentRow key={r.id} row={r} />
         ))}
-        {!rows.length && !error ? <ActivityIndicator color={p.accent} style={{ alignSelf: "flex-start" }} /> : null}
-        {error ? <Text style={{ fontFamily: fonts.body, fontSize: 14, color: p.danger }}>{error}</Text> : null}
+        {error ? <Text style={[type.callout, { color: p.danger }]}>{error}</Text> : null}
       </Glass>
       {note ? <StreamedNote text={note} /> : null}
       {result?.largest && note ? (
-        <Rise delay={note.split(" ").length * 26} style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
+        <Rise delay={note.split(" ").length * 26} style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
           <Chip label={`${result.largest.name} last`} selected={chosen === "last"} onPress={() => { setChosen("last"); onFollowUp(result.largest!.name); }} />
           <Chip label="Keep this order" selected={chosen === "keep"} onPress={() => { setChosen("keep"); onFollowUp(null); }} />
         </Rise>

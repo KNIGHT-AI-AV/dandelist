@@ -1,6 +1,7 @@
-import { BodoniModa_400Regular, BodoniModa_400Regular_Italic, BodoniModa_500Medium } from "@expo-google-fonts/bodoni-moda";
+import { BodoniModa_400Regular, BodoniModa_400Regular_Italic } from "@expo-google-fonts/bodoni-moda";
 import { DMMono_400Regular } from "@expo-google-fonts/dm-mono";
-import { InterTight_400Regular, InterTight_600SemiBold } from "@expo-google-fonts/inter-tight";
+import { Inter_400Regular, Inter_600SemiBold } from "@expo-google-fonts/inter";
+import { InterTight_400Regular } from "@expo-google-fonts/inter-tight";
 import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
@@ -21,11 +22,17 @@ export default function RootLayout() {
 function Root() {
   const p = usePalette();
   const [loaded, error] = useFonts({
+    // Bodoni Moda's optical cuts (OFL; assets/fonts/OFL-BodoniModa.txt): Display (opsz 72) for 28 px and up, Title
+    // (opsz 28) for 18–27 px, and the package's 11 pt text cut below that (UI audit P1-9).
+    BodoniDisplay: require("../assets/fonts/BodoniModaDisplay-Regular.ttf"),
+    BodoniDisplay_Italic: require("../assets/fonts/BodoniModaDisplay-Italic.ttf"),
+    BodoniTitle: require("../assets/fonts/BodoniModaTitle-Regular.ttf"),
+    BodoniTitle_Italic: require("../assets/fonts/BodoniModaTitle-Italic.ttf"),
     BodoniModa_400Regular,
     BodoniModa_400Regular_Italic,
-    BodoniModa_500Medium,
+    Inter_400Regular,
+    Inter_600SemiBold,
     InterTight_400Regular,
-    InterTight_600SemiBold,
     DMMono_400Regular,
   });
   // Hold the first frame until the type is ready (or failed, in which case system fonts take over).
@@ -35,7 +42,10 @@ function Root() {
       <AuthProvider>
         <WishProvider>
           <StatusBar style={p.scheme === "dark" ? "light" : "dark"} />
-          <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: p.bg } }} />
+          <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: p.bg } }}>
+            {/* The detail grows out of its card over the list, so the list stays underneath (UI audit P1-17). */}
+            <Stack.Screen name="wishes/[id]" options={{ presentation: "transparentModal", animation: "none", contentStyle: { backgroundColor: "transparent" } }} />
+          </Stack>
         </WishProvider>
       </AuthProvider>
     </SafeAreaProvider>

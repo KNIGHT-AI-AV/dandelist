@@ -3,10 +3,10 @@ import { Image } from "expo-image";
 import { useState } from "react";
 import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { providerName, type ProviderId, type SignInOption } from "../lib/auth";
-import { fonts, radius, usePalette } from "../lib/theme";
+import { radius, type, usePalette } from "../lib/theme";
 import { Eyebrow, Glass, Hairline } from "./lux";
 
-/** Google, GitHub and Apple sign-in buttons for the sign-in screen, set in the lux kit: glass, hairlines, Inter Tight. */
+/** Google, GitHub and Apple sign-in buttons for the sign-in screen, set in the lux kit: glass, hairlines, Inter. */
 
 const MARK: Record<ProviderId, number> = {
   apple: require("../assets/brands/apple.svg"),
@@ -14,7 +14,7 @@ const MARK: Record<ProviderId, number> = {
   github: require("../assets/brands/github.svg"),
 };
 
-const HEIGHT = 54;
+const HEIGHT = 56;
 
 /** "Continue with ..." on frosted glass with the provider's mark. Champagne appears only as the focus ring. */
 function ProviderButton({ id, busy, disabled, onPress }: { id: ProviderId; busy: boolean; disabled: boolean; onPress(): void }) {
@@ -41,14 +41,14 @@ function ProviderButton({ id, busy, disabled, onPress }: { id: ProviderId; busy:
       {focused ? (
         <View pointerEvents="none" style={{ position: "absolute", top: -4, left: -4, right: -4, bottom: -4, borderRadius: radius.pill, borderWidth: 1, borderColor: p.accent }} />
       ) : null}
-      <Glass intensity={34} style={{ height: HEIGHT, borderRadius: radius.pill, justifyContent: "center", borderColor: hovered && !inactive ? `rgba(${p.inkRgb}, 0.26)` : p.hair }}>
+      <Glass intensity={34} style={{ height: HEIGHT, borderRadius: radius.pill, justifyContent: "center", borderColor: hovered && !inactive ? p.ink2 : p.line }}>
         <View style={{ position: "absolute", left: 22, top: 0, bottom: 0, justifyContent: "center" }}>
           <Image source={MARK[id]} style={{ width: 18, height: 18 }} contentFit="contain" accessible={false} />
         </View>
         {busy ? (
           <ActivityIndicator color={p.ink} accessibilityLabel={`Signing in with ${providerName(id)}`} />
         ) : (
-          <Text style={{ textAlign: "center", fontFamily: fonts.label, fontSize: 15, letterSpacing: 0.15, color: p.ink }}>{label}</Text>
+          <Text style={[type.button, { textAlign: "center", color: p.ink }]}>{label}</Text>
         )}
       </Glass>
     </Pressable>

@@ -1,15 +1,16 @@
 import { Canvas, Fill, ImageShader, Shader, Skia, useImage } from "@shopify/react-native-skia";
 import { Image } from "expo-image";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { StyleSheet, View, type LayoutChangeEvent, type StyleProp, type ViewStyle } from "react-native";
 import { useReducedMotion } from "../lib/motion";
 import { usePalette } from "../lib/theme";
-import { CLARITY, FINISHED, useGlassClock, type Stage, type Treatment } from "./reveal-clock";
+import { clarityTarget, useGlassClock, usePictureState, type Stage, type Treatment } from "./reveal-clock";
 
 /**
  * Phone version of the glass reveal; `reveal.tsx` is the web version. One Skia shader bends the picture through
- * swirled glass (rosettes of ripples, like poured window glass), blurs it, adds grain and a light catch, and eases
- * all of it away as the picture clears. Once clear, the canvas steps aside for a plain image.
+ * swirled glass (the title only, gentler than before), or frosts it behind a pane (cards: blur and a sheen, no
+ * bending), adds grain and a light catch, and eases all of it away as the picture clears. Once clear, the canvas
+ * steps aside for a plain image. A picture that fails or never arrives shows its standby clear.
  */
 
 const SKSL = `
@@ -46,16 +47,17 @@ half4 main(float2 p) {
     float e = 1.5 / size.y;
     float h0 = glass(uv);
     float2 g = float2(glass(uv + float2(e, 0.0)) - h0, glass(uv + float2(0.0, e)) - h0) / e;
-    disp = g * 0.0011 * size.y * k;
+    // At most about 24 px of bend at full glass (UI audit P0-2), so even the title never melts the subject.
+    disp = clamp(g * 0.00044 * size.y, float2(-24.0), float2(24.0)) * k;
     float3 n = normalize(float3(-g * 0.018, 1.0));
     float3 hv = normalize(normalize(float3(-0.4, -0.6, 0.7)) + float3(0.0, 0.0, 1.0));
     shine = pow(max(dot(n, hv), 0.0), 36.0) * k;
   } else if (mode < 1.5) {
     disp = float2(sin(uv.y * 9.0 + time), cos(uv.x * 7.0 + time * 0.8)) * 2.0 * k;
-  } else {
+  } else if (mode < 2.5) {
     disp = (float2(hash(floor(p * 0.5)), hash(floor(p * 0.5) + 3.1)) - 0.5) * 8.0 * k;
   }
-  float rad = (mode < 0.5 ? 5.0 : (mode < 1.5 ? 14.0 : 18.0)) * k;
+  float rad = (mode < 0.5 ? 5.0 : (mode < 1.5 ? 14.0 : (mode < 2.5 ? 18.0 : 12.0))) * k;
   float2 q = p + disp;
   float4 c = float4(image.eval(q)) * 0.2;
   for (int i = 0; i < 8; i++) {
@@ -66,31 +68,42 @@ half4 main(float2 p) {
   float grain = (hash(p + fract(time) * 97.0) - 0.5) * (film ? 0.14 * (0.3 + k) : 0.06 * k);
   c.rgb += float3(grain);
   if (film) { float lum = dot(c.rgb, float3(0.299, 0.587, 0.114)); c.rgb = mix(c.rgb, float3(lum), 0.35 * k); }
-  if (mode > 1.5) { c.rgb = mix(c.rgb, float3(0.93, 0.9, 0.85), 0.26 * k); }
+  if (mode > 1.5 && mode < 2.5) { c.rgb = mix(c.rgb, float3(0.93, 0.9, 0.85), 0.26 * k); }
+  if (mode > 2.5) {
+    // The pane: a faint frost and one diagonal sheen that lift away as it clears.
+    float d = uv.x * 0.8 + uv.y * 0.6;
+    float sheen = smoothstep(0.0, 0.25, d) * (1.0 - smoothstep(0.25, 0.6, d)) * 0.14 + smoothstep(0.7, 0.85, d) * (1.0 - smoothstep(0.85, 1.1, d)) * 0.06;
+    c.rgb = mix(c.rgb, float3(0.93, 0.9, 0.85), 0.1 * k) + float3(sheen * k);
+  }
   c.rgb = mix(c.rgb, float3(0.04), 0.18 * k);
   c.rgb += float3(shine * 0.55);
   return half4(c);
 }`;
 
 const effect = Skia.RuntimeEffect.Make(SKSL);
-const MODE: Record<Treatment, number> = { swirl: 0, film: 1, frost: 2 };
+const MODE: Record<Treatment, number> = { swirl: 0, film: 1, frost: 2, pane: 3 };
 
-export function GlassReveal({ uri, standby, stage, treatment = "swirl", finish = false, style, children }: { uri?: string | null; standby: number; stage: Stage; treatment?: Treatment; /** Generated imagery never shows bare: it keeps a fine layer of glass and grain. */ finish?: boolean; style?: StyleProp<ViewStyle>; children?: ReactNode }) {
+export function GlassReveal({ uri, standby, stage, treatment = "pane", finish = false, focus, style, children }: { uri?: string | null; standby: number; stage: Stage; treatment?: Treatment; /** Where the subject sits (0–1), so a tight crop keeps it whole. */ focus?: { x: number; y: number }; /** Generated imagery never shows bare: it keeps a fine layer of glass and grain. */ finish?: boolean; style?: StyleProp<ViewStyle>; children?: ReactNode }) {
   const p = usePalette();
   const reduced = useReducedMotion();
   const [size, setSize] = useState({ width: 0, height: 0 });
+  const pic = usePictureState(uri);
   const waiting = useImage(standby);
-  const found = useImage(uri ?? null);
-  const ready = !!uri && !!found;
-  const { clarity, time } = useGlassClock(ready ? Math.min(CLARITY[stage], finish ? FINISHED : 1) : !uri && stage === "clear" ? FINISHED : 0, reduced);
+  const found = useImage(uri && !pic.failed ? uri : null, pic.onError);
+  const ready = !!uri && !!found && !pic.failed;
+  useEffect(() => {
+    if (found && !pic.loaded) pic.onLoad();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [found]);
+  const { clarity, time } = useGlassClock(clarityTarget({ uri, ready, failed: pic.failed, stage, finish }), reduced, treatment);
   const picture = ready ? found : waiting;
   const onLayout = (e: LayoutChangeEvent) => setSize({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height });
-  const clear = ready && clarity >= 0.999;
+  const clear = clarity >= 0.999;
 
   return (
     <View style={[{ overflow: "hidden", backgroundColor: p.bg }, style]} onLayout={onLayout}>
       {clear || !effect ? (
-        <Image source={uri ? { uri } : standby} style={StyleSheet.absoluteFill} contentFit="cover" blurRadius={clear ? 0 : 24} transition={300} />
+        <Image source={ready ? { uri: uri! } : standby} style={StyleSheet.absoluteFill} contentFit="cover" contentPosition={focus ? { left: `${focus.x * 100}%`, top: `${focus.y * 100}%` } : "center"} blurRadius={clear ? 0 : 24} transition={{ duration: 300, effect: "cross-dissolve" }} />
       ) : picture && size.width > 0 ? (
         <Canvas style={StyleSheet.absoluteFill}>
           <Fill>
