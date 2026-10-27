@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { z } from "zod";
 import { pageShowsPrice } from "../agent/tools";
 import { SEARCH_INCLUDE, json, searchResults, strictObject, type DreamCtx } from "./context";
@@ -208,6 +209,14 @@ export function pageStates(page: { text: string; prices: { amount: number; curre
 }
 
 /**
+ * The cache row a request reads and writes. The row is keyed by the exact research prompt (place, what, units), so a
+ * person can only ever share evidence with people who asked the same question, never seed a figure under someone
+ * else's place. A figure its page confirmed is shared; an unconfirmed one stays with the person whose search found it.
+ */
+export const sharedRow = (r: RateRequest) => `${r.region}|${createHash("sha256").update([r.place, r.what, r.units.join(",")].join("\n")).digest("hex").slice(0, 20)}`;
+const ownRow = (r: RateRequest, userId: string) => `${sharedRow(r)}#${userId}`;
+
+/**
  * The rates for these requests: cached ones when fresh, the rest researched in one Muse Spark pass per place, each
  * checked on its source page and cached. A figure nobody publishes stays missing; nothing is filled in.
  */
@@ -216,8 +225,9 @@ export async function getRates(ctx: DreamCtx, requests: RateRequest[]): Promise<
   const now = ctx.now();
   const missing: RateRequest[] = [];
   for (const r of requests) {
-    const { rows } = await ctx.db.query<RateRow>("select key, value, checked_at from region_rates where region = $1 and key = $2", [r.region, r.key]);
-    const row = rows[0];
+    const shared = sharedRow(r);
+    const { rows } = await ctx.db.query<RateRow & { region: string }>("select region, key, value, checked_at from region_rates where region in ($1, $2) and key = $3", [shared, ownRow(r, ctx.userId), r.key]);
+    const row = rows.find((x) => x.region === shared) ?? rows[0];
     if (row) {
       const value = parse(row.value) as Rate & { found?: boolean };
       const age = now.getTime() - new Date(row.checked_at).getTime();
@@ -276,7 +286,7 @@ export async function getRates(ctx: DreamCtx, requests: RateRequest[]): Promise<
       if (!ok) {
         await ctx.db.query(
           "insert into region_rates (region, key, value, source_url, checked_at) values ($1, $2, $3::jsonb, null, $4) on conflict (region, key) do update set value = excluded.value, source_url = null, checked_at = excluded.checked_at",
-          [req.region, req.key, JSON.stringify({ found: false }), checkedAt],
+          [sharedRow(req), req.key, JSON.stringify({ found: false }), checkedAt],
         );
         out[req.key] = undefined;
         continue;
@@ -293,7 +303,7 @@ export async function getRates(ctx: DreamCtx, requests: RateRequest[]): Promise<
       if (!verified && (!cite || bareRoot(cite))) {
         await ctx.db.query(
           "insert into region_rates (region, key, value, source_url, checked_at) values ($1, $2, $3::jsonb, null, $4) on conflict (region, key) do update set value = excluded.value, source_url = null, checked_at = excluded.checked_at",
-          [req.region, req.key, JSON.stringify({ found: false }), checkedAt],
+          [sharedRow(req), req.key, JSON.stringify({ found: false }), checkedAt],
         );
         out[req.key] = undefined;
         continue;
@@ -314,7 +324,7 @@ export async function getRates(ctx: DreamCtx, requests: RateRequest[]): Promise<
       };
       await ctx.db.query(
         "insert into region_rates (region, key, value, source_url, checked_at) values ($1, $2, $3::jsonb, $4, $5) on conflict (region, key) do update set value = excluded.value, source_url = excluded.source_url, checked_at = excluded.checked_at",
-        [req.region, req.key, JSON.stringify({ ...rate, found: true }), rate.sourceUrl, checkedAt],
+        [verified ? sharedRow(req) : ownRow(req, ctx.userId), req.key, JSON.stringify({ ...rate, found: true }), rate.sourceUrl, checkedAt],
       );
       out[req.key] = rate;
       found++;

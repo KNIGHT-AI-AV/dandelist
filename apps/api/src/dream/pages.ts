@@ -310,12 +310,19 @@ export const featureId = (label: string) =>
     .slice(0, 40);
 
 /** The pattern for a feature id or label, falling back to the words themselves for things like "Gaggenau kitchen". */
-export function featurePattern(f: string): { id: string; label: string; re: RegExp } {
+export function featurePattern(f: string): { id: string; label: string; re: { test(text: string): boolean } } {
   const id = featureId(f);
   const known = FEATURE_PATTERNS[id] ?? Object.entries(FEATURE_PATTERNS).find(([, p]) => p.re.test(f))?.[1];
   if (known) return { id: Object.entries(FEATURE_PATTERNS).find(([, p]) => p === known)?.[0] ?? id, ...known };
-  const words = f.trim().split(/\s+/).filter((w) => w.length > 2).map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
-  return { id, label: f.trim().slice(0, 40), re: new RegExp(words.length ? words.map((w) => `(?=[\\s\\S]*\\b${w})`).join("") : "$^", "i") };
+  // Every word must appear somewhere on the page: one plain pattern per word, never a chain of lookaheads, which
+  // rescans the whole page from every position and can stall the server on a long page.
+  const words = f
+    .trim()
+    .split(/\s+/)
+    .filter((w) => w.length > 2)
+    .slice(0, 6)
+    .map((w) => new RegExp(`\\b${w.slice(0, 30).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "i"));
+  return { id, label: f.trim().slice(0, 40), re: { test: (text: string) => words.length > 0 && words.every((w) => w.test(text)) } };
 }
 
 /** A home's recurring fee if the page states one: HOA, condo or service charge, with its period. */
