@@ -4,7 +4,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { requireAuth, type AuthDeps, type AuthVars } from "../auth";
 import type { MediaStore } from "../media-store";
-import { SpendLimitError, TOOL_MODEL_PREFIX, assertBudget, assertUserBudget, callsToday, recordSpend, recordToolSpend, spentToday, userCapUsd, type SpendCaps } from "../spend";
+import { SpendLimitError, TOOL_MODEL_PREFIX, assertBudget, assertUserBudget, callsToday, recordSpend, recordToolSpend, spentToday, userCapUsd, isJudge, type SpendCaps } from "../spend";
 import { answerSchema, clarify, draftSchema, interpret, research, type Meta, type Step } from "./agent";
 import { SAM_MODEL } from "./cutout";
 import type { MediaOptions } from "./hunt";
@@ -12,6 +12,8 @@ import { SHOPPING_ACTOR, SHOPPING_MAX_RESULTS, SHOPPING_PRICE_PER_RESULT_USD, sh
 import type { Fetcher } from "./tools";
 
 export const RUNS_PER_USER_PER_DAY = 20;
+/** Every judge shares one account, so it gets more runs; its share of the daily spend cap still bounds it. */
+export const RUNS_PER_JUDGE_PER_DAY = 120;
 export const INTERPRETS_PER_USER_PER_DAY = 60;
 /** About 15 researched wishes; the per-day run cap usually bites first. */
 export const USER_DAILY_USD = 2;
@@ -174,14 +176,15 @@ export function agentRoutes(deps: AgentDeps) {
     // Count and insert in one statement. Parallel requests can still overshoot by a few; the per-person spend cap
     // above bounds what that costs.
     const since = new Date(now.getTime() - CACHE_MS).toISOString();
+    const runCap = (await isJudge(db, userId, deps.judge)) ? RUNS_PER_JUDGE_PER_DAY : RUNS_PER_USER_PER_DAY;
     const { rows } = await db.query<RunRow>(
       `insert into agent_runs (user_id, cache_key, draft, answers, created_at, updated_at)
        select $1, $2, $3::jsonb, $4::jsonb, $5, $5
        where (select count(*) from agent_runs where user_id = $1 and created_at > $6) < $7
        returning ${RUN_COLUMNS}`,
-      [userId, key, JSON.stringify(draft), JSON.stringify(answers), now.toISOString(), since, RUNS_PER_USER_PER_DAY],
+      [userId, key, JSON.stringify(draft), JSON.stringify(answers), now.toISOString(), since, runCap],
     );
-    if (!rows[0]) return c.json({ error: `You can research up to ${RUNS_PER_USER_PER_DAY} wishes a day.` }, 429);
+    if (!rows[0]) return c.json({ error: `You can research up to ${runCap} wishes a day.` }, 429);
     const run = rows[0]!;
 
     const touch = () => deps.now().toISOString();

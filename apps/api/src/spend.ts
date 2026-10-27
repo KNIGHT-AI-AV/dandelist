@@ -63,9 +63,14 @@ export const JUDGE_SHARE = 0.6;
  * share of the service's daily cap rather than one person's allowance; everyone else gets `personUsd`.
  */
 export async function userCapUsd(db: Db, userId: string, personUsd: number, judge: { email: string } | undefined, caps: SpendCaps): Promise<number> {
-  if (!judge) return personUsd;
+  return (await isJudge(db, userId, judge)) ? Math.max(personUsd, caps.dailyUsd * JUDGE_SHARE) : personUsd;
+}
+
+/** True for the one account every judge signs in to. */
+export async function isJudge(db: Db, userId: string, judge: { email: string } | undefined): Promise<boolean> {
+  if (!judge) return false;
   const { rows } = await db.query<{ email: string | null }>("select email from users where id = $1", [userId]);
-  return rows[0]?.email?.toLowerCase() === judge.email.toLowerCase() ? Math.max(personUsd, caps.dailyUsd * JUDGE_SHARE) : personUsd;
+  return rows[0]?.email?.toLowerCase() === judge.email.toLowerCase();
 }
 
 /** Records a call to an outside service, such as one Apify actor run, with its estimated cost. */

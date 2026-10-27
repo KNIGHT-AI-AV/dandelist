@@ -9,9 +9,43 @@
     "recurring": [],
     "status": "verified",
     "seller": "Porsche",
-    "url": "https://www.porsche.com/stories/mobility/how-much-is-a-porsche-911/",
-    "checkedAt": "2026-10-27T13:56:18.271Z",
-    "imageUrl": "https://content-hub.imgix.net/4JDC1E6eSRmKKfWYscK4on/f24953432f61b464c6b0af74e1223c08/how_much_is_a_porsche_911.jpg?w=1308"
+    "url": "https://www.porsche.com/usa/models/911/carrera-models/911-carrera/",
+    "checkedAt": "2026-10-27T21:52:48.709Z",
+    "imageUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/ea/2025_Porsche_911_Carrera_S_rear.jpg/3840px-2025_Porsche_911_Carrera_S_rear.jpg",
+    "media": {
+      "kind": "vehicle",
+      "cutout": {
+        "url": "https://api.dandelist.knightaiav.com/media/c7a381bf709f4acf43d22d7b3742a5adf357f2c2119ef1b87ee2be0ba5d4c581.png",
+        "from": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/ea/2025_Porsche_911_Carrera_S_rear.jpg/3840px-2025_Porsche_911_Carrera_S_rear.jpg",
+        "model": "sam-3.1",
+        "width": 2048,
+        "height": 931
+      },
+      "images": [
+        {
+          "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/ea/2025_Porsche_911_Carrera_S_rear.jpg/3840px-2025_Porsche_911_Carrera_S_rear.jpg",
+          "width": 3840,
+          "credit": "TTTNIS",
+          "height": 1858,
+          "source": "commons.wikimedia.org",
+          "license": "CC0"
+        },
+        {
+          "url": "https://encrypted-tbn2.gstatic.com/shopping?q=tbn:ANd9GcQ1TMXdgA3d4ptzSkO83khLQfqnJaOADVjW8jZFOzKPk0fTNpJnp1Dup-M92WRE8fQWM0RS6pYwb27SumPBKIQAhaLUrBp0YZUi_XYvKxL6xcpoI2Xi5vNW",
+          "width": 401,
+          "credit": "Suncoast Porsche Parts",
+          "height": 259,
+          "source": "Google Shopping"
+        },
+        {
+          "url": "https://encrypted-tbn0.gstatic.com/shopping?q=tbn:ANd9GcS8utYD1dRihwkCT3Xbiixa9s0hzyiFrwZrrr6moTHj80zbaQszgfzOmuLaY5QKwKVyrNw_TcJmiMWMO-6BHDkViWipGoQnLYnhctKfgWDo696iIjUT7IjipQ",
+          "width": 401,
+          "credit": "Suncoast Porsche Parts",
+          "height": 259,
+          "source": "Google Shopping"
+        }
+      ]
+    }
   },
   {
     "id": "leica-q3",
@@ -52,8 +86,42 @@
     "status": "verified",
     "seller": "Rolex",
     "url": "https://www.rolex.com/en-us/watches/submariner/m126610ln-0001",
-    "checkedAt": "2026-10-27T13:56:32.489Z",
-    "imageUrl": "https://media.rolex.com/image/upload/q_auto/f_auto/t_v7-cover-majesty-landscape/c_limit,w_1920/v1/a677b2c664f6/catalogue/2026/upright-c/m126610ln-0001"
+    "checkedAt": "2026-10-27T21:54:09.048Z",
+    "imageUrl": "https://media.rolex.com/image/upload/f_auto/t_v7-cover-majesty-landscape/c_limit,w_1920/v1/a677b2c664f6/catalogue/2026/upright-c/m126610ln-0001",
+    "media": {
+      "kind": "product",
+      "cutout": {
+        "url": "https://api.dandelist.knightaiav.com/media/d6e1848513ecba74fa6d92a5ec2161bbbd79b32eee492d62d9dda5463da4aaab.png",
+        "from": "https://media.rolex.com/image/upload/f_auto/t_v7-cover-majesty-landscape/c_limit,w_1920/v1/a677b2c664f6/catalogue/2026/upright-c/m126610ln-0001",
+        "model": "sam-3.1",
+        "width": 886,
+        "height": 1510
+      },
+      "images": [
+        {
+          "url": "https://media.rolex.com/image/upload/f_auto/t_v7-cover-majesty-landscape/c_limit,w_1920/v1/a677b2c664f6/catalogue/2026/upright-c/m126610ln-0001",
+          "clean": true,
+          "width": 1451,
+          "credit": "Rolex",
+          "height": 2160,
+          "source": "rolex.com"
+        },
+        {
+          "url": "https://encrypted-tbn2.gstatic.com/shopping?q=tbn:ANd9GcTPnLvM3IYt4Tv_dZVX5sDWE4igTJf4WAkVcf8Y3rkO_vf__lkBnAbxzVm58soLIo8HIuMtVRR5S0orHKB5aQnFRhvLpSn9Qc-qv57V4KoLIaYJC2mVFylh",
+          "width": 426,
+          "credit": "Mr. Alex Jewelry",
+          "height": 426,
+          "source": "Google Shopping"
+        },
+        {
+          "url": "https://encrypted-tbn3.gstatic.com/shopping?q=tbn:ANd9GcQEFU00yRwxU8jQHrJdo9i-PuR4tsN20YuzOXjQBrf9MR6Bp_o15DR9tIqwrQp3q-1iLERMpHjp618BkOCom5SmY6Lnu041mIedoXwk1o02pifyP9hd-BCdpA",
+          "width": 426,
+          "credit": "Wrist Aficionado",
+          "height": 426,
+          "source": "Google Shopping"
+        }
+      ]
+    }
   },
   {
     "id": "kyoto-autumn",
@@ -61,12 +129,82 @@
     "name": "Two weeks in Kyoto",
     "kind": "visit",
     "category": "travel",
-    "upfrontCents": 94700,
+    "upfrontCents": 360800,
     "recurring": [],
     "status": "estimate",
-    "seller": "Japan Airlines",
-    "url": "https://www.jal.co.jp/flights/en-us/flights-from-new-york-to-osaka?r=inbound",
-    "checkedAt": "2026-10-27T13:56:54.318Z"
+    "seller": "flights.com + KAYAK",
+    "url": "https://www.flights.com/?redirect=true",
+    "checkedAt": "2026-10-27T21:55:25.877Z",
+    "imageUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/de/Water_reflection_of_Kinkaku-ji_Temple_a_sunny_day%2C_Kyoto%2C_Japan.jpg/3840px-Water_reflection_of_Kinkaku-ji_Temple_a_sunny_day%2C_Kyoto%2C_Japan.jpg",
+    "media": {
+      "kind": "place",
+      "images": [
+        {
+          "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/de/Water_reflection_of_Kinkaku-ji_Temple_a_sunny_day%2C_Kyoto%2C_Japan.jpg/3840px-Water_reflection_of_Kinkaku-ji_Temple_a_sunny_day%2C_Kyoto%2C_Japan.jpg",
+          "width": 3840,
+          "credit": "Basile Morin",
+          "height": 2160,
+          "source": "commons.wikimedia.org",
+          "license": "CC BY-SA 4.0"
+        },
+        {
+          "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/0e/Torii_path_with_lantern_at_Fushimi_Inari_Taisha_Shrine%2C_Kyoto%2C_Japan.jpg/3840px-Torii_path_with_lantern_at_Fushimi_Inari_Taisha_Shrine%2C_Kyoto%2C_Japan.jpg",
+          "width": 3840,
+          "credit": "Basile Morin",
+          "height": 2560,
+          "source": "commons.wikimedia.org",
+          "license": "CC BY-SA 4.0"
+        },
+        {
+          "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/83/Kiyomizu-dera%2C_Kyoto%2C_November_2016_-01.jpg/3840px-Kiyomizu-dera%2C_Kyoto%2C_November_2016_-01.jpg",
+          "width": 3840,
+          "credit": "Martin Falbisoner",
+          "height": 2363,
+          "source": "commons.wikimedia.org",
+          "license": "CC BY-SA 4.0"
+        },
+        {
+          "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/4a/Bamboo_Forest%2C_Arashiyama%2C_Kyoto%2C_Japan.jpg/3840px-Bamboo_Forest%2C_Arashiyama%2C_Kyoto%2C_Japan.jpg",
+          "width": 3840,
+          "credit": "Basile Morin",
+          "height": 2560,
+          "source": "commons.wikimedia.org",
+          "license": "CC BY-SA 4.0"
+        },
+        {
+          "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/ed/Yasaka-dori_early_morning_with_street_lanterns_and_the_Tower_of_Yasaka_%28Hokan-ji_Temple%29%2C_Kyoto%2C_Japan.jpg/3840px-Yasaka-dori_early_morning_with_street_lanterns_and_the_Tower_of_Yasaka_%28Hokan-ji_Temple%29%2C_Kyoto%2C_Japan.jpg",
+          "width": 3840,
+          "credit": "Basile Morin",
+          "height": 2560,
+          "source": "commons.wikimedia.org",
+          "license": "CC BY-SA 4.0"
+        },
+        {
+          "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/99/Sunlight_through_clouds_and_view_of_Ginkaku-ji_Temple_from_above%2C_Kyoto%2C_Japan.jpg/3840px-Sunlight_through_clouds_and_view_of_Ginkaku-ji_Temple_from_above%2C_Kyoto%2C_Japan.jpg",
+          "width": 3840,
+          "credit": "Basile Morin",
+          "height": 2560,
+          "source": "commons.wikimedia.org",
+          "license": "CC BY-SA 4.0"
+        },
+        {
+          "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/ab/Togetsu-kyo_bridge_at_dusk%2C_Kyoto%2C_Japan.jpg/3840px-Togetsu-kyo_bridge_at_dusk%2C_Kyoto%2C_Japan.jpg",
+          "width": 3840,
+          "credit": "Basile Morin",
+          "height": 2560,
+          "source": "commons.wikimedia.org",
+          "license": "CC BY-SA 4.0"
+        },
+        {
+          "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/25/Wooden_and_bamboo_facades_of_dwellings_with_sudare_in_a_cobbled_street_of_Gion%2C_perspective_effect_with_vanishing_point%2C_Kyoto%2C_Japan.jpg/3840px-Wooden_and_bamboo_facades_of_dwellings_with_sudare_in_a_cobbled_street_of_Gion%2C_perspective_effect_with_vanishing_point%2C_Kyoto%2C_Japan.jpg",
+          "width": 3840,
+          "credit": "Wikimedia Commons contributor",
+          "height": 2560,
+          "source": "commons.wikimedia.org",
+          "license": "CC BY-SA 4.0"
+        }
+      ]
+    }
   },
   {
     "id": "peloton-bike-plus",
