@@ -1,0 +1,33 @@
+import type { Wish } from "./wishes";
+
+export const KIND_LABEL = { buy: "Buy", own: "Own", do: "Do", visit: "Visit" } as const;
+export const TIER_LABEL = { must: "Must", nice: "Nice", dream: "Dream" } as const;
+
+export function hostOf(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
+}
+
+/** "today", "yesterday", "3 days ago", or a short date for anything older than a week. */
+export function whenChecked(iso: string, now = new Date()): string {
+  const then = new Date(iso);
+  const days = Math.floor((Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) - Date.UTC(then.getFullYear(), then.getMonth(), then.getDate())) / 86_400_000);
+  if (days <= 0) return "today";
+  if (days === 1) return "yesterday";
+  if (days < 7) return `${days} days ago`;
+  return then.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+/** What the agent last did for a wish, in a few words. */
+export function agentLine(w: Wish): string {
+  const a = w.details.agent;
+  if (!a) return "Priced by you";
+  return a.status === "verified" ? `Checked ${whenChecked(a.checkedAt)} on ${hostOf(a.url)}` : `Estimate from ${hostOf(a.url)}`;
+}
+
+export function monthYear(d: Date): string {
+  return d.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+}

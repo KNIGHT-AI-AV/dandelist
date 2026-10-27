@@ -1,10 +1,12 @@
 import { equivalentMonthly, horizonCashOutlay, recurringBreakdown, type Item, type Period } from "@dandelist/cost";
 import { router } from "expo-router";
 import { useMemo, useState } from "react";
-import { Text } from "react-native";
-import { Body, Button, Card, ErrorText, Field, Row, Screen, Segmented, Title } from "../../components/ui";
+import { ScrollView, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Choice, ErrorLine, Eyebrow, GlassField, PrimaryButton, QuietButton } from "../../components/lux";
+import { Statement } from "../../components/statement";
 import { formatCents, parseDollars } from "../../lib/money";
-import { type, usePalette } from "../../lib/theme";
+import { fonts, usePalette } from "../../lib/theme";
 import { useWishes, type WishKind, type WishTier } from "../../lib/wishes";
 
 const KINDS: { value: WishKind; label: string }[] = [
@@ -33,6 +35,7 @@ const HORIZONS = [
 export default function ManualWish() {
   const { add } = useWishes();
   const p = usePalette();
+  const insets = useSafeAreaInsets();
   const [name, setName] = useState("");
   const [kind, setKind] = useState<WishKind>("buy");
   const [tier, setTier] = useState<WishTier>("nice");
@@ -70,32 +73,38 @@ export default function ManualWish() {
     }
   }
 
+  const choiceRow = <T extends string>(label: string, options: { value: T; label: string }[], value: T, onChange: (v: T) => void) => (
+    <View style={{ gap: 8 }}>
+      <Eyebrow>{label}</Eyebrow>
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+        {options.map((o) => (
+          <Choice key={o.value} label={o.label} selected={o.value === value} onPress={() => onChange(o.value)} />
+        ))}
+      </View>
+    </View>
+  );
+
   return (
-    <Screen>
-      <Title>Enter it yourself</Title>
-      <Field label="What is it?" value={name} onChangeText={setName} placeholder="Leica Q3, a week in Lisbon..." />
-      <Segmented<WishKind> label="Type" options={KINDS} value={kind} onChange={setKind} />
-      <Segmented<WishTier> label="How much you want it" options={TIERS} value={tier} onChange={setTier} />
-      <Field label="Price upfront (USD)" value={price} onChangeText={setPrice} keyboardType="decimal-pad" inputMode="decimal" placeholder="2,400" />
-      <Field label="Running cost (USD, optional)" value={running} onChangeText={setRunning} keyboardType="decimal-pad" inputMode="decimal" placeholder="30" />
-      <Segmented<Period> label="Running cost is paid" options={PERIODS} value={period} onChange={setPeriod} />
-      <Segmented label="Look ahead" options={HORIZONS} value={horizon} onChange={setHorizon} />
-
-      {preview ? (
-        <Card>
-          <Text style={[type.label, { color: p.muted }]}>What it really costs</Text>
-          <Row label="Upfront" value={formatCents(upfrontCents ?? 0)} />
-          <Row label="Every month" value={formatCents(preview.monthly)} hint="The running cost you'd actually pay" />
-          <Row label={`Over ${years} ${years === 1 ? "year" : "years"}`} value={formatCents(preview.total)} />
-          <Row label="Spread per month" value={formatCents(preview.equivalent)} hint={`The ${years}-year total spread evenly. Not a bill.`} />
-        </Card>
-      ) : (
-        <Body muted>Enter amounts as numbers to see the costs.</Body>
-      )}
-
-      <ErrorText>{error}</ErrorText>
-      <Button label="Save wish" busy={busy} onPress={save} />
-      <Button label="Cancel" kind="quiet" onPress={() => router.back()} />
-    </Screen>
+    <View style={{ flex: 1, backgroundColor: p.bg }}>
+      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingTop: insets.top + 64, paddingBottom: insets.bottom + 40, paddingHorizontal: 24, gap: 18, width: "100%", maxWidth: 520, alignSelf: "center" }}>
+        <Eyebrow>New wish</Eyebrow>
+        <Text accessibilityRole="header" style={{ fontFamily: fonts.display, fontSize: 42, lineHeight: 44, color: p.ink }}>Enter it yourself</Text>
+        <GlassField label="What is it?" value={name} onChangeText={setName} placeholder="Leica Q3, a week in Lisbon..." />
+        {choiceRow("Type", KINDS, kind, setKind)}
+        {choiceRow("How much you want it", TIERS, tier, setTier)}
+        <GlassField label="Price upfront (USD)" value={price} onChangeText={setPrice} keyboardType="decimal-pad" inputMode="decimal" placeholder="2,400" />
+        <GlassField label="Running cost (USD, optional)" value={running} onChangeText={setRunning} keyboardType="decimal-pad" inputMode="decimal" placeholder="30" />
+        {choiceRow("Running cost is paid", PERIODS, period, setPeriod)}
+        {choiceRow("Look ahead", HORIZONS, horizon, setHorizon)}
+        {preview ? (
+          <Statement item={{ id: "preview", upfrontCents: upfrontCents ?? 0, recurring: recurringCents ? [{ amountCents: recurringCents, period }] : [] }} years={years} />
+        ) : (
+          <Text style={{ fontFamily: fonts.body, fontSize: 14, color: p.ink2 }}>Enter amounts as numbers to see the costs.</Text>
+        )}
+        <ErrorLine>{error}</ErrorLine>
+        <PrimaryButton label="Save wish" busy={busy} onPress={save} />
+        <QuietButton label="Cancel" onPress={() => (router.canGoBack() ? router.back() : router.replace("/wishes"))} />
+      </ScrollView>
+    </View>
   );
 }

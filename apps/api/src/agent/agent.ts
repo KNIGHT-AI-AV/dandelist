@@ -109,10 +109,10 @@ const rawOptionSchema = z.object({
 
 export type Step =
   | { type: "search"; query: string; at: string }
-  | { type: "open"; url: string; title?: string; ok: boolean; at: string }
+  | { type: "open"; url: string; title?: string; ok: boolean; imageUrl?: string; at: string }
   | { type: "fx"; from: string; to: string; rate?: number; at: string }
   | { type: "check"; url: string; verified: boolean; at: string }
-  | { type: "price"; label: string; at: string }
+  | { type: "price"; label: string; upfrontCents?: number; at: string }
   | { type: "explain"; at: string }
   | { type: "note"; text: string; at: string };
 
@@ -230,7 +230,7 @@ export async function research(meta: Meta, ctx: ResearchContext): Promise<Resear
       const page = await getPage(String(parsed.url ?? ""), fetcher);
       pages.set(String(parsed.url), page);
       pages.set(page.url, page);
-      await ctx.onStep({ type: "open", url: page.url, title: page.title || undefined, ok: page.ok, at: at() });
+      await ctx.onStep({ type: "open", url: page.url, title: page.title || undefined, ok: page.ok, imageUrl: page.imageUrl, at: at() });
       if (!page.ok) return JSON.stringify({ error: page.error ?? "The page couldn't be opened." });
       return JSON.stringify({ title: page.title, prices_in_markup: page.structuredPrices, text: page.text });
     }
@@ -305,7 +305,7 @@ export async function research(meta: Meta, ctx: ResearchContext): Promise<Resear
       checkedAt: at(),
       totals: { monthlyCents: recurringBreakdown([item]).perMonth, horizonCents, spreadMonthlyCents: equivalentMonthly(horizonCents, HORIZON_YEARS) },
     });
-    await ctx.onStep({ type: "price", label: o.label, at: at() });
+    await ctx.onStep({ type: "price", label: o.label, upfrontCents: toCents(o.price), at: at() });
   }
   options.sort((a, b) => Number(b.status === "verified") - Number(a.status === "verified") || a.totals.horizonCents - b.totals.horizonCents);
 
@@ -356,7 +356,7 @@ export async function explain(meta: Meta, draft: Draft, options: PriceOption[]):
   for (let attempt = 0; attempt < 2; attempt++) {
     const res = await meta.responses({
       instructions:
-        "Write two or three plain sentences that help someone choose between these ways to get their wish. Use only numbers that appear in FACTS, written exactly as given, and say 'over N years' for the horizon. If a price was not checked on its page, say so; otherwise don't mention checking. No financial advice.",
+        "Write at most two short sentences, under 40 words in all, that help someone choose between these ways to get their wish. Lead with the best choice and why. Use only numbers that appear in FACTS, written exactly as given, and say 'over N years' for the horizon. If a price was not checked on its page, say so; otherwise don't mention checking. No financial advice.",
       input: `FACTS: ${JSON.stringify(facts)}${feedback}`,
     });
     const text = res.text.trim();

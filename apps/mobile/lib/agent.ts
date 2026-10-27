@@ -25,10 +25,10 @@ export interface Answer {
 
 export type Step =
   | { type: "search"; query: string; at: string }
-  | { type: "open"; url: string; title?: string; ok: boolean; at: string }
+  | { type: "open"; url: string; title?: string; ok: boolean; imageUrl?: string; at: string }
   | { type: "fx"; from: string; to: string; rate?: number; at: string }
   | { type: "check"; url: string; verified: boolean; at: string }
-  | { type: "price"; label: string; at: string }
+  | { type: "price"; label: string; upfrontCents?: number; at: string }
   | { type: "explain"; at: string }
   | { type: "note"; text: string; at: string };
 
@@ -78,32 +78,4 @@ export async function startResearch(api: Api, draft: Draft, answers: Answer[]) {
 
 export async function getRun(api: Api, id: string) {
   return (await read<{ run: Run }>(await api(`/agent/runs/${id}`).catch(() => null), "Lost track of the research.")).run;
-}
-
-export function hostOf(url: string): string {
-  try {
-    return new URL(url).hostname.replace(/^www\./, "");
-  } catch {
-    return url;
-  }
-}
-
-/** One line per step, in the agent's own order, for the trail on screen. */
-export function describeStep(s: Step): { verb: string; detail: string } {
-  switch (s.type) {
-    case "search":
-      return { verb: "Searched", detail: s.query };
-    case "open":
-      return { verb: s.ok ? "Opened" : "Couldn't open", detail: hostOf(s.url) };
-    case "fx":
-      return { verb: "Converted", detail: `${s.from} to ${s.to}` };
-    case "check":
-      return { verb: s.verified ? "Checked" : "Couldn't confirm", detail: `${hostOf(s.url)}${s.verified ? ", price found on the page" : ", kept as an estimate"}` };
-    case "price":
-      return { verb: "Priced", detail: s.label };
-    case "explain":
-      return { verb: "Summing up", detail: "comparing the options" };
-    case "note":
-      return { verb: "Note", detail: s.text };
-  }
 }
