@@ -44,7 +44,7 @@ export function GlassReveal({ uri, standby, stage, treatment = "swirl", style, c
           { id, x: "-5%", y: "-5%", width: "110%", height: "110%", colorInterpolationFilters: "sRGB" },
           h("feImage", { href: DISP, x: drift, y: drift * 0.6, width: 512, height: 512, preserveAspectRatio: "none", result: "map" }),
           h("feTile", { in: "map", result: "tiled" }),
-          h("feDisplacementMap", { in: "SourceGraphic", in2: "tiled", scale: treatment === "swirl" ? 46 * k : treatment === "frost" ? 10 * k : 0, xChannelSelector: "R", yChannelSelector: "G" }),
+          h("feDisplacementMap", { in: "SourceGraphic", in2: "tiled", scale: treatment === "swirl" ? 60 * k : treatment === "frost" ? 10 * k : 0, xChannelSelector: "R", yChannelSelector: "G" }),
         ),
       )}
       {h(
