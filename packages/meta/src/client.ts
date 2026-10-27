@@ -101,6 +101,8 @@ export function parseResponses(raw: Json, model: string): ResponsesResult {
   let searches = 0;
   for (const item of output) {
     if (item.type === "message" && Array.isArray(item.content)) {
+      // Separate messages are separate thoughts: never run the last sentence of one into the first of the next.
+      if (text && !/\s$/.test(text)) text += " ";
       for (const part of item.content as Json[]) {
         if (part.type === "output_text" && typeof part.text === "string") {
           text += part.text;

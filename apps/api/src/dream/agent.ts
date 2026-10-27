@@ -185,7 +185,9 @@ function sayableFacts(t: TranscriptEntry[], state: DreamState, ctx: DreamCtx) {
 
 /** The concierge speaks in at most two sentences; the tools carry the detail. */
 export function brief(text: string, max = 2): string {
-  const s = text.split(/(?<=[.!?])\s+/).filter(Boolean);
+  const seen = new Set<string>();
+  // The model sometimes says the same sentence twice across its messages; keep the first.
+  const s = text.split(/(?<=[.!?])\s+/).filter((x) => x && !seen.has(x.toLowerCase()) && seen.add(x.toLowerCase()));
   const out = s.slice(0, max).join(" ");
   return out.length > 320 ? `${out.slice(0, 317).replace(/\s+\S*$/, "")}...` : out;
 }

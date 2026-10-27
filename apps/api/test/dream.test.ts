@@ -766,6 +766,7 @@ describe("listing pages and evidence", () => {
 
   it("keeps the concierge to two plain sentences", () => {
     expect(brief("One. Two! Three? Four.")).toBe("One. Two!");
+    expect(brief("Lovely choice. Opening it now. Lovely choice.")).toBe("Lovely choice. Opening it now.");
     expect(tidy("Lovely dream — opening it now… “Sea views” 1–2%")).toBe('Lovely dream, opening it now... "Sea views" 1-2%');
   });
 
