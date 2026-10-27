@@ -57,7 +57,15 @@ export function fallbackNote(f: ReturnType<typeof planFacts>): string {
   return `At ${f.set_aside_per_month} a month, everything lands by ${f.everything_by}.`;
 }
 
-const ipOf = (h: (name: string) => string | undefined) => (h("x-forwarded-for") ?? "").split(",")[0]!.trim() || h("x-real-ip") || "unknown";
+/**
+ * App Runner's proxy appends the caller's address as the last X-Forwarded-For hop; earlier hops are whatever the
+ * caller sent, so only the right-most one can be trusted.
+ */
+export const ipOf = (h: (name: string) => string | undefined) => (h("x-forwarded-for") ?? "").split(",").map((s) => s.trim()).filter(Boolean).pop() || "unknown";
+
+/** Preview notes are cheap, but they get their own daily ceiling so anonymous traffic can't eat the agent's budget. */
+export const PREVIEW_DAILY_USD = 1;
+const MAX_TRACKED_IPS = 5000;
 
 export function previewRoutes(deps: AgentDeps & { webFetch?: Fetcher }) {
   const app = new Hono();
@@ -75,6 +83,10 @@ export function previewRoutes(deps: AgentDeps & { webFetch?: Fetcher }) {
     const now = deps.now();
     const ip = ipOf((n) => c.req.header(n));
     const recent = (hits.get(ip) ?? []).filter((t) => now.getTime() - t < 3_600_000);
+    if (hits.size > MAX_TRACKED_IPS) {
+      for (const [k, v] of hits) if (!v.some((t) => now.getTime() - t < 3_600_000)) hits.delete(k);
+      if (hits.size > MAX_TRACKED_IPS) hits.clear();
+    }
     if (recent.length >= PREVIEWS_PER_IP_PER_HOUR) return c.json({ error: "That's a lot of lives for one hour. Try again soon." }, 429);
     const today = now.toISOString().slice(0, 10);
     if (today !== dayKey) [dayKey, dayCount] = [today, 0];
@@ -117,6 +129,9 @@ export function previewRoutes(deps: AgentDeps & { webFetch?: Fetcher }) {
       if (deps.meta) {
         try {
           await assertBudget(db, deps.spendCaps ?? { dailyUsd: 10, totalUsd: 120 }, now);
+          const dayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).toISOString();
+          const spent = (await db.query<{ s: string | null }>("select coalesce(sum(cost_usd), 0) as s from spend_ledger where kind = 'preview' and created_at >= $1", [dayStart])).rows[0];
+          if (Number(spent?.s ?? 0) >= PREVIEW_DAILY_USD) throw new SpendLimitError("daily");
           const client = new MetaClient({ ...deps.meta, onUsage: (usage, cost) => recordSpend(db, null, "preview", usage, cost, deps.now()) });
           const res = await client.responses({
             instructions:

@@ -3,7 +3,7 @@ import { entry } from "@dandelist/catalogue";
 import { beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../src/app";
 import { migrate, type Db } from "../src/db";
-import { PREVIEWS_PER_IP_PER_HOUR, fallbackNote, planFacts, reachBy } from "../src/preview";
+import { PREVIEWS_PER_IP_PER_HOUR, fallbackNote, ipOf, planFacts, reachBy } from "../src/preview";
 
 const clock = new Date("2026-10-27T12:00:00Z");
 let db: Db;
@@ -82,6 +82,13 @@ describe("pre-login preview", () => {
       })) as never;
     const ev = await events(await post(makeApp(sellerPage("$7,350.00"), meta), { picks: ["leica-q3"], monthlyCents: 100_000 }));
     expect(ev.find((e) => e.type === "note").text).not.toContain("$99");
+  });
+
+  it("trusts only the hop the proxy appended", () => {
+    const h = (v: string) => (n: string) => (n === "x-forwarded-for" ? v : undefined);
+    expect(ipOf(h("1.2.3.4, 198.51.100.7"))).toBe("198.51.100.7");
+    expect(ipOf(h("198.51.100.7"))).toBe("198.51.100.7");
+    expect(ipOf(() => undefined)).toBe("unknown");
   });
 
   it("refuses unknown picks and limits each address", async () => {
