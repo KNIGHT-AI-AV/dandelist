@@ -812,6 +812,10 @@ function modelInput(ctx: DreamCtx, t: TranscriptEntry[], state: DreamState, mess
     .join("\n\n");
 }
 
+/** A reply that says the concierge is about to open, search or price something. */
+const PROMISE = /\b(let me|i'll|i will|i'm going to|i am going to|opening|searching|looking up|pulling up|one moment|just a moment)\b/i;
+const NUDGE = "You said you would do that but called no tool. Call the tool now, without repeating what you said.";
+
 async function converse(ctx: DreamCtx, t: TranscriptEntry[], state: DreamState, message: string): Promise<void> {
   let res = await ctx.meta.responses({ instructions: CONCIERGE, input: modelInput(ctx, t, state, message), tools: CONCIERGE_TOOLS });
   const speak = async (text: string) => {
@@ -820,9 +824,19 @@ async function converse(ctx: DreamCtx, t: TranscriptEntry[], state: DreamState, 
     await say(ctx, clean);
     log(t, { role: "agent", text: clean, at: ctx.now().toISOString() });
   };
+  let acted = false;
   for (;;) {
     if (res.text.trim()) await speak(res.text);
-    if (!res.functionCalls.length) break;
+    if (!res.functionCalls.length) {
+      // The model sometimes announces a tool ("Let me open your villa builder") without calling it, which leaves the
+      // person waiting on nothing. Hold it to its word once.
+      if (acted || !PROMISE.test(res.text)) break;
+      acted = true;
+      res = await ctx.meta.responses({ previous_response_id: res.id, input: [{ role: "user", content: NUDGE }], tools: CONCIERGE_TOOLS });
+      if (!res.functionCalls.length) break;
+      res = { ...res, text: "" };
+    }
+    acted = true;
     const outputs = [];
     let stop = false;
     for (const fc of res.functionCalls) {

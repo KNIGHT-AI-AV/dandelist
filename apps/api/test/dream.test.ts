@@ -495,6 +495,15 @@ describe("dream turn", () => {
     expect(regions).not.toContain("ID/car_insurance");
   });
 
+  it("holds the concierge to its word when it announces a tool without calling it", async () => {
+    const t = await signIn("ada@example.com");
+    await liveIn(t, "MT", "Malta");
+    concierge = [[message("Let me open your villa builder now.")], [fc("home_builder", VILLA_ARGS)], [message("")]];
+    const { events } = await turn(t, { type: "message", text: "a modern sea-view villa with a pool" });
+    expect(widgets(events, "home_builder")).toHaveLength(1);
+    expect(events.filter((e) => e.type === "text").map((e) => e.text)).toEqual(["Let me open your villa builder now."]);
+  });
+
   it("hands a single item to the item price research with the person's words", async () => {
     const t = await signIn("ada@example.com");
     concierge = [[fc("price_item", { description: "a Leica Q3" })], [message("I'll find what it really costs.")]];
