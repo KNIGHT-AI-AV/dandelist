@@ -6,6 +6,8 @@
  */
 import { execFileSync } from "node:child_process";
 import { randomInt } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { homedir } from "node:os";
 import {
   AppRunnerClient,
   CreateServiceCommand,
@@ -78,6 +80,13 @@ const secrets: Record<string, string> = {
   JUDGE_CODE: await secret("dandelist/api/judge-code", async () => String(randomInt(100000, 1000000))),
   RESEND_API_KEY: await secret("dandelist/api/resend-key", async () => vault("accounting/resend-api-key")),
   MODEL_API_KEY: await secret("dandelist/api/model-key", async () => vault("accounting/meta-model-api")),
+  // Apify's free plan (hard-capped at its monthly credit, so no cash); the token file never leaves this machine.
+  APIFY_TOKEN: await secret("dandelist/api/apify-token", async () => {
+    const line = readFileSync(`${homedir()}/.knight-secrets/apify.env`, "utf8").split(/?
+/).find((l) => l.startsWith("APIFY_TOKEN="));
+    if (!line) throw new Error("APIFY_TOKEN not found in ~/.knight-secrets/apify.env");
+    return line.slice("APIFY_TOKEN=".length).trim();
+  }),
 };
 
 // Social sign-in. The owner creates each provider's OAuth client and stores its secret under these names; until a
@@ -174,6 +183,12 @@ const source: SourceConfiguration = {
         SPEND_DAILY_USD: "10",
         SPEND_TOTAL_USD: "120",
         PUBLIC_API_URL: "https://api.dandelist.knightaiav.com",
+        // Product and place photos found by the agent are stored here and served at /media/<sha256>.
+        MEDIA_BUCKET: `dandelist-media-${ACCOUNT}`,
+        MEDIA_CUTOUTS: "1",
+        MEDIA_GENERATE: "1",
+        MEDIA_UPSCALE: "1",
+        APIFY_DAILY_USD: "0.15",
         ...signInIds,
       },
       RuntimeEnvironmentSecrets: secrets,
@@ -182,7 +197,8 @@ const source: SourceConfiguration = {
   AuthenticationConfiguration: { AccessRoleArn: role("dandelist-apprunner-ecr") },
   AutoDeploymentsEnabled: false,
 };
-const instance = { Cpu: "0.25 vCPU", Memory: "0.5 GB", InstanceRoleArn: role("dandelist-apprunner-instance") };
+// 1 GB: a cutout decodes a source photo of up to 16 megapixels (64 MB of pixels) next to its mask.
+const instance = { Cpu: "0.25 vCPU", Memory: "1 GB", InstanceRoleArn: role("dandelist-apprunner-instance") };
 const health = { Protocol: "HTTP" as const, Path: "/healthz", Interval: 10, Timeout: 5, HealthyThreshold: 1, UnhealthyThreshold: 5 };
 
 let arn: string;
