@@ -38,6 +38,15 @@ export function roundCents(cents: number): Cents {
   return Math.round(cents);
 }
 
+const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
+const usdWhole = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+
+/** Formats cents as US dollars; whole dollars when the amount has no cents. */
+export function formatCents(cents: number): string {
+  const rounded = Math.round(cents);
+  return rounded % 100 === 0 ? usdWhole.format(rounded / 100) : usd.format(rounded / 100);
+}
+
 export function annualRecurringCents(recurring: Recurring[]): Cents {
   return recurring.reduce((sum, r) => sum + r.amountCents * PERIODS_PER_YEAR[r.period], 0);
 }

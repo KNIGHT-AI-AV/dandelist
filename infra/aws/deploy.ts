@@ -132,7 +132,7 @@ const source: SourceConfiguration = {
       RuntimeEnvironmentVariables: {
         NODE_ENV: "production",
         JUDGE_EMAIL: "judge@dandelist.com",
-        WEB_ORIGINS: "https://dandelist.com,https://www.dandelist.com,https://dandelist.pages.dev,http://localhost:8081",
+        WEB_ORIGINS: "https://dandelist.knightaiav.com,https://dandelist.pages.dev,https://dandelist.com,https://www.dandelist.com,http://localhost:8081",
         SPEND_DAILY_USD: "10",
         SPEND_TOTAL_USD: "120",
       },

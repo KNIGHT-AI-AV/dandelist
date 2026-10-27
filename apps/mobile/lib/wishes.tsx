@@ -11,7 +11,22 @@ export interface Wish {
   kind: WishKind;
   tier: WishTier;
   item: Item;
+  /** What the agent found when the wish was researched: the chosen option, its source and the summary. */
+  details: WishDetails;
   createdAt: string;
+}
+
+export interface WishDetails {
+  agent?: {
+    runId: string;
+    seller: string;
+    url: string;
+    status: "verified" | "estimate";
+    checkedAt: string;
+    imageUrl?: string;
+    explanation: string;
+    source: { currency: string; price: number; rate: number; rateDate: string };
+  };
 }
 
 export interface NewWish {
@@ -21,6 +36,9 @@ export interface NewWish {
   upfrontCents: number;
   recurringCents: number;
   period: Period;
+  /** Itemised running costs; when given, these replace recurringCents. */
+  recurring?: { amountCents: number; period: Period; label?: string }[];
+  details?: WishDetails;
 }
 
 interface WishStore {
@@ -40,6 +58,7 @@ type ServerWish = {
   upfrontCents: number;
   recurring: { amountCents: number; period: Period }[];
   resaleCents: number | null;
+  details: WishDetails | null;
   createdAt: string;
 };
 
@@ -49,6 +68,7 @@ const fromServer = (w: ServerWish): Wish => ({
   kind: w.kind,
   tier: w.tier,
   createdAt: w.createdAt,
+  details: w.details ?? {},
   item: { id: w.id, upfrontCents: w.upfrontCents, recurring: w.recurring, ...(w.resaleCents === null ? {} : { resaleCents: w.resaleCents }) },
 });
 
@@ -103,7 +123,8 @@ export function WishProvider({ children }: { children: ReactNode }) {
             kind: w.kind,
             tier: w.tier,
             upfrontCents: w.upfrontCents,
-            recurring: w.recurringCents > 0 ? [{ amountCents: w.recurringCents, period: w.period }] : [],
+            recurring: w.recurring ?? (w.recurringCents > 0 ? [{ amountCents: w.recurringCents, period: w.period }] : []),
+            ...(w.details ? { details: w.details } : {}),
           }),
         }).catch(() => null);
         if (!res?.ok) throw await failure(res, "Couldn't save the wish.");

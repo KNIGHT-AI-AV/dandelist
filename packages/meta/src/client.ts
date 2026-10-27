@@ -28,6 +28,8 @@ export interface ResponsesResult {
   text: string;
   citations: Citation[];
   functionCalls: FunctionCall[];
+  /** Queries the built-in web_search tool ran, when Meta reports them. */
+  searchQueries: string[];
   usage: Usage;
   costUsd: number;
   raw: unknown;
@@ -95,6 +97,7 @@ export function parseResponses(raw: Json, model: string): ResponsesResult {
   let text = "";
   const citations: Citation[] = [];
   const functionCalls: FunctionCall[] = [];
+  const searchQueries: string[] = [];
   let searches = 0;
   for (const item of output) {
     if (item.type === "message" && Array.isArray(item.content)) {
@@ -112,6 +115,9 @@ export function parseResponses(raw: Json, model: string): ResponsesResult {
       functionCalls.push({ callId: String(item.call_id ?? item.id), name: String(item.name), arguments: String(item.arguments ?? "{}") });
     } else if (item.type === "web_search_call") {
       searches++;
+      const action = (item.action ?? {}) as Json;
+      const query = action.query ?? item.query;
+      if (typeof query === "string" && query) searchQueries.push(query);
     }
   }
   if (!text && typeof raw.output_text === "string") text = raw.output_text;
@@ -124,5 +130,5 @@ export function parseResponses(raw: Json, model: string): ResponsesResult {
     outputTokens: Number(u.output_tokens ?? 0),
     searches,
   };
-  return { id: String(raw.id ?? ""), text, citations, functionCalls, usage, costUsd: estimateCostUsd(usage), raw };
+  return { id: String(raw.id ?? ""), text, citations, functionCalls, searchQueries, usage, costUsd: estimateCostUsd(usage), raw };
 }

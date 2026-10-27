@@ -22,6 +22,8 @@ const createBody = z.object({
   upfrontCents: z.number().int().min(0).max(MAX_CENTS).default(0),
   recurring: recurring.default([]),
   resaleCents: z.number().int().min(0).max(MAX_CENTS).nullable().optional(),
+  // What the agent found: chosen price option, sources, explanation. Kept small so a row stays cheap to read.
+  details: z.record(z.unknown()).refine((d) => JSON.stringify(d).length <= 20_000, "Too much detail.").optional(),
 });
 
 const patchBody = createBody.partial().refine((b) => Object.keys(b).length > 0, "Nothing to change.");
@@ -79,9 +81,9 @@ export function wishRoutes(deps: AuthDeps) {
     const w = parsed.data;
     const now = deps.now().toISOString();
     const { rows } = await db.query<Row>(
-      `insert into wishes (user_id, name, kind, tier, upfront_cents, recurring, resale_cents, created_at, updated_at)
-       values ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $8) returning ${COLUMNS}`,
-      [userId, w.name, w.kind, w.tier, w.upfrontCents, JSON.stringify(w.recurring), w.resaleCents ?? null, now],
+      `insert into wishes (user_id, name, kind, tier, upfront_cents, recurring, resale_cents, details, created_at, updated_at)
+       values ($1, $2, $3, $4, $5, $6::jsonb, $7, $8::jsonb, $9, $9) returning ${COLUMNS}`,
+      [userId, w.name, w.kind, w.tier, w.upfrontCents, JSON.stringify(w.recurring), w.resaleCents ?? null, JSON.stringify(w.details ?? {}), now],
     );
     return c.json({ wish: toWish(rows[0]!) }, 201);
   });
@@ -103,6 +105,7 @@ export function wishRoutes(deps: AuthDeps) {
     if (p.upfrontCents !== undefined) set("upfront_cents", p.upfrontCents);
     if (p.recurring !== undefined) set("recurring", JSON.stringify(p.recurring), "::jsonb");
     if (p.resaleCents !== undefined) set("resale_cents", p.resaleCents);
+    if (p.details !== undefined) set("details", JSON.stringify(p.details), "::jsonb");
     set("updated_at", deps.now().toISOString());
     vals.push(id.data, c.get("userId"));
     const { rows } = await db.query<Row>(

@@ -1,9 +1,10 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { authRoutes, requireAuth, type AuthDeps, type AuthVars } from "./auth";
+import { agentRoutes, type AgentDeps } from "./agent/routes";
+import { authRoutes, requireAuth, type AuthVars } from "./auth";
 import { wishRoutes } from "./wishes";
 
-export interface AppDeps extends AuthDeps {
+export interface AppDeps extends AgentDeps {
   webOrigins: string[];
 }
 
@@ -20,6 +21,7 @@ export function createApp(deps: AppDeps) {
 
   app.route("/auth", authRoutes(deps));
   app.route("/wishes", wishRoutes(deps));
+  app.route("/agent", agentRoutes(deps));
 
   app.use("/me", requireAuth(deps));
   app.get("/me", async (c) => {

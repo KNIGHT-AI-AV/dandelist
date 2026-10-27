@@ -16,6 +16,8 @@ const app = createApp({
   codePepper: env.CODE_PEPPER,
   judge: env.JUDGE_EMAIL && env.JUDGE_CODE ? { email: env.JUDGE_EMAIL, code: env.JUDGE_CODE } : undefined,
   now: () => new Date(),
+  meta: env.MODEL_API_KEY ? { apiKey: env.MODEL_API_KEY } : undefined,
+  spendCaps: { dailyUsd: env.SPEND_DAILY_USD, totalUsd: env.SPEND_TOTAL_USD },
   webOrigins: env.WEB_ORIGINS.split(",").map((s) => s.trim()).filter(Boolean),
 });
 
