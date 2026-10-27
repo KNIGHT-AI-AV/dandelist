@@ -1,5 +1,7 @@
 import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
+import jpeg from "jpeg-js";
+import { PNG } from "pngjs";
+import { describe, expect, it, vi } from "vitest";
 import { composeCutout, cutoutSource, decodeImage, makeCutout, parseSam, pickMask } from "../src/agent/cutout";
 import {
   allowsCutout,
@@ -263,6 +265,31 @@ describe("SAM 3.1 cutouts", () => {
     expect(alphaAt(500, 400)).toBe(255);
     const small = composeCutout(img, mask, 500);
     expect(Math.max(small.width, small.height)).toBe(500);
+  });
+
+  it("refuses a decompression bomb from its header, before decoding a byte", async () => {
+    const pngRead = vi.spyOn(PNG.sync, "read");
+    const jpegDecode = vi.spyOn(jpeg, "decode");
+    try {
+      // A few dozen bytes that claim 30000 x 30000 pixels: 3.6 GB once decoded.
+      expect(decodeImage(pngHeader(30000, 30000, 6))).toBeNull();
+      expect(decodeImage(jpegHeader(30000, 30000))).toBeNull();
+      expect(decodeImage(pngHeader(0, 100, 6))).toBeNull();
+      expect(pngRead).not.toHaveBeenCalled();
+      expect(jpegDecode).not.toHaveBeenCalled();
+      // A real image within the limit still decodes.
+      expect(decodeImage(productJpeg(64, 48, { left: 8, top: 8, right: 40, bottom: 40 }))).toMatchObject({ width: 64, height: 48 });
+      expect(jpegDecode).toHaveBeenCalledTimes(1);
+      expect(decodeImage(PNG.sync.write(new PNG({ width: 4, height: 3 })))).toMatchObject({ width: 4, height: 3 });
+      expect(pngRead).toHaveBeenCalledTimes(1);
+    } finally {
+      pngRead.mockRestore();
+      jpegDecode.mockRestore();
+    }
+    // The same ceiling guards the compositor and SAM's own mask sizes.
+    const mask = (await parseSam(SAM_TEXT))[0]!;
+    expect(() => composeCutout({ width: 30000, height: 30000, data: new Uint8Array(16) }, mask)).toThrow(/too large/);
+    expect(await parseSam("<0f>0<|box;x1=0;y1=0;x2=1;y2=1;w=2;h=2|><|mask;x=0;y=0;data=30000,30000,!!!!!!|>\n")).toEqual([]);
   });
 
   it("cuts out the best decodable photo and stores the PNG", async () => {

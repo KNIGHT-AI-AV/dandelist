@@ -2,7 +2,7 @@ import { decodeMaskToRaster, parseImageStream, recordsOfKind, type ResponsesEven
 import jpeg from "jpeg-js";
 import { PNG } from "pngjs";
 import type { MediaStore } from "../media-store";
-import type { Cutout } from "./media";
+import { imageInfo, type Cutout } from "./media";
 import { readCapped, safeGet, type Fetcher } from "./tools";
 
 /**
@@ -40,7 +40,8 @@ export async function parseSam(text: string): Promise<SamMask[]> {
     yield { type: "response.completed" };
   }
   const result = await parseImageStream(events()).finalResult;
-  return recordsOfKind(result.records, "mask").map((r) => ({
+  // A mask's raster is checked against the same pixel ceiling before it is expanded.
+  return recordsOfKind(result.records, "mask").filter((r) => decodable(r.mask.width, r.mask.height)).map((r) => ({
     left: r.bounds.left,
     top: r.bounds.top,
     right: r.bounds.right,
@@ -68,21 +69,29 @@ export interface Rgba {
   data: Uint8Array;
 }
 
-/** JPEG and PNG only: both have small pure-JS decoders. WebP and others return null and the cutout is skipped. */
+/** True when an image of this size is safe to hold decoded: positive, and at most MAX_SOURCE_MP megapixels. */
+export const decodable = (width: number, height: number) =>
+  Number.isSafeInteger(width) && Number.isSafeInteger(height) && width > 0 && height > 0 && width * height <= MAX_SOURCE_MP * 1_000_000;
+
+/**
+ * JPEG and PNG only: both have small pure-JS decoders. WebP and others return null and the cutout is skipped.
+ * The size comes from the file's header first, and anything over MAX_SOURCE_MP is refused before a byte is decoded,
+ * so a small file that claims to be enormous (a decompression bomb) can't exhaust memory. The decoded image must
+ * then be exactly the size the header said.
+ */
 export function decodeImage(bytes: Uint8Array): Rgba | null {
+  const info = imageInfo(bytes);
+  if (!info || (info.type !== "jpeg" && info.type !== "png") || !decodable(info.width, info.height)) return null;
   try {
-    if (bytes[0] === 0xff && bytes[1] === 0xd8) {
-      const img = jpeg.decode(bytes, { useTArray: true, formatAsRGBA: true, maxResolutionInMP: MAX_SOURCE_MP, maxMemoryUsageInMB: 320 });
-      return { width: img.width, height: img.height, data: img.data };
-    }
-    if (bytes[0] === 0x89 && bytes[1] === 0x50) {
-      const img = PNG.sync.read(Buffer.from(bytes));
-      return { width: img.width, height: img.height, data: img.data };
-    }
+    const img =
+      info.type === "jpeg"
+        ? jpeg.decode(bytes, { useTArray: true, formatAsRGBA: true, maxResolutionInMP: MAX_SOURCE_MP, maxMemoryUsageInMB: 320 })
+        : PNG.sync.read(Buffer.from(bytes));
+    if (img.width !== info.width || img.height !== info.height || img.data.length !== info.width * info.height * 4) return null;
+    return { width: img.width, height: img.height, data: img.data };
   } catch {
     return null;
   }
-  return null;
 }
 
 /**
@@ -90,8 +99,11 @@ export function decodeImage(bytes: Uint8Array): Rgba | null {
  * and scaled down (area-averaged, alpha-weighted) so the long edge is at most 2048 px.
  */
 export function composeCutout(img: Rgba, mask: SamMask, maxEdge = MAX_EDGE, pad = 0.04): { width: number; height: number; png: Buffer } {
+  if (!decodable(img.width, img.height) || img.data.length !== img.width * img.height * 4) throw new Error("Image too large or malformed");
+  if (!decodable(mask.width, mask.height) || mask.raster.length !== mask.width * mask.height) throw new Error("Mask too large or malformed");
   const bw = mask.right - mask.left;
   const bh = mask.bottom - mask.top;
+  if (!(bw > 0 && bh > 0 && mask.left < img.width && mask.top < img.height && mask.right > 0 && mask.bottom > 0)) throw new Error("Mask outside the image");
   const air = Math.round(Math.max(bw, bh) * pad);
   const x0 = Math.max(0, mask.left - air);
   const y0 = Math.max(0, mask.top - air);
