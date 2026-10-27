@@ -63,8 +63,8 @@ function PhotoCard({ e, onPress, style, big = false }: { e: Entry; onPress(ref: 
   );
 }
 
-/** Room the floating Life pill takes at the bottom of the step: its height and the air around it. */
-const PILL_SPACE = 104;
+/** Air between the bottom of the first-pick cards and the floating Life pill. */
+const BREATH = 16;
 
 /** Step 2: "Start with one you'd say yes to." Three cards: a snap carousel on phones, three across on wide screens. */
 export function FirstPick({ entries, onPick }: { entries: Entry[]; onPick(e: Entry, from: View | null): void }) {
@@ -74,9 +74,9 @@ export function FirstPick({ entries, onPick }: { entries: Entry[]; onPick(e: Ent
   const wide = width >= 760;
   const gutter = layout.gutter(width);
   const ratio = wide ? 1.4 : 1.42;
-  // The cards must end above the floating Life pill, so on a short screen they shrink, keeping their shape.
+  // The step already stops above the floating Life pill; the cards fill what the headline leaves, keeping their shape.
   const [room, setRoom] = useState<{ box: number; title: number } | null>(null);
-  const fits = room ? Math.max(220, room.box - room.title - layout.stack.section - PILL_SPACE) : Infinity;
+  const fits = room && room.box > 0 && room.title > 0 ? Math.max(220, room.box - room.title - layout.stack.section - BREATH) : Infinity;
   const cardH = Math.min((wide ? Math.min(300, (Math.min(width, 1040) - 64 - 32) / 3) : Math.min(320, width * 0.76)) * ratio, fits);
   const cardW = cardH / ratio;
   const cards = entries.map((e, i) => (
