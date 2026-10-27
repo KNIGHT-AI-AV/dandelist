@@ -4,7 +4,7 @@ import { StyleSheet, Text, View } from "react-native";
 import { monthlyOf } from "../../lib/dream";
 import { haptic } from "../../lib/motion";
 import { formatCents } from "../../lib/money";
-import { fonts, radius, usePalette } from "../../lib/theme";
+import { fonts, radius, usePalette, type } from "../../lib/theme";
 import { Eyebrow, Glass, Hairline, PrimaryButton, Shade } from "../lux";
 import { Odometer } from "../odometer";
 import { GlassReveal } from "../reveal";
@@ -18,10 +18,10 @@ export function KeepStatement({ lines }: { lines: KeepLine[] }) {
       {lines.map((l) => (
         <View key={l.label} style={{ gap: 3 }}>
           <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "baseline", gap: 12 }}>
-            <Text style={{ flexShrink: 1, fontFamily: fonts.body, fontSize: 14.5, color: p.ink }}>{l.label}</Text>
-            <Text style={{ fontFamily: fonts.figure, fontSize: 14, color: p.ink }}>{`${formatCents(l.amountCents)}${per(l)}`}</Text>
+            <Text style={[type.callout, { flexShrink: 1, color: p.ink }]}>{l.label}</Text>
+            <Text style={[type.figure13, { color: p.ink }]}>{`${formatCents(l.amountCents)}${per(l)}`}</Text>
           </View>
-          <Text style={{ fontFamily: fonts.body, fontSize: 12, lineHeight: 16, color: p.ink3 }}>{`${l.basis}${l.estimate ? " · estimate" : ""}`}</Text>
+          <Text style={[type.footnote, { color: p.ink3 }]}>{`${l.basis}${l.estimate ? " · estimate" : ""}`}</Text>
         </View>
       ))}
       <Hairline />
@@ -51,8 +51,8 @@ export function ServiceQuote({ w, onAdd }: { w: Extract<Widget, { kind: "service
       <Hero images={w.images} />
       <View style={{ gap: 4 }}>
         <Eyebrow color={p.accent}>{w.region}</Eyebrow>
-        <Text style={{ fontFamily: fonts.display, fontSize: 26, lineHeight: 30, color: p.ink }}>{w.service}</Text>
-        <Text style={{ fontFamily: fonts.body, fontSize: 14, lineHeight: 20, color: p.ink2 }}>{w.summary}</Text>
+        <Text style={[type.title2, { color: p.ink }]}>{w.service}</Text>
+        <Text style={[type.callout, { color: p.ink2 }]}>{w.summary}</Text>
       </View>
       <KeepStatement lines={w.lines} />
       <PrimaryButton label={added ? "Added to your life" : "Add to my life"} disabled={added} onPress={async () => { await onAdd(); haptic.success(); setAdded(true); }} />
@@ -70,7 +70,7 @@ export function WishReady({ w, onAdd }: { w: Extract<Widget, { kind: "wish_ready
       <Hero images={wish.images} height={260} />
       <View style={{ gap: 4 }}>
         <Eyebrow color={p.accent}>{[wish.region, wish.seller].filter(Boolean).join(" · ") || "Found it"}</Eyebrow>
-        <Text style={{ fontFamily: fonts.display, fontSize: 28, lineHeight: 32, color: p.ink }}>{wish.name}</Text>
+        <Text style={[type.title2, { color: p.ink }]}>{wish.name}</Text>
       </View>
       <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
         <Eyebrow>Upfront</Eyebrow>

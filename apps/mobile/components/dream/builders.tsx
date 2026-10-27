@@ -3,7 +3,7 @@ import { useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { haptic } from "../../lib/motion";
 import { formatCents } from "../../lib/money";
-import { fonts, radius, usePalette } from "../../lib/theme";
+import { fonts, radius, usePalette, type } from "../../lib/theme";
 import { Eyebrow, Glass, PrimaryButton, Shade } from "../lux";
 import { GlassReveal } from "../reveal";
 import { Chip } from "../welcome/kit";
@@ -20,7 +20,7 @@ function SearchBar({ primary, onPrimary, onJustSearch }: { primary: string; onPr
     <View style={{ gap: 6 }}>
       <PrimaryButton label={primary} onPress={onPrimary} />
       <Pressable accessibilityRole="button" onPress={onJustSearch} hitSlop={8} style={{ alignSelf: "center", paddingVertical: 8 }}>
-        <Text style={{ fontFamily: fonts.label, fontSize: 13.5, color: p.ink2 }}>Just search</Text>
+        <Text style={[type.footnote, { fontFamily: fonts.label, color: p.ink2 }]}>Just search</Text>
       </Pressable>
     </View>
   );
@@ -45,11 +45,11 @@ export function HomeBuilder({ w, onApply, onSearchNow, onRegion }: { w: HomeWidg
       <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
         <Eyebrow color={p.accent}>Your home</Eyebrow>
         <Pressable accessibilityRole="button" onPress={onRegion} hitSlop={8}>
-          <Text style={{ fontFamily: fonts.label, fontSize: 12.5, color: p.ink2 }}>{`In ${w.region}  ▾`}</Text>
+          <Text style={[type.footnote, { fontFamily: fonts.label, color: p.ink2 }]}>{`In ${w.region}  ▾`}</Text>
         </Pressable>
       </View>
       <View style={{ gap: 10 }}>
-        <Text style={{ fontFamily: fonts.display, fontSize: 22, color: p.ink }}>Which feels like home?</Text>
+        <Text style={[type.title3, { color: p.ink }]}>Which feels like home?</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
           {w.styles.map((s) => {
             const on = styles.includes(s.id);
@@ -58,7 +58,7 @@ export function HomeBuilder({ w, onApply, onSearchNow, onRegion }: { w: HomeWidg
                 <View style={{ width: 132, height: 172, borderRadius: radius.md, overflow: "hidden", borderWidth: on ? 2 : StyleSheet.hairlineWidth, borderColor: on ? p.accent : p.hair }}>
                   <GlassReveal uri={s.imageUrl ?? null} standby={require("../../assets/standby/life.jpg")} stage="clear" treatment="film" style={StyleSheet.absoluteFill} />
                   <Shade from={0.45} />
-                  <Text style={{ position: "absolute", left: 10, right: 10, bottom: 10, fontFamily: fonts.label, fontSize: 13, color: p.ink }}>{s.label}</Text>
+                  <Text style={[type.footnote, { position: "absolute", left: 10, right: 10, bottom: 10, fontFamily: fonts.label, color: p.ink }]}>{s.label}</Text>
                 </View>
               </Pressable>
             );
@@ -66,7 +66,7 @@ export function HomeBuilder({ w, onApply, onSearchNow, onRegion }: { w: HomeWidg
         </ScrollView>
       </View>
       <View style={{ gap: 10 }}>
-        <Text style={{ fontFamily: fonts.display, fontSize: 22, color: p.ink }}>What it has</Text>
+        <Text style={[type.title3, { color: p.ink }]}>What it has</Text>
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
           {w.features.map((f) => (
             <Chip key={f.id} label={f.label} selected={!!features[f.id]} onPress={() => { haptic.select(); setFeatures((x) => ({ ...x, [f.id]: !x[f.id] })); }} />
@@ -74,7 +74,7 @@ export function HomeBuilder({ w, onApply, onSearchNow, onRegion }: { w: HomeWidg
         </View>
       </View>
       <View style={{ gap: 10 }}>
-        <Text style={{ fontFamily: fonts.display, fontSize: 22, color: p.ink }}>Bedrooms</Text>
+        <Text style={[type.title3, { color: p.ink }]}>Bedrooms</Text>
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
           {ROOMS.map((r) => (
             <Chip key={r} label={r === 6 ? "6+" : String(r)} selected={rooms === r} onPress={() => setRooms(r)} />
@@ -82,7 +82,7 @@ export function HomeBuilder({ w, onApply, onSearchNow, onRegion }: { w: HomeWidg
         </View>
       </View>
       <View style={{ gap: 10 }}>
-        <Text style={{ fontFamily: fonts.display, fontSize: 22, color: p.ink }}>Budget</Text>
+        <Text style={[type.title3, { color: p.ink }]}>Budget</Text>
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
           {BUDGETS.map(([label, cents]) => (
             <Chip key={label} label={label} selected={budget === cents} onPress={() => setBudget(cents)} />
@@ -103,7 +103,7 @@ export function CarBuilder({ w, onApply, onSearchNow }: { w: CarWidget; onApply(
       <Eyebrow color={p.accent}>Build your car</Eyebrow>
       {w.steps.map((step) => (
         <View key={step.id} style={{ gap: 10 }}>
-          <Text style={{ fontFamily: fonts.display, fontSize: 22, color: p.ink }}>{step.title}</Text>
+          <Text style={[type.title3, { color: p.ink }]}>{step.title}</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
             {step.choices.map((c) => {
               const on = picked[step.id] === c.id;
@@ -116,9 +116,9 @@ export function CarBuilder({ w, onApply, onSearchNow }: { w: CarWidget; onApply(
                       </View>
                     ) : null}
                     <View style={{ padding: 12, gap: 4 }}>
-                      <Text style={{ fontFamily: fonts.label, fontSize: 14, color: p.ink }}>{c.label}</Text>
-                      {c.detail ? <Text style={{ fontFamily: fonts.body, fontSize: 12, color: p.ink2 }} numberOfLines={2}>{c.detail}</Text> : null}
-                      {c.priceCents != null ? <Text style={{ fontFamily: fonts.figure, fontSize: 12, color: p.accent }}>{c.priceCents ? `+ ${formatCents(c.priceCents)}` : "Included"}</Text> : null}
+                      <Text style={[type.label, { color: p.ink }]}>{c.label}</Text>
+                      {c.detail ? <Text style={[type.footnote, { color: p.ink2 }]} numberOfLines={2}>{c.detail}</Text> : null}
+                      {c.priceCents != null ? <Text style={[type.figure, { color: p.accent }]}>{c.priceCents ? `+ ${formatCents(c.priceCents)}` : "Included"}</Text> : null}
                     </View>
                   </View>
                 </Pressable>
@@ -152,7 +152,7 @@ export function RegionPicker({ current, onPick }: { current: LifeContext["home"]
   return (
     <Glass style={{ padding: 18, gap: 14, borderRadius: radius.lg }}>
       <Eyebrow color={p.accent}>Where you'll live</Eyebrow>
-      <Text style={{ fontFamily: fonts.body, fontSize: 14, lineHeight: 20, color: p.ink2 }}>Homes, staff, services and running costs are priced for this place.</Text>
+      <Text style={[type.callout, { color: p.ink2 }]}>Homes, staff, services and running costs are priced for this place.</Text>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
         {PLACES.map((pl) => (
           <Chip key={pl.label} label={pl.label} selected={current?.label === pl.label} onPress={() => { haptic.select(); onPick(pl); }} />
@@ -164,7 +164,7 @@ export function RegionPicker({ current, onPick }: { current: LifeContext["home"]
         placeholder="Somewhere else"
         placeholderTextColor={p.ink3}
         onSubmitEditing={() => text.trim() && onPick({ country: "", label: text.trim() })}
-        style={{ minHeight: 48, paddingHorizontal: 16, borderRadius: radius.sm, borderWidth: StyleSheet.hairlineWidth, borderColor: p.hair, color: p.ink, fontFamily: fonts.body, fontSize: 15 }}
+        style={[type.callout, { minHeight: 48, paddingHorizontal: 16, borderRadius: radius.sm, borderWidth: StyleSheet.hairlineWidth, borderColor: p.hair, color: p.ink }]}
       />
     </Glass>
   );

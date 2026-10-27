@@ -9,7 +9,7 @@ import { AgentDot, Eyebrow, Glass, Grain } from "../components/lux";
 import { Rise } from "../components/welcome/kit";
 import { useAuth } from "../lib/auth";
 import { dreamTurn, wishFrom, type DreamAction, type DreamEvent, type FeedItem, type LifeContext, type Widget } from "../lib/dream";
-import { fonts, radius, usePalette } from "../lib/theme";
+import { fonts, radius, usePalette, type } from "../lib/theme";
 import { useWishes } from "../lib/wishes";
 
 const IDEAS = ["A villa by the sea with a pool", "A black G-Wagon", "Private security for my family", "A year living in Kyoto"];
@@ -84,7 +84,7 @@ export default function Dream() {
       case "deck":
         return (
           <View style={{ gap: 10 }}>
-            <Text style={{ fontFamily: fonts.display, fontSize: 22, color: p.ink, paddingHorizontal: 4 }}>{w.title}</Text>
+            <Text style={[type.title3, { color: p.ink, paddingHorizontal: 4 }]}>{w.title}</Text>
             <SwipeDeck cards={w.cards} onSwipe={(l, verdict) => void send({ type: "swipe", widgetId: w.id, listingId: l.id, verdict })} onSearchNow={() => send({ type: "search_now", widgetId: w.id })} onEnough={() => send({ type: "message", text: "That's enough, show me the best match." }, "That's enough, show me the best match.")} />
           </View>
         );
@@ -114,14 +114,14 @@ export default function Dream() {
                 <AgentDot />
                 <Eyebrow>Your agent · Muse Spark by Meta</Eyebrow>
               </View>
-              <Text style={{ fontFamily: fonts.display, fontSize: 40, lineHeight: 44, color: p.ink }}>
+              <Text style={[type.title1, { color: p.ink }]}>
                 Tell me the life you <Text style={{ fontFamily: fonts.displayItalic, color: p.accent }}>want</Text>.
               </Text>
-              <Text style={{ fontFamily: fonts.body, fontSize: 15, lineHeight: 22, color: p.ink2 }}>Anything at all. I'll find the real thing, its price, and what it costs to keep.</Text>
+              <Text style={[type.callout, { color: p.ink2 }]}>Anything at all. I'll find the real thing, its price, and what it costs to keep.</Text>
               <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
                 {IDEAS.map((i) => (
                   <Pressable key={i} accessibilityRole="button" onPress={() => submit(i)} style={({ pressed }) => ({ paddingHorizontal: 14, minHeight: 40, justifyContent: "center", borderRadius: radius.pill, borderWidth: StyleSheet.hairlineWidth, borderColor: p.hair, backgroundColor: pressed ? p.glassTint : "transparent" })}>
-                    <Text style={{ fontFamily: fonts.body, fontSize: 14, color: p.ink }}>{i}</Text>
+                    <Text style={[type.callout, { color: p.ink }]}>{i}</Text>
                   </Pressable>
                 ))}
               </View>
@@ -131,17 +131,17 @@ export default function Dream() {
             f.kind === "you" ? (
               <Rise key={f.id} style={{ alignSelf: "flex-end", maxWidth: "86%" }}>
                 <Glass style={{ paddingHorizontal: 16, paddingVertical: 11, borderRadius: radius.md }}>
-                  <Text style={{ fontFamily: fonts.body, fontSize: 15, lineHeight: 21, color: p.ink }}>{f.text}</Text>
+                  <Text style={[type.callout, { color: p.ink }]}>{f.text}</Text>
                 </Glass>
               </Rise>
             ) : f.kind === "agent" ? (
               <Rise key={f.id} style={{ maxWidth: "94%" }}>
-                <Text style={{ fontFamily: fonts.displayItalic, fontSize: 19, lineHeight: 27, color: p.ink }}>{f.text}</Text>
+                <Text style={[type.title3, { fontFamily: fonts.displayItalic, color: p.ink }]}>{f.text}</Text>
               </Rise>
             ) : f.kind === "step" ? (
               <Rise key={f.id} style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-                <View style={{ width: 16, alignItems: "center" }}>{f.state === "running" ? <ActivityIndicator size="small" color={p.accent} /> : <Text style={{ fontFamily: fonts.label, fontSize: 12, color: p.accent }}>✓</Text>}</View>
-                <Text style={{ flex: 1, fontFamily: fonts.body, fontSize: 13.5, color: f.state === "running" ? p.ink2 : p.ink }}>{f.text}</Text>
+                <View style={{ width: 16, alignItems: "center" }}>{f.state === "running" ? <ActivityIndicator size="small" color={p.accent} /> : <Text style={[type.footnote, { fontFamily: fonts.label, color: p.accent }]}>✓</Text>}</View>
+                <Text style={[type.footnote, { flex: 1, color: f.state === "running" ? p.ink2 : p.ink }]}>{f.text}</Text>
               </Rise>
             ) : (
               <Rise key={f.id}>{renderWidget(f.widget)}</Rise>
@@ -160,10 +160,10 @@ export default function Dream() {
               placeholderTextColor={p.ink3}
               onSubmitEditing={() => submit()}
               returnKeyType="send"
-              style={[{ flex: 1, fontFamily: fonts.body, fontSize: 16, color: p.ink, paddingVertical: 12 }, Platform.OS === "web" ? ({ outlineWidth: 0 } as object) : null]}
+              style={[type.body, { flex: 1, color: p.ink, paddingVertical: 12 }, Platform.OS === "web" ? ({ outlineWidth: 0 } as object) : null]}
             />
             <Pressable accessibilityRole="button" accessibilityLabel="Send" onPress={() => submit()} disabled={busy || !text.trim()} style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: p.ink, alignItems: "center", justifyContent: "center", opacity: busy || !text.trim() ? 0.4 : 1 }}>
-              <Text style={{ fontFamily: fonts.label, fontSize: 18, color: p.onAccent, marginTop: -2 }}>↑</Text>
+              <Text style={[type.headline, { color: p.onAccent, marginTop: -2 }]}>↑</Text>
             </Pressable>
           </Glass>
         </View>
@@ -172,12 +172,12 @@ export default function Dream() {
       <View pointerEvents="box-none" style={{ position: "absolute", top: insets.top + 12, left: 16, right: 16, flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
         <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => (router.canGoBack() ? router.back() : router.replace("/wishes"))} hitSlop={10}>
           <Glass style={{ width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center" }}>
-            <Text style={{ fontFamily: fonts.body, fontSize: 20, color: p.ink, marginTop: -3 }}>‹</Text>
+            <Text style={[type.title3, { fontFamily: fonts.body, color: p.ink, marginTop: -3 }]}>‹</Text>
           </Glass>
         </Pressable>
         <Pressable accessibilityRole="button" onPress={() => setRegionOpen((o) => !o)} hitSlop={8}>
           <Glass style={{ paddingHorizontal: 14, height: 36, borderRadius: 18, justifyContent: "center" }}>
-            <Text style={{ fontFamily: fonts.label, fontSize: 12.5, color: p.ink }}>{life?.home ? `Living in ${life.home.label}  ▾` : "Where you'll live  ▾"}</Text>
+            <Text style={[type.footnote, { fontFamily: fonts.label, color: p.ink }]}>{life?.home ? `Living in ${life.home.label}  ▾` : "Where you'll live  ▾"}</Text>
           </Glass>
         </Pressable>
       </View>

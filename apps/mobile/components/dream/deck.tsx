@@ -3,7 +3,7 @@ import { useRef, useState } from "react";
 import { Animated, PanResponder, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { ease, haptic, native, spring, useReducedMotion } from "../../lib/motion";
 import { formatCents } from "../../lib/money";
-import { fonts, radius, usePalette } from "../../lib/theme";
+import { fonts, radius, usePalette, type } from "../../lib/theme";
 import { hostOf } from "../../lib/welcome";
 import { Eyebrow, Shade } from "../lux";
 import { Slideshow } from "../media";
@@ -23,18 +23,18 @@ function ListingCard({ l }: { l: Listing }) {
       )}
       <Shade from={0.38} />
       <View style={{ position: "absolute", left: 20, right: 20, bottom: 20, gap: 8 }}>
-        <Text style={{ fontFamily: fonts.display, fontSize: 27, lineHeight: 31, color: p.ink }} numberOfLines={2}>
+        <Text style={[type.title2, { color: p.ink }]} numberOfLines={2}>
           {l.title}
         </Text>
-        <Text style={{ fontFamily: fonts.display, fontSize: 24, color: p.ink }}>{formatCents(l.priceCents)}</Text>
+        <Text style={[type.cardPrice, { color: p.ink }]}>{formatCents(l.priceCents)}</Text>
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
           {l.facts.slice(0, 4).map((f) => (
             <View key={f} style={{ paddingHorizontal: 10, paddingVertical: 5, borderRadius: radius.pill, backgroundColor: p.glassTint, borderWidth: StyleSheet.hairlineWidth, borderColor: p.hair }}>
-              <Text style={{ fontFamily: fonts.label, fontSize: 11.5, color: p.ink }}>{f}</Text>
+              <Text style={[type.footnote, { fontFamily: fonts.label, color: p.ink }]}>{f}</Text>
             </View>
           ))}
         </View>
-        <Text style={{ fontFamily: fonts.figure, fontSize: 11, color: p.ink2 }} numberOfLines={1}>{`${l.source || hostOf(l.url)}${l.region ? ` · ${l.region}` : ""}`}</Text>
+        <Text style={[type.figure, { color: p.ink2 }]} numberOfLines={1}>{`${l.source || hostOf(l.url)}${l.region ? ` · ${l.region}` : ""}`}</Text>
       </View>
     </View>
   );
@@ -94,7 +94,7 @@ export function SwipeDeck({ cards, onSwipe, onSearchNow, onEnough }: { cards: Li
   if (!top) {
     return (
       <View style={{ alignItems: "center", gap: 12, paddingVertical: 24 }}>
-        <Text style={{ fontFamily: fonts.displayItalic, fontSize: 20, color: p.ink2 }}>That's this round.</Text>
+        <Text style={[type.title3, { fontFamily: fonts.displayItalic, color: p.ink2 }]}>That's this round.</Text>
       </View>
     );
   }
@@ -115,10 +115,10 @@ export function SwipeDeck({ cards, onSwipe, onSearchNow, onEnough }: { cards: Li
         <Animated.View {...pan.panHandlers} style={[StyleSheet.absoluteFill, { transform: [{ translateX: x }, { translateY: y }, { rotate }] }]}>
           <ListingCard l={top} />
           <Animated.View pointerEvents="none" style={{ position: "absolute", top: 22, left: 20, opacity: yes, borderWidth: 1.5, borderColor: p.accent, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 4, transform: [{ rotate: "-8deg" }] }}>
-            <Text style={{ fontFamily: fonts.label, fontSize: 16, letterSpacing: 2, color: p.accent }}>YES</Text>
+            <Text style={[type.button, { letterSpacing: 2, color: p.accent }]}>YES</Text>
           </Animated.View>
           <Animated.View pointerEvents="none" style={{ position: "absolute", top: 22, right: 20, opacity: no, borderWidth: 1.5, borderColor: p.ink, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 4, transform: [{ rotate: "8deg" }] }}>
-            <Text style={{ fontFamily: fonts.label, fontSize: 16, letterSpacing: 2, color: p.ink }}>PASS</Text>
+            <Text style={[type.button, { letterSpacing: 2, color: p.ink }]}>PASS</Text>
           </Animated.View>
         </Animated.View>
       </View>
@@ -129,10 +129,10 @@ export function SwipeDeck({ cards, onSwipe, onSearchNow, onEnough }: { cards: Li
       </View>
       <View style={{ flexDirection: "row", gap: 22 }}>
         <Pressable accessibilityRole="button" onPress={onSearchNow} hitSlop={10}>
-          <Text style={{ fontFamily: fonts.label, fontSize: 13.5, color: p.ink2 }}>Just search</Text>
+          <Text style={[type.footnote, { fontFamily: fonts.label, color: p.ink2 }]}>Just search</Text>
         </Pressable>
         <Pressable accessibilityRole="button" onPress={onEnough} hitSlop={10}>
-          <Text style={{ fontFamily: fonts.label, fontSize: 13.5, color: p.ink2 }}>That's enough, show the best</Text>
+          <Text style={[type.footnote, { fontFamily: fonts.label, color: p.ink2 }]}>That's enough, show the best</Text>
         </Pressable>
       </View>
     </View>
@@ -151,7 +151,7 @@ function RoundButton({ label, glyph, accent = false, onPress }: { label: string;
       onPress={onPress}
     >
       <Animated.View style={{ width: 58, height: 58, borderRadius: 29, alignItems: "center", justifyContent: "center", backgroundColor: accent ? p.accent : p.glassTint, borderWidth: StyleSheet.hairlineWidth, borderColor: accent ? p.accent : p.hair, transform: [{ scale: s }] }}>
-        <Text style={{ fontSize: 22, color: accent ? p.onAccent : p.ink }}>{glyph}</Text>
+        <Text style={{ fontSize: type.title3.fontSize, color: accent ? p.onAccent : p.ink }}>{glyph}</Text>
       </Animated.View>
     </Pressable>
   );
