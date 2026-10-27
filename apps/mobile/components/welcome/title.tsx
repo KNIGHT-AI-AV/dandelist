@@ -70,7 +70,8 @@ export function TitleSequence({ hero, short, onDone }: { hero: Entry; short: boo
   const by = monthYearLong(reachBy(hero.upfrontCents, EXAMPLE_MONTHLY_CENTS));
 
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel="Skip the introduction" onPress={() => skippable && finish()} style={{ flex: 1, backgroundColor: p.bg }}>
+    // Tapping anywhere skips too; the visible "Skip" is the accessible control, so this layer isn't a button itself.
+    <Pressable accessible={false} onPress={() => skippable && finish()} style={{ flex: 1, backgroundColor: p.bg }}>
       <Animated.View style={[StyleSheet.absoluteFill, { opacity: photo, transform: [{ scale: push }] }]}>
         <GlassReveal uri={hero.imageUrl ?? null} standby={require("../../assets/standby/drive.jpg")} stage={stage} treatment="swirl" style={StyleSheet.absoluteFill} />
       </Animated.View>

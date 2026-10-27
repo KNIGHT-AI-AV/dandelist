@@ -13,5 +13,5 @@ export default function Index() {
       </View>
     );
   }
-  return <Redirect href={status === "signedIn" ? "/wishes" : "/sign-in"} />;
+  return <Redirect href={status === "signedIn" ? "/wishes" : "/welcome"} />;
 }
