@@ -1,47 +1,55 @@
 import { recurringBreakdown, upfrontCashCents } from "@dandelist/cost";
 import { Redirect, router } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Animated, Pressable, ScrollView, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { AgentDot, Backdrop, Eyebrow, Figure, Glass, Grain, Photo, PrimaryButton, QuietButton, Shade } from "../../components/lux";
+import { AgentDot, Backdrop, Breathing, EdgeFade, Eyebrow, Glass, Grain, Icon, Money, Photo, PrimaryButton, QuietButton, Shade, Wordmark } from "../../components/lux";
 import { useAuth } from "../../lib/auth";
 import { formatCents } from "../../lib/money";
-import { fonts, radius, space, usePalette } from "../../lib/theme";
+import { usePress } from "../../lib/motion";
+import { layout, radius, type, usePalette, useType } from "../../lib/theme";
 import { loadWelcome, saveWelcome, toWishes } from "../../lib/welcome";
 import { useWishes, type Wish } from "../../lib/wishes";
-import { KIND_LABEL, TIER_LABEL, agentLine, hostOf, whenChecked } from "../../lib/words";
-
-const MAX_W = 520;
+import { TIER_LABEL, agentLine, hostOf, whenChecked } from "../../lib/words";
+import { rememberCard } from "../../lib/zoom";
 
 function WishCard({ w, tall }: { w: Wish; tall: boolean }) {
   const p = usePalette();
+  const press = usePress(0.985);
+  const ref = useRef<View>(null);
   const monthly = recurringBreakdown([w.item]).perMonth;
+  const open = () => {
+    // The detail zooms out of this card: remember where it is (by id, not by view) before navigating.
+    const go = () => router.push(`/wishes/${w.id}`);
+    if (!ref.current) return go();
+    ref.current.measureInWindow((x, y, width, height) => {
+      rememberCard(w.id, { x, y, width, height });
+      go();
+    });
+  };
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`${w.name}, ${formatCents(w.item.upfrontCents)}`}
-      onPress={() => router.push(`/wishes/${w.id}`)}
-      style={({ pressed }) => ({ height: tall ? 232 : 184, borderRadius: radius.lg, overflow: "hidden", opacity: pressed ? 0.92 : 1, transform: [{ scale: pressed ? 0.99 : 1 }] })}
-    >
-      <Photo uri={w.details.agent?.imageUrl} kind={w.kind} />
-      <Shade from={0.25} />
-      <Glass style={{ position: "absolute", top: 14, left: 14, borderRadius: radius.pill, paddingHorizontal: 10, paddingVertical: 5 }}>
-        <Eyebrow color={p.ink}>{`${KIND_LABEL[w.kind]} · ${TIER_LABEL[w.tier]}`}</Eyebrow>
-      </Glass>
-      <View style={{ position: "absolute", left: 18, right: 18, bottom: 16, gap: 4 }}>
-        <Text style={{ fontFamily: fonts.display, fontSize: 27, lineHeight: 30, color: p.ink }} numberOfLines={2}>
-          {w.name}
-        </Text>
-        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "baseline", gap: space.md }}>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexShrink: 1 }}>
-            {w.details.agent ? <AgentDot /> : null}
-            <Text style={{ fontFamily: fonts.body, fontSize: 11.5, color: p.ink2 }} numberOfLines={1}>
-              {monthly ? `${agentLine(w)} · + ${formatCents(monthly)}/mo` : agentLine(w)}
-            </Text>
+    <Pressable ref={ref} accessibilityRole="button" accessibilityLabel={`${w.name}, ${formatCents(w.item.upfrontCents)}`} onPress={open} onPressIn={press.onPressIn} onPressOut={press.onPressOut} collapsable={false}>
+      <Animated.View style={{ height: tall ? 232 : 184, borderRadius: radius.lg, overflow: "hidden", transform: [{ scale: press.scale }] }}>
+        <Photo uri={w.details.agent?.imageUrl} />
+        <Shade from={0.25} />
+        <View style={{ position: "absolute", left: layout.cardPad, right: layout.cardPad, bottom: 16, gap: 6 }}>
+          <Text style={[type.title2, { color: p.ink }]} numberOfLines={2}>
+            {w.name}
+          </Text>
+          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexShrink: 1 }}>
+              {w.details.agent ? <AgentDot /> : null}
+              <Text style={[type.footnote, { color: p.ink2, flexShrink: 1 }]} numberOfLines={1}>
+                {monthly ? `${agentLine(w)} · + ${formatCents(monthly)}/mo` : agentLine(w)}
+              </Text>
+            </View>
+            <View style={{ flexDirection: "row", alignItems: "baseline", gap: 8 }}>
+              <Text style={[type.figure, { color: p.ink2, textTransform: "uppercase" }]}>{TIER_LABEL[w.tier]}</Text>
+              <Money cents={w.item.upfrontCents} size="card" />
+            </View>
           </View>
-          <Figure value={formatCents(w.item.upfrontCents)} size={24} />
         </View>
-      </View>
+      </Animated.View>
     </Pressable>
   );
 }
@@ -64,14 +72,27 @@ function useAdoptWelcome(ready: boolean, add: ReturnType<typeof useWishes>["add"
   }, [ready, add]);
 }
 
+/** True once `ms` have passed: waits under a second show nothing rather than a flash (NN/g, UI audit P2-26). */
+function useAfter(ms: number) {
+  const [on, setOn] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setOn(true), ms);
+    return () => clearTimeout(t);
+  }, [ms]);
+  return on;
+}
+
 export default function LifeList() {
   const auth = useAuth();
   const { wishes, status, error, reload, add } = useWishes();
   useAdoptWelcome(auth.status === "signedIn" && status === "ready", add);
   const p = usePalette();
+  const t = useType();
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
   const [menu, setMenu] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const late = useAfter(200);
   // App Store rule 5.1.1(v): accounts can be deleted from inside the app. A second tap confirms.
   const deleteAccount = async () => {
     if (!confirmDelete) return setConfirmDelete(true);
@@ -84,18 +105,23 @@ export default function LifeList() {
   const monthly = recurringBreakdown(items).perMonth;
   // The briefing is the agent's most recent real check, never an invented event.
   const latest = wishes.filter((w) => w.details.agent).sort((a, b) => b.details.agent!.checkedAt.localeCompare(a.details.agent!.checkedAt))[0];
+  const gutter = layout.gutter(width);
+  const dock = layout.dockHeight(insets.bottom);
+  const count = `${wishes.length} ${wishes.length === 1 ? "wish" : "wishes"}`;
 
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
-      <ScrollView contentContainerStyle={{ paddingTop: insets.top + 14, paddingBottom: insets.bottom + 120, paddingHorizontal: 12, width: "100%", maxWidth: MAX_W, alignSelf: "center" }}>
-        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 12, height: 40 }}>
-          <Eyebrow>Your life list</Eyebrow>
-          <Pressable accessibilityRole="button" accessibilityLabel="Menu" onPress={() => setMenu((m) => !m)} hitSlop={8} style={{ width: 34, height: 34, borderRadius: 17, borderWidth: StyleSheet.hairlineWidth, borderColor: p.hair, backgroundColor: p.surface, alignItems: "center", justifyContent: "center" }}>
-            <Text style={{ fontFamily: fonts.label, fontSize: 13, color: p.ink2 }}>{(auth.user?.email ?? "·").slice(0, 1).toUpperCase()}</Text>
+      <ScrollView style={{ scrollbarWidth: "thin", scrollbarColor: `rgba(${p.inkRgb},0.2) transparent` } as object} contentContainerStyle={{ paddingTop: insets.top, paddingBottom: dock, paddingHorizontal: gutter, width: "100%", maxWidth: layout.list + 2 * gutter, alignSelf: "center" }}>
+        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", height: layout.headerBar }}>
+          <Wordmark />
+          <Pressable accessibilityRole="button" accessibilityLabel="Menu" onPress={() => setMenu((m) => !m)} style={{ width: 44, height: 44, alignItems: "center", justifyContent: "center" }}>
+            <View style={{ width: 34, height: 34, borderRadius: 17, borderWidth: 1, borderColor: p.line, backgroundColor: p.surface, alignItems: "center", justifyContent: "center" }}>
+              <Text style={[type.label, { color: p.ink2 }]}>{(auth.user?.email ?? "·").slice(0, 1).toUpperCase()}</Text>
+            </View>
           </Pressable>
         </View>
         {menu ? (
-          <Glass style={{ marginHorizontal: 12, marginTop: 6, paddingVertical: 4 }}>
+          <Glass style={{ marginTop: 8, paddingVertical: 4 }}>
             <QuietButton label="The plan" onPress={() => { setMenu(false); router.push("/plan"); }} />
             <QuietButton label="Theme" onPress={() => { setMenu(false); router.push("/theme"); }} />
             <QuietButton label="Enter a wish yourself" onPress={() => { setMenu(false); router.push("/wishes/manual"); }} />
@@ -107,45 +133,43 @@ export default function LifeList() {
         ) : null}
 
         {wishes.length ? (
-          <View style={{ paddingHorizontal: 12, paddingTop: 18, gap: 6 }}>
-          <Eyebrow>The life you want</Eyebrow>
-          <Figure value={formatCents(upfrontCashCents(items))} size={58} dollarSmall />
-          <Text style={{ fontFamily: fonts.body, fontSize: 13.5, color: p.ink2 }}>
-            {`${formatCents(monthly)} a month to run · ${wishes.length} ${wishes.length === 1 ? "wish" : "wishes"}`}
-          </Text>
-          <Pressable accessibilityRole="link" onPress={() => router.push("/plan")} hitSlop={8} style={{ alignSelf: "flex-start", marginTop: 6 }}>
-            <Text style={{ fontFamily: fonts.label, fontSize: 13, color: p.accent }}>See when you can have it all</Text>
-          </Pressable>
-        </View>
+          <View style={{ paddingTop: layout.stack.section, gap: layout.stack.tight }}>
+            <Eyebrow>The life you want</Eyebrow>
+            <Money cents={upfrontCashCents(items)} size="hero" />
+            <Text style={[type.footnote, { color: p.ink2 }]}>{monthly ? `${formatCents(monthly)} a month to run · ${count}` : count}</Text>
+            <Pressable accessibilityRole="link" onPress={() => router.push("/plan")} style={{ alignSelf: "flex-start", minHeight: 44, justifyContent: "center" }}>
+              <Text style={[type.label, { color: p.accentText }]}>See when you can have it all</Text>
+            </Pressable>
+          </View>
         ) : null}
 
         {latest ? (
-          <Glass style={{ marginTop: 18, padding: 14, gap: 6 }}>
+          <Glass style={{ marginTop: layout.stack.base, padding: 16, gap: 8 }}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
               <AgentDot />
               <Eyebrow>Your agent</Eyebrow>
             </View>
-            <Text style={{ fontFamily: fonts.body, fontSize: 13.5, lineHeight: 19, color: p.ink }}>
+            <Text style={[type.callout, { color: p.ink }]}>
               {`Priced ${latest.name} at ${formatCents(latest.item.upfrontCents)}, ${latest.details.agent!.status === "verified" ? "checked on" : "an estimate from"} ${hostOf(latest.details.agent!.url)} ${whenChecked(latest.details.agent!.checkedAt)}.`}
             </Text>
           </Glass>
         ) : null}
 
-        <View style={{ marginTop: 14, gap: 10 }}>
+        <View style={{ marginTop: layout.stack.base, gap: 12 }}>
           {status === "loading" && wishes.length === 0 ? (
-            <ActivityIndicator color={p.accent} style={{ marginTop: 40 }} />
+            late ? [232, 184, 232].map((h, i) => <Breathing key={i} style={{ height: h }} />) : null
           ) : status === "error" ? (
-            <Glass style={{ padding: 18, gap: 12 }}>
-              <Text style={{ fontFamily: fonts.body, fontSize: 14, color: p.danger }}>{error}</Text>
+            <Glass style={{ padding: layout.cardPad, gap: 12 }}>
+              <Text style={[type.callout, { color: p.danger }]}>{error}</Text>
               <PrimaryButton label="Try again" onPress={() => reload()} />
             </Glass>
           ) : wishes.length === 0 ? (
-            <View style={{ height: 520, borderRadius: radius.lg, overflow: "hidden", justifyContent: "flex-end", padding: 22, gap: 12 }}>
+            <View style={{ height: 520, borderRadius: radius.lg, overflow: "hidden", justifyContent: "flex-end", padding: layout.cardPad, gap: 12 }}>
               <Backdrop source={require("../../assets/backdrop.jpg")} />
               <Shade from={0.1} />
               <Eyebrow color={p.ink}>Your first wish</Eyebrow>
-              <Text style={{ fontFamily: fonts.display, fontSize: 38, lineHeight: 41, color: p.ink }}>Price the life you want.</Text>
-              <Text style={{ fontFamily: fonts.body, fontSize: 14.5, lineHeight: 20, color: p.ink2 }}>Tell the agent what you want. It finds the real price and what it costs over the years.</Text>
+              <Text style={[t.title1, { color: p.ink }]}>Price the life you&nbsp;want.</Text>
+              <Text style={[type.callout, { color: p.ink2 }]}>Tell the agent what you want. It finds the real price and what it costs over the years.</Text>
             </View>
           ) : (
             wishes.map((w, i) => <WishCard key={w.id} w={w} tall={i % 3 !== 2} />)
@@ -153,12 +177,13 @@ export default function LifeList() {
         </View>
       </ScrollView>
 
-      <View pointerEvents="box-none" style={{ position: "absolute", left: 0, right: 0, bottom: insets.bottom + 14, alignItems: "center", paddingHorizontal: 14 }}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Tell me what you want" onPress={() => router.push("/wishes/new")} style={{ width: "100%", maxWidth: MAX_W - 4 }}>
+      <EdgeFade height={dock} />
+      <View pointerEvents="box-none" style={{ position: "absolute", left: 0, right: 0, bottom: insets.bottom + 16, alignItems: "center", paddingHorizontal: 16 }}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Tell me what you want" onPress={() => router.push("/wishes/new")} style={{ width: "100%", maxWidth: layout.list }}>
           <Glass intensity={60} style={{ height: 58, borderRadius: radius.pill, flexDirection: "row", alignItems: "center", paddingLeft: 20, paddingRight: 8 }}>
-            <Text style={{ flex: 1, fontFamily: fonts.body, fontSize: 15, color: p.ink2 }}>Tell me what you want...</Text>
+            <Text style={[type.body, { flex: 1, color: p.ink2 }]}>Tell me what you want…</Text>
             <View style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: p.ink, alignItems: "center", justifyContent: "center" }}>
-              <Text style={{ fontFamily: fonts.label, fontSize: 20, color: p.onAccent, marginTop: -2 }}>+</Text>
+              <Icon name="plus" color={p.onAccent} />
             </View>
           </Glass>
         </Pressable>

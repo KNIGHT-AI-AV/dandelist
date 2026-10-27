@@ -14,7 +14,7 @@ export default function ThemeScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
       <ThemeChooser
-        total={`$${Math.round(total / 100).toLocaleString("en-US")}`}
+        totalCents={total}
         by="your plan"
         cta="Use this theme"
         onDone={(id) => {

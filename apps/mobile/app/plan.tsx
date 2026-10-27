@@ -1,17 +1,16 @@
 import { recurringBreakdown } from "@dandelist/cost";
 import { Redirect, router } from "expo-router";
 import { useEffect, useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Pressable, ScrollView, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { AgentDot, Eyebrow, Figure, Glass, GlassField, Grain, Hairline, Photo } from "../components/lux";
+import { AgentDot, Eyebrow, Glass, GlassField, Grain, Hairline, IconButton, Money, Photo } from "../components/lux";
 import { useAuth } from "../lib/auth";
 import { formatCents, parseDollars } from "../lib/money";
 import { getSecret, setSecret } from "../lib/storage";
-import { fonts, radius, usePalette } from "../lib/theme";
+import { fonts, layout, radius, type, usePalette, useType } from "../lib/theme";
 import { useWishes } from "../lib/wishes";
 import { TIER_LABEL, monthYear } from "../lib/words";
 
-const MAX_W = 520;
 const KEY = "dandelist.monthlyAside";
 const RANK = { must: 0, nice: 1, dream: 2 } as const;
 
@@ -25,7 +24,9 @@ export default function Plan() {
   const auth = useAuth();
   const { wishes } = useWishes();
   const p = usePalette();
+  const t = useType();
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
   const [aside, setAside] = useState("");
   useEffect(() => {
     getSecret(KEY).then((v) => v && setAside(v));
@@ -42,6 +43,7 @@ export default function Plan() {
   });
   const lastMust = [...rows].reverse().find((r) => r.w.tier === "must");
   const runningCosts = recurringBreakdown(wishes.map((w) => w.item)).perMonth;
+  const gutter = layout.gutter(width);
 
   function save(text: string) {
     setAside(text);
@@ -50,41 +52,43 @@ export default function Plan() {
 
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
-      <ScrollView contentContainerStyle={{ paddingTop: insets.top + 64, paddingBottom: insets.bottom + 40, paddingHorizontal: 24, gap: 16, width: "100%", maxWidth: MAX_W, alignSelf: "center" }}>
-        <Eyebrow>The plan</Eyebrow>
-        <Text accessibilityRole="header" style={{ fontFamily: fonts.display, fontSize: 42, lineHeight: 44, color: p.ink }}>When you can have it all</Text>
-        <GlassField label="You put aside each month" value={aside} onChangeText={save} keyboardType="decimal-pad" inputMode="decimal" placeholder="$3,000" inputStyle={{ fontFamily: fonts.display, fontSize: 26 }} />
-        {aside.trim() && monthly === null ? <Text style={{ fontFamily: fonts.body, fontSize: 13, color: p.danger }}>Enter an amount, like 3000.</Text> : null}
+      <ScrollView contentContainerStyle={{ paddingTop: insets.top + layout.contentTop, paddingBottom: insets.bottom + 40, paddingHorizontal: gutter, gap: 20, width: "100%", maxWidth: layout.list + 2 * gutter, alignSelf: "center" }}>
+        <View style={{ gap: layout.stack.tight }}>
+          <Eyebrow>The plan</Eyebrow>
+          <Text accessibilityRole="header" style={[t.title1, { color: p.ink }]}>When you can have it&nbsp;all</Text>
+        </View>
+        <GlassField label="You put aside each month" value={aside} onChangeText={save} keyboardType="decimal-pad" inputMode="decimal" placeholder="$3,000" inputStyle={[type.title2, { fontVariant: ["tabular-nums"] }]} />
+        {aside.trim() && monthly === null ? <Text style={[type.footnote, { color: p.danger }]}>Enter an amount, like 3000.</Text> : null}
 
         <View>
           {rows.map(({ w, when }) => (
             <Pressable key={w.id} accessibilityRole="button" onPress={() => router.push(`/wishes/${w.id}`)}>
               <Hairline />
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 10 }}>
-                <View style={{ width: 54, height: 54, borderRadius: 14, overflow: "hidden" }}>
-                  <Photo uri={w.details.agent?.imageUrl} kind={w.kind} />
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 12 }}>
+                <View style={{ width: 56, height: 56, borderRadius: radius.sm, overflow: "hidden" }}>
+                  <Photo uri={w.details.agent?.imageUrl} />
                 </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontFamily: fonts.display, fontSize: 18, lineHeight: 21, color: p.ink }} numberOfLines={1}>{w.name}</Text>
-                  <Eyebrow style={{ marginTop: 3 }} color={p.ink3}>{TIER_LABEL[w.tier]}</Eyebrow>
+                <View style={{ flex: 1, gap: 2 }}>
+                  <Text style={[type.title3, { color: p.ink }]} numberOfLines={1}>{w.name}</Text>
+                  <Text style={[type.figure, { color: p.ink3, textTransform: "uppercase" }]}>{TIER_LABEL[w.tier]}</Text>
                 </View>
-                <View style={{ alignItems: "flex-end" }}>
-                  <Text style={{ fontFamily: fonts.display, fontSize: 19, color: p.ink }}>{when ? monthYear(when) : ""}</Text>
-                  <Text style={{ fontFamily: fonts.figure, fontSize: 11.5, color: p.ink2 }}>{formatCents(w.item.upfrontCents)}</Text>
+                <View style={{ alignItems: "flex-end", gap: 2 }}>
+                  <Text style={[type.title3, { fontFamily: fonts.titleItalic, color: p.ink }]}>{when ? monthYear(when) : ""}</Text>
+                  <Money cents={w.item.upfrontCents} size="ledger" color={p.ink2} />
                 </View>
               </View>
             </Pressable>
           ))}
-          {rows.length ? <Hairline /> : <Text style={{ fontFamily: fonts.body, fontSize: 14, color: p.ink2 }}>Add a wish and it appears here with a date.</Text>}
+          {rows.length ? <Hairline /> : <Text style={[type.callout, { color: p.ink2 }]}>Add a wish and it appears here with a date.</Text>}
         </View>
 
         {monthly && rows.length ? (
-          <Glass style={{ padding: 14, gap: 6, borderRadius: radius.md }}>
+          <Glass style={{ padding: 16, gap: 8, borderRadius: radius.md }}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
               <AgentDot />
               <Eyebrow>Your agent</Eyebrow>
             </View>
-            <Text style={{ fontFamily: fonts.body, fontSize: 13.5, lineHeight: 19, color: p.ink }}>
+            <Text style={[type.callout, { color: p.ink }]}>
               {lastMust ? `At ${formatCents(monthly)} a month, your must-haves are covered by ${monthYear(lastMust.when!)}.` : `At ${formatCents(monthly)} a month, everything on your list is covered by ${monthYear(rows[rows.length - 1]!.when!)}.`}
               {runningCosts ? ` Once you have them all, running costs add ${formatCents(runningCosts)} a month.` : ""}
             </Text>
@@ -92,16 +96,11 @@ export default function Plan() {
         ) : null}
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "baseline", paddingTop: 4 }}>
           <Eyebrow>Everything upfront</Eyebrow>
-          <Figure value={formatCents(running)} size={26} />
+          <Money cents={running} size="title" align="right" />
         </View>
       </ScrollView>
-      <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => (router.canGoBack() ? router.back() : router.replace("/wishes"))} hitSlop={10} style={{ position: "absolute", top: insets.top + 10, left: 16 }}>
-        <Glass style={{ width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center" }}>
-          <Text style={{ fontFamily: fonts.body, fontSize: 20, color: p.ink, marginTop: -3 }}>‹</Text>
-        </Glass>
-      </Pressable>
+      <IconButton icon="back" label="Back" onPress={() => (router.canGoBack() ? router.back() : router.replace("/wishes"))} style={{ position: "absolute", top: insets.top + 4, left: 16 }} />
       <Grain />
     </View>
   );
 }
-

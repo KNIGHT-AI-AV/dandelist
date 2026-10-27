@@ -1,10 +1,39 @@
 import { Redirect } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ScrollView, Text, View } from "react-native";
+import { Chip, Money } from "../components/lux";
 import { MediaHero, type Media } from "../components/media";
+import { dollars } from "../components/odometer";
 import { GlassReveal } from "../components/reveal";
 import type { Stage } from "../components/reveal-clock";
-import { fonts, usePalette } from "../lib/theme";
+import type { Mode } from "../lib/odometer-plan";
+import { type, usePalette } from "../lib/theme";
+
+/** The odometer QA cases from the UI audit (§2.11), one tap each. */
+function OdometerBench() {
+  const p = usePalette();
+  const [cents, setCents] = useState(0);
+  const [mode, setMode] = useState<Mode>("ui");
+  const [landed, setLanded] = useState(0);
+  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const run = (steps: [number, Mode, number][]) => {
+    timers.current.forEach(clearTimeout);
+    timers.current = steps.map(([c, m, at]) => setTimeout(() => { setMode(m); setCents(c); }, at));
+  };
+  return (
+    <View style={{ gap: 12, paddingHorizontal: 16 }}>
+      <Text style={[type.label, { color: p.ink2 }]}>{`Odometer · landed ${landed}`}</Text>
+      <Money cents={cents} size="hero" format={dollars} mode={mode} onLand={() => setLanded((n) => n + 1)} />
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+        <Chip label="QA1 0 → 107,529 cinema" onPress={() => run([[0, "instant", 0], [10_752_900, "cinema", 60]])} />
+        <Chip label="QA2 9,999 → 10,000" onPress={() => run([[999_900, "instant", 0], [1_000_000, "ui", 60]])} />
+        <Chip label="QA2 10,000 → 9,999" onPress={() => run([[1_000_000, "instant", 0], [999_900, "ui", 60]])} />
+        <Chip label="QA3 107,529 → 107,530" onPress={() => run([[10_752_900, "instant", 0], [10_753_000, "ui", 60]])} />
+        <Chip label="QA4 five in 400 ms" onPress={() => run([[10_000_000, "instant", 0], [10_100_000, "ui", 60], [10_200_000, "ui", 160], [10_300_000, "ui", 260], [10_400_000, "ui", 360], [10_500_000, "ui", 460]])} />
+      </View>
+    </View>
+  );
+}
 
 // Development-only bench for the media views; production redirects away.
 const car: Media = {
@@ -51,12 +80,12 @@ function GlassBench() {
   const uri = i === 0 ? null : rolex;
   return (
     <View style={{ gap: 8 }}>
-      <Text style={{ fontFamily: fonts.label, color: p.ink2, paddingHorizontal: 16 }}>{`Glass reveal · ${uri ? stage : "standby"}`}</Text>
+      <Text style={[type.label, { color: p.ink2, paddingHorizontal: 16 }]}>{`Glass reveal · ${uri ? stage : "standby"}`}</Text>
       <View style={{ flexDirection: "row", gap: 6, paddingHorizontal: 12 }}>
-        {(["swirl", "film", "frost"] as const).map((t) => (
+        {(["swirl", "pane", "film", "frost"] as const).map((t) => (
           <View key={t} style={{ flex: 1, gap: 4 }}>
             <GlassReveal uri={uri} standby={require("../assets/standby/object.jpg")} stage={stage} treatment={t} style={{ height: 260, borderRadius: 18 }} />
-            <Text style={{ fontFamily: fonts.body, color: p.ink3, fontSize: 11, textAlign: "center" }}>{t}</Text>
+            <Text style={[type.figure, { color: p.ink3, textAlign: "center" }]}>{t}</Text>
           </View>
         ))}
       </View>
@@ -69,6 +98,7 @@ export default function Lab() {
   if (!__DEV__) return <Redirect href="/" />;
   return (
     <ScrollView style={{ flex: 1, backgroundColor: p.bg }} contentContainerStyle={{ gap: 24, paddingVertical: 40, maxWidth: 520, width: "100%", alignSelf: "center" }}>
+      <OdometerBench />
       <GlassBench />
       {[
         ["Vehicle · 3D", car],
@@ -76,7 +106,7 @@ export default function Lab() {
         ["Product · turnable cutout", camera],
       ].map(([label, media]) => (
         <View key={label as string} style={{ gap: 8 }}>
-          <Text style={{ fontFamily: fonts.label, color: p.ink2, paddingHorizontal: 16 }}>{label as string}</Text>
+          <Text style={[type.label, { color: p.ink2, paddingHorizontal: 16 }]}>{label as string}</Text>
           <MediaHero media={media as Media} style={{ height: 420, borderRadius: 26, overflow: "hidden", marginHorizontal: 12 }} />
         </View>
       ))}

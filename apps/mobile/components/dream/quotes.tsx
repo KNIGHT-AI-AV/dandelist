@@ -27,7 +27,7 @@ export function KeepStatement({ lines }: { lines: KeepLine[] }) {
       <Hairline />
       <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
         <Eyebrow>To keep it, every month</Eyebrow>
-        <Odometer value={formatCents(monthlyOf(lines))} size={24} family={fonts.display} />
+        <Odometer cents={monthlyOf(lines)} format={formatCents} size={24} family="bodoni" align="right" pulse />
       </View>
     </View>
   );
@@ -74,7 +74,7 @@ export function WishReady({ w, onAdd }: { w: Extract<Widget, { kind: "wish_ready
       </View>
       <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
         <Eyebrow>Upfront</Eyebrow>
-        <Odometer value={formatCents(wish.upfrontCents)} size={34} family={fonts.display} />
+        <Odometer cents={wish.upfrontCents} format={formatCents} size={34} family="bodoni" smallPrefix tracking={-0.68} align="right" rollOnMount="cinema" />
       </View>
       {wish.keep.length ? <KeepStatement lines={wish.keep} /> : null}
       <PrimaryButton label={added ? "On your life list" : "Add to my life"} disabled={added} onPress={async () => { await onAdd(); haptic.success(); setAdded(true); }} />

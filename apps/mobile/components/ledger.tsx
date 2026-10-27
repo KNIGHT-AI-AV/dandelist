@@ -1,7 +1,7 @@
 import { Text, View } from "react-native";
 import type { Step } from "../lib/agent";
 import { formatCents } from "../lib/money";
-import { fonts, usePalette } from "../lib/theme";
+import { type, usePalette } from "../lib/theme";
 import { hostOf } from "../lib/words";
 import { AgentDot, Hairline } from "./lux";
 
@@ -42,11 +42,11 @@ export function Ledger({ steps, startedAt, working }: { steps: Step[]; startedAt
           <View key={i}>
             <Hairline />
             <View style={{ flexDirection: "row", alignItems: "baseline", gap: 10, paddingVertical: 11 }}>
-              <Text style={{ width: 40, fontFamily: fonts.figure, fontSize: 11, color: p.ink3 }}>{clock(new Date(s.at).getTime() - t0)}</Text>
-              <Text style={{ flex: 1, fontFamily: fonts.body, fontSize: 13.5, lineHeight: 18, color: p.ink }} numberOfLines={2}>
+              <Text style={[type.figure, { width: 44, color: p.ink3 }]}>{clock(new Date(s.at).getTime() - t0)}</Text>
+              <Text style={[type.footnote, { flex: 1, color: p.ink }]} numberOfLines={2}>
                 {d.verb} <Text style={{ color: p.ink2 }}>{d.detail}</Text>
               </Text>
-              {d.value ? <Text style={{ fontFamily: fonts.figure, fontSize: 12.5, color: d.strong ? p.accent : p.ink2 }}>{d.value}</Text> : null}
+              {d.value ? <Text style={[type.figure, { color: d.strong ? p.accentText : p.ink2 }]}>{d.value}</Text> : null}
             </View>
           </View>
         );
@@ -55,10 +55,10 @@ export function Ledger({ steps, startedAt, working }: { steps: Step[]; startedAt
         <View>
           <Hairline />
           <View style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 12 }}>
-            <View style={{ width: 40 }}>
-              <AgentDot />
+            <View style={{ width: 44 }}>
+              <AgentDot busy />
             </View>
-            <Text style={{ fontFamily: fonts.body, fontSize: 13.5, color: p.ink2 }}>{steps.length ? "Working..." : "Starting the research..."}</Text>
+            <Text style={[type.footnote, { color: p.ink2 }]}>{steps.length ? "Working..." : "Starting the research..."}</Text>
           </View>
         </View>
       ) : null}
