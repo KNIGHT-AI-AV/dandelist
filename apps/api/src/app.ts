@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { agentRoutes, type AgentDeps } from "./agent/routes";
 import { authRoutes, requireAuth, type AuthVars } from "./auth";
+import { previewRoutes } from "./preview";
 import { wishRoutes } from "./wishes";
 
 export interface AppDeps extends AgentDeps {
@@ -22,6 +23,7 @@ export function createApp(deps: AppDeps) {
   app.route("/auth", authRoutes(deps));
   app.route("/wishes", wishRoutes(deps));
   app.route("/agent", agentRoutes(deps));
+  app.route("/preview", previewRoutes(deps));
 
   app.use("/me", requireAuth(deps));
   app.get("/me", async (c) => {
