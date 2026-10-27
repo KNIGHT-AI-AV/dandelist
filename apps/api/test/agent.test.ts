@@ -81,7 +81,7 @@ const fakeMeta = (async (_url: string, init: RequestInit) => {
             { label: "Bike+ used", seller: "Marketplace", url: "https://93.184.215.15/used", currency: "USD", price: 1500, recurring: [], evidence: "$1,500", confidence: "low" },
             { label: "Not a link", seller: "x", url: "javascript:alert(1)", currency: "USD", price: 1, recurring: [], evidence: "", confidence: "low" },
           ],
-          note: "Prices checked today.",
+          note: "The bike plus a year of membership comes to about $3,423.",
         }),
       ),
     ]);
@@ -181,6 +181,7 @@ describe("wish agent", () => {
     expect(bike.totals.horizonCents).toBe(249500 + 4400 * 12 * 5);
     expect(used).toMatchObject({ status: "estimate", upfrontCents: 150000 });
     expect(run.result.explanation).toBe("The Bike+ Basics costs $2,495 upfront and $5,135 over 5 years.");
+    expect(run.result.note).toBe(""); // its $3,423 isn't a number the cost engine produced
     const kinds = run.steps.map((s: { type: string }) => s.type);
     expect(kinds).toEqual(expect.arrayContaining(["search", "open", "check", "price", "explain"]));
     expect(run.costUsd).toBeGreaterThan(0);

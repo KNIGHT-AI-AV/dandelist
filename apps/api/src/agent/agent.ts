@@ -311,7 +311,9 @@ export async function research(meta: Meta, ctx: ResearchContext): Promise<Resear
 
   await ctx.onStep({ type: "explain", at: at() });
   const explanation = options.length ? await explain(meta, ctx.draft, options) : "";
-  return { options, explanation, note: parsed.note, horizonYears: HORIZON_YEARS };
+  // The note is the model's own words, so it may only carry numbers the cost engine produced.
+  const note = unknownNumbers(parsed.note, explainFacts(ctx.draft, options)).length ? "" : parsed.note;
+  return { options, explanation, note, horizonYears: HORIZON_YEARS };
 }
 
 /** The numbers the explanation may use, already formatted the way the app shows them. */

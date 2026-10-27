@@ -2,6 +2,7 @@
  * Checks the live API end to end: health (which queries Postgres), sign-in as the judge account, and a wish
  * created, listed and removed. The judge code is read from Secrets Manager and never printed.
  * Usage: API_URL=https://... pnpm --filter @dandelist/infra-aws run smoke
+ * AGENT=1 also asks the Meta agent to read one wish (about a cent).
  */
 import { GetSecretValueCommand, SecretsManagerClient } from "@aws-sdk/client-secrets-manager";
 import { credentials, region } from "./creds";
@@ -40,4 +41,8 @@ const id = created.json?.wish?.id as string;
 const list = await call("GET", "/wishes", undefined, token);
 check("list includes it", list.status === 200 && list.json?.wishes?.some((w: { id: string }) => w.id === id));
 check("delete wish", (await call("DELETE", `/wishes/${id}`, undefined, token)).status === 204);
+if (process.env.AGENT) {
+  const read = await call("POST", "/agent/interpret", { text: "a Peloton Bike+" }, token);
+  check("agent reads a wish", read.status === 200 && typeof read.json?.draft?.title === "string", `${read.status} ${read.json?.draft?.title ?? read.json?.error ?? ""}`);
+}
 check("sign out", (await call("POST", "/auth/logout", {}, token)).status === 204);
