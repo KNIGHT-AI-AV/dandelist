@@ -79,12 +79,13 @@ export function Glass({ children, style, intensity = 40, tint }: { children?: Re
  */
 export function Shade({ from, style, look = "photo" }: { from?: number; style?: StyleProp<ViewStyle>; look?: "photo" | "title" }) {
   const p = usePalette();
-  const stops = look === "title" ? { a: [0, 0.55, 0.96], at: [0.25, 0.6, 0.9] } : { a: [0, 0.6, 0.94], at: [from ?? 0.3, 0.62, 0.9] };
+  // The title fade reaches the page colour exactly at its bottom edge, so a framed hero has no seam.
+  const stops = look === "title" ? { a: [0, 0.55, 0.96, 1], at: [0.25, 0.6, 0.9, 1] } : { a: [0, 0.6, 0.94, 0.94], at: [from ?? 0.3, 0.62, 0.9, 1] };
   return (
     <LinearGradient
       pointerEvents="none"
-      colors={[`rgba(${p.bgRgb}, ${stops.a[0]})`, `rgba(${p.bgRgb}, ${stops.a[1]})`, `rgba(${p.bgRgb}, ${stops.a[2]})`]}
-      locations={[Math.min(stops.at[0]!, 0.55), stops.at[1]!, stops.at[2]!] as [number, number, number]}
+      colors={stops.a.map((a) => `rgba(${p.bgRgb}, ${a})`) as [string, string, string, string]}
+      locations={[Math.min(stops.at[0]!, 0.55), stops.at[1]!, stops.at[2]!, stops.at[3]!] as [number, number, number, number]}
       style={[StyleSheet.absoluteFill, style]}
     />
   );

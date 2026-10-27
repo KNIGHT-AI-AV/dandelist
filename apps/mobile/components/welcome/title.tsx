@@ -16,7 +16,7 @@ const SHORT_MS = 1200;
 /** The title's example plan: a stated monthly amount, so the date it shows is honest arithmetic. */
 const EXAMPLE_MONTHLY_CENTS = 300_000;
 /** Where each hero's subject sits in its photograph, so a portrait crop keeps the subject whole. */
-const FOCUS: Record<string, { x: number; y: number }> = { "porsche-911": { x: 0.35, y: 0.5 } };
+const FOCUS: Record<string, { x: number; y: number }> = { "porsche-911": { x: 0.42, y: 0.5 } };
 
 /**
  * The title sequence (research §4.2, step 1): a real thing, its real price, and that price becoming a date.
@@ -27,7 +27,8 @@ const FOCUS: Record<string, { x: number; y: number }> = { "porsche-911": { x: 0.
 export function TitleSequence({ hero, short, onDone }: { hero: Entry; short: boolean; onDone(): void }) {
   const p = usePalette();
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
+  const frame = height > width ? { position: "absolute" as const, top: 0, left: 0, right: 0, height: Math.round(Math.min(height * 0.62, width * 0.95)) } : StyleSheet.absoluteFill;
   const reduced = useReducedMotion();
   const t = useRef(new Animated.Value(short || reduced ? 3800 : 0)).current;
   const [stage, setStage] = useState<Stage>("hunting");
@@ -83,14 +84,16 @@ export function TitleSequence({ hero, short, onDone }: { hero: Entry; short: boo
   return (
     // Tapping anywhere skips too. The root is a plain view with a responder, not a button, so the Skip button is the
     // one real control (UI audit P0-8: no button inside a button on the web).
-    <View onStartShouldSetResponder={() => skippable} onResponderRelease={finish} style={{ flex: 1, backgroundColor: p.bg }}>
-      <Animated.View style={[StyleSheet.absoluteFill, { opacity: photo, transform: [{ scale: push }] }]}>
+    <View onStartShouldSetResponder={() => skippable} onResponderRelease={finish} style={{ flex: 1, backgroundColor: p.bg, overflow: "hidden" }}>
+      {/* On a tall screen the landscape hero sits in a frame at the top whose floor dissolves into the page, so the
+          subject stays whole instead of being cropped to a door (UI audit P1-20). */}
+      <Animated.View style={[frame, { opacity: photo, transform: [{ scale: push }] }]}>
         {/* Studio-white heroes are dimmed so the page stays dark (filter works on iOS, Android and the web). */}
         <View style={[StyleSheet.absoluteFill, { filter: "brightness(0.72)" } as object]}>
           <GlassReveal uri={hero.imageUrl ?? null} standby={require("../../assets/standby/drive.jpg")} stage={stage} treatment="swirl" focus={focus} style={StyleSheet.absoluteFill} />
         </View>
+        <Shade look="title" />
       </Animated.View>
-      <Shade look="title" />
       <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: p.bg, opacity: dim }]} />
 
       {/* Lower third: the checked price and its source, then the date it becomes. */}
