@@ -82,8 +82,7 @@ const secrets: Record<string, string> = {
   MODEL_API_KEY: await secret("dandelist/api/model-key", async () => vault("accounting/meta-model-api")),
   // Apify's free plan (hard-capped at its monthly credit, so no cash); the token file never leaves this machine.
   APIFY_TOKEN: await secret("dandelist/api/apify-token", async () => {
-    const line = readFileSync(`${homedir()}/.knight-secrets/apify.env`, "utf8").split(/?
-/).find((l) => l.startsWith("APIFY_TOKEN="));
+    const line = readFileSync(`${homedir()}/.knight-secrets/apify.env`, "utf8").split(/\r?\n/).find((l) => l.startsWith("APIFY_TOKEN="));
     if (!line) throw new Error("APIFY_TOKEN not found in ~/.knight-secrets/apify.env");
     return line.slice("APIFY_TOKEN=".length).trim();
   }),
