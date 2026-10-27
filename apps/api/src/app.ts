@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { agentRoutes, type AgentDeps } from "./agent/routes";
 import { authRoutes, requireAuth, type AuthVars } from "./auth";
+import { dreamRoutes } from "./dream/routes";
 import { previewRoutes } from "./preview";
 import { wishRoutes } from "./wishes";
 
@@ -13,7 +14,7 @@ export function createApp(deps: AppDeps) {
   const app = new Hono<{ Variables: AuthVars }>();
   const { db } = deps;
 
-  app.use("*", cors({ origin: deps.webOrigins, allowHeaders: ["Authorization", "Content-Type"], allowMethods: ["GET", "POST", "PATCH", "DELETE"] }));
+  app.use("*", cors({ origin: deps.webOrigins, allowHeaders: ["Authorization", "Content-Type"], allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE"] }));
 
   app.get("/healthz", async (c) => {
     await db.query("select 1");
@@ -24,6 +25,7 @@ export function createApp(deps: AppDeps) {
   app.route("/wishes", wishRoutes(deps));
   app.route("/agent", agentRoutes(deps));
   app.route("/preview", previewRoutes(deps));
+  app.route("/", dreamRoutes(deps));
 
   app.use("/me", requireAuth(deps));
   app.get("/me", async (c) => {
