@@ -1,5 +1,7 @@
+import { lookup as dnsLookup } from "node:dns";
 import { lookup } from "node:dns/promises";
-import { isIP } from "node:net";
+import { BlockList, isIP, type LookupFunction } from "node:net";
+import { Agent, fetch as undiciFetch } from "undici";
 
 /**
  * The research agent's own tools. Pages are fetched by our server, never by the model, and their text is
@@ -26,16 +28,23 @@ export interface PageResult {
 
 export type Fetcher = typeof fetch;
 
-function privateV4(ip: string): boolean {
-  const [a, b] = ip.split(".").map(Number) as [number, number];
-  return a === 10 || a === 127 || a === 0 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127);
-}
+// Every range that isn't globally routable unicast. BlockList also matches IPv4-mapped IPv6 forms
+// (::ffff:127.0.0.1 and ::ffff:7f00:1) against the IPv4 rules.
+const blocked = new BlockList();
+for (const [net, bits] of [
+  ["0.0.0.0", 8], ["10.0.0.0", 8], ["100.64.0.0", 10], ["127.0.0.0", 8], ["169.254.0.0", 16], ["172.16.0.0", 12],
+  ["192.0.0.0", 24], ["192.0.2.0", 24], ["192.88.99.0", 24], ["192.168.0.0", 16], ["198.18.0.0", 15], ["198.51.100.0", 24],
+  ["203.0.113.0", 24], ["224.0.0.0", 4], ["240.0.0.0", 4],
+] as const) blocked.addSubnet(net, bits, "ipv4");
+for (const [net, bits] of [
+  ["::", 128], ["::1", 128], ["64:ff9b::", 96], ["64:ff9b:1::", 48], ["100::", 64], ["2001::", 23], ["2001:db8::", 32],
+  ["2002::", 16], ["fc00::", 7], ["fe80::", 10], ["fec0::", 10], ["ff00::", 8],
+] as const) blocked.addSubnet(net, bits, "ipv6");
 
-function privateIp(ip: string): boolean {
-  if (isIP(ip) === 4) return privateV4(ip);
-  const v6 = ip.toLowerCase();
-  if (v6.startsWith("::ffff:")) return privateV4(v6.slice(7));
-  return v6 === "::1" || v6 === "::" || v6.startsWith("fc") || v6.startsWith("fd") || v6.startsWith("fe80");
+export function privateIp(ip: string): boolean {
+  const family = isIP(ip);
+  if (!family) return true;
+  return blocked.check(ip, family === 4 ? "ipv4" : "ipv6");
 }
 
 /** Throws unless the URL is http(s) on a public host. */
@@ -53,6 +62,23 @@ export async function assertPublicUrl(raw: string): Promise<URL> {
   if (!addresses.length || addresses.some(privateIp)) throw new Error("That host is private");
   return url;
 }
+
+/**
+ * Checks the addresses again at the moment of connecting, so a host that resolves to a public address for the
+ * check and a private one for the request (DNS rebinding) still can't reach our network.
+ */
+const safeLookup: LookupFunction = (hostname, options, callback) => {
+  dnsLookup(hostname, { ...options, all: true }, (err, addresses) => {
+    if (err) return callback(err, "", 0);
+    const list = addresses as unknown as { address: string; family: number }[];
+    if (!list.length || list.some((a) => privateIp(a.address))) return callback(new Error("That host is private"), "", 0);
+    if ((options as { all?: boolean }).all) return (callback as unknown as (e: null, a: typeof list) => void)(null, list);
+    callback(null, list[0]!.address, list[0]!.family);
+  });
+};
+const publicOnly = new Agent({ connect: { lookup: safeLookup } });
+export const publicFetch: Fetcher = ((url: string | URL, init?: RequestInit) =>
+  undiciFetch(url, { ...(init as object), dispatcher: publicOnly } as never)) as unknown as Fetcher;
 
 const ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ", "#39": "'", "#36": "$", euro: "€", pound: "£" };
 
@@ -103,7 +129,7 @@ export function structuredPrices(html: string): { amount: number; currency?: str
   return out.slice(0, 20);
 }
 
-export async function getPage(raw: string, fetcher: Fetcher = fetch): Promise<PageResult> {
+export async function getPage(raw: string, fetcher: Fetcher = publicFetch): Promise<PageResult> {
   const empty = { ok: false, url: raw, status: 0, title: "", text: "", structuredPrices: [] };
   let url: URL;
   try {

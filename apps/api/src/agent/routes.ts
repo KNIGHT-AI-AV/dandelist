@@ -3,11 +3,14 @@ import { MetaApiError, MetaClient } from "@dandelist/meta";
 import { Hono } from "hono";
 import { z } from "zod";
 import { requireAuth, type AuthDeps, type AuthVars } from "../auth";
-import { SpendLimitError, assertBudget, recordSpend, type SpendCaps } from "../spend";
+import { SpendLimitError, assertBudget, assertUserBudget, recordSpend, type SpendCaps } from "../spend";
 import { answerSchema, clarify, draftSchema, interpret, research, type Meta, type Step } from "./agent";
 import type { Fetcher } from "./tools";
 
 export const RUNS_PER_USER_PER_DAY = 20;
+export const INTERPRETS_PER_USER_PER_DAY = 60;
+/** About 15 researched wishes; the per-day run cap usually bites first. */
+export const USER_DAILY_USD = 2;
 const CACHE_MS = 24 * 60 * 60 * 1000;
 
 export interface AgentDeps extends AuthDeps {
@@ -71,6 +74,7 @@ export function agentRoutes(deps: AgentDeps) {
     return {
       responses: async (body) => {
         await assertBudget(db, caps, deps.now());
+        await assertUserBudget(db, userId, USER_DAILY_USD, deps.now());
         return client.responses(body);
       },
     };
@@ -84,6 +88,12 @@ export function agentRoutes(deps: AgentDeps) {
   app.post("/interpret", async (c) => {
     const body = interpretBody.safeParse(await c.req.json().catch(() => null));
     if (!body.success) return c.json({ error: "Describe the wish in a few words." }, 400);
+    const read = await db.query<{ n: string | number }>("select count(*) as n from spend_ledger where user_id = $1 and kind = 'interpret' and created_at > $2", [
+      c.get("userId"),
+      new Date(deps.now().getTime() - CACHE_MS).toISOString(),
+    ]);
+    // Each wish read is two model calls: interpret, then clarify.
+    if (Number(read.rows[0]?.n ?? 0) >= INTERPRETS_PER_USER_PER_DAY * 2) return c.json({ error: `You can add up to ${INTERPRETS_PER_USER_PER_DAY} wishes this way a day.` }, 429);
     try {
       const meta = metaFor(c.get("userId"), "interpret");
       const draft = await interpret(meta, body.data.text);
@@ -110,21 +120,24 @@ export function agentRoutes(deps: AgentDeps) {
     );
     if (cached.rows[0]) return c.json({ run: { ...toRun(cached.rows[0]), cached: true } });
 
-    const today = await db.query<{ n: string | number }>("select count(*) as n from agent_runs where user_id = $1 and created_at > $2", [
-      userId,
-      new Date(now.getTime() - CACHE_MS).toISOString(),
-    ]);
-    if (Number(today.rows[0]?.n ?? 0) >= RUNS_PER_USER_PER_DAY) return c.json({ error: `You can research up to ${RUNS_PER_USER_PER_DAY} wishes a day.` }, 429);
     try {
       await assertBudget(db, caps, now);
+      await assertUserBudget(db, userId, USER_DAILY_USD, now);
     } catch (e) {
       return c.json({ error: friendly(e) }, 429);
     }
 
+    // Count and insert in one statement. Parallel requests can still overshoot by a few; the per-person spend cap
+    // above bounds what that costs.
+    const since = new Date(now.getTime() - CACHE_MS).toISOString();
     const { rows } = await db.query<RunRow>(
-      `insert into agent_runs (user_id, cache_key, draft, answers, created_at, updated_at) values ($1, $2, $3::jsonb, $4::jsonb, $5, $5) returning ${RUN_COLUMNS}`,
-      [userId, key, JSON.stringify(draft), JSON.stringify(answers), now.toISOString()],
+      `insert into agent_runs (user_id, cache_key, draft, answers, created_at, updated_at)
+       select $1, $2, $3::jsonb, $4::jsonb, $5, $5
+       where (select count(*) from agent_runs where user_id = $1 and created_at > $6) < $7
+       returning ${RUN_COLUMNS}`,
+      [userId, key, JSON.stringify(draft), JSON.stringify(answers), now.toISOString(), since, RUNS_PER_USER_PER_DAY],
     );
+    if (!rows[0]) return c.json({ error: `You can research up to ${RUNS_PER_USER_PER_DAY} wishes a day.` }, 429);
     const run = rows[0]!;
 
     const touch = () => deps.now().toISOString();

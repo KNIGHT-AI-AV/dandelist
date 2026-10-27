@@ -2,8 +2,14 @@ import type { Usage } from "@dandelist/meta";
 import type { Db } from "./db";
 
 export class SpendLimitError extends Error {
-  constructor(readonly scope: "daily" | "total") {
-    super(scope === "daily" ? "Today's AI budget is used up. Try again tomorrow." : "The AI budget for this event is used up.");
+  constructor(readonly scope: "daily" | "total" | "user") {
+    super(
+      scope === "daily"
+        ? "Today's AI budget is used up. Try again tomorrow."
+        : scope === "user"
+          ? "You've used today's research allowance. Try again tomorrow."
+          : "The AI budget for this event is used up.",
+    );
   }
 }
 
@@ -30,4 +36,13 @@ export async function recordSpend(db: Db, userId: string | null, kind: string, u
     "insert into spend_ledger (user_id, model, kind, input_tokens, output_tokens, searches, cost_usd, created_at) values ($1, $2, $3, $4, $5, $6, $7, $8)",
     [userId, usage.model, kind, usage.inputTokens, usage.outputTokens, usage.searches, costUsd.toFixed(6), now.toISOString()],
   );
+}
+
+/** One person can spend at most `capUsd` of AI calls in any 24 hours, so nobody can drain the shared budget. */
+export async function assertUserBudget(db: Db, userId: string, capUsd: number, now: Date): Promise<void> {
+  const { rows } = await db.query<{ spent: string | null }>("select coalesce(sum(cost_usd), 0) as spent from spend_ledger where user_id = $1 and created_at > $2", [
+    userId,
+    new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString(),
+  ]);
+  if (Number(rows[0]?.spent ?? 0) >= capUsd) throw new SpendLimitError("user");
 }

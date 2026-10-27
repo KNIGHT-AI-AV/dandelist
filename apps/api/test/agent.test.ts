@@ -1,7 +1,7 @@
 import { PGlite } from "@electric-sql/pglite";
 import { beforeEach, describe, expect, it } from "vitest";
 import { unknownNumbers } from "../src/agent/agent";
-import { assertPublicUrl, htmlToText, pageShowsPrice, structuredPrices } from "../src/agent/tools";
+import { assertPublicUrl, htmlToText, pageShowsPrice, privateIp, structuredPrices } from "../src/agent/tools";
 import { createApp } from "../src/app";
 import { migrate, type Db } from "../src/db";
 
@@ -29,7 +29,15 @@ describe("page tools", () => {
     await expect(assertPublicUrl("http://localhost:8080/")).rejects.toThrow();
     await expect(assertPublicUrl("file:///etc/passwd")).rejects.toThrow();
     await expect(assertPublicUrl("http://[::1]/")).rejects.toThrow();
+    await expect(assertPublicUrl("http://[::ffff:7f00:1]/")).rejects.toThrow();
     await expect(assertPublicUrl("https://93.184.215.14/bike")).resolves.toBeInstanceOf(URL);
+  });
+
+  it("treats every mapped, translated and reserved form of a private address as private", () => {
+    for (const ip of ["::ffff:127.0.0.1", "::ffff:7f00:1", "::ffff:a9fe:a9fe", "64:ff9b::a9fe:a9fe", "169.254.169.254", "fd00::1", "fe80::1", "0.0.0.0", "::", "100.64.0.1", "nonsense"]) {
+      expect(privateIp(ip), ip).toBe(true);
+    }
+    for (const ip of ["93.184.215.14", "2606:4700::6810:84e5", "8.8.8.8"]) expect(privateIp(ip), ip).toBe(false);
   });
 
   it("flags numbers the facts don't contain", () => {
@@ -209,6 +217,17 @@ describe("wish agent", () => {
     const res = await call("POST", "/agent/interpret", t, { text: "a peloton bike plus" });
     expect(res.status).toBe(429);
     expect(((await res.json()) as { error: string }).error).toMatch(/budget/);
+  });
+
+  it("stops one person at their own daily allowance", async () => {
+    const t = await signIn("ada@example.com");
+    const { rows } = await db.query<{ id: string }>("select id from users where email = 'ada@example.com'");
+    await db.query("insert into spend_ledger (user_id, model, kind, cost_usd, created_at) values ($1, 'muse-spark-1.3', 'research', 2, $2)", [rows[0]!.id, clock.toISOString()]);
+    const res = await call("POST", "/agent/interpret", t, { text: "a peloton bike plus" });
+    expect(res.status).toBe(429);
+    expect(((await res.json()) as { error: string }).error).toMatch(/allowance/);
+    const other = await signIn("bob@example.com");
+    expect((await call("POST", "/agent/interpret", other, { text: "a peloton bike plus" })).status).toBe(200);
   });
 
   it("answers 503 when no Meta key is configured", async () => {

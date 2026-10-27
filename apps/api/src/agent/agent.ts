@@ -1,7 +1,7 @@
 import { equivalentMonthly, formatCents, horizonCashOutlay, recurringBreakdown, type Item, type Period } from "@dandelist/cost";
 import type { ResponsesResult } from "@dandelist/meta";
 import { z } from "zod";
-import { fxRate, getPage, pageShowsPrice, type Fetcher, type PageResult } from "./tools";
+import { fxRate, getPage, pageShowsPrice, publicFetch, type Fetcher, type PageResult } from "./tools";
 
 /**
  * The wish agent on Meta's Muse Spark. It reads a wish (interpret), asks only what moves the price (clarify),
@@ -205,7 +205,7 @@ const RESEARCH_INSTRUCTIONS = `You are Dandelist's price researcher. Find 2 to 4
 - You have at most ${MAX_TOOL_CALLS} tool calls. Stop when you have 2 to 4 good options.`;
 
 export async function research(meta: Meta, ctx: ResearchContext): Promise<ResearchResult> {
-  const fetcher = ctx.fetcher ?? fetch;
+  const fetcher = ctx.fetcher ?? publicFetch;
   const home = (ctx.homeCurrency ?? "USD").toUpperCase();
   const at = () => ctx.now().toISOString();
   const pages = new Map<string, PageResult>();
