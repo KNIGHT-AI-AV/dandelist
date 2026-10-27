@@ -3,8 +3,12 @@ import { MetaApiError, MetaClient } from "@dandelist/meta";
 import { Hono } from "hono";
 import { z } from "zod";
 import { requireAuth, type AuthDeps, type AuthVars } from "../auth";
-import { assertBudget, assertUserBudget, recordSpend, SpendLimitError, userCapUsd, type SpendCaps } from "../spend";
+import type { MediaStore } from "../media-store";
+import { SpendLimitError, TOOL_MODEL_PREFIX, assertBudget, assertUserBudget, callsToday, recordSpend, recordToolSpend, spentToday, userCapUsd, type SpendCaps } from "../spend";
 import { answerSchema, clarify, draftSchema, interpret, research, type Meta, type Step } from "./agent";
+import { SAM_MODEL } from "./cutout";
+import type { MediaOptions } from "./hunt";
+import { SHOPPING_ACTOR, SHOPPING_MAX_RESULTS, SHOPPING_PRICE_PER_RESULT_USD, shoppingSearch } from "./shopping";
 import type { Fetcher } from "./tools";
 
 export const RUNS_PER_USER_PER_DAY = 20;
@@ -17,9 +21,15 @@ export interface AgentDeps extends AuthDeps {
   /** Missing when no Meta key is configured; the agent routes then answer 503. */
   meta?: { apiKey: string; baseUrl?: string; fetch?: typeof fetch };
   spendCaps?: SpendCaps;
-  /** Used for pages and exchange rates; tests replace it. */
+  /** Used for pages, images, exchange rates, Commons and Sketchfab; tests replace it. */
   webFetch?: Fetcher;
+  /** Google Shopping through Apify. Missing turns the shopping tool off. `dailyUsd` is a hard cap on the free credit. */
+  apify?: { token: string; dailyUsd: number; actor?: string; fetch?: Fetcher };
+  /** Pictures Meta's models make. Each is off unless switched on, and each has a daily count cap. */
+  media?: { store?: MediaStore; cutouts?: boolean; generate?: boolean; upscale?: boolean; cutoutsPerDay: number; imagesPerDay: number };
 }
+
+const IMAGE_MODEL = "muse-image-1.0";
 
 const interpretBody = z.object({ text: z.string().trim().min(2).max(1000) });
 const runBody = z.object({ draft: draftSchema, answers: z.array(answerSchema).max(3).default([]) });
@@ -71,12 +81,46 @@ export function agentRoutes(deps: AgentDeps) {
         await onCost?.(cost);
       },
     });
+    const guard = async () => {
+      await assertBudget(db, caps, deps.now());
+      await assertUserBudget(db, userId, await userCapUsd(db, userId, USER_DAILY_USD, deps.judge, caps), deps.now());
+    };
     return {
       responses: async (body) => {
-        await assertBudget(db, caps, deps.now());
-        await assertUserBudget(db, userId, await userCapUsd(db, userId, USER_DAILY_USD, deps.judge, caps), deps.now());
+        await guard();
         return client.responses(body);
       },
+      images: async (op, body) => {
+        await guard();
+        return client.images(op, body);
+      },
+    };
+  };
+
+  /** One shopping search, refused before it starts when it could push today's Apify spend past the cap. */
+  const shoppingFor = (userId: string, region: string, currency: string, onCost: (usd: number) => Promise<void>) => {
+    const apify = deps.apify;
+    if (!apify) return undefined;
+    const actor = apify.actor ?? SHOPPING_ACTOR;
+    return async (query: string) => {
+      const worst = SHOPPING_MAX_RESULTS * SHOPPING_PRICE_PER_RESULT_USD;
+      if ((await spentToday(db, TOOL_MODEL_PREFIX, deps.now())) + worst > apify.dailyUsd) throw new Error("Today's shopping searches are used up; search the web instead.");
+      const r = await shoppingSearch(query, region, currency, { token: apify.token, actor, fetcher: apify.fetch });
+      await recordToolSpend(db, userId, "shopping", `${TOOL_MODEL_PREFIX}${actor}`, r.costUsd, deps.now());
+      await onCost(r.costUsd);
+      return r.offers;
+    };
+  };
+
+  const mediaOptions = (): MediaOptions | undefined => {
+    const m = deps.media;
+    if (!m) return undefined;
+    return {
+      store: m.store,
+      cutouts: m.cutouts,
+      generate: m.generate,
+      upscale: m.upscale,
+      allow: async (what) => (await callsToday(db, what === "cutout" ? SAM_MODEL : IMAGE_MODEL, deps.now())) < (what === "cutout" ? m.cutoutsPerDay : m.imagesPerDay),
     };
   };
 
@@ -145,7 +189,8 @@ export function agentRoutes(deps: AgentDeps) {
     const onStep = async (step: Step) =>
       void (await db.query("update agent_runs set steps = steps || $1::jsonb, updated_at = $2 where id = $3", [JSON.stringify([step]), touch(), run.id]));
     // The agent keeps working after this response; the app polls GET /agent/runs/:id for its trail.
-    void research(metaFor(userId, "research", addCost), { draft, answers, onStep, fetcher: deps.webFetch, now: deps.now })
+    const shopping = shoppingFor(userId, draft.region, draft.currency, addCost);
+    void research(metaFor(userId, "research", addCost), { draft, answers, onStep, fetcher: deps.webFetch, now: deps.now, shopping, media: mediaOptions() })
       .then((result) => db.query("update agent_runs set status = 'done', result = $1::jsonb, updated_at = $2 where id = $3", [JSON.stringify(result), touch(), run.id]))
       .catch((e) => {
         console.error("research failed", run.id, e instanceof MetaApiError ? `${e.status} ${e.body.slice(0, 200)}` : e);

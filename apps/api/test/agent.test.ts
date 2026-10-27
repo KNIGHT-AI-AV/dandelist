@@ -1,7 +1,10 @@
 import { PGlite } from "@electric-sql/pglite";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { unknownNumbers } from "../src/agent/agent";
-import { assertPublicUrl, htmlToText, pageShowsPrice, privateIp, structuredPrices } from "../src/agent/tools";
+import { assertPublicUrl, htmlToText, pageNamesItem, pageShowsPrice, privateIp, sellerOwnsHost, structuredPrices } from "../src/agent/tools";
+
+// Shop hostnames resolve to a public documentation address, so no test touches real DNS.
+vi.mock("node:dns/promises", async (importOriginal) => ({ ...(await importOriginal<object>()), lookup: async () => [{ address: "93.184.215.14", family: 4 }] }));
 import { createApp } from "../src/app";
 import { migrate, type Db } from "../src/db";
 
@@ -40,6 +43,34 @@ describe("page tools", () => {
     for (const ip of ["93.184.215.14", "2606:4700::6810:84e5", "8.8.8.8"]) expect(privateIp(ip), ip).toBe(false);
   });
 
+  it("counts a page as the seller's only when its host belongs to the seller", () => {
+    expect(sellerOwnsHost("Herman Miller", "https://store.hermanmiller.com/living-room-furniture/eames-lounge-chair")).toBe(true);
+    expect(sellerOwnsHost("Herman Miller", "https://www.thekitchn.com/eames-chair-at-home")).toBe(false);
+    expect(sellerOwnsHost("Leica Camera", "https://leica-camera.com/en-US/q3")).toBe(true);
+    expect(sellerOwnsHost("Leica Camera", "https://woodwardcamera.com/products/leica-q3")).toBe(false);
+    expect(sellerOwnsHost("B&H Photo Video", "https://www.bhphotovideo.com/c/product/1.html")).toBe(true);
+    expect(sellerOwnsHost("B&H", "https://www.bhphotovideo.com/c/product/1.html")).toBe(true);
+    expect(sellerOwnsHost("Peloton", "https://www.onepeloton.com/bike-plus")).toBe(true);
+    expect(sellerOwnsHost("TAP Air Portugal", "https://www.flytap.com/en-us/flights")).toBe(true);
+    expect(sellerOwnsHost("Booking.com", "https://www.booking.com/hotel/pt/avenida-palace.html")).toBe(true);
+    expect(sellerOwnsHost("John Lewis", "https://www.johnlewis.co.uk/eames")).toBe(true);
+    expect(sellerOwnsHost("Design Within Reach", "https://www.dwr.com/living/eames")).toBe(true);
+    expect(sellerOwnsHost("Hotel Avenida Palace", "https://www.avenidapalace.com/rooms")).toBe(true);
+    expect(sellerOwnsHost("Leica Camera", "https://leicacamerausa.com/q3")).toBe(true);
+    expect(sellerOwnsHost("Lisbon Lofts", "https://www.lisbon-food-blog.com/stay")).toBe(false);
+    expect(sellerOwnsHost("Peloton", "https://www.pelotonfanblog.com/bike")).toBe(false);
+    expect(sellerOwnsHost("Porsche", "https://93.184.215.14/911")).toBe(false);
+    expect(sellerOwnsHost("Porsche", "not a url")).toBe(false);
+  });
+
+  it("only takes a price from a page that names the item", () => {
+    const page = (title: string, text: string) => ({ title, text });
+    expect(pageNamesItem(page("Stays | KAYAK", "Hotels from $75 a night"), "ibis Lisboa Centro Liberdade, double room")).toBe(false);
+    expect(pageNamesItem(page("ibis Lisboa Centro Liberdade | KAYAK", "$75 a night"), "ibis Lisboa Centro Liberdade, double room")).toBe(true);
+    expect(pageNamesItem(page("Peloton Bike+", "Bike+ $2,495.00"), "Bike+ Basics")).toBe(true);
+    expect(pageNamesItem(page("Home", "Sale $75"), "New, double room")).toBe(true);
+  });
+
   it("flags numbers the facts don't contain", () => {
     const facts = { horizon_years: 5, options: [{ upfront: "$2,495", total: "$5,135" }] };
     expect(unknownNumbers("It costs $2,495 now and $5,135 over 5 years.", facts)).toEqual([]);
@@ -48,7 +79,7 @@ describe("page tools", () => {
 });
 
 // A fake Meta Responses API that answers each step of the agent the way the real one does.
-const SHOP = "https://93.184.215.14/bike-plus";
+const SHOP = "https://www.onepeloton.com/bike-plus";
 let explainReplies: string[];
 let metaCalls: Record<string, unknown>[];
 
@@ -177,7 +208,7 @@ describe("wish agent", () => {
     expect(run.status).toBe("done");
     const [bike, used] = run.result.options;
     expect(run.result.options).toHaveLength(2); // the javascript: link is dropped
-    expect(bike).toMatchObject({ label: "Bike+ Basics", status: "verified", upfrontCents: 249500, imageUrl: "https://93.184.215.14/img/bike.jpg" });
+    expect(bike).toMatchObject({ label: "Bike+ Basics", status: "verified", statusLabel: "Checked on onepeloton.com", upfrontCents: 249500, imageUrl: "https://www.onepeloton.com/img/bike.jpg" });
     expect(bike.totals.horizonCents).toBe(249500 + 4400 * 12 * 5);
     expect(used).toMatchObject({ status: "estimate", upfrontCents: 150000 });
     expect(run.result.explanation).toBe("The Bike+ Basics costs $2,495 upfront and $5,135 over 5 years.");

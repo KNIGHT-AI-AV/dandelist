@@ -1,5 +1,7 @@
 import { Hono } from "hono";
 import { z } from "zod";
+import { mediaSchema } from "./agent/media";
+import { requireAuth, type AuthDeps, type AuthVars } from "./auth";
 
 /** A wish's source and image links are opened and shown by the app, so only http(s) addresses are stored. */
 export function webLinksOnly(details: Record<string, unknown>): boolean {
@@ -7,7 +9,6 @@ export function webLinksOnly(details: Record<string, unknown>): boolean {
   if (!agent) return true;
   return [agent.url, agent.imageUrl].every((u) => u === undefined || u === "" || (typeof u === "string" && /^https?:\/\//i.test(u) && URL.canParse(u)));
 }
-import { requireAuth, type AuthDeps, type AuthVars } from "./auth";
 
 export const MAX_WISHES_PER_USER = 500;
 const MAX_CENTS = 1_000_000_000_000; // ten billion dollars; anything bigger is a typo
@@ -34,6 +35,11 @@ const createBody = z.object({
     .record(z.unknown())
     .refine((d) => JSON.stringify(d).length <= 20_000, "Too much detail.")
     .refine(webLinksOnly, "Links must be web addresses.")
+    // Saved media is shown in image views and a 3D player, so only web images and Sketchfab embeds get in.
+    .refine((d) => {
+      const media = (d.agent as { media?: unknown } | undefined)?.media;
+      return media === undefined || mediaSchema.safeParse(media).success;
+    }, "Check the pictures.")
     .optional(),
 });
 
