@@ -8,7 +8,8 @@
     "provision": "tsx up.ts",
     "migrate": "tsx migrate.ts",
     "deploy": "tsx deploy.ts",
-    "smoke": "tsx smoke.ts"
+    "smoke": "tsx smoke.ts",
+    "catalogue": "tsx catalogue.ts"
   },
   "dependencies": {
     "@aws-sdk/client-apprunner": "^3.1150.0",

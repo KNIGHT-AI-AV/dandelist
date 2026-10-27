@@ -1,6 +1,9 @@
 import { Redirect } from "expo-router";
+import { useEffect, useState } from "react";
 import { ScrollView, Text, View } from "react-native";
 import { MediaHero, type Media } from "../components/media";
+import { GlassReveal } from "../components/reveal";
+import type { Stage } from "../components/reveal-clock";
 import { fonts, usePalette } from "../lib/theme";
 
 // Development-only bench for the media views; production redirects away.
@@ -33,11 +36,40 @@ const camera: Media = {
   cutout: { url: "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6c/Leica_Q3.jpg/1600px-Leica_Q3.jpg", from: "", model: "sam-3.1" },
 };
 
+const STAGES: Stage[] = ["hunting", "found", "sharpening", "clear"];
+const rolex = "https://media.rolex.com/image/upload/q_auto/f_auto/t_v7-cover-majesty-landscape/c_limit,w_1920/v1/a677b2c664f6/catalogue/2026/upright-c/m126610ln-0001";
+
+function GlassBench() {
+  const p = usePalette();
+  const [i, setI] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setI((n) => (n + 1) % (STAGES.length + 1)), 2600);
+    return () => clearInterval(t);
+  }, []);
+  // One beat with nothing found yet, then each stage in turn.
+  const stage = STAGES[Math.max(0, i - 1)]!;
+  const uri = i === 0 ? null : rolex;
+  return (
+    <View style={{ gap: 8 }}>
+      <Text style={{ fontFamily: fonts.label, color: p.ink2, paddingHorizontal: 16 }}>{`Glass reveal · ${uri ? stage : "standby"}`}</Text>
+      <View style={{ flexDirection: "row", gap: 6, paddingHorizontal: 12 }}>
+        {(["swirl", "film", "frost"] as const).map((t) => (
+          <View key={t} style={{ flex: 1, gap: 4 }}>
+            <GlassReveal uri={uri} standby={require("../assets/standby/object.jpg")} stage={stage} treatment={t} style={{ height: 260, borderRadius: 18 }} />
+            <Text style={{ fontFamily: fonts.body, color: p.ink3, fontSize: 11, textAlign: "center" }}>{t}</Text>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
 export default function Lab() {
   const p = usePalette();
   if (!__DEV__) return <Redirect href="/" />;
   return (
     <ScrollView style={{ flex: 1, backgroundColor: p.bg }} contentContainerStyle={{ gap: 24, paddingVertical: 40, maxWidth: 520, width: "100%", alignSelf: "center" }}>
+      <GlassBench />
       {[
         ["Vehicle · 3D", car],
         ["Place · slideshow", lisbon],

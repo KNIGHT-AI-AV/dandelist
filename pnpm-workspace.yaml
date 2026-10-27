@@ -17,5 +17,8 @@ trustPolicyExclude:
   - "undici-types@6.21.0"
 
 # Only these dependencies may run install scripts.
+# Skia (checked 2026-10-27): scripts/install-libs.js only copies its prebuilt binaries from its own
+# react-native-skia-android / -apple-* npm packages into libs/; no network, no other writes.
 onlyBuiltDependencies:
   - esbuild
+  - "@shopify/react-native-skia"

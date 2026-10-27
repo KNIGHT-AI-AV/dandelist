@@ -1,7 +1,8 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { Image } from "expo-image";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { AccessibilityInfo, Animated, Easing, PanResponder, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
+import { Animated, Easing, PanResponder, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
+import { useReducedMotion } from "../lib/motion";
 import { fonts, usePalette } from "../lib/theme";
 import { Embed } from "./embed";
 import { Photo } from "./lux";
@@ -15,16 +16,6 @@ export type Media = {
   model3d?: Model3d;
   cutout?: { url: string; width?: number; height?: number; from: string; model: string };
 };
-
-export function useReducedMotion(): boolean {
-  const [reduced, setReduced] = useState(false);
-  useEffect(() => {
-    void AccessibilityInfo.isReduceMotionEnabled().then(setReduced);
-    const sub = AccessibilityInfo.addEventListener("reduceMotionChanged", setReduced);
-    return () => sub.remove();
-  }, []);
-  return reduced;
-}
 
 function Credit({ children }: { children: ReactNode }) {
   const p = usePalette();
