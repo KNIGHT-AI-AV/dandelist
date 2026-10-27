@@ -1,5 +1,5 @@
 import type { Entry } from "@dandelist/catalogue";
-import { heroOf } from "@dandelist/catalogue";
+import { heroFor } from "@dandelist/catalogue";
 import { useEffect, useRef, useState } from "react";
 import { Animated, Easing, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -30,6 +30,7 @@ export function TitleSequence({ hero, short, onDone }: { hero: Entry; short: boo
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const frame = height > width ? { position: "absolute" as const, top: 0, left: 0, right: 0, height: Math.round(Math.min(height * 0.62, width * 0.95)) } : StyleSheet.absoluteFill;
+  const frameAspect = height > width ? width / Math.round(Math.min(height * 0.62, width * 0.95)) : width / height;
   const reduced = useReducedMotion();
   const t = useRef(new Animated.Value(short || reduced ? 3800 : 0)).current;
   const [stage, setStage] = useState<Stage>("hunting");
@@ -91,7 +92,7 @@ export function TitleSequence({ hero, short, onDone }: { hero: Entry; short: boo
       <Animated.View style={[frame, { opacity: photo, transform: [{ scale: push }] }]}>
         {/* Studio-white heroes are dimmed so the page stays dark (filter works on iOS, Android and the web). */}
         <View style={[StyleSheet.absoluteFill, { filter: "brightness(0.72)" } as object]}>
-          <GlassReveal uri={heroOf(hero) ?? null} standby={require("../../assets/standby/drive.jpg")} stage={stage} treatment="film" focus={focus} style={StyleSheet.absoluteFill} />
+          <GlassReveal uri={heroFor(hero, frameAspect) ?? null} standby={require("../../assets/standby/drive.jpg")} stage={stage} treatment="film" focus={focus} style={StyleSheet.absoluteFill} />
         </View>
         <Shade look="title" />
       </Animated.View>

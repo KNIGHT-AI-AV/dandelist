@@ -21,6 +21,20 @@
           "height": 2048,
           "source": "porsche.com",
           "credit": "Porsche"
+        },
+        {
+          "url": "https://api.dandelist.knightaiav.com/media/a763a79df99d068d40cc48ec91e8c1e5fb179f2d231b91b94686c3656385a2ce.jpg",
+          "width": 1500,
+          "height": 2100,
+          "source": "porsche.com",
+          "credit": "Porsche"
+        },
+        {
+          "url": "https://api.dandelist.knightaiav.com/media/8ce51b9473f75d23c8c76c8d1c54655bb5304e1f185e3bbf561a57874f019fed.jpg",
+          "width": 2400,
+          "height": 900,
+          "source": "porsche.com",
+          "credit": "Porsche"
         }
       ]
     }
@@ -45,6 +59,20 @@
           "url": "https://api.dandelist.knightaiav.com/media/2f85fc0386c2c9a17f898a0a8b53453aea8d0eb8bd7f91df0f2e574708ee4362.jpg",
           "width": 2048,
           "height": 2048,
+          "source": "leica-camera.com",
+          "credit": "Leica Camera"
+        },
+        {
+          "url": "https://api.dandelist.knightaiav.com/media/85145ee7b8463ff73117bca82a56320910b309fb439aae75bc15ac6e4cd97088.jpg",
+          "width": 1500,
+          "height": 2100,
+          "source": "leica-camera.com",
+          "credit": "Leica Camera"
+        },
+        {
+          "url": "https://api.dandelist.knightaiav.com/media/c874353d86743e2b7a1629572425858100ccfbc7c1d407c6aa2995500e1f5653.jpg",
+          "width": 2400,
+          "height": 900,
           "source": "leica-camera.com",
           "credit": "Leica Camera"
         }
@@ -90,18 +118,39 @@
     "seller": "Rolex",
     "url": "https://www.rolex.com/en-us/watches/submariner/m126610ln-0001",
     "checkedAt": "2026-10-27T21:54:09.048Z",
-    "imageUrl": "https://api.dandelist.knightaiav.com/media/f38d1bc3f0718631bca7a5e8dbd4bec7c4018a04f2bddff9eb9229641138f058.jpg",
+    "imageUrl": "https://api.dandelist.knightaiav.com/media/a1f9579cdb2233c41a81459f1e9afe4ba6a514f5f79cf523d0e1b5796a54fdc4.jpg",
     "media": {
       "kind": "product",
       "images": [
         {
-          "url": "https://api.dandelist.knightaiav.com/media/f38d1bc3f0718631bca7a5e8dbd4bec7c4018a04f2bddff9eb9229641138f058.jpg",
-          "width": 1451,
-          "height": 2160,
+          "url": "https://api.dandelist.knightaiav.com/media/a1f9579cdb2233c41a81459f1e9afe4ba6a514f5f79cf523d0e1b5796a54fdc4.jpg",
+          "width": 2048,
+          "height": 2048,
+          "source": "rolex.com",
+          "credit": "Rolex"
+        },
+        {
+          "url": "https://api.dandelist.knightaiav.com/media/87ceeaae263820252710dd6319a0559469d9182890c574a4591a34899af6df20.jpg",
+          "width": 1500,
+          "height": 2100,
+          "source": "rolex.com",
+          "credit": "Rolex"
+        },
+        {
+          "url": "https://api.dandelist.knightaiav.com/media/4db154f83567f8d34484ab2f4ed293c27f2c52a80aa4cd7d2b468b65a50a6d92.jpg",
+          "width": 2400,
+          "height": 900,
           "source": "rolex.com",
           "credit": "Rolex"
         }
-      ]
+      ],
+      "cutout": {
+        "url": "https://api.dandelist.knightaiav.com/media/949f5a27e346f92fe179e43181cb3b1f266e2dacdbf8a93919e92bdd7670f3ba.png",
+        "width": 886,
+        "height": 1511,
+        "from": "https://media.rolex.com/image/upload/f_auto/t_v7-cover-majesty-landscape/c_limit,w_1920/v1/a677b2c664f6/catalogue/2026/upright-c/m126610ln-0001",
+        "model": "sam-3.1"
+      }
     }
   },
   {
@@ -184,6 +233,20 @@
           "height": 2048,
           "source": "rimowa.com",
           "credit": "RIMOWA"
+        },
+        {
+          "url": "https://api.dandelist.knightaiav.com/media/9fb7b1662115b156229503e3dc1ce600d524f8a0e5493be4b2b3435ba0265ca6.jpg",
+          "width": 1500,
+          "height": 2100,
+          "source": "rimowa.com",
+          "credit": "RIMOWA"
+        },
+        {
+          "url": "https://api.dandelist.knightaiav.com/media/ede3b945e6671cd89f8d8ec955d5caf0c62e6972a607cadc6fb2fbd72a9c0bd7.jpg",
+          "width": 2400,
+          "height": 900,
+          "source": "rimowa.com",
+          "credit": "RIMOWA"
         }
       ]
     }
@@ -208,6 +271,20 @@
           "url": "https://api.dandelist.knightaiav.com/media/e533ac972f6fcfcb3cc6c8faedf335d1d854486ac9c3494b245d378f880b8394.jpg",
           "width": 2048,
           "height": 2048,
+          "source": "rangerover.com",
+          "credit": "Land Rover"
+        },
+        {
+          "url": "https://api.dandelist.knightaiav.com/media/ced3323f7fe3b7dffa2d0c8c0eff47e788216c4353e2a9a9db6ee7e0819af708.jpg",
+          "width": 1500,
+          "height": 2100,
+          "source": "rangerover.com",
+          "credit": "Land Rover"
+        },
+        {
+          "url": "https://api.dandelist.knightaiav.com/media/9201c9c4f68748af0021b8342f84e862506c1caa9d47bab21f606b66ca567195.jpg",
+          "width": 2400,
+          "height": 900,
           "source": "rangerover.com",
           "credit": "Land Rover"
         }
@@ -270,6 +347,20 @@
           "height": 2048,
           "source": "hermanmiller.com",
           "credit": "Herman Miller"
+        },
+        {
+          "url": "https://api.dandelist.knightaiav.com/media/7a30c58f28ae310e63b3d351c91b16dfdfbde0d38e1ef0579876baf2d17219ad.jpg",
+          "width": 1500,
+          "height": 2100,
+          "source": "hermanmiller.com",
+          "credit": "Herman Miller"
+        },
+        {
+          "url": "https://api.dandelist.knightaiav.com/media/eb4dcaa32540c48e1da264ae75d0739726f97e06885dcd2968670589a50a4a28.jpg",
+          "width": 2400,
+          "height": 900,
+          "source": "hermanmiller.com",
+          "credit": "Herman Miller"
         }
       ],
       "cutout": {
@@ -301,6 +392,22 @@
           "url": "https://api.dandelist.knightaiav.com/media/c7c71c7ee161d032751113d0f87aa080d05c401aded2dc1a94d538cb08c89519.jpg",
           "width": 2048,
           "height": 2048,
+          "source": "commons.wikimedia.org",
+          "credit": "AzureSaturn",
+          "license": "CC0"
+        },
+        {
+          "url": "https://api.dandelist.knightaiav.com/media/6685338729ff0cd3e37a49e13b0855a914311f1ca1f0decb5227a9d2e021f9ed.jpg",
+          "width": 1500,
+          "height": 2100,
+          "source": "commons.wikimedia.org",
+          "credit": "AzureSaturn",
+          "license": "CC0"
+        },
+        {
+          "url": "https://api.dandelist.knightaiav.com/media/d5f72feb46e35c671622ed5b5c0c46dbb359fa650a03153109a3e35d0d4493b7.jpg",
+          "width": 2400,
+          "height": 900,
           "source": "commons.wikimedia.org",
           "credit": "AzureSaturn",
           "license": "CC0"

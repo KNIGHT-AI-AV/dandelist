@@ -42,6 +42,17 @@ export function heroOf(e: Pick<Entry, "media" | "imageUrl">): string | undefined
   return (all.find((i) => !i.generated) ?? all[0])?.url ?? e.imageUrl;
 }
 
+/**
+ * The real photograph whose shape is closest to the frame's (width / height), so a tall card and a wide card each get
+ * a version composed for them instead of a crop that cuts the subject. Ties go to the earlier, better image.
+ */
+export function heroFor(e: Pick<Entry, "media" | "imageUrl">, aspect: number): string | undefined {
+  const real = (e.media?.images ?? []).filter((i) => !i.generated && i.width && i.height);
+  if (!real.length || !(aspect > 0)) return heroOf(e);
+  const off = (i: MediaImage) => Math.abs(Math.log(i.width! / i.height! / aspect));
+  return real.reduce((best, i) => (off(i) < off(best) - 0.05 ? i : best)).url;
+}
+
 export const seeds: Seed[] = [
   { id: "porsche-911", ask: "A new Porsche 911 Carrera (current model year), US base price on porsche.com", name: "Porsche 911 Carrera", kind: "buy", category: "drive" },
   { id: "leica-q3", ask: "Leica Q3 camera, new, US price from Leica's own store", name: "Leica Q3", kind: "buy", category: "capture" },

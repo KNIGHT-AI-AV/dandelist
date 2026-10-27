@@ -1,5 +1,5 @@
 import type { Entry } from "@dandelist/catalogue";
-import { heroOf } from "@dandelist/catalogue";
+import { heroFor, heroOf } from "@dandelist/catalogue";
 import { formatCents } from "@dandelist/cost";
 import { useEffect, useRef, useState } from "react";
 import { Animated, Linking, PanResponder, Platform, Pressable, StyleSheet, Text, TextInput, View, useWindowDimensions } from "react-native";
@@ -75,7 +75,7 @@ export function RevealCard({ picks, upfrontCents, monthlyRunningCents, everythin
               }}
             >
               <View style={{ flex: 1, borderRadius: radius.sm, overflow: "hidden", borderWidth: StyleSheet.hairlineWidth, borderColor: p.hair }}>
-                <GlassReveal uri={heroOf(e) ?? null} standby={require("../../assets/standby/object.jpg")} stage="clear" treatment="film" style={StyleSheet.absoluteFill} />
+                <GlassReveal uri={heroFor(e, 0.75) ?? null} standby={require("../../assets/standby/object.jpg")} stage="clear" treatment="film" style={StyleSheet.absoluteFill} />
               </View>
             </Animated.View>
           );

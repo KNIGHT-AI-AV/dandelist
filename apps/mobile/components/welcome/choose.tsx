@@ -1,6 +1,6 @@
 import type { Entry } from "@dandelist/catalogue";
 import { recurringBreakdown } from "@dandelist/cost";
-import { heroOf, toItem } from "@dandelist/catalogue";
+import { heroFor, toItem } from "@dandelist/catalogue";
 import { useEffect, useRef, useState } from "react";
 import { Animated, PanResponder, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions, type LayoutChangeEvent } from "react-native";
 import { ease, haptic, native, spring, usePress, useReducedMotion } from "../../lib/motion";
@@ -23,7 +23,9 @@ const monthly = (e: Entry) => recurringBreakdown([toItem(e)]).perMonth;
 /** The source line every card carries: where the price was checked, and when; estimates say so. */
 function Source({ e }: { e: Entry }) {
   const p = usePalette();
-  return <Text numberOfLines={1} style={[type.figure, { color: p.ink2 }]}>{`${hostOf(e.url)} · ${e.status === "verified" ? "checked" : "estimate"} ${shortDate(e.checkedAt)}`}</Text>;
+  // A shopping-search link names Google, not the shop, so the seller's name stands in for it.
+  const where = /(^|\.)google\./.test(hostOf(e.url)) ? e.seller : hostOf(e.url);
+  return <Text numberOfLines={1} style={[type.figure, { color: p.ink2 }]}>{`${where} · ${e.status === "verified" ? "checked" : "estimate"} ${shortDate(e.checkedAt)}`}</Text>;
 }
 
 function Price({ e }: { e: Entry }) {
@@ -42,10 +44,12 @@ function PhotoCard({ e, onPress, style, big = false }: { e: Entry; onPress(ref: 
   const p = usePalette();
   const ref = useRef<View>(null);
   const press = usePress(0.985);
+  // The card's own shape picks the photo composed for it (tall first picks, wide vote cards).
+  const [aspect, setAspect] = useState(big ? 0.7 : 2.6);
   return (
     <Pressable ref={ref} accessibilityRole="button" accessibilityLabel={`${e.name}, ${formatCents(e.upfrontCents)}`} onPressIn={press.onPressIn} onPressOut={press.onPressOut} onPress={() => onPress(ref.current)} style={style}>
-      <Animated.View style={{ flex: 1, borderRadius: radius.lg, overflow: "hidden", transform: [{ scale: press.scale }] }}>
-        <GlassReveal uri={heroOf(e) ?? null} standby={standbyFor(e)} stage="clear" treatment="pane" style={StyleSheet.absoluteFill} />
+      <Animated.View onLayout={(ev) => { const { width: w, height: h } = ev.nativeEvent.layout; if (w > 0 && h > 0 && Math.abs(w / h - aspect) > 0.1) setAspect(w / h); }} style={{ flex: 1, borderRadius: radius.lg, overflow: "hidden", transform: [{ scale: press.scale }] }}>
+        <GlassReveal uri={heroFor(e, aspect) ?? null} standby={standbyFor(e)} stage="clear" treatment="pane" style={StyleSheet.absoluteFill} />
         <Shade />
         <View style={{ position: "absolute", left: layout.cardPad, right: layout.cardPad, bottom: layout.cardPad, gap: 8 }}>
           <Text style={[type.title2, { color: p.ink }]} numberOfLines={2}>
