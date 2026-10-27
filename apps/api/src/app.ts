@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { agentRoutes, type AgentDeps } from "./agent/routes";
 import { authRoutes, requireAuth, type AuthVars } from "./auth";
+import { MEDIA_KEY } from "./media-store";
 import { wishRoutes } from "./wishes";
 
 export interface AppDeps extends AgentDeps {
@@ -17,6 +18,22 @@ export function createApp(deps: AppDeps) {
   app.get("/healthz", async (c) => {
     await db.query("select 1");
     return c.json({ ok: true });
+  });
+
+  // Pictures the agent made (SAM cutouts, Muse Image). Public like any image link: names are the sha256 of the bytes.
+  app.get("/media/:key", async (c) => {
+    const key = c.req.param("key");
+    const store = deps.media?.store;
+    if (!store || !MEDIA_KEY.test(key)) return c.json({ error: "Not found." }, 404);
+    const obj = await store.get(key);
+    if (!obj) return c.json({ error: "Not found." }, 404);
+    return c.body(obj.bytes as never, 200, {
+      "Content-Type": obj.type,
+      "Cache-Control": "public, max-age=31536000, immutable",
+      "X-Content-Type-Options": "nosniff",
+      "Content-Security-Policy": "default-src 'none'; sandbox",
+      "Cross-Origin-Resource-Policy": "cross-origin",
+    });
   });
 
   app.route("/auth", authRoutes(deps));

@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { z } from "zod";
+import { mediaSchema } from "./agent/media";
 import { requireAuth, type AuthDeps, type AuthVars } from "./auth";
 
 export const MAX_WISHES_PER_USER = 500;
@@ -23,7 +24,15 @@ const createBody = z.object({
   recurring: recurring.default([]),
   resaleCents: z.number().int().min(0).max(MAX_CENTS).nullable().optional(),
   // What the agent found: chosen price option, sources, explanation. Kept small so a row stays cheap to read.
-  details: z.record(z.unknown()).refine((d) => JSON.stringify(d).length <= 20_000, "Too much detail.").optional(),
+  details: z
+    .record(z.unknown())
+    .refine((d) => JSON.stringify(d).length <= 20_000, "Too much detail.")
+    // Saved media is shown in image views and a 3D player, so only web images and Sketchfab embeds get in.
+    .refine((d) => {
+      const media = (d.agent as { media?: unknown } | undefined)?.media;
+      return media === undefined || mediaSchema.safeParse(media).success;
+    }, "Check the pictures.")
+    .optional(),
 });
 
 const patchBody = createBody.partial().refine((b) => Object.keys(b).length > 0, "Nothing to change.");
