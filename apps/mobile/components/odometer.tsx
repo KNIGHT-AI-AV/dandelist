@@ -1,4 +1,4 @@
-import { createElement, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { AccessibilityInfo, Animated, Easing, Platform, Text, View, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
 import { ease, native, useReducedMotion } from "../lib/motion";
 import { METRICS, REPEATS, REST, cellsOf, emWidth, lineAt, normalize, plan, target, wheelTables, type Cell, type Mode, type Trend, type WheelCmd } from "../lib/odometer-plan";
@@ -12,9 +12,9 @@ import { EdgeMask } from "./odometer-mask";
  *
  * Modes: `ui` (the Life pill, totals: the last of six wheels lands at 795 ms and unchanged digits stay still),
  * `cinema` (the title price and the reveal: every wheel spins, 2/2/1/1 extra turns, landing at 1.2 s) and
- * `instant` (slider drags). While a wheel moves, two ghost copies at ±0.33 of a line and a small vertical stretch
- * read as motion blur, all driven by one native clock per wheel; the web adds a vertical-only blur. Reduced motion
- * swaps the figure with a 100/160 ms crossfade.
+ * `instant` (slider drags). Crisp digits roll through a soft edge fade, all driven by one native clock per wheel,
+ * with a slight vertical stretch at speed and, on the web, a stepped blur. Reduced motion swaps the figure with a
+ * 100/160 ms crossfade.
  */
 
 const COLUMN = Array.from({ length: REPEATS * 10 }, (_, i) => String(i % 10)).join("\n");
@@ -66,6 +66,11 @@ function useLook({ size = 22, family = "mono", color, smallPrefix = false, prefi
   const p = usePalette();
   const H = Math.round(size * 1.18);
   const P = Math.round(size * 0.18);
+  // Reel pitch: digits on the wheel sit further apart than the figure's line, so a passing digit has left the
+  // window before the next arrives. iOS draws a taller line from the bottom, so phones keep the figure's own line.
+  const L = Platform.OS === "web" ? Math.round(size * 1.6) : H;
+  // The edge fade runs past the pad into the empty space above and below the digits, so passing digits dissolve.
+  const F = P + Math.round(size * 0.16);
   const m = METRICS[family];
   const fontFamily = family === "bodoni" ? bodoni(size) : fonts.figure;
   const text: TextStyle = { fontFamily, fontSize: size, lineHeight: H, color: color ?? p.ink, textAlign: "center", includeFontPadding: false, fontVariant: ["tabular-nums", "lining-nums"], ...(glow ? { textShadowColor: glow, textShadowRadius: size * 0.25, textShadowOffset: { width: 0, height: 0 } } : null) };
@@ -76,7 +81,7 @@ function useLook({ size = 22, family = "mono", color, smallPrefix = false, prefi
   // The half-size `$` sits with its top on the digits' top (fontTools: digits reach 0.76 em, `$` 0.83 em).
   const mid = (m.ascent - m.descent) / 2;
   const prefixLift = smallPrefix ? size * (mid - 0.76) - size * 0.5 * (mid - 0.83) : 0;
-  return { p, H, P, text, widthOf, prefixLift, size, smallPrefix, prefixColor: prefixColor ?? p.ink2 };
+  return { p, H, P, L, F, text, widthOf, prefixLift, size, smallPrefix, prefixColor: prefixColor ?? p.ink2 };
 }
 
 type Look = ReturnType<typeof useLook>;
@@ -85,7 +90,7 @@ type Shown = Cell & { exiting?: boolean };
 function Rolling(props: OdometerProps) {
   const { cents, format = dollars, mode = "ui", align = "left", rollOnMount = false, onLand, pulse = false, announce, live = false, style } = props;
   const look = useLook(props);
-  const { p, H, P, widthOf } = look;
+  const { p, H, P, F, widthOf } = look;
   const figure = format(cents);
 
   const [cells, setCells] = useState<Shown[]>(() => cellsOf(figure));
@@ -217,7 +222,7 @@ function Rolling(props: OdometerProps) {
       accessibilityLiveRegion={live ? "polite" : "none"}
     >
       <View style={{ marginTop: -P }} pointerEvents="none" {...HIDDEN}>
-        <EdgeMask pad={P}>
+        <EdgeMask pad={F}>
           <Animated.View style={{ width, height: H + 2 * P }}>
             {placed.map(({ c, w, at }) => {
               const pos: ViewStyle = at === null ? { left: 0 } : { right: at };
@@ -254,19 +259,22 @@ function Glyph({ look, cell, color }: { look: Look; cell: Cell; color: string | 
 
 type Roll = { progress: Animated.Value; tables: ReturnType<typeof wheelTables>; to: number; ty: Animated.AnimatedInterpolation<number> | Animated.Value; speed: Animated.AnimatedInterpolation<number> | Animated.Value; moving: boolean };
 
-const restRoll = (line: number, H: number, P: number): Roll => ({
+/** Where the column sits for a (fractional) line: that line's digit centred in the visible box. */
+const yOf = (look: Pick<Look, "H" | "P" | "L">, line: number) => look.P + (look.H - look.L) / 2 - line * look.L;
+
+const restRoll = (line: number, look: Pick<Look, "H" | "P" | "L">): Roll => ({
   progress: new Animated.Value(0),
   tables: { input: [0, 1], line: [line, line], speed: [0, 0], total: 1 },
   to: line,
-  ty: new Animated.Value(P - line * H),
+  ty: new Animated.Value(yOf(look, line)),
   speed: new Animated.Value(0),
   moving: false,
 });
 
 /** One digit wheel: a column of 0–9 repeated, moved by a single native clock (§2.4). */
 function Wheel({ look, width, start, id, cmd, color }: { look: Look; width: number; start: number; id: number; cmd?: WheelCmd | "instant"; color: string | Animated.AnimatedInterpolation<string> }) {
-  const { H, P, text } = look;
-  const [roll, setRoll] = useState<Roll>(() => restRoll(REST + start, H, P));
+  const { H, P, L, text } = look;
+  const [roll, setRoll] = useState<Roll>(() => restRoll(REST + start, look));
   const live = useRef({ roll, startedAt: 0, running: false });
   live.current.roll = roll;
 
@@ -274,9 +282,9 @@ function Wheel({ look, width, start, id, cmd, color }: { look: Look; width: numb
     if (!cmd || !id) return;
     const cur = live.current;
     const begin = (from: number, interrupted: boolean, remaining: number) => {
-      if (cmd === "instant") return setRoll(restRoll(REST + start, H, P));
+      if (cmd === "instant") return setRoll(restRoll(REST + start, look));
       const to = target(from, cmd.digit, cmd.trend, cmd.turns);
-      if (Math.abs(to - from) < 1e-6) return setRoll(restRoll(normalize(from), H, P));
+      if (Math.abs(to - from) < 1e-6) return setRoll(restRoll(normalize(from), look));
       const delay = interrupted ? 0 : cmd.delay;
       const duration = interrupted ? Math.max(320, remaining) : cmd.duration;
       const tables = wheelTables(from, to, delay, duration, cmd.detent);
@@ -285,7 +293,7 @@ function Wheel({ look, width, start, id, cmd, color }: { look: Look; width: numb
         progress,
         tables,
         to,
-        ty: progress.interpolate({ inputRange: tables.input, outputRange: tables.line.map((l) => P - l * H) }),
+        ty: progress.interpolate({ inputRange: tables.input, outputRange: tables.line.map((l) => yOf(look, l)) }),
         speed: progress.interpolate({ inputRange: tables.input, outputRange: tables.speed }),
         moving: true,
       });
@@ -311,22 +319,33 @@ function Wheel({ look, width, start, id, cmd, color }: { look: Look; width: numb
     Animated.timing(roll.progress, { toValue: 1, duration: roll.tables.total, easing: Easing.linear, useNativeDriver: native }).start(({ finished }) => {
       if (!finished || live.current.roll !== roll) return;
       cur.running = false;
-      setRoll(restRoll(normalize(roll.to), H, P));
+      setRoll(restRoll(normalize(roll.to), look));
     });
-  }, [roll, H, P]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roll, H, P, L]);
 
-  // The web gets a true vertical-only blur that follows the wheel's speed (an SVG filter per wheel).
-  const filterId = useMemo(() => `odo${Math.random().toString(36).slice(2, 9)}`, []);
-  const blur = useRef<{ setAttribute(n: string, v: string): void } | null>(null);
+  // Web motion blur in three steps (none, light, full) as the wheel speeds up: a blur radius that changed every
+  // frame would make the browser redraw the whole column each frame, which stutters on a phone.
+  const textRef = useRef<Text | null>(null);
+  // On the web the Text is a DOM node, so its style can be set directly between React renders.
+  const dom = () => (textRef.current as unknown as { style?: { filter: string } } | null)?.style;
   useEffect(() => {
     if (Platform.OS !== "web" || !roll.moving) return;
+    let level = -1;
     const s = roll.speed as Animated.AnimatedInterpolation<number>;
-    const sub = s.addListener(({ value }) => blur.current?.setAttribute("stdDeviation", `0 ${(1.6 * value).toFixed(2)}`));
+    const id = s.addListener(({ value }) => {
+      const next = value > 0.6 ? 2 : value > 0.3 ? 1 : 0;
+      const style = dom();
+      if (next === level || !style) return;
+      level = next;
+      style.filter = next ? `blur(${(next * 0.025 * H).toFixed(1)}px)` : "";
+    });
     return () => {
-      s.removeListener(sub);
-      blur.current?.setAttribute("stdDeviation", "0 0");
+      s.removeListener(id);
+      const style = dom();
+      if (style) style.filter = "";
     };
-  }, [roll]);
+  }, [roll, H]);
 
   const column = (offset: number, alpha: number) => (
     <Animated.View
@@ -335,25 +354,16 @@ function Wheel({ look, width, start, id, cmd, color }: { look: Look; width: numb
         left: 0,
         width,
         top: 0,
-        opacity: offset === 0 ? roll.speed.interpolate({ inputRange: [0, 1], outputRange: [1, 0.8] }) : roll.speed.interpolate({ inputRange: [0, 1], outputRange: [0, alpha] }),
-        transform: [{ translateY: offset === 0 ? roll.ty : Animated.add(roll.ty, offset * H) }],
+        opacity: offset === 0 ? roll.speed.interpolate({ inputRange: [0, 1], outputRange: [1, 0.88] }) : roll.speed.interpolate({ inputRange: [0, 1], outputRange: [0, alpha] }),
+        transform: [{ translateY: offset === 0 ? roll.ty : Animated.add(roll.ty, offset * L) }],
       }}
     >
-      <Animated.Text style={[text, { color, width }, offset === 0 && roll.moving && Platform.OS === "web" ? ({ filter: `url(#${filterId})` } as object) : null]}>{COLUMN}</Animated.Text>
+      <Animated.Text ref={offset === 0 ? textRef : undefined} style={[text, { color, width, lineHeight: L }]}>{COLUMN}</Animated.Text>
     </Animated.View>
   );
 
   return (
-    <Animated.View style={{ width, height: H + 2 * P, overflow: "hidden", transform: [{ scaleY: roll.speed.interpolate({ inputRange: [0, 1], outputRange: [1, 1.06] }) }] }}>
-      {Platform.OS === "web"
-        ? createElement(
-            "svg",
-            { width: 0, height: 0, style: { position: "absolute" }, "aria-hidden": true },
-            createElement("filter", { id: filterId, x: "0", y: "-10%", width: "100%", height: "120%" }, createElement("feGaussianBlur", { ref: blur, stdDeviation: "0 0" })),
-          )
-        : null}
-      {roll.moving ? column(-0.33, 0.3) : null}
-      {roll.moving ? column(0.33, 0.3) : null}
+    <Animated.View style={{ width, height: H + 2 * P, overflow: "hidden", transform: [{ scaleY: roll.speed.interpolate({ inputRange: [0, 1], outputRange: [1, 1.03] }) }] }}>
       {column(0, 1)}
     </Animated.View>
   );

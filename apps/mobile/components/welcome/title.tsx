@@ -90,7 +90,7 @@ export function TitleSequence({ hero, short, onDone }: { hero: Entry; short: boo
       <Animated.View style={[frame, { opacity: photo, transform: [{ scale: push }] }]}>
         {/* Studio-white heroes are dimmed so the page stays dark (filter works on iOS, Android and the web). */}
         <View style={[StyleSheet.absoluteFill, { filter: "brightness(0.72)" } as object]}>
-          <GlassReveal uri={hero.imageUrl ?? null} standby={require("../../assets/standby/drive.jpg")} stage={stage} treatment="swirl" focus={focus} style={StyleSheet.absoluteFill} />
+          <GlassReveal uri={hero.imageUrl ?? null} standby={require("../../assets/standby/drive.jpg")} stage={stage} treatment="film" focus={focus} style={StyleSheet.absoluteFill} />
         </View>
         <Shade look="title" />
       </Animated.View>
