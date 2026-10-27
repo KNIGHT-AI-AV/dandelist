@@ -12,6 +12,8 @@ export interface WelcomeState {
   monthlyCents: number;
   /** A pick the agent suggested buying last, if they took the suggestion. */
   last?: string;
+  /** Set when they pressed "Keep this life"; only then do the picks become wishes after sign-in. */
+  kept?: boolean;
 }
 
 const KEY = "dandelist.welcome";

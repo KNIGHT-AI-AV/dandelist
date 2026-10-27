@@ -1,12 +1,13 @@
 import { recurringBreakdown, upfrontCashCents } from "@dandelist/cost";
 import { Redirect, router } from "expo-router";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AgentDot, Backdrop, Eyebrow, Figure, Glass, Grain, Photo, PrimaryButton, QuietButton, Shade } from "../../components/lux";
 import { useAuth } from "../../lib/auth";
 import { formatCents } from "../../lib/money";
 import { fonts, radius, space, usePalette } from "../../lib/theme";
+import { loadWelcome, saveWelcome, toWishes } from "../../lib/welcome";
 import { useWishes, type Wish } from "../../lib/wishes";
 import { KIND_LABEL, TIER_LABEL, agentLine, hostOf, whenChecked } from "../../lib/words";
 
@@ -45,9 +46,28 @@ function WishCard({ w, tall }: { w: Wish; tall: boolean }) {
   );
 }
 
+/**
+ * After any sign-in (code, Apple, Google, GitHub), the life someone kept on the welcome screen becomes their first
+ * wishes. It runs once: the saved picks are cleared before the wishes are added, so a reload can't add them twice.
+ */
+function useAdoptWelcome(ready: boolean, add: ReturnType<typeof useWishes>["add"]) {
+  const started = useRef(false);
+  useEffect(() => {
+    if (!ready || started.current) return;
+    started.current = true;
+    void (async () => {
+      const kept = await loadWelcome();
+      if (!kept?.kept || !kept.picks.length) return;
+      await saveWelcome(null);
+      for (const w of toWishes(kept)) await add(w).catch(() => null);
+    })();
+  }, [ready, add]);
+}
+
 export default function LifeList() {
   const auth = useAuth();
-  const { wishes, status, error, reload } = useWishes();
+  const { wishes, status, error, reload, add } = useWishes();
+  useAdoptWelcome(auth.status === "signedIn" && status === "ready", add);
   const p = usePalette();
   const insets = useSafeAreaInsets();
   const [menu, setMenu] = useState(false);

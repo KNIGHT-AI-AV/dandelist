@@ -12,8 +12,36 @@ import { TitleSequence } from "../components/welcome/title";
 import { useAuth } from "../lib/auth";
 import { ease, native, useReducedMotion } from "../lib/motion";
 import { fonts, radius, usePalette } from "../lib/theme";
-import { loadWelcome, markTitleSeen, picked, saveWelcome, seenTitle, toWishes, type WelcomeState } from "../lib/welcome";
-import { useWishes } from "../lib/wishes";
+import { SignInOptions } from "../components/sign-in-options";
+import { useSignInOptions, type ProviderId, type SignInOption } from "../lib/auth";
+import { loadWelcome, markTitleSeen, picked, saveWelcome, seenTitle, type WelcomeState } from "../lib/welcome";
+
+/** Apple, Google and GitHub in the save sheet; the kept picks are already on this device for after the redirect. */
+function WelcomeSocial() {
+  const auth = useAuth();
+  const options = useSignInOptions();
+  const [pending, setPending] = useState<ProviderId | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  if (!options?.length) return null;
+  const choose = async (o: SignInOption) => {
+    setPending(o.id);
+    setError(null);
+    try {
+      if (o.native) await auth.signInWithApple();
+      else await auth.signInWith(o.id);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Something went wrong. Try again.");
+    } finally {
+      setPending(null);
+    }
+  };
+  return (
+    <View style={{ gap: 10 }}>
+      <SignInOptions options={options} pending={pending} disabled={!!pending} onChoose={choose} />
+      {error ? <Text style={{ fontFamily: fonts.body, fontSize: 13, color: "#F0A595" }}>{error}</Text> : null}
+    </View>
+  );
+}
 
 type Step = { kind: "title" } | { kind: "first" } | { kind: "vote"; round: number } | { kind: "horizon" } | { kind: "aside" } | { kind: "agent" } | { kind: "reveal" };
 
@@ -31,7 +59,6 @@ export default function Welcome() {
   const insets = useSafeAreaInsets();
   const reduced = useReducedMotion();
   const auth = useAuth();
-  const { add } = useWishes();
   const [step, setStep] = useState<Step | null>(null);
   const [short, setShort] = useState(false);
   const [state, setState] = useState<WelcomeState>({ picks: [], horizonYears: null, monthlyCents: 100_000 });
@@ -41,7 +68,6 @@ export default function Welcome() {
   const [flight, setFlight] = useState<{ text: string; from: { x: number; y: number }; to: { x: number; y: number } } | null>(null);
   const fly = useRef(new Animated.Value(0)).current;
   const pill = useRef<View | null>(null);
-  const adopting = useRef(false);
 
   useEffect(() => {
     void (async () => {
@@ -52,20 +78,10 @@ export default function Welcome() {
     })();
   }, []);
 
-  // Once the code is accepted, the life built here becomes the account's life list.
+  // Signed in by any route (code, Apple, Google, GitHub): the life list adopts the kept picks (see useAdoptWelcome).
   useEffect(() => {
-    if (auth.status !== "signedIn" || adopting.current) return;
-    if (!sheet || !state.picks.length) {
-      if (!sheet) router.replace("/wishes");
-      return;
-    }
-    adopting.current = true;
-    void (async () => {
-      for (const w of toWishes(state)) await add(w).catch(() => null);
-      await saveWelcome(null);
-      router.replace("/wishes");
-    })();
-  }, [auth.status, sheet, state, add]);
+    if (auth.status === "signedIn") router.replace("/wishes");
+  }, [auth.status]);
 
   const update = (next: WelcomeState) => {
     setState(next);
@@ -149,7 +165,7 @@ export default function Welcome() {
           upfrontCents={result.upfrontCents}
           monthlyRunningCents={result.monthlyRunningCents}
           everythingBy={result.everythingBy}
-          onKeep={() => setSheet(true)}
+          onKeep={() => { update({ ...state, kept: true }); setSheet(true); }}
           onChange={() => { update({ ...state, picks: [] }); setAnswered(0); setResult(null); setStep({ kind: "first" }); }}
         />
       ) : null;
@@ -196,7 +212,7 @@ export default function Welcome() {
         </Animated.Text>
       ) : null}
 
-      {sheet ? <CodeSheet startEmail={auth.startEmail} verifyEmail={auth.verifyEmail} onClose={() => setSheet(false)} /> : null}
+      {sheet ? <CodeSheet startEmail={auth.startEmail} verifyEmail={auth.verifyEmail} onClose={() => setSheet(false)} extra={<WelcomeSocial />} /> : null}
       <Grain />
     </View>
   );
