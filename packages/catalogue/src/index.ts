@@ -32,7 +32,7 @@ export interface Entry extends Seed {
     kind: "product" | "vehicle" | "place" | "experience" | "other";
     images: MediaImage[];
     model3d?: { provider: "sketchfab"; uid: string; name: string; author: string; license: string; embedUrl: string; thumbnail: string };
-    cutout?: { url: string; width?: number; height?: number; from: string; model: string };
+    cutout?: { url: string; width: number; height: number; from: string; model: "sam-3.1" };
   };
 }
 

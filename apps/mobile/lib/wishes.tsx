@@ -1,3 +1,4 @@
+import type { Media } from "./agent";
 import type { Item, Period } from "@dandelist/cost";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useAuth } from "./auth";
@@ -24,6 +25,8 @@ export interface WishDetails {
     status: "verified" | "estimate";
     checkedAt: string;
     imageUrl?: string;
+    /** The photos, cutout and 3D model the agent found for it (real photos first). */
+    media?: Media;
     explanation: string;
     source: { currency: string; price: number; rate: number; rateDate: string };
   };

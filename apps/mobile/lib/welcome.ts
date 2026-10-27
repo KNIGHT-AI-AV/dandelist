@@ -51,6 +51,7 @@ export function toWishes(s: WelcomeState): NewWish[] {
         status: e.status,
         checkedAt: e.checkedAt,
         ...(heroOf(e) ? { imageUrl: heroOf(e) } : {}),
+        ...(e.media ? { media: e.media } : {}),
         explanation: "",
         source: { currency: "USD", price: e.upfrontCents / 100, rate: 1, rateDate: e.checkedAt.slice(0, 10) },
       },

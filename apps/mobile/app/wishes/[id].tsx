@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { Animated, Linking, PanResponder, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AgentDot, Breathing, ErrorLine, Eyebrow, Grain, IconButton, Photo, Protect, QuietButton, Shade } from "../../components/lux";
+import { MediaHero } from "../../components/media";
 import { Statement, Take } from "../../components/statement";
 import { useAuth } from "../../lib/auth";
 import { FLICK, ease, native, spring, useReducedMotion } from "../../lib/motion";
@@ -113,7 +114,7 @@ export default function WishDetail() {
               transform: [{ translateY: Animated.multiply(pull, 0.6) }, { scale: pulled }],
             }}
           >
-            <Photo uri={a?.imageUrl} />
+            <MediaHero media={a?.media} fallbackUri={a?.imageUrl} kind={w.kind} style={StyleSheet.absoluteFill} />
             <Shade from={0.2} />
           </Animated.View>
         </View>

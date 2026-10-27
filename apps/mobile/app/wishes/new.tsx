@@ -143,6 +143,7 @@ export default function NewWish() {
             status: option.status,
             checkedAt: option.checkedAt,
             imageUrl: option.imageUrl ?? run.result.options.find((o) => o.imageUrl)?.imageUrl,
+            ...(option.media ? { media: option.media } : {}),
             explanation: run.result.explanation,
             source: option.source,
           },
