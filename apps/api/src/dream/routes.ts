@@ -36,7 +36,7 @@ const actionSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("region"), home: homeSchema }),
   z.object({ type: z.literal("pick"), widgetId: z.string().max(40), listingId: z.string().max(40).optional() }),
 ]);
-const turnBody = z.object({ sessionId: z.string().uuid().optional(), action: actionSchema });
+const turnBody = z.object({ sessionId: z.string().uuid().nullish(), action: actionSchema });
 
 type SessionRow = { id: string; transcript: unknown; state: unknown };
 const parse = (v: unknown) => (typeof v === "string" ? JSON.parse(v) : v);

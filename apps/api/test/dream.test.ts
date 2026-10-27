@@ -271,7 +271,8 @@ async function signIn(email: string) {
 
 type Ev = Record<string, any>;
 async function turn(token: string, action: unknown, sessionId?: string): Promise<{ status: number; events: Ev[]; sessionId: string }> {
-  const res = await call("POST", "/dream/turn", token, { ...(sessionId ? { sessionId } : {}), action });
+  // The app sends null on a first turn, so the tests do too.
+  const res = await call("POST", "/dream/turn", token, { sessionId: sessionId ?? null, action });
   if (res.status !== 200) return { status: res.status, events: [], sessionId: "" };
   const events = (await res.text())
     .split("\n")
