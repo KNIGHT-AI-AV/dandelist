@@ -11,12 +11,12 @@
     "seller": "Porsche",
     "url": "https://www.porsche.com/usa/models/911/carrera-models/911-carrera/",
     "checkedAt": "2026-10-27T21:52:48.709Z",
-    "imageUrl": "https://api.dandelist.knightaiav.com/media/2ac2aa1a62bb6fab970b37c6ca6d752222de2d0870b665777e4b8f5a9a5a5a10.jpg",
+    "imageUrl": "https://api.dandelist.knightaiav.com/media/cab4c29147c12bd010fe7faeec92af0f0b4a59e2fb2b82fbb2f8c7c574c063e3.jpg",
     "media": {
       "kind": "vehicle",
       "images": [
         {
-          "url": "https://api.dandelist.knightaiav.com/media/2ac2aa1a62bb6fab970b37c6ca6d752222de2d0870b665777e4b8f5a9a5a5a10.jpg",
+          "url": "https://api.dandelist.knightaiav.com/media/cab4c29147c12bd010fe7faeec92af0f0b4a59e2fb2b82fbb2f8c7c574c063e3.jpg",
           "width": 2048,
           "height": 2048,
           "source": "porsche.com",
@@ -37,12 +37,12 @@
     "seller": "Leica Camera USA",
     "url": "https://leicacamerausa.com/leica-q3-black.html",
     "checkedAt": "2026-10-27T13:55:50.823Z",
-    "imageUrl": "https://api.dandelist.knightaiav.com/media/e135d1bab9b4ca0ed59b1c737ad435c56a7e779e7ae2fe33998534f0cb12fef1.jpg",
+    "imageUrl": "https://api.dandelist.knightaiav.com/media/2f85fc0386c2c9a17f898a0a8b53453aea8d0eb8bd7f91df0f2e574708ee4362.jpg",
     "media": {
       "kind": "product",
       "images": [
         {
-          "url": "https://api.dandelist.knightaiav.com/media/e135d1bab9b4ca0ed59b1c737ad435c56a7e779e7ae2fe33998534f0cb12fef1.jpg",
+          "url": "https://api.dandelist.knightaiav.com/media/2f85fc0386c2c9a17f898a0a8b53453aea8d0eb8bd7f91df0f2e574708ee4362.jpg",
           "width": 2048,
           "height": 2048,
           "source": "leica-camera.com",
@@ -57,12 +57,12 @@
     "name": "A month in Lisbon",
     "kind": "visit",
     "category": "travel",
-    "upfrontCents": 167820,
+    "upfrontCents": 214689,
     "recurring": [],
     "status": "estimate",
-    "seller": "Flatio",
-    "url": "https://www.flatio.com/",
-    "checkedAt": "2026-10-27T13:56:54.119Z",
+    "seller": "Priceline + Flatio",
+    "url": "https://www.flatio.com/rent/apartment/100785-lisbon",
+    "checkedAt": "2026-10-27T22:19:52.909Z",
     "imageUrl": "https://api.dandelist.knightaiav.com/media/2ff3a1bd237af71f4bd952d794b4d6ae842120b744472097f98aa5bad61f8ad6.jpg",
     "media": {
       "kind": "place",
@@ -136,7 +136,7 @@
     "name": "Peloton Bike+",
     "kind": "buy",
     "category": "move",
-    "upfrontCents": 139500,
+    "upfrontCents": 269500,
     "recurring": [
       {
         "label": "All-Access Membership",
@@ -146,8 +146,8 @@
     ],
     "status": "verified",
     "seller": "onepeloton.com",
-    "url": "https://www.onepeloton.com/shop/bike-plus",
-    "checkedAt": "2026-10-27T13:56:54.318Z",
+    "url": "https://www.onepeloton.com/bike-plus",
+    "checkedAt": "2026-10-27T22:18:57.980Z",
     "imageUrl": "https://api.dandelist.knightaiav.com/media/87f3add9014cc6466396ce2cc7c263c494bc3d4306565009426086f140672795.jpg",
     "media": {
       "kind": "product",
@@ -168,25 +168,25 @@
     "name": "Rimowa Original Cabin",
     "kind": "buy",
     "category": "travel",
-    "upfrontCents": 143000,
+    "upfrontCents": 155000,
     "recurring": [],
     "status": "estimate",
-    "seller": "rimowa.com",
-    "url": "https://www.rimowa.com/us/en/luggage/colour/silver/cabin/92553004.html",
-    "checkedAt": "2026-10-27T13:58:02.241Z",
+    "seller": "rimowa.com/us/en",
+    "url": "https://www.google.com/search?ibp=oshop&q=Rimowa+Original+Cabin+aluminium&prds=localAnnotatedOfferId:1,catalogid:12019736635646603971,gpcid:8735516789527914786,pvo:2,pvt:hg&gl=us&udm=28&pvorigin=2",
+    "checkedAt": "2026-10-27T22:21:20.966Z",
+    "imageUrl": "https://api.dandelist.knightaiav.com/media/c4ebf3adc52b847de3fcd083af2fdcd574dcc8a432c13e551d9685afe4da8a87.jpg",
     "media": {
       "kind": "product",
       "images": [
         {
-          "url": "https://api.dandelist.knightaiav.com/media/ce2b91a4f6894d9baf9710b0c116fd1e24da8fb4c679c498bc484614ca490e76.jpg",
+          "url": "https://api.dandelist.knightaiav.com/media/c4ebf3adc52b847de3fcd083af2fdcd574dcc8a432c13e551d9685afe4da8a87.jpg",
           "width": 2048,
           "height": 2048,
           "source": "rimowa.com",
           "credit": "RIMOWA"
         }
       ]
-    },
-    "imageUrl": "https://api.dandelist.knightaiav.com/media/ce2b91a4f6894d9baf9710b0c116fd1e24da8fb4c679c498bc484614ca490e76.jpg"
+    }
   },
   {
     "id": "range-rover-sport",
@@ -200,12 +200,12 @@
     "seller": "Land Rover USA",
     "url": "https://www.rangerover.com/en-us/index.html?dclid=CM3RzMum5IgDFbEHaAgdj8gARA",
     "checkedAt": "2026-10-27T13:56:36.320Z",
-    "imageUrl": "https://api.dandelist.knightaiav.com/media/f831e9dbb86ef056c6aee654f67b7b461d3c859ff1a85f49312e547c02ded061.jpg",
+    "imageUrl": "https://api.dandelist.knightaiav.com/media/e533ac972f6fcfcb3cc6c8faedf335d1d854486ac9c3494b245d378f880b8394.jpg",
     "media": {
       "kind": "vehicle",
       "images": [
         {
-          "url": "https://api.dandelist.knightaiav.com/media/f831e9dbb86ef056c6aee654f67b7b461d3c859ff1a85f49312e547c02ded061.jpg",
+          "url": "https://api.dandelist.knightaiav.com/media/e533ac972f6fcfcb3cc6c8faedf335d1d854486ac9c3494b245d378f880b8394.jpg",
           "width": 2048,
           "height": 2048,
           "source": "rangerover.com",
@@ -227,12 +227,13 @@
     "name": "A week in Positano",
     "kind": "visit",
     "category": "travel",
-    "upfrontCents": 30500,
+    "upfrontCents": 378200,
     "recurring": [],
-    "status": "verified",
-    "seller": "Hotel Poseidon",
-    "url": "https://www.positanohotelspage.com/en/",
-    "checkedAt": "2026-10-27T13:57:44.124Z",
+    "status": "estimate",
+    "seller": "Lufthansa, Hotel Marincanto",
+    "url": "https://www.tripexpert.com/",
+    "checkedAt": "2026-10-27T22:22:03.736Z",
+    "imageUrl": "https://api.dandelist.knightaiav.com/media/9bc14f198e35e95cf5c06ebdec0903b75dbb17aebdcf3b936cd7a0d0615edecf.jpg",
     "media": {
       "kind": "place",
       "images": [
@@ -245,8 +246,7 @@
           "license": "CC BY 4.0"
         }
       ]
-    },
-    "imageUrl": "https://api.dandelist.knightaiav.com/media/9bc14f198e35e95cf5c06ebdec0903b75dbb17aebdcf3b936cd7a0d0615edecf.jpg"
+    }
   },
   {
     "id": "eames-lounge",
@@ -254,18 +254,18 @@
     "name": "Eames Lounge Chair",
     "kind": "buy",
     "category": "live",
-    "upfrontCents": 639500,
+    "upfrontCents": 803600,
     "recurring": [],
-    "status": "verified",
+    "status": "estimate",
     "seller": "Herman Miller",
-    "url": "https://www.veganfoodandliving.com/news/eames-lounge-chair-vegan-bamboo-upholstery/",
-    "checkedAt": "2026-10-27T14:02:16.093Z",
-    "imageUrl": "https://api.dandelist.knightaiav.com/media/4583445617fa8ded6f0c9972e36f94ceb792134195b55fbef087c6445e310570.jpg",
+    "url": "https://www.google.com/search?ibp=oshop&q=Herman+Miller+Eames+Lounge+Chair+and+Ottoman&prds=localAnnotatedOfferId:1,catalogid:8830621110811062881,gpcid:9541738175038401560,pvo:2,pvt:hg&gl=us&udm=28&pvorigin=2",
+    "checkedAt": "2026-10-27T22:23:32.651Z",
+    "imageUrl": "https://api.dandelist.knightaiav.com/media/b7de33ff12f9cb86788e49541e8af7a252112afd03e989b9c2c98e875ba0a165.jpg",
     "media": {
       "kind": "product",
       "images": [
         {
-          "url": "https://api.dandelist.knightaiav.com/media/4583445617fa8ded6f0c9972e36f94ceb792134195b55fbef087c6445e310570.jpg",
+          "url": "https://api.dandelist.knightaiav.com/media/b7de33ff12f9cb86788e49541e8af7a252112afd03e989b9c2c98e875ba0a165.jpg",
           "width": 2048,
           "height": 2048,
           "source": "hermanmiller.com",
@@ -293,12 +293,12 @@
     "seller": "apple.com",
     "url": "https://www.apple.com/shop/buy-vision/apple-vision-pro",
     "checkedAt": "2026-10-27T14:01:59.157Z",
-    "imageUrl": "https://api.dandelist.knightaiav.com/media/434c5de4a33f9bb35b970d280e33d80b79a5ee46c4fff83e8e3addb287d1d35d.jpg",
+    "imageUrl": "https://api.dandelist.knightaiav.com/media/c7c71c7ee161d032751113d0f87aa080d05c401aded2dc1a94d538cb08c89519.jpg",
     "media": {
       "kind": "product",
       "images": [
         {
-          "url": "https://api.dandelist.knightaiav.com/media/434c5de4a33f9bb35b970d280e33d80b79a5ee46c4fff83e8e3addb287d1d35d.jpg",
+          "url": "https://api.dandelist.knightaiav.com/media/c7c71c7ee161d032751113d0f87aa080d05c401aded2dc1a94d538cb08c89519.jpg",
           "width": 2048,
           "height": 2048,
           "source": "commons.wikimedia.org",

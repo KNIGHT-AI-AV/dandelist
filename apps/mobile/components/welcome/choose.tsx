@@ -59,6 +59,9 @@ function PhotoCard({ e, onPress, style, big = false }: { e: Entry; onPress(ref: 
   );
 }
 
+/** Room the floating Life pill takes at the bottom of the step: its height and the air around it. */
+const PILL_SPACE = 104;
+
 /** Step 2: "Start with one you'd say yes to." Three cards: a snap carousel on phones, three across on wide screens. */
 export function FirstPick({ entries, onPick }: { entries: Entry[]; onPick(e: Entry, from: View | null): void }) {
   const p = usePalette();
@@ -66,16 +69,23 @@ export function FirstPick({ entries, onPick }: { entries: Entry[]; onPick(e: Ent
   const { width } = useWindowDimensions();
   const wide = width >= 760;
   const gutter = layout.gutter(width);
-  const cardW = wide ? Math.min(300, (Math.min(width, 1040) - 64 - 32) / 3) : Math.min(320, width * 0.76);
-  const cardH = cardW * (wide ? 1.4 : 1.42);
+  const ratio = wide ? 1.4 : 1.42;
+  // The cards must end above the floating Life pill, so on a short screen they shrink, keeping their shape.
+  const [room, setRoom] = useState<{ box: number; title: number } | null>(null);
+  const fits = room ? Math.max(220, room.box - room.title - layout.stack.section - PILL_SPACE) : Infinity;
+  const cardH = Math.min((wide ? Math.min(300, (Math.min(width, 1040) - 64 - 32) / 3) : Math.min(320, width * 0.76)) * ratio, fits);
+  const cardW = cardH / ratio;
   const cards = entries.map((e, i) => (
     <Rise key={e.id} delay={60 * i}>
       <PhotoCard e={e} big onPress={(ref) => onPick(e, ref)} style={{ width: cardW, height: cardH }} />
     </Rise>
   ));
   return (
-    <View style={{ flex: 1, justifyContent: "center", gap: layout.stack.section }}>
-      <Rise style={{ paddingHorizontal: gutter, gap: layout.stack.tight, width: "100%", maxWidth: wide ? Math.max(cardW * 3 + 32, 0) + 2 * gutter : undefined, alignSelf: "center" }}>
+    <View style={{ flex: 1, justifyContent: "center", gap: layout.stack.section }} onLayout={(ev) => { const box = ev.nativeEvent.layout.height; setRoom((r) => (r && Math.abs(r.box - box) < 1 ? r : { box, title: r?.title ?? 0 })); }}>
+      <Rise
+        onLayout={(ev) => { const title = ev.nativeEvent.layout.height; setRoom((r) => (r && Math.abs(r.title - title) < 1 ? r : { box: r?.box ?? 0, title })); }}
+        style={{ paddingHorizontal: gutter, gap: layout.stack.tight, width: "100%", maxWidth: wide ? Math.max(cardW * 3 + 32, 0) + 2 * gutter : undefined, alignSelf: "center" }}
+      >
         <Eyebrow>Your first pick</Eyebrow>
         <Text accessibilityRole="header" style={[t.title1, { color: p.ink }]}>
           Start with one you'd say <Text style={{ fontFamily: fonts.displayItalic, color: p.accentText }}>yes</Text> to.

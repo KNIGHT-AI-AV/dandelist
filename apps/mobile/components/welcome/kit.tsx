@@ -1,5 +1,5 @@
 import { useEffect, useRef, type ReactNode } from "react";
-import { Animated, StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
+import { Animated, StyleSheet, View, type StyleProp, type ViewStyle, type LayoutChangeEvent } from "react-native";
 import { ease, haptic, native, spring, useReducedMotion } from "../../lib/motion";
 import { radius, usePalette } from "../../lib/theme";
 import { meterFraction } from "../../lib/welcome";
@@ -64,11 +64,11 @@ function Segment({ on }: { on: boolean }) {
 }
 
 /** Content enters with an 8 px rise and a fade (320 ms, ease.out); `delay` staggers blocks 50 ms apart. */
-export function Rise({ children, delay = 0, style }: { children: ReactNode; delay?: number; style?: StyleProp<ViewStyle> }) {
+export function Rise({ children, delay = 0, style, onLayout }: { children: ReactNode; delay?: number; style?: StyleProp<ViewStyle>; onLayout?: (e: LayoutChangeEvent) => void }) {
   const reduced = useReducedMotion();
   const v = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     Animated.timing(v, { toValue: 1, duration: reduced ? 200 : 320, delay: reduced ? 0 : delay, easing: ease.out, useNativeDriver: native }).start();
   }, [v, delay, reduced]);
-  return <Animated.View style={[{ opacity: v, transform: [{ translateY: v.interpolate({ inputRange: [0, 1], outputRange: [reduced ? 0 : 8, 0] }) }] }, style]}>{children}</Animated.View>;
+  return <Animated.View onLayout={onLayout} style={[{ opacity: v, transform: [{ translateY: v.interpolate({ inputRange: [0, 1], outputRange: [reduced ? 0 : 8, 0] }) }] }, style]}>{children}</Animated.View>;
 }
