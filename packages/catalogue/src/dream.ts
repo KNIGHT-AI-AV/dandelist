@@ -35,6 +35,9 @@ export interface Listing {
   /** Short facts the swipe card shows, e.g. "5 bedrooms", "Sea view", "Pool". */
   facts: string[];
   region?: string;
+  /** "verified" when the price was read from the listing itself (its page or the portal's own data) at `checkedAt`. */
+  status?: "verified" | "estimate";
+  checkedAt?: string;
 }
 
 export type Widget =
@@ -42,18 +45,23 @@ export type Widget =
       kind: "home_builder";
       id: string;
       region: string;
-      styles: { id: string; label: string; imageUrl?: string }[];
+      /** `on` marks styles prefilled from the chat; `credit` is the reference photo's author and licence. */
+      styles: { id: string; label: string; imageUrl?: string; on?: boolean; credit?: string }[];
       features: { id: string; label: string; on: boolean }[];
       bedrooms: number | null;
       budgetCents: number | null;
+      /** Currency of `budgetCents` (the life context's currency). */
+      currency?: string;
     }
   | {
       kind: "car_builder";
       id: string;
       steps: { id: string; title: string; choices: { id: string; label: string; priceCents?: number; imageUrl?: string; detail?: string }[]; selected?: string }[];
+      /** Currency of every `priceCents` above (the life context's currency). */
+      currency?: string;
     }
   | { kind: "deck"; id: string; title: string; round: number; cards: Listing[] }
-  | { kind: "service_quote"; id: string; service: string; region: string; summary: string; lines: KeepLine[]; images: MediaImage[] }
+  | { kind: "service_quote"; id: string; service: string; region: string; summary: string; lines: KeepLine[]; images: MediaImage[]; currency?: string }
   | { kind: "region_picker"; id: string; current: LifeContext["home"] }
   | {
       kind: "wish_ready";
@@ -69,6 +77,8 @@ export type Widget =
         checkedAt?: string;
         status: "verified" | "estimate";
         images: MediaImage[];
+        /** Currency of `upfrontCents` and every keep line (the life context's currency, or the listing's when no rate exists). */
+        currency?: string;
       };
     };
 
@@ -78,6 +88,8 @@ export type DreamAction =
   | { type: "builder"; widgetId: string; values: Record<string, unknown> }
   | { type: "swipe"; widgetId: string; listingId: string; verdict: "yes" | "no" }
   | { type: "search_now"; widgetId: string }
+  /** Make a deck's listing the wish, or without listingId a service quote or car build; answers with wish_ready. */
+  | { type: "pick"; widgetId: string; listingId?: string }
   | { type: "region"; home: NonNullable<LifeContext["home"]> };
 
 export type DreamEvent =
