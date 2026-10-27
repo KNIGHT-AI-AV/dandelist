@@ -1,4 +1,4 @@
-import { createHash, hkdfSync, randomBytes } from "node:crypto";
+import { createHash, hkdfSync, randomBytes, timingSafeEqual } from "node:crypto";
 import { Hono, type Context } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { EncryptJWT, createLocalJWKSet, jwtDecrypt, jwtVerify, type JWTPayload, type JWTVerifyOptions } from "jose";
@@ -12,6 +12,11 @@ import { normalizeEmail } from "./tokens";
  * comes back to /auth/oauth/<provider>/callback; the API finds or creates the user and hands the app a one-time
  * ticket in the redirect, which the app swaps for the usual tokens at /auth/oauth/redeem. Native iOS uses Apple's own
  * sheet instead and posts the identity token to /auth/apple/native.
+ *
+ * Each ticket is bound to the app that asked for it, PKCE-style: the app makes a random verifier per attempt, sends
+ * its SHA-256 (base64url) as `challenge` when it starts, and must show the verifier to redeem. Another app that
+ * catches the dandelist://auth redirect gets a ticket it cannot use. Native Apple sign-in carries a single-use nonce
+ * from /auth/apple/nonce, so a captured identity token can't be replayed.
  */
 
 export type Provider = "apple" | "google" | "github";
@@ -49,6 +54,9 @@ export interface Profile {
 
 const STATE_TTL_S = 10 * 60;
 const TICKET_TTL_MS = 60 * 1000;
+const APPLE_NONCE_TTL_MS = 10 * 60 * 1000;
+/** A base64url SHA-256, as the app sends its challenge. */
+const CHALLENGE = /^[A-Za-z0-9_-]{43}$/;
 const STATE_ISSUER = "dandelist-api";
 const STATE_AUDIENCE = "dandelist-oauth-state";
 const COOKIE = "dl_oauth";
@@ -71,6 +79,8 @@ const stateSchema = z.object({
   r: z.string(),
   n: z.string().min(16),
   v: z.string().min(43),
+  // The app's challenge: SHA-256 of the verifier it must show to redeem the ticket.
+  c: z.string().regex(CHALLENGE),
 });
 type State = z.infer<typeof stateSchema>;
 
@@ -105,15 +115,18 @@ function stateCodec(jwtSecret: string) {
 }
 
 /**
- * Where a ticket may be sent: each web origin's /auth/callback and the app's own scheme. Development also accepts
- * Expo Go (exp://) and any localhost port. Matching is exact, never by prefix.
+ * Where a ticket may be sent: each web origin's /auth/callback and the app's own scheme. In production only https
+ * origins qualify, so an http origin kept in WEB_ORIGINS for CORS (localhost) never receives a ticket. Development
+ * also accepts Expo Go (exp://) and any localhost port. Matching is exact, never by prefix.
  */
 export function redirectAllowed(redirect: string, webOrigins: string[], production: boolean): boolean {
   if (!redirect || redirect.length > 300) return false;
   const exact = new Set([NATIVE_REDIRECT]);
   for (const o of webOrigins) {
     try {
-      exact.add(`${new URL(o).origin}/auth/callback`);
+      const url = new URL(o);
+      if (production && url.protocol !== "https:") continue;
+      exact.add(`${url.origin}/auth/callback`);
     } catch {
       // A malformed origin in WEB_ORIGINS simply allows nothing.
     }
@@ -167,7 +180,18 @@ const nativeBody = z.object({
     .object({ givenName: z.string().max(100).nullish(), familyName: z.string().max(100).nullish() })
     .nullish(),
 });
-const redeemBody = z.object({ ticket: z.string().min(20).max(100) });
+const redeemBody = z.object({
+  ticket: z.string().min(20).max(100),
+  // The secret behind the challenge sent at start: 43 to 128 URL-safe characters, as in PKCE.
+  verifier: z.string().regex(/^[A-Za-z0-9._~-]{43,128}$/),
+});
+
+/** Whether `verifier` hashes to `challenge`, compared in constant time. */
+function verifierMatches(verifier: string, challenge: string): boolean {
+  const a = Buffer.from(pkceChallenge(verifier));
+  const b = Buffer.from(challenge);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
 
 export function oauthRoutes(deps: OAuthRouteDeps, issueSession: (userId: string) => Promise<Session>) {
   const app = new Hono();
@@ -182,6 +206,7 @@ export function oauthRoutes(deps: OAuthRouteDeps, issueSession: (userId: string)
   const callbacksPerIp = new RateLimiter(60, 60 * 60 * 1000);
   const redeemsPerIp = new RateLimiter(60, 60 * 60 * 1000);
   const nativePerIp = new RateLimiter(30, 60 * 60 * 1000);
+  const noncesPerIp = new RateLimiter(60, 60 * 60 * 1000);
   const ip = (c: Context) => clientIp(c.req.header("X-Forwarded-For"));
   const nowS = () => Math.floor(deps.now().getTime() / 1000);
 
@@ -264,10 +289,11 @@ export function oauthRoutes(deps: OAuthRouteDeps, issueSession: (userId: string)
     return res.json();
   }
 
-  async function appleProfile(idToken: string, audience: string, nonce: string | null, name: string | null): Promise<Profile> {
+  /** Verifies an Apple identity token, then lets `nonceOk` decide whether its nonce belongs to a sign-in we started. */
+  async function appleProfile(idToken: string, audience: string, nonceOk: (nonce: unknown) => Promise<boolean>, name: string | null): Promise<Profile> {
     const claims = await appleKeys.verify(idToken, { issuer: APPLE_ISSUER, audience, algorithms: ["RS256"], currentDate: deps.now() });
-    if (nonce !== null && claims.nonce !== nonce) throw new Error("Apple token nonce doesn't match");
     if (!claims.sub) throw new Error("Apple token has no subject");
+    if (!(await nonceOk(claims.nonce))) throw new Error("Apple token nonce doesn't match a sign-in we started");
     return { subject: claims.sub, email: text(claims.email), emailVerified: verified(claims.email_verified), name };
   }
 
@@ -314,7 +340,7 @@ export function oauthRoutes(deps: OAuthRouteDeps, issueSession: (userId: string)
     } catch {
       // Apple sends the name only the first time; a malformed value is the same as none.
     }
-    return appleProfile(params.id_token, appleServicesId!, s.n, name);
+    return appleProfile(params.id_token, appleServicesId!, async (nonce) => nonce === s.n, name);
   }
 
   /**
@@ -337,16 +363,28 @@ export function oauthRoutes(deps: OAuthRouteDeps, issueSession: (userId: string)
     return (await db.query<{ user_id: string }>("select user_id from user_identities where provider = $1 and subject = $2", [p, profile.subject])).rows[0]!.user_id;
   }
 
-  async function issueTicket(userId: string): Promise<string> {
+  async function issueTicket(userId: string, challenge: string): Promise<string> {
     const ticket = randomToken(32);
     const nowMs = deps.now().getTime();
     await db.query("delete from oauth_tickets where expires_at < $1", [new Date(nowMs - 60 * 60 * 1000).toISOString()]);
-    await db.query("insert into oauth_tickets (ticket_hash, user_id, expires_at) values ($1, $2, $3)", [
+    await db.query("insert into oauth_tickets (ticket_hash, user_id, expires_at, client_challenge) values ($1, $2, $3, $4)", [
       sha256hex(ticket),
       userId,
       new Date(nowMs + TICKET_TTL_MS).toISOString(),
+      challenge,
     ]);
     return ticket;
+  }
+
+  /** Uses up a nonce from /auth/apple/nonce. True only the first time, and only within its ten minutes. */
+  async function consumeAppleNonce(nonce: unknown): Promise<boolean> {
+    if (typeof nonce !== "string" || !nonce) return false;
+    const nowIso = deps.now().toISOString();
+    const { rows } = await db.query(
+      "update apple_nonces set consumed_at = $2 where nonce_hash = $1 and consumed_at is null and expires_at > $2 returning id",
+      [sha256hex(nonce), nowIso],
+    );
+    return rows.length > 0;
   }
 
   async function signedIn(userId: string) {
@@ -371,7 +409,9 @@ export function oauthRoutes(deps: OAuthRouteDeps, issueSession: (userId: string)
     if (!PROVIDERS.includes(p) || !webEnabled[p]) return c.json({ error: "That sign-in option isn't available." }, 404);
     const redirect = c.req.query("redirect") ?? "";
     if (!redirectAllowed(redirect, webOrigins, production)) return c.json({ error: "That return address isn't allowed." }, 400);
-    const s: State = { p, r: redirect, n: randomToken(24), v: randomToken(32) };
+    const challenge = c.req.query("challenge") ?? "";
+    if (!CHALLENGE.test(challenge)) return c.json({ error: "That sign-in request is incomplete. Update Dandelist and try again." }, 400);
+    const s: State = { p, r: redirect, n: randomToken(24), v: randomToken(32), c: challenge };
     const sealed = await state.seal(s, nowS());
     setCookie(c, COOKIE, s.n, cookieOpts);
     return c.redirect(authorizeUrl(p, sealed, s), 302);
@@ -401,7 +441,7 @@ export function oauthRoutes(deps: OAuthRouteDeps, issueSession: (userId: string)
 
     try {
       const userId = await accountFor(p, await finish(p, params, s));
-      return back(`ticket=${await issueTicket(userId)}`);
+      return back(`ticket=${await issueTicket(userId, s.c)}`);
     } catch (e) {
       if (e instanceof OAuthFailure) return bounce(e.code);
       console.warn(`${p} sign-in failed: ${e instanceof Error ? e.message : String(e)}`);
@@ -417,12 +457,32 @@ export function oauthRoutes(deps: OAuthRouteDeps, issueSession: (userId: string)
     if (!parsed.success) return c.json({ error: "That sign-in has expired. Try again." }, 400);
     if (!redeemsPerIp.take(ip(c), deps.now().getTime())) return c.json({ error: "Too many sign-in attempts from this network. Try again in an hour." }, 429);
     const nowIso = deps.now().toISOString();
-    const { rows } = await db.query<{ user_id: string }>(
-      "update oauth_tickets set consumed_at = $2 where ticket_hash = $1 and consumed_at is null and expires_at > $2 returning user_id",
+    const expired = () => c.json({ error: "That sign-in has expired. Try again." }, 400);
+    const found = await db.query<{ id: string; client_challenge: string }>(
+      "select id, client_challenge from oauth_tickets where ticket_hash = $1 and consumed_at is null and expires_at > $2",
       [sha256hex(parsed.data.ticket), nowIso],
     );
-    if (!rows[0]) return c.json({ error: "That sign-in has expired. Try again." }, 400);
+    const ticket = found.rows[0];
+    // A ticket redeems only with the verifier of the app that started the sign-in. A wrong one leaves the ticket
+    // unspent, so an app that caught the redirect can't use it up before the real app does.
+    if (!ticket || !verifierMatches(parsed.data.verifier, ticket.client_challenge)) return expired();
+    const { rows } = await db.query<{ user_id: string }>(
+      "update oauth_tickets set consumed_at = $2 where id = $1 and consumed_at is null returning user_id",
+      [ticket.id, nowIso],
+    );
+    if (!rows[0]) return expired();
     return c.json(await signedIn(rows[0].user_id));
+  });
+
+  app.get("/apple/nonce", async (c) => {
+    noStore(c);
+    if (!appleBundleId) return c.json({ error: "Sign in with Apple isn't available." }, 404);
+    const nowMs = deps.now().getTime();
+    if (!noncesPerIp.take(ip(c), nowMs)) return c.json({ error: "Too many sign-in attempts from this network. Try again in an hour." }, 429);
+    const nonce = randomToken(32);
+    await db.query("delete from apple_nonces where expires_at < $1", [new Date(nowMs - 60 * 60 * 1000).toISOString()]);
+    await db.query("insert into apple_nonces (nonce_hash, expires_at) values ($1, $2)", [sha256hex(nonce), new Date(nowMs + APPLE_NONCE_TTL_MS).toISOString()]);
+    return c.json({ nonce });
   });
 
   app.post("/apple/native", async (c) => {
@@ -434,7 +494,9 @@ export function oauthRoutes(deps: OAuthRouteDeps, issueSession: (userId: string)
     const { identityToken, fullName } = parsed.data;
     let profile: Profile;
     try {
-      profile = await appleProfile(identityToken, appleBundleId, null, text([fullName?.givenName, fullName?.familyName].filter(Boolean).join(" ")));
+      // expo-apple-authentication hands the nonce to Apple unchanged and Apple returns it unchanged in the token, so
+      // the claim is the raw nonce from /auth/apple/nonce. It must be one we issued and is used up here.
+      profile = await appleProfile(identityToken, appleBundleId, consumeAppleNonce, text([fullName?.givenName, fullName?.familyName].filter(Boolean).join(" ")));
     } catch (e) {
       console.warn(`native Apple sign-in rejected: ${e instanceof Error ? e.message : String(e)}`);
       return c.json({ error: "Apple couldn't confirm that sign-in. Try again." }, 401);

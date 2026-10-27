@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { PGlite } from "@electric-sql/pglite";
 import { SignJWT, exportJWK, generateKeyPair, type JWTPayload, type KeyLike } from "jose";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
@@ -105,15 +105,22 @@ beforeEach(async () => {
 
 const postJson = (path: string, body: unknown) => app.request(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 
+/** The app's secret for its latest sign-in attempt; only its SHA-256 goes out at start. */
+let appVerifier = "";
+const newVerifier = () => randomBytes(32).toString("hex");
+const startPath = (provider: string, redirect: string, verifier: string) =>
+  `/auth/oauth/${provider}/start?redirect=${encodeURIComponent(redirect)}&challenge=${b64sha(verifier)}`;
+
 /** Begins a sign-in the way the app does and returns what the provider would receive. */
 async function start(provider: string, redirect = WEB) {
-  const res = await app.request(`/auth/oauth/${provider}/start?redirect=${encodeURIComponent(redirect)}`);
+  appVerifier = newVerifier();
+  const res = await app.request(startPath(provider, redirect, appVerifier));
   expect(res.status).toBe(302);
   const to = new URL(res.headers.get("Location")!);
   const cookie = (res.headers.get("Set-Cookie") ?? "").split(";")[0]!;
   expect(cookie).toMatch(/^dl_oauth=./);
   lastChallenge = to.searchParams.get("code_challenge") ?? "";
-  return { to, state: to.searchParams.get("state")!, nonce: to.searchParams.get("nonce"), cookie };
+  return { to, state: to.searchParams.get("state")!, nonce: to.searchParams.get("nonce"), cookie, verifier: appVerifier };
 }
 
 function callback(provider: string, query: Record<string, string>, cookie?: string) {
@@ -137,8 +144,15 @@ async function githubSignIn() {
   return callback("github", { code: "good-code", state: s.state }, s.cookie);
 }
 
-async function redeem(ticket: string) {
-  return postJson("/auth/oauth/redeem", { ticket });
+async function redeem(ticket: string, verifier = appVerifier) {
+  return postJson("/auth/oauth/redeem", { ticket, verifier });
+}
+
+/** A nonce from the API, as the iPhone app fetches it before opening Apple's sheet. */
+async function appleNonce() {
+  const res = await app.request("/auth/apple/nonce");
+  expect(res.status).toBe(200);
+  return ((await res.json()) as { nonce: string }).nonce;
 }
 
 async function emailSignIn(email: string) {
@@ -153,6 +167,7 @@ describe("provider list", () => {
     expect(await (await app.request("/auth/providers")).json()).toEqual({ providers: [] });
     expect((await app.request(`/auth/oauth/google/start?redirect=${encodeURIComponent(WEB)}`)).status).toBe(404);
     expect((await postJson("/auth/apple/native", { identityToken: "x".repeat(40) })).status).toBe(404);
+    expect((await app.request("/auth/apple/nonce")).status).toBe(404);
   });
 
   it("shows each configured provider and where it works", async () => {
@@ -258,6 +273,9 @@ describe("state", () => {
 describe("redirect allowlist", () => {
   it("accepts each web origin's callback and the app scheme, exactly", () => {
     for (const ok of [WEB, "https://dandelist.knightaiav.com/auth/callback", "dandelist://auth"]) {
+      expect(redirectAllowed(ok, WEB_ORIGINS, false)).toBe(true);
+    }
+    for (const ok of ["https://dandelist.knightaiav.com/auth/callback", "dandelist://auth"]) {
       expect(redirectAllowed(ok, WEB_ORIGINS, true)).toBe(true);
     }
     for (const bad of [
@@ -287,13 +305,31 @@ describe("redirect allowlist", () => {
     }
   });
 
+  it("in production sends tickets only to https origins, even when an http origin is listed for CORS", async () => {
+    // WEB_ORIGINS in production still lists http://localhost:8081 so local builds can call the API.
+    expect(WEB_ORIGINS).toContain("http://localhost:8081");
+    expect(redirectAllowed(WEB, WEB_ORIGINS, true)).toBe(false);
+    expect(redirectAllowed(WEB, WEB_ORIGINS, false)).toBe(true);
+    expect(redirectAllowed("http://staging.example/auth/callback", ["http://staging.example"], true)).toBe(false);
+    expect(redirectAllowed("https://staging.example/auth/callback", ["https://staging.example"], true)).toBe(true);
+
+    app = makeApp({ ...fullConfig(), production: true });
+    const res = await app.request(startPath("google", WEB, newVerifier()));
+    expect(res.status).toBe(400);
+    expect(res.headers.get("Location")).toBeNull();
+    expect((await app.request(startPath("google", "https://dandelist.knightaiav.com/auth/callback", newVerifier()))).status).toBe(302);
+    // CORS for that origin is untouched.
+    const cors = await app.request("/auth/providers", { headers: { Origin: "http://localhost:8081" } });
+    expect(cors.headers.get("Access-Control-Allow-Origin")).toBe("http://localhost:8081");
+  });
+
   it("refuses to start toward an address off the list", async () => {
-    const res = await app.request(`/auth/oauth/google/start?redirect=${encodeURIComponent("https://evil.example/auth/callback")}`);
+    const res = await app.request(startPath("google", "https://evil.example/auth/callback", newVerifier()));
     expect(res.status).toBe(400);
     expect(res.headers.get("Location")).toBeNull();
     app = makeApp({ ...fullConfig(), production: true });
-    expect((await app.request(`/auth/oauth/google/start?redirect=${encodeURIComponent("exp://192.168.1.20:8081/--/auth")}`)).status).toBe(400);
-    const prod = await app.request(`/auth/oauth/google/start?redirect=${encodeURIComponent("dandelist://auth")}`);
+    expect((await app.request(startPath("google", "exp://192.168.1.20:8081/--/auth", newVerifier()))).status).toBe(400);
+    const prod = await app.request(startPath("google", "dandelist://auth", newVerifier()));
     expect(prod.status).toBe(302);
     // In production the binding cookie is a host-only, Secure, SameSite=None cookie, so Apple's POST back carries it.
     expect(prod.headers.get("Set-Cookie")).toMatch(/^__Host-dl_oauth=[^;]+;.*Secure/);
@@ -322,6 +358,34 @@ describe("tickets", () => {
     const stored = (await db.query<{ ticket_hash: string }>("select ticket_hash from oauth_tickets")).rows.map((r) => r.ticket_hash);
     expect(stored).not.toContain(late);
     expect(stored).toContain(createHash("sha256").update(late).digest("hex"));
+  });
+
+  it("redeem only for the app that started the sign-in", async () => {
+    // Starting needs a well-formed challenge.
+    const bare = await app.request(`/auth/oauth/google/start?redirect=${encodeURIComponent(WEB)}`);
+    expect(bare.status).toBe(400);
+    expect(bare.headers.get("Location")).toBeNull();
+    expect((await app.request(`/auth/oauth/google/start?redirect=${encodeURIComponent(WEB)}&challenge=too-short`)).status).toBe(400);
+
+    const res = await googleSignIn({ sub: "g-7", email: "mine@example.com", email_verified: true }, "dandelist://auth");
+    const { ticket } = landing(res);
+    const mine = appVerifier;
+    // Another app that caught the dandelist://auth redirect has the ticket but not the verifier.
+    expect((await redeem(ticket!, newVerifier())).status).toBe(400);
+    expect((await postJson("/auth/oauth/redeem", { ticket })).status).toBe(400);
+    expect((await redeem(ticket!, mine.slice(0, -1) + (mine.endsWith("0") ? "1" : "0"))).status).toBe(400);
+    // Those failed tries didn't spend it: the app that started the sign-in still gets in.
+    const r = await redeem(ticket!, mine);
+    expect(r.status).toBe(200);
+    expect(((await r.json()) as { user: { email: string } }).user.email).toBe("mine@example.com");
+
+    // A verifier from a different attempt doesn't fit this attempt's ticket.
+    const first = await start("google");
+    nextGoogle = { nonce: first.nonce!, sub: "g-7", email: "mine@example.com", email_verified: true };
+    const firstTicket = landing(await callback("google", { code: "good-code", state: first.state }, first.cookie)).ticket!;
+    await start("github");
+    expect((await redeem(firstTicket, appVerifier)).status).toBe(400);
+    expect((await redeem(firstTicket, first.verifier)).status).toBe(200);
   });
 
   it("can't be redeemed twice in parallel", async () => {
@@ -401,36 +465,63 @@ describe("Apple", () => {
   });
 
   it("signs in natively only with a token for the app's bundle id", async () => {
-    const good = await appleToken({ sub: "001234.apple", email: "ada@example.com", email_verified: true });
+    const ada = { sub: "001234.apple", email: "ada@example.com", email_verified: true };
+    const good = await appleToken({ ...ada, nonce: await appleNonce() });
     const res = await postJson("/auth/apple/native", { identityToken: good, fullName: { givenName: "Ada", familyName: null } });
     expect(res.status).toBe(200);
     const body = (await res.json()) as { user: { email: string }; accessToken: string; refreshToken: string; expiresIn: number };
     expect(Object.keys(body).sort()).toEqual(["accessToken", "expiresIn", "refreshToken", "user"]);
     expect(body.user.email).toBe("ada@example.com");
 
-    const wrongAud = await appleToken({ sub: "001234.apple", email: "ada@example.com", email_verified: true }, APPLE_SERVICES);
+    // Each of these carries a valid, unused nonce, so the audience, signature, issuer or age is what fails.
+    const wrongAud = await appleToken({ ...ada, nonce: await appleNonce() }, APPLE_SERVICES);
     expect((await postJson("/auth/apple/native", { identityToken: wrongAud })).status).toBe(401);
-    const otherApp = await appleToken({ sub: "001234.apple", email: "ada@example.com", email_verified: true }, "com.example.other");
+    const otherApp = await appleToken({ ...ada, nonce: await appleNonce() }, "com.example.other");
     expect((await postJson("/auth/apple/native", { identityToken: otherApp })).status).toBe(401);
-    const forged = await appleToken({ sub: "001234.apple", email: "ada@example.com", email_verified: true }, APPLE_BUNDLE, strangerKeys);
+    const forged = await appleToken({ ...ada, nonce: await appleNonce() }, APPLE_BUNDLE, strangerKeys);
     expect((await postJson("/auth/apple/native", { identityToken: forged })).status).toBe(401);
-    const wrongIssuer = await appleToken({ sub: "001234.apple" }, APPLE_BUNDLE, appleKeys, "https://evil.example");
+    const wrongIssuer = await appleToken({ sub: "001234.apple", nonce: await appleNonce() }, APPLE_BUNDLE, appleKeys, "https://evil.example");
     expect((await postJson("/auth/apple/native", { identityToken: wrongIssuer })).status).toBe(401);
+    const stale = await appleToken({ ...ada, nonce: await appleNonce() });
     clock = new Date(clock.getTime() + 11 * 60 * 1000);
-    expect((await postJson("/auth/apple/native", { identityToken: good })).status).toBe(401);
+    expect((await postJson("/auth/apple/native", { identityToken: stale })).status).toBe(401);
+  });
+
+  it("needs a nonce the API issued, and takes each one once", async () => {
+    const ada = { sub: "001234.apple", email: "ada@example.com", email_verified: true };
+    // No nonce, or one the API never issued.
+    expect((await postJson("/auth/apple/native", { identityToken: await appleToken(ada) })).status).toBe(401);
+    expect((await postJson("/auth/apple/native", { identityToken: await appleToken({ ...ada, nonce: "made-up-nonce-made-up-nonce-made-up-n" }) })).status).toBe(401);
+
+    // The raw nonce, exactly as Apple returns what the app passed, signs in once; replaying the same token fails.
+    const nonce = await appleNonce();
+    expect(nonce).toMatch(/^[\w-]{43}$/);
+    const token = await appleToken({ ...ada, nonce });
+    expect((await postJson("/auth/apple/native", { identityToken: token })).status).toBe(200);
+    expect((await postJson("/auth/apple/native", { identityToken: token })).status).toBe(401);
+    // A hashed form of an issued nonce is not the same thing.
+    const other = await appleNonce();
+    expect((await postJson("/auth/apple/native", { identityToken: await appleToken({ ...ada, nonce: b64sha(other) }) })).status).toBe(401);
+    expect((await postJson("/auth/apple/native", { identityToken: await appleToken({ ...ada, nonce: other }) })).status).toBe(200);
+
+    // Nonces last ten minutes and are stored only as hashes.
+    const old = await appleNonce();
+    clock = new Date(clock.getTime() + 11 * 60 * 1000);
+    expect((await postJson("/auth/apple/native", { identityToken: await appleToken({ ...ada, nonce: old }) })).status).toBe(401);
+    const stored = (await db.query<{ nonce_hash: string }>("select nonce_hash from apple_nonces")).rows.map((r) => r.nonce_hash);
+    expect(stored).toContain(createHash("sha256").update(old).digest("hex"));
+    expect(stored).not.toContain(old);
   });
 
   it("honours a configured bundle id and lets a returning Apple user in without an email", async () => {
     app = makeApp({ ...fullConfig(), apple: { bundleId: "com.example.custom" } });
-    const first = await appleToken({ sub: "000777.apple", email: "z@example.com", email_verified: true }, "com.example.custom");
-    expect((await postJson("/auth/apple/native", { identityToken: first })).status).toBe(200);
+    const native = async (claims: JWTPayload, aud = "com.example.custom") =>
+      (await postJson("/auth/apple/native", { identityToken: await appleToken({ ...claims, nonce: await appleNonce() }, aud) })).status;
+    expect(await native({ sub: "000777.apple", email: "z@example.com", email_verified: true })).toBe(200);
     // Apple can leave the email out on later sign-ins; the stable subject is enough.
-    const later = await appleToken({ sub: "000777.apple" }, "com.example.custom");
-    expect((await postJson("/auth/apple/native", { identityToken: later })).status).toBe(200);
+    expect(await native({ sub: "000777.apple" })).toBe(200);
     // A brand-new Apple user with no email has nothing to sign in as.
-    const anon = await appleToken({ sub: "000888.apple" }, "com.example.custom");
-    expect((await postJson("/auth/apple/native", { identityToken: anon })).status).toBe(400);
-    const defaultAud = await appleToken({ sub: "000777.apple" }, APPLE_BUNDLE);
-    expect((await postJson("/auth/apple/native", { identityToken: defaultAud })).status).toBe(401);
+    expect(await native({ sub: "000888.apple" })).toBe(400);
+    expect(await native({ sub: "000777.apple" }, APPLE_BUNDLE)).toBe(401);
   });
 });

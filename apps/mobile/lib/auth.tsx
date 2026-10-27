@@ -1,5 +1,6 @@
 import * as AppleAuthentication from "expo-apple-authentication";
 import Constants, { ExecutionEnvironment } from "expo-constants";
+import * as Crypto from "expo-crypto";
 import * as Linking from "expo-linking";
 import * as WebBrowser from "expo-web-browser";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -8,6 +9,8 @@ import { getSecret, setSecret } from "./storage";
 
 export const API_URL = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:8080";
 const REFRESH_KEY = "dandelist.refresh";
+/** The secret for the provider sign-in in progress; its ticket redeems only with this. */
+const VERIFIER_KEY = "dandelist.oauth.verifier";
 
 type User = { id: string; email: string };
 type Status = "loading" | "signedOut" | "signedIn";
@@ -79,7 +82,21 @@ function appReturnUrl(): string {
   return Constants.executionEnvironment === ExecutionEnvironment.StoreClient ? Linking.createURL("auth") : "dandelist://auth";
 }
 
-const startUrl = (provider: ProviderId, redirect: string) => `${API_URL}/auth/oauth/${provider}/start?redirect=${encodeURIComponent(redirect)}`;
+/**
+ * Makes a fresh secret for one sign-in attempt, keeps it on this device and returns its SHA-256 (base64url). The API
+ * binds the ticket to that hash, so only this app, holding the secret, can redeem it; another app that catches the
+ * dandelist://auth redirect gets nothing it can use. Hermes has no Web Crypto, so the randomness comes from expo-crypto
+ * (the system generator on phones, crypto.getRandomValues on the web).
+ */
+async function newChallenge(): Promise<string> {
+  const verifier = Array.from(Crypto.getRandomBytes(32), (b) => b.toString(16).padStart(2, "0")).join("");
+  await setSecret(VERIFIER_KEY, verifier);
+  const digest = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, verifier, { encoding: Crypto.CryptoEncoding.BASE64 });
+  return digest.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+const startUrl = (provider: ProviderId, redirect: string, challenge: string) =>
+  `${API_URL}/auth/oauth/${provider}/start?redirect=${encodeURIComponent(redirect)}&challenge=${challenge}`;
 
 let brokerPending = false;
 /**
@@ -190,7 +207,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // so both share one redemption.
       let pending = redemptions.current.get(ticket);
       if (!pending) {
-        pending = (async () => finishSignIn(await post("/auth/oauth/redeem", { ticket }).catch(() => null)))();
+        pending = (async () => {
+          const verifier = await getSecret(VERIFIER_KEY);
+          if (!verifier) throw new Error("That sign-in has expired. Try again.");
+          await finishSignIn(await post("/auth/oauth/redeem", { ticket, verifier }).catch(() => null));
+          await setSecret(VERIFIER_KEY, null);
+        })();
         redemptions.current.set(ticket, pending);
         pending.catch(() => redemptions.current.delete(ticket));
       }
@@ -218,15 +240,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setStatus("signedIn");
       },
       async signInWith(provider) {
+        const challenge = await newChallenge();
         if (Platform.OS === "web") {
           // A full-page trip: the provider returns to the API, which returns here at /auth/callback with a ticket.
-          globalThis.location.assign(startUrl(provider, `${globalThis.location.origin}/auth/callback`));
+          globalThis.location.assign(startUrl(provider, `${globalThis.location.origin}/auth/callback`, challenge));
           return new Promise<boolean>(() => {});
         }
         const back = appReturnUrl();
         brokerPending = true;
         try {
-          const result = await WebBrowser.openAuthSessionAsync(startUrl(provider, back), back);
+          const result = await WebBrowser.openAuthSessionAsync(startUrl(provider, back, challenge), back);
           if (result.type !== "success") return false;
           const { queryParams } = Linking.parse(result.url);
           const ticket = typeof queryParams?.ticket === "string" ? queryParams.ticket : null;
@@ -242,10 +265,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       },
       async signInWithApple() {
+        // A single-use nonce from the API. The sheet hands it to Apple unchanged, Apple signs it into the identity
+        // token, and the API accepts that token once, so a captured token can't be replayed.
+        const nonceRes = await fetch(`${API_URL}/auth/apple/nonce`).catch(() => null);
+        if (!nonceRes) throw new Error("Can't reach Dandelist. Check your connection.");
+        if (!nonceRes.ok) throw new Error(await errorMessage(nonceRes));
+        const { nonce } = (await nonceRes.json()) as { nonce: string };
         let credential: AppleAuthentication.AppleAuthenticationCredential;
         try {
           credential = await AppleAuthentication.signInAsync({
             requestedScopes: [AppleAuthentication.AppleAuthenticationScope.FULL_NAME, AppleAuthentication.AppleAuthenticationScope.EMAIL],
+            nonce,
           });
         } catch (e) {
           if ((e as { code?: string }).code === "ERR_REQUEST_CANCELED") return false;
