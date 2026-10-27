@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CarBuilder, HomeBuilder, RegionPicker } from "../components/dream/builders";
 import { SwipeDeck } from "../components/dream/deck";
 import { ServiceQuote, WishReady } from "../components/dream/quotes";
-import { AgentDot, Eyebrow, Glass, Grain } from "../components/lux";
+import { AgentDot, Eyebrow, Glass, Grain, PrimaryButton } from "../components/lux";
 import { Rise } from "../components/welcome/kit";
 import { useAuth } from "../lib/auth";
 import { dreamTurn, wishFrom, type DreamAction, type DreamEvent, type FeedItem, type LifeContext, type Widget } from "../lib/dream";
@@ -80,25 +80,27 @@ export default function Dream() {
       case "home_builder":
         return <HomeBuilder w={w} onApply={(values) => send({ type: "builder", widgetId: w.id, values })} onSearchNow={() => send({ type: "search_now", widgetId: w.id })} onRegion={() => setRegionOpen(true)} />;
       case "car_builder":
-        return <CarBuilder w={w} onApply={(values) => send({ type: "builder", widgetId: w.id, values })} onSearchNow={() => send({ type: "search_now", widgetId: w.id })} />;
+        return <CarBuilder w={w} onApply={(values) => send({ type: "builder", widgetId: w.id, values })} />;
       case "deck":
         return (
           <View style={{ gap: 10 }}>
             <Text style={[type.title3, { color: p.ink, paddingHorizontal: 4 }]}>{w.title}</Text>
-            <SwipeDeck cards={w.cards} onSwipe={(l, verdict) => void send({ type: "swipe", widgetId: w.id, listingId: l.id, verdict })} onSearchNow={() => send({ type: "search_now", widgetId: w.id })} onEnough={() => send({ type: "message", text: "That's enough, show me the best match." }, "That's enough, show me the best match.")} />
+            <SwipeDeck cards={w.cards} onSwipe={(l, verdict) => void send({ type: "swipe", widgetId: w.id, listingId: l.id, verdict })} onPick={(l) => void send({ type: "pick", widgetId: w.id, listingId: l.id }, l.title)} onSearchNow={() => send({ type: "search_now", widgetId: w.id })} onEnough={() => send({ type: "message", text: "That's enough, show me the best match." }, "That's enough, show me the best match.")} />
           </View>
         );
       case "service_quote":
         return (
-          <ServiceQuote
-            w={w}
-            onAdd={async () => {
-              await add({ name: w.service, kind: "own", tier: "must", upfrontCents: 0, recurringCents: 0, period: "month", recurring: w.lines.map((l) => ({ amountCents: l.amountCents, period: l.period, label: l.label })) });
-            }}
-          />
+          <ServiceQuote w={w} onAccept={() => send({ type: "pick", widgetId: w.id })} />
         );
       case "wish_ready":
         return <WishReady w={w} onAdd={async () => { await add(wishFrom(w.wish)); }} />;
+      case "item":
+        return (
+          <Glass style={{ padding: 18, gap: 14, borderRadius: radius.lg }}>
+            <Text style={[type.title3, { fontFamily: fonts.displayItalic, color: p.ink }]}>{w.text}</Text>
+            <PrimaryButton label="Find the real price" onPress={() => router.push({ pathname: "/wishes/new", params: { text: w.text } })} />
+          </Glass>
+        );
       case "region_picker":
         return <RegionPicker current={life?.home ?? w.current} onPick={(home) => send({ type: "region", home }, `I'll live in ${home.label}.`)} />;
     }

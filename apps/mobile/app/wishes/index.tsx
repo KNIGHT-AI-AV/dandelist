@@ -179,7 +179,7 @@ export default function LifeList() {
 
       <EdgeFade height={dock} />
       <View pointerEvents="box-none" style={{ position: "absolute", left: 0, right: 0, bottom: insets.bottom + 16, alignItems: "center", paddingHorizontal: 16 }}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Tell me what you want" onPress={() => router.push("/wishes/new")} style={{ width: "100%", maxWidth: layout.list }}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Tell me what you want" onPress={() => router.push("/dream")} style={{ width: "100%", maxWidth: layout.list }}>
           <Glass intensity={60} style={{ height: 58, borderRadius: radius.pill, flexDirection: "row", alignItems: "center", paddingLeft: 20, paddingRight: 8 }}>
             <Text style={[type.body, { flex: 1, color: p.ink2 }]}>Tell me what you want...</Text>
             <View style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: p.ink, alignItems: "center", justifyContent: "center" }}>

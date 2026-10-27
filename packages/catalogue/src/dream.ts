@@ -63,6 +63,8 @@ export type Widget =
   | { kind: "deck"; id: string; title: string; round: number; cards: Listing[] }
   | { kind: "service_quote"; id: string; service: string; region: string; summary: string; lines: KeepLine[]; images: MediaImage[]; currency?: string }
   | { kind: "region_picker"; id: string; current: LifeContext["home"] }
+  /** A single thing to buy or do (a watch, a trip): handed to the item price research with the person's words. */
+  | { kind: "item"; id: string; text: string }
   | {
       kind: "wish_ready";
       id: string;
@@ -79,6 +81,8 @@ export type Widget =
         images: MediaImage[];
         /** Currency of `upfrontCents` and every keep line (the life context's currency, or the listing's when no rate exists). */
         currency?: string;
+        /** One unit of `currency` in US dollars on `date`, so the app can store the wish in dollars. Absent for USD. */
+        toUsd?: { rate: number; date: string };
       };
     };
 

@@ -2,7 +2,7 @@ import type { Listing } from "@dandelist/catalogue/dream";
 import { useRef, useState } from "react";
 import { Animated, PanResponder, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { ease, haptic, native, spring, useReducedMotion } from "../../lib/motion";
-import { formatCents } from "../../lib/money";
+import { moneyIn } from "../../lib/dream";
 import { fonts, radius, usePalette, type } from "../../lib/theme";
 import { hostOf } from "../../lib/welcome";
 import { Eyebrow, Shade } from "../lux";
@@ -26,7 +26,10 @@ function ListingCard({ l }: { l: Listing }) {
         <Text style={[type.title2, { color: p.ink }]} numberOfLines={2}>
           {l.title}
         </Text>
-        <Text style={[type.cardPrice, { color: p.ink }]}>{formatCents(l.priceCents)}</Text>
+        <Text style={[type.cardPrice, { color: p.ink }]}>
+          {moneyIn(l.currency)(l.priceCents)}
+          {l.status === "estimate" ? <Text style={[type.figure, { color: p.ink2 }]}>{"  estimate"}</Text> : null}
+        </Text>
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
           {l.facts.slice(0, 4).map((f) => (
             <View key={f} style={{ paddingHorizontal: 10, paddingVertical: 5, borderRadius: radius.pill, backgroundColor: p.glassTint, borderWidth: StyleSheet.hairlineWidth, borderColor: p.hair }}>
@@ -44,7 +47,7 @@ function ListingCard({ l }: { l: Listing }) {
  * Swipe right for yes, left for no; the buttons do the same. The top card follows the finger 1:1 and tilts up to
  * ±12°; it commits past 35% of the width or above 900 px/s, otherwise springs home. The next card rises as you drag.
  */
-export function SwipeDeck({ cards, onSwipe, onSearchNow, onEnough }: { cards: Listing[]; onSwipe(l: Listing, verdict: "yes" | "no"): void; onSearchNow(): void; onEnough(): void }) {
+export function SwipeDeck({ cards, onSwipe, onPick, onSearchNow, onEnough }: { cards: Listing[]; onSwipe(l: Listing, verdict: "yes" | "no"): void; onPick(l: Listing): void; onSearchNow(): void; onEnough(): void }) {
   const p = usePalette();
   const reduced = useReducedMotion();
   const { width } = useWindowDimensions();
@@ -127,7 +130,10 @@ export function SwipeDeck({ cards, onSwipe, onSearchNow, onEnough }: { cards: Li
         <Eyebrow>{`${index + 1} of ${cards.length}`}</Eyebrow>
         <RoundButton label="Yes" glyph="♥" accent onPress={() => commit("yes")} />
       </View>
-      <View style={{ flexDirection: "row", gap: 22 }}>
+      <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "center", columnGap: 22, rowGap: 8 }}>
+        <Pressable accessibilityRole="button" onPress={() => top && onPick(top)} hitSlop={10}>
+          <Text style={[type.footnote, { fontFamily: fonts.label, color: p.accentText }]}>Choose this one</Text>
+        </Pressable>
         <Pressable accessibilityRole="button" onPress={onSearchNow} hitSlop={10}>
           <Text style={[type.footnote, { fontFamily: fonts.label, color: p.ink2 }]}>Just search</Text>
         </Pressable>

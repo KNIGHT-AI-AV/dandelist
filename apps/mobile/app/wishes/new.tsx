@@ -1,5 +1,5 @@
 import type { Item } from "@dandelist/cost";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -48,7 +48,9 @@ export default function NewWish() {
   const dock = layout.dockHeight(insets.bottom);
   const column = { width: "100%" as const, maxWidth: layout.list + 2 * gutter, alignSelf: "center" as const, paddingHorizontal: gutter };
   const [stage, setStage] = useState<Stage>("describe");
-  const [text, setText] = useState("");
+  // The dream builder hands single items here with the person's words, which are read straight away.
+  const handed = useLocalSearchParams<{ text?: string }>().text;
+  const [text, setText] = useState(typeof handed === "string" ? handed.slice(0, 300) : "");
   const [reading, setReading] = useState(false);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -78,6 +80,14 @@ export default function NewWish() {
     }, 1500);
     return () => clearTimeout(t);
   }, [run, api]);
+
+  const autoRead = useRef(false);
+  useEffect(() => {
+    if (autoRead.current || !text.trim()) return;
+    autoRead.current = true;
+    void read();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function read() {
     if (text.trim().length < 2) return setError("Describe the wish in a few words.");

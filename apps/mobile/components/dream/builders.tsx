@@ -2,7 +2,7 @@ import type { LifeContext, Widget } from "@dandelist/catalogue/dream";
 import { useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { haptic } from "../../lib/motion";
-import { formatCents } from "../../lib/money";
+import { moneyIn } from "../../lib/dream";
 import { fonts, radius, usePalette, type } from "../../lib/theme";
 import { Eyebrow, Glass, PrimaryButton, Shade } from "../lux";
 import { GlassReveal } from "../reveal";
@@ -11,7 +11,9 @@ import { Chip } from "../welcome/kit";
 type HomeWidget = Extract<Widget, { kind: "home_builder" }>;
 type CarWidget = Extract<Widget, { kind: "car_builder" }>;
 
-const BUDGETS: [string, number | null][] = [["Up to $1M", 100_000_000], ["Up to $3M", 300_000_000], ["Up to $10M", 1_000_000_000], ["No limit", null]];
+/** Budget steps in the builder's own currency: "Up to €1M". */
+const BUDGETS: [number, number | null][] = [[1, 100_000_000], [3, 300_000_000], [10, 1_000_000_000], [0, null]];
+const symbolOf = (currency = "USD") => moneyIn(currency)(0).replace(/[\d.,\s]/g, "") || "$";
 const ROOMS = [2, 3, 4, 5, 6];
 
 function SearchBar({ primary, onPrimary, onJustSearch }: { primary: string; onPrimary(): void; onJustSearch(): void }) {
@@ -32,7 +34,8 @@ function SearchBar({ primary, onPrimary, onJustSearch }: { primary: string; onPr
  */
 export function HomeBuilder({ w, onApply, onSearchNow, onRegion }: { w: HomeWidget; onApply(values: Record<string, unknown>): void; onSearchNow(): void; onRegion(): void }) {
   const p = usePalette();
-  const [styles, setStyles] = useState<string[]>([]);
+  const [styles, setStyles] = useState<string[]>(() => w.styles.filter((s) => s.on).map((s) => s.id));
+  const symbol = symbolOf(w.currency);
   const [features, setFeatures] = useState(() => Object.fromEntries(w.features.map((f) => [f.id, f.on])));
   const [rooms, setRooms] = useState<number | null>(w.bedrooms);
   const [budget, setBudget] = useState<number | null>(w.budgetCents);
@@ -58,7 +61,10 @@ export function HomeBuilder({ w, onApply, onSearchNow, onRegion }: { w: HomeWidg
                 <View style={{ width: 132, height: 172, borderRadius: radius.md, overflow: "hidden", borderWidth: on ? 2 : StyleSheet.hairlineWidth, borderColor: on ? p.accent : p.hair }}>
                   <GlassReveal uri={s.imageUrl ?? null} standby={require("../../assets/standby/life.jpg")} stage="clear" treatment="film" style={StyleSheet.absoluteFill} />
                   <Shade from={0.45} />
-                  <Text style={[type.footnote, { position: "absolute", left: 10, right: 10, bottom: 10, fontFamily: fonts.label, color: p.ink }]}>{s.label}</Text>
+                  <View style={{ position: "absolute", left: 10, right: 10, bottom: 10, gap: 2 }}>
+                    <Text style={[type.footnote, { fontFamily: fonts.label, color: p.ink }]}>{s.label}</Text>
+                    {s.credit ? <Text style={[type.figure, { color: p.ink2 }]} numberOfLines={1}>{s.credit}</Text> : null}
+                  </View>
                 </View>
               </Pressable>
             );
@@ -84,8 +90,8 @@ export function HomeBuilder({ w, onApply, onSearchNow, onRegion }: { w: HomeWidg
       <View style={{ gap: 10 }}>
         <Text style={[type.title3, { color: p.ink }]}>Budget</Text>
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-          {BUDGETS.map(([label, cents]) => (
-            <Chip key={label} label={label} selected={budget === cents} onPress={() => setBudget(cents)} />
+          {BUDGETS.map(([millions, cents]) => (
+            <Chip key={millions} label={cents === null ? "No limit" : `Up to ${symbol}${millions}M`} selected={budget === cents} onPress={() => setBudget(cents)} />
           ))}
         </View>
       </View>
@@ -94,10 +100,23 @@ export function HomeBuilder({ w, onApply, onSearchNow, onRegion }: { w: HomeWidg
   );
 }
 
-/** Carvana-style: one step at a time, each a rail of cards with what it adds to the price. */
-export function CarBuilder({ w, onApply, onSearchNow }: { w: CarWidget; onApply(values: Record<string, unknown>): void; onSearchNow(): void }) {
+/**
+ * Carvana-style: one step at a time, each a rail of cards with what it costs, priced from the maker's page. Options
+ * take several picks; every other step takes one. "Price this build" makes it the wish; "Just search" finds real cars.
+ */
+export function CarBuilder({ w, onApply }: { w: CarWidget; onApply(values: Record<string, unknown>): void }) {
   const p = usePalette();
-  const [picked, setPicked] = useState<Record<string, string>>(() => Object.fromEntries(w.steps.filter((s) => s.selected).map((s) => [s.id, s.selected!])));
+  const money = moneyIn(w.currency);
+  const multi = (id: string) => id === "options";
+  const [picked, setPicked] = useState<Record<string, string[]>>(() => Object.fromEntries(w.steps.filter((s) => s.selected).map((s) => [s.id, s.selected!.split(",")])));
+  const choose = (step: string, id: string) => {
+    haptic.select();
+    setPicked((x) => {
+      const now = x[step] ?? [];
+      return { ...x, [step]: multi(step) ? (now.includes(id) ? now.filter((c) => c !== id) : [...now, id]) : [id] };
+    });
+  };
+  const values = () => Object.fromEntries(Object.entries(picked).map(([k, v]) => [k, multi(k) ? v : v[0]]));
   return (
     <Glass style={{ padding: 18, gap: 20, borderRadius: radius.lg }}>
       <Eyebrow color={p.accent}>Build your car</Eyebrow>
@@ -106,9 +125,9 @@ export function CarBuilder({ w, onApply, onSearchNow }: { w: CarWidget; onApply(
           <Text style={[type.title3, { color: p.ink }]}>{step.title}</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
             {step.choices.map((c) => {
-              const on = picked[step.id] === c.id;
+              const on = (picked[step.id] ?? []).includes(c.id);
               return (
-                <Pressable key={c.id} accessibilityRole="radio" accessibilityState={{ selected: on }} onPress={() => { haptic.select(); setPicked((x) => ({ ...x, [step.id]: c.id })); }}>
+                <Pressable key={c.id} accessibilityRole={multi(step.id) ? "checkbox" : "radio"} accessibilityState={multi(step.id) ? { checked: on } : { selected: on }} onPress={() => choose(step.id, c.id)}>
                   <View style={{ width: 168, borderRadius: radius.md, overflow: "hidden", borderWidth: on ? 2 : StyleSheet.hairlineWidth, borderColor: on ? p.accent : p.hair, backgroundColor: p.surface }}>
                     {c.imageUrl ? (
                       <View style={{ height: 96 }}>
@@ -117,8 +136,8 @@ export function CarBuilder({ w, onApply, onSearchNow }: { w: CarWidget; onApply(
                     ) : null}
                     <View style={{ padding: 12, gap: 4 }}>
                       <Text style={[type.label, { color: p.ink }]}>{c.label}</Text>
+                      {c.priceCents ? <Text style={[type.figure, { color: p.accent }]}>{step.id === "trim" ? money(c.priceCents) : `+ ${money(c.priceCents)}`}</Text> : null}
                       {c.detail ? <Text style={[type.footnote, { color: p.ink2 }]} numberOfLines={2}>{c.detail}</Text> : null}
-                      {c.priceCents != null ? <Text style={[type.figure, { color: p.accent }]}>{c.priceCents ? `+ ${formatCents(c.priceCents)}` : "Included"}</Text> : null}
                     </View>
                   </View>
                 </Pressable>
@@ -127,7 +146,7 @@ export function CarBuilder({ w, onApply, onSearchNow }: { w: CarWidget; onApply(
           </ScrollView>
         </View>
       ))}
-      <SearchBar primary="Find this car" onPrimary={() => onApply(picked)} onJustSearch={onSearchNow} />
+      <SearchBar primary="Price this build" onPrimary={() => onApply({ ...values(), done: true })} onJustSearch={() => onApply({ ...values(), search: true })} />
     </Glass>
   );
 }

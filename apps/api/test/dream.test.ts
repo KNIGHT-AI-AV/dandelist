@@ -493,6 +493,13 @@ describe("dream turn", () => {
     expect(regions).not.toContain("ID/car_insurance");
   });
 
+  it("hands a single item to the item price research with the person's words", async () => {
+    const t = await signIn("ada@example.com");
+    concierge = [[fc("price_item", { description: "a Leica Q3" })], [message("I'll find what it really costs.")]];
+    const { events } = await turn(t, { type: "message", text: "a Leica Q3" });
+    expect(widgets(events, "item")[0]).toMatchObject({ kind: "item", text: "a Leica Q3" });
+  });
+
   it("prices a service from regional rates and makes the accepted quote a wish", async () => {
     const t = await signIn("ada@example.com");
     await liveIn(t, "MT", "Malta");
