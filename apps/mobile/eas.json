@@ -1,0 +1,14 @@
+{
+  "cli": { "version": ">= 24.0.0", "appVersionSource": "remote" },
+  "build": {
+    "production": {
+      "distribution": "store",
+      "autoIncrement": true,
+      "credentialsSource": "local",
+      "env": { "EXPO_PUBLIC_API_URL": "https://api.dandelist.knightaiav.com" }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}

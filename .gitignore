@@ -13,3 +13,7 @@ ios/
 android/
 .claude/
 expo-env.d.ts
+
+# iOS signing files for EAS local credentials; never committed
+apps/mobile/credentials/
+apps/mobile/credentials.json
