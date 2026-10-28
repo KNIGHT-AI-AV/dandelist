@@ -26,7 +26,8 @@ const SEED = fileURLToPath(new URL("../../data/archive-seed.json", import.meta.u
 /**
  * Loads the master list into the archive when the seed file has changed since the last load: entities are
  * upserted, seed photos that pass the guard are added. Runs after the server is listening, so a big seed never
- * holds up a deploy's health check. Agent-contributed rows are left alone.
+ * holds up a deploy's health check. Reviewed seed metadata takes ownership of matching entity/photo rows;
+ * unrelated agent-contributed associations are left alone.
  */
 export async function loadSeed(db: Db, path = SEED): Promise<{ version: string; entities: number; photos: number } | null> {
   let raw: string;
@@ -54,7 +55,11 @@ export async function loadSeed(db: Db, path = SEED): Promise<{ version: string; 
       const r = await db.query(
         `insert into archive_photos (entity_id, url, width, height, source, source_page, photographer, license, hero, status, contributed_by)
          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'approved', 'seed')
-         on conflict (url) do update set hero = excluded.hero, status = 'approved' returning id`,
+         on conflict (entity_id, url) do update set
+           width = excluded.width, height = excluded.height, source = excluded.source,
+           source_page = excluded.source_page, photographer = excluded.photographer, license = excluded.license,
+           hero = excluded.hero, status = 'approved', contributed_by = 'seed', vouchers = '{}'
+         returning id`,
         [e.id, p.url, p.width, p.height, p.source, p.sourcePage, p.photographer, p.license, p.hero],
       );
       photos += r.rows.length;

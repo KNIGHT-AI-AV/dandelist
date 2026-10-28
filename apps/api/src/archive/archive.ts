@@ -196,7 +196,7 @@ export function pgArchive(db: Db, now: () => Date = () => new Date()): Archive {
         const r = await db.query(
           `insert into archive_photos (entity_id, url, width, height, source, source_page, photographer, license, status, contributed_by, vouchers)
            values ($1, $2, $3, $4, $5, $6, $7, $8, 'pending', $9, array[$9])
-           on conflict (url) do update set
+           on conflict (entity_id, url) do update set
              vouchers = array(select distinct v from unnest(archive_photos.vouchers || excluded.vouchers) v),
              status = case
                when archive_photos.status = 'pending' and archive_photos.entity_id = excluded.entity_id
