@@ -21,7 +21,8 @@ export const PREVIEWS_PER_DAY = 400;
 const CHECK_TIMEOUT_MS = 6000;
 
 const body = z.object({
-  picks: z.array(z.string().max(40)).min(1).max(8),
+  // One first pick plus Both in each of the four voting rounds.
+  picks: z.array(z.string().max(40)).min(1).max(9),
   monthlyCents: z.number().int().min(1000).max(10_000_000),
   horizonYears: z.number().int().min(1).max(30).nullable().default(null),
 });

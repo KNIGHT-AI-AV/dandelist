@@ -1,6 +1,6 @@
 import { PGlite } from "@electric-sql/pglite";
-import { entry } from "@dandelist/catalogue";
-import { beforeEach, describe, expect, it } from "vitest";
+import { entry, firstPick, pairs } from "@dandelist/catalogue";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../src/app";
 import { migrate, type Db } from "../src/db";
 import { PREVIEWS_PER_IP_PER_HOUR, fallbackNote, ipOf, planFacts, reachBy } from "../src/preview";
@@ -72,6 +72,27 @@ describe("pre-login preview", () => {
   it("says so when the seller can't confirm the price", async () => {
     const ev = await events(await post(makeApp(sellerPage("$1.00")), { picks: ["leica-q3"], monthlyCents: 100_000 }));
     expect(ev.find((e) => e.id === "check" && e.state === "done").text).toMatch(/Couldn't confirm .* Using the .* check\./);
+  });
+
+  it.each(firstPick)("previews all nine picks after choosing %s and Both in every round", async (first) => {
+    const picks = [...new Set([first, ...pairs.flat()])];
+    expect(picks).toHaveLength(9);
+    const res = await post(makeApp(sellerPage("$1.00")), { picks, monthlyCents: 100_000 });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("text/event-stream");
+    const ev = await events(res);
+    expect(ev.find((e) => e.id === "read").text).toBe("Read your 9 picks.");
+    expect(ev.find((e) => e.type === "result").upfrontCents).toBe(picks.reduce((sum, id) => sum + entry(id)!.upfrontCents, 0));
+  });
+
+  it("rejects more than the onboarding flow's nine picks before fetching a seller", async () => {
+    const webFetch = vi.fn(sellerPage("$1.00"));
+    const picks = [...firstPick.slice(0, 2), ...pairs.flat()];
+    expect(picks).toHaveLength(10);
+    const res = await post(makeApp(webFetch), { picks, monthlyCents: 100_000 });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: "Check your picks and try again." });
+    expect(webFetch).not.toHaveBeenCalled();
   });
 
   it("drops a model note that invents numbers", async () => {
