@@ -128,7 +128,7 @@ export default function Dream() {
               <Eyebrow>Your agent · Muse Spark by Meta</Eyebrow>
             </View>
             <Text style={[type.title1, { color: p.ink }]}>
-              Tell me the life you <Text style={{ fontFamily: fonts.displayItalic, color: p.accent }}>want</Text>.
+              Tell me the life you <Text style={{ fontFamily: fonts.displayItalic, color: p.accentText }}>want</Text>.
             </Text>
             <Text style={[type.callout, { color: p.ink2 }]}>Anything at all. I'll find the real thing, its price, and what it costs to keep.</Text>
             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>

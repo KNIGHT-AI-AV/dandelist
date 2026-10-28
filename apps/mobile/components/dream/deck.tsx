@@ -118,7 +118,7 @@ export function SwipeDeck({ cards, onSwipe, onPick, onSearchNow, onEnough }: { c
         <Animated.View {...pan.panHandlers} style={[StyleSheet.absoluteFill, { transform: [{ translateX: x }, { translateY: y }, { rotate }] }]}>
           <ListingCard l={top} />
           <Animated.View pointerEvents="none" style={{ position: "absolute", top: 22, left: 20, opacity: yes, borderWidth: 1.5, borderColor: p.accent, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 4, transform: [{ rotate: "-8deg" }] }}>
-            <Text style={[type.button, { letterSpacing: 2, color: p.accent }]}>YES</Text>
+            <Text style={[type.button, { letterSpacing: 2, color: p.accentText }]}>YES</Text>
           </Animated.View>
           <Animated.View pointerEvents="none" style={{ position: "absolute", top: 22, right: 20, opacity: no, borderWidth: 1.5, borderColor: p.ink, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 4, transform: [{ rotate: "8deg" }] }}>
             <Text style={[type.button, { letterSpacing: 2, color: p.ink }]}>PASS</Text>

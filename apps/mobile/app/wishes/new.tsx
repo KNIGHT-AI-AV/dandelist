@@ -1,19 +1,20 @@
 import type { Item } from "@dandelist/cost";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ledger } from "../../components/ledger";
 import { AgentDot, Backdrop, Chip, EdgeFade, ErrorLine, Eyebrow, Glass, Grain, Hairline, IconButton, Money, Photo, PrimaryButton, Protect, QuietButton, Shade } from "../../components/lux";
 import { Statement, Take } from "../../components/statement";
 import { getRun, interpretWish, startResearch, type Answer, type Draft, type PriceOption, type Question, type Run, type Step } from "../../lib/agent";
 import { useAuth } from "../../lib/auth";
-import { fonts, layout, radius, type, usePalette, useType } from "../../lib/theme";
+import { fonts, layout, radius, space, type, usePalette, useType } from "../../lib/theme";
 import { useWishes, type WishTier } from "../../lib/wishes";
 import { KIND_LABEL, hostOf } from "../../lib/words";
 import { Atmosphere } from "../../components/atmosphere";
 import { Carve, RevealPhoto, ThoughtLine } from "../../components/wish-reveal";
 import { WishField } from "../../components/wish-field";
+import { KeyboardDock, KeyboardScroll, dockRoom } from "../../components/inputs";
 import { Rise } from "../../components/welcome/kit";
 import { haptic } from "../../lib/motion";
 import { clarityOf, deckFor, thoughtOf } from "../../lib/reveal";
@@ -74,6 +75,8 @@ export default function NewWish() {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const field = useRef<TextInput>(null);
+  // The docked button's height, reported by KeyboardDock, so the scroll leaves room for it above the keyboard.
+  const [askDock, setAskDock] = useState<number>(layout.control.primary);
   const alive = useRef(true);
   useEffect(() => () => void (alive.current = false), []);
   const working = run?.status === "running";
@@ -182,7 +185,7 @@ export default function NewWish() {
   }
 
   const latestImage = wishes.find((w) => w.details.agent?.imageUrl)?.details.agent?.imageUrl;
-  const close = <IconButton icon="close" label="Close" onPress={() => (router.canGoBack() ? router.back() : router.replace("/wishes"))} style={{ position: "absolute", top: insets.top + 4, left: 16, zIndex: 10 }} />;
+  const close = <IconButton icon="close" label="Close" onPress={() => (router.canGoBack() ? router.back() : router.replace("/wishes"))} style={{ position: "absolute", top: insets.top + (layout.headerBar - layout.control.icon) / 2, left: gutter, zIndex: 10 }} />;
 
   // Concierge: describe the wish, then answer the agent's questions, over a blurred photograph.
   if (stage === "describe" || stage === "ask") {
@@ -199,8 +202,7 @@ export default function NewWish() {
         )}
         <Glass intensity={70} style={[StyleSheet.absoluteFill, { borderRadius: 0, borderWidth: 0 }]} />
         {close}
-        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }}>
-          <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={[column, { paddingTop: insets.top + layout.contentTop, paddingBottom: dock, gap: 20 }]}>
+        <KeyboardScroll dock={askDock} contentContainerStyle={[column, { paddingTop: insets.top + layout.contentTop, paddingBottom: dockRoom(askDock, insets.bottom), gap: space[20] }]}>
             <View style={{ gap: layout.stack.tight }}>
               <Eyebrow>New wish</Eyebrow>
               <Text accessibilityRole="header" style={[t.display, { color: p.ink }]}>
@@ -246,12 +248,10 @@ export default function NewWish() {
                 <QuietButton label="Change the wish" onPress={startOver} style={{ alignSelf: "flex-start" }} />
               </>
             ) : null}
-          </ScrollView>
-        </KeyboardAvoidingView>
-        <EdgeFade height={dock} />
-        <View pointerEvents="box-none" style={{ position: "absolute", left: gutter, right: gutter, bottom: insets.bottom + 20, alignItems: "center" }}>
+        </KeyboardScroll>
+        <KeyboardDock onHeight={setAskDock}>
           <PrimaryButton label={stage === "describe" ? "Find the real price" : "Research the price"} busyLabel="Reading your wish..." busy={reading} onPress={stage === "describe" ? read : research} />
-        </View>
+        </KeyboardDock>
         <Grain />
       </View>
     );
