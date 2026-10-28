@@ -133,14 +133,16 @@ export function previewRoutes(deps: AgentDeps & { webFetch?: Fetcher }) {
           const dayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).toISOString();
           const spent = (await db.query<{ s: string | null }>("select coalesce(sum(cost_usd), 0) as s from spend_ledger where kind = 'preview' and created_at >= $1", [dayStart])).rows[0];
           if (Number(spent?.s ?? 0) >= PREVIEW_DAILY_USD) throw new SpendLimitError("daily");
+          // Give the note writer the unit to copy; the streamed result still uses the numeric share.
+          const noteFacts = { ...facts, largest: { ...facts.largest, share_percent: `${facts.largest.share_percent}%` } };
           const client = new MetaClient({ ...deps.meta, onUsage: (usage, cost) => recordSpend(db, null, "preview", usage, cost, deps.now()) });
           const res = await client.responses({
             instructions:
-              "You are Dandelist's agent. In two or three short sentences, under 45 words, tell this person something useful about when they can have the life they picked. If one pick is a large share, say what happens if they buy it last. Use only numbers and dates that appear in FACTS, written exactly as given. Plain, specific, warm. No financial advice, no hype, no questions.",
-            input: `FACTS: ${JSON.stringify(facts)}`,
+              "You are Dandelist's agent. In two or three short sentences, under 45 words, tell this person something useful about when they can have the life they picked. If one pick is a large share, say what happens if they buy it last. Use only numbers and dates that appear in FACTS, written exactly as given, including the % sign on percentages. Plain, specific, warm. No financial advice, no hype, no questions.",
+            input: `FACTS: ${JSON.stringify(noteFacts)}`,
           });
           const text = res.text.trim();
-          if (text && !unknownNumbers(text, facts).length) note = text;
+          if (text && !unknownNumbers(text, noteFacts).length) note = text;
         } catch (e) {
           if (!(e instanceof SpendLimitError)) console.error("preview note failed", (e as Error).message);
         }

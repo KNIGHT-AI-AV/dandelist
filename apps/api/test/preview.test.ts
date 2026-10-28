@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../src/app";
 import { migrate, type Db } from "../src/db";
 import { PREVIEWS_PER_IP_PER_HOUR, fallbackNote, ipOf, planFacts, reachBy } from "../src/preview";
+import { unknownNumbers } from "../src/agent/agent";
 
 const clock = new Date("2026-10-27T12:00:00Z");
 let db: Db;
@@ -103,6 +104,29 @@ describe("pre-login preview", () => {
       })) as never;
     const ev = await events(await post(makeApp(sellerPage("$7,350.00"), meta), { picks: ["leica-q3"], monthlyCents: 100_000 }));
     expect(ev.find((e) => e.type === "note").text).not.toContain("$99");
+  });
+
+  it("keeps the percent sign when the model copies the largest share from its facts", async () => {
+    let submittedFacts: { largest: { share_percent: string | number } } | undefined;
+    const meta = (async (_url: unknown, init: RequestInit) => {
+      const request = JSON.parse(String(init.body));
+      submittedFacts = JSON.parse(request.input.slice("FACTS: ".length));
+      const text = `The Porsche 911 Carrera is the largest at ${submittedFacts!.largest.share_percent}.`;
+      return new Response(JSON.stringify({ output: [{ type: "message", content: [{ type: "output_text", text }] }], usage: { input_tokens: 10, output_tokens: 10 } }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }) as typeof fetch;
+    const ev = await events(await post(makeApp(sellerPage("$1.00"), meta), { picks: ["porsche-911", "leica-q3"], monthlyCents: 300_000 }));
+    expect(submittedFacts?.largest.share_percent).toBe("95%");
+    expect(ev.find((e) => e.type === "note").text).toBe("The Porsche 911 Carrera is the largest at 95%.");
+    expect(ev.find((e) => e.type === "result").largest.share).toBe(95);
+  });
+
+  it("accepts a known percentage in the number guard and rejects an invented percentage", () => {
+    const facts = { largest: { share_percent: "95%" } };
+    expect(unknownNumbers("The largest is 95% of the total.", facts)).toEqual([]);
+    expect(unknownNumbers("The largest is 96% of the total.", facts)).toEqual(["96"]);
   });
 
   it("trusts only the hop the proxy appended", () => {
