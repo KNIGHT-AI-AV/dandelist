@@ -1,4 +1,4 @@
-import { forwardRef, useImperativeHandle, useLayoutEffect, useRef } from "react";
+import { forwardRef, useImperativeHandle, useLayoutEffect, useRef, type ReactNode } from "react";
 import { Animated, Platform, Pressable, StyleSheet, TextInput, View } from "react-native";
 import { ease, haptic, spring, usePress, useReducedMotion } from "../../lib/motion";
 import { layout, space, type, usePalette } from "../../lib/theme";
@@ -58,6 +58,10 @@ export interface ComposerProps {
   label: string;
   /** A reply is on its way: sending waits. */
   busy?: boolean;
+  /** Shown in place of the send button while there is nothing to send (or while `cover` is up): the microphone. */
+  idleAction?: ReactNode;
+  /** Shown in place of the text box, such as the listening bars while someone speaks. */
+  cover?: ReactNode;
 }
 
 /**
@@ -65,7 +69,7 @@ export interface ComposerProps {
  * inside itself, and shrinks back faster. Return sends (on the web Shift+Return makes a new line); the send button
  * stays an outline while the text is blank. A send ticks the selection haptic.
  */
-export const Composer = forwardRef<TextInput, ComposerProps>(function Composer({ value, onChangeText, onSend, placeholder, label, busy = false }, ref) {
+export const Composer = forwardRef<TextInput, ComposerProps>(function Composer({ value, onChangeText, onSend, placeholder, label, busy = false, idleAction, cover }, ref) {
   const p = usePalette();
   const reduced = useReducedMotion();
   const input = useRef<TextInput>(null);
@@ -109,41 +113,45 @@ export const Composer = forwardRef<TextInput, ComposerProps>(function Composer({
 
   return (
     <Glass intensity={60} style={{ borderRadius: layout.control.primary / 2, borderCurve: "continuous", flexDirection: "row", alignItems: "flex-end", minHeight: layout.control.primary }}>
-      <AnimatedInput
-        ref={input}
-        value={value}
-        onChangeText={onChangeText}
-        placeholder={placeholder}
-        placeholderTextColor={p.ink3}
-        accessibilityLabel={label}
-        multiline
-        returnKeyType="send"
-        enterKeyHint="send"
-        submitBehavior="submit"
-        blurOnSubmit={false}
-        autoCapitalize="sentences"
-        autoCorrect
-        spellCheck
-        autoComplete="off"
-        textContentType="none"
-        onSubmitEditing={send}
-        onKeyPress={(e) => {
-          if (Platform.OS !== "web") return;
-          const k = e.nativeEvent as unknown as { key: string; shiftKey?: boolean; isComposing?: boolean; keyCode?: number };
-          // Enter sends; Shift+Enter and an IME still composing a word keep their newline.
-          if (k.key !== "Enter" || k.shiftKey || k.isComposing || k.keyCode === 229) return;
-          e.preventDefault();
-          send();
-        }}
-        onContentSizeChange={(e) => Platform.OS !== "web" && fit(e.nativeEvent.contentSize.height)}
-        {...caretColors(p)}
-        style={[
-          type.body,
-          { flex: 1, height, marginVertical: COMPOSER_PAD_Y, marginLeft: space[20], marginRight: layout.stack.tight, paddingTop: 0, paddingBottom: 0, paddingHorizontal: 0, color: p.ink, textAlignVertical: "top" },
-          webInput(p),
-        ]}
-      />
-      <SendButton enabled={canSend} onPress={send} />
+      {cover ? (
+        <View style={{ flex: 1, minHeight: line, marginVertical: COMPOSER_PAD_Y, marginLeft: space[20], marginRight: layout.stack.tight, justifyContent: "center" }}>{cover}</View>
+      ) : (
+        <AnimatedInput
+          ref={input}
+          value={value}
+          onChangeText={onChangeText}
+          placeholder={placeholder}
+          placeholderTextColor={p.ink3}
+          accessibilityLabel={label}
+          multiline
+          returnKeyType="send"
+          enterKeyHint="send"
+          submitBehavior="submit"
+          blurOnSubmit={false}
+          autoCapitalize="sentences"
+          autoCorrect
+          spellCheck
+          autoComplete="off"
+          textContentType="none"
+          onSubmitEditing={send}
+          onKeyPress={(e) => {
+            if (Platform.OS !== "web") return;
+            const k = e.nativeEvent as unknown as { key: string; shiftKey?: boolean; isComposing?: boolean; keyCode?: number };
+            // Enter sends; Shift+Enter and an IME still composing a word keep their newline.
+            if (k.key !== "Enter" || k.shiftKey || k.isComposing || k.keyCode === 229) return;
+            e.preventDefault();
+            send();
+          }}
+          onContentSizeChange={(e) => Platform.OS !== "web" && fit(e.nativeEvent.contentSize.height)}
+          {...caretColors(p)}
+          style={[
+            type.body,
+            { flex: 1, height, marginVertical: COMPOSER_PAD_Y, marginLeft: space[20], marginRight: layout.stack.tight, paddingTop: 0, paddingBottom: 0, paddingHorizontal: 0, color: p.ink, textAlignVertical: "top" },
+            webInput(p),
+          ]}
+        />
+      )}
+      {idleAction && (cover || !value.trim()) ? <View style={{ margin: COMPOSER_INSET }}>{idleAction}</View> : <SendButton enabled={canSend} onPress={send} />}
     </Glass>
   );
 });
