@@ -11,30 +11,33 @@
     "seller": "Porsche",
     "url": "https://www.porsche.com/usa/models/911/carrera-models/911-carrera/",
     "checkedAt": "2026-10-27T21:52:48.709Z",
-    "imageUrl": "https://api.dandelist.knightaiav.com/media/cab4c29147c12bd010fe7faeec92af0f0b4a59e2fb2b82fbb2f8c7c574c063e3.jpg",
+    "imageUrl": "https://api.dandelist.knightaiav.com/media/614051be891d61f8c5cd1d6ec0fc103010cf61097e6fea74f88d04fbcffdf9ac.jpg",
     "media": {
       "kind": "vehicle",
       "images": [
         {
-          "url": "https://api.dandelist.knightaiav.com/media/cab4c29147c12bd010fe7faeec92af0f0b4a59e2fb2b82fbb2f8c7c574c063e3.jpg",
+          "url": "https://api.dandelist.knightaiav.com/media/614051be891d61f8c5cd1d6ec0fc103010cf61097e6fea74f88d04fbcffdf9ac.jpg",
           "width": 2048,
           "height": 2048,
-          "source": "porsche.com",
-          "credit": "Porsche"
+          "source": "unsplash.com",
+          "credit": "Daniel Garcia, noir.",
+          "license": "Unsplash License"
         },
         {
-          "url": "https://api.dandelist.knightaiav.com/media/a763a79df99d068d40cc48ec91e8c1e5fb179f2d231b91b94686c3656385a2ce.jpg",
-          "width": 1500,
-          "height": 2100,
-          "source": "porsche.com",
-          "credit": "Porsche"
+          "url": "https://api.dandelist.knightaiav.com/media/f10b4f5636637e742f52639762b6c879570d4349ebfa35e8a2df218de78459e6.jpg",
+          "width": 1800,
+          "height": 2520,
+          "source": "unsplash.com",
+          "credit": "Daniel Garcia, noir.",
+          "license": "Unsplash License"
         },
         {
-          "url": "https://api.dandelist.knightaiav.com/media/8ce51b9473f75d23c8c76c8d1c54655bb5304e1f185e3bbf561a57874f019fed.jpg",
-          "width": 2400,
-          "height": 900,
-          "source": "porsche.com",
-          "credit": "Porsche"
+          "url": "https://api.dandelist.knightaiav.com/media/c7ba1c3bacb3149c7ddfb7c675c4e64ff13c080944158bc09069872794e52703.jpg",
+          "width": 3000,
+          "height": 1125,
+          "source": "unsplash.com",
+          "credit": "Daniel Garcia, noir.",
+          "license": "Unsplash License"
         }
       ]
     }
@@ -51,30 +54,33 @@
     "seller": "Leica Camera USA",
     "url": "https://leicacamerausa.com/leica-q3-black.html",
     "checkedAt": "2026-10-27T13:55:50.823Z",
-    "imageUrl": "https://api.dandelist.knightaiav.com/media/2f85fc0386c2c9a17f898a0a8b53453aea8d0eb8bd7f91df0f2e574708ee4362.jpg",
+    "imageUrl": "https://api.dandelist.knightaiav.com/media/a435d0ddac84a80a21efd43b9ff9621b4c36fd4633138ef5413335cd99a34364.jpg",
     "media": {
       "kind": "product",
       "images": [
         {
-          "url": "https://api.dandelist.knightaiav.com/media/2f85fc0386c2c9a17f898a0a8b53453aea8d0eb8bd7f91df0f2e574708ee4362.jpg",
+          "url": "https://api.dandelist.knightaiav.com/media/a435d0ddac84a80a21efd43b9ff9621b4c36fd4633138ef5413335cd99a34364.jpg",
           "width": 2048,
           "height": 2048,
-          "source": "leica-camera.com",
-          "credit": "Leica Camera"
+          "source": "unsplash.com",
+          "credit": "Donna White, rawkkim",
+          "license": "Unsplash License"
         },
         {
-          "url": "https://api.dandelist.knightaiav.com/media/85145ee7b8463ff73117bca82a56320910b309fb439aae75bc15ac6e4cd97088.jpg",
-          "width": 1500,
-          "height": 2100,
-          "source": "leica-camera.com",
-          "credit": "Leica Camera"
+          "url": "https://api.dandelist.knightaiav.com/media/e5dee2038f559c60b8df63dd261f5215cbb95c1793e2c3c5a4023cd6284926fc.jpg",
+          "width": 1800,
+          "height": 2520,
+          "source": "unsplash.com",
+          "credit": "Donna White, rawkkim",
+          "license": "Unsplash License"
         },
         {
-          "url": "https://api.dandelist.knightaiav.com/media/c874353d86743e2b7a1629572425858100ccfbc7c1d407c6aa2995500e1f5653.jpg",
-          "width": 2400,
-          "height": 900,
-          "source": "leica-camera.com",
-          "credit": "Leica Camera"
+          "url": "https://api.dandelist.knightaiav.com/media/a7d953adfa4f03924d51c8aa73540c0f14604217ae62796c28d6ff4a147575b5.jpg",
+          "width": 3000,
+          "height": 1125,
+          "source": "unsplash.com",
+          "credit": "Donna White, rawkkim",
+          "license": "Unsplash License"
         }
       ]
     }
@@ -91,17 +97,33 @@
     "seller": "Priceline + Flatio",
     "url": "https://www.flatio.com/rent/apartment/100785-lisbon",
     "checkedAt": "2026-10-27T22:19:52.909Z",
-    "imageUrl": "https://api.dandelist.knightaiav.com/media/2ff3a1bd237af71f4bd952d794b4d6ae842120b744472097f98aa5bad61f8ad6.jpg",
+    "imageUrl": "https://api.dandelist.knightaiav.com/media/8ce43529ffd95ec192a4ccc0a671d29c60925dbb4cad88a38e4d896d3785850c.jpg",
     "media": {
       "kind": "place",
       "images": [
         {
-          "url": "https://api.dandelist.knightaiav.com/media/2ff3a1bd237af71f4bd952d794b4d6ae842120b744472097f98aa5bad61f8ad6.jpg",
-          "width": 2400,
-          "height": 1600,
-          "source": "commons.wikimedia.org",
-          "credit": "NorbertNagel",
-          "license": "CC BY-SA 4.0"
+          "url": "https://api.dandelist.knightaiav.com/media/8ce43529ffd95ec192a4ccc0a671d29c60925dbb4cad88a38e4d896d3785850c.jpg",
+          "width": 2048,
+          "height": 2048,
+          "source": "unsplash.com",
+          "credit": "Andreas Brücker, Benjamin Pazdernik",
+          "license": "Unsplash License"
+        },
+        {
+          "url": "https://api.dandelist.knightaiav.com/media/7a22b07b8c8feb380d33b840f489fffc1fa954aa9c351b4444c8c3fb21c7b492.jpg",
+          "width": 1800,
+          "height": 2520,
+          "source": "unsplash.com",
+          "credit": "Andreas Brücker, Benjamin Pazdernik",
+          "license": "Unsplash License"
+        },
+        {
+          "url": "https://api.dandelist.knightaiav.com/media/3f5524510bf4b2786c9181646558face559b9df87282004c8d989e88ca055d04.jpg",
+          "width": 3000,
+          "height": 1125,
+          "source": "unsplash.com",
+          "credit": "Andreas Brücker, Benjamin Pazdernik",
+          "license": "Unsplash License"
         }
       ]
     }
@@ -118,39 +140,35 @@
     "seller": "Rolex",
     "url": "https://www.rolex.com/en-us/watches/submariner/m126610ln-0001",
     "checkedAt": "2026-10-27T21:54:09.048Z",
-    "imageUrl": "https://api.dandelist.knightaiav.com/media/a1f9579cdb2233c41a81459f1e9afe4ba6a514f5f79cf523d0e1b5796a54fdc4.jpg",
+    "imageUrl": "https://api.dandelist.knightaiav.com/media/f7aa6e57fad94c577f98831475e7b6f8ac05c49925003993cd3c43be5c4dfb60.jpg",
     "media": {
       "kind": "product",
       "images": [
         {
-          "url": "https://api.dandelist.knightaiav.com/media/a1f9579cdb2233c41a81459f1e9afe4ba6a514f5f79cf523d0e1b5796a54fdc4.jpg",
+          "url": "https://api.dandelist.knightaiav.com/media/f7aa6e57fad94c577f98831475e7b6f8ac05c49925003993cd3c43be5c4dfb60.jpg",
           "width": 2048,
           "height": 2048,
-          "source": "rolex.com",
-          "credit": "Rolex"
+          "source": "unsplash.com",
+          "credit": "Daniel Hay, Patrick Langwallner",
+          "license": "Unsplash License"
         },
         {
-          "url": "https://api.dandelist.knightaiav.com/media/87ceeaae263820252710dd6319a0559469d9182890c574a4591a34899af6df20.jpg",
-          "width": 1500,
-          "height": 2100,
-          "source": "rolex.com",
-          "credit": "Rolex"
+          "url": "https://api.dandelist.knightaiav.com/media/537b270d3138476565a453bd98d8e3fa7bcaa574b12589033fd52d517c160d68.jpg",
+          "width": 1800,
+          "height": 2520,
+          "source": "unsplash.com",
+          "credit": "Daniel Hay, Patrick Langwallner",
+          "license": "Unsplash License"
         },
         {
-          "url": "https://api.dandelist.knightaiav.com/media/4db154f83567f8d34484ab2f4ed293c27f2c52a80aa4cd7d2b468b65a50a6d92.jpg",
-          "width": 2400,
-          "height": 900,
-          "source": "rolex.com",
-          "credit": "Rolex"
+          "url": "https://api.dandelist.knightaiav.com/media/8870cf387e908049fe29dce3feff409c587368bf6bd9eb62567be62dcc5b8cee.jpg",
+          "width": 3000,
+          "height": 1125,
+          "source": "unsplash.com",
+          "credit": "Daniel Hay, Patrick Langwallner",
+          "license": "Unsplash License"
         }
-      ],
-      "cutout": {
-        "url": "https://api.dandelist.knightaiav.com/media/949f5a27e346f92fe179e43181cb3b1f266e2dacdbf8a93919e92bdd7670f3ba.png",
-        "width": 886,
-        "height": 1511,
-        "from": "https://media.rolex.com/image/upload/f_auto/t_v7-cover-majesty-landscape/c_limit,w_1920/v1/a677b2c664f6/catalogue/2026/upright-c/m126610ln-0001",
-        "model": "sam-3.1"
-      }
+      ]
     }
   },
   {
@@ -165,16 +183,33 @@
     "seller": "flights.com + KAYAK",
     "url": "https://www.flights.com/?redirect=true",
     "checkedAt": "2026-10-27T21:55:25.877Z",
-    "imageUrl": "https://api.dandelist.knightaiav.com/media/18675cec3b0ac062fbd1fb493332ab9312e9641cbcadbd3434a82267a17f8303.jpg",
+    "imageUrl": "https://api.dandelist.knightaiav.com/media/6859e7925cd75112483fe6e7c5f5b9984ff9a6569e43ab7cc2bb2e77c0375aed.jpg",
     "media": {
       "kind": "place",
       "images": [
         {
-          "url": "https://api.dandelist.knightaiav.com/media/18675cec3b0ac062fbd1fb493332ab9312e9641cbcadbd3434a82267a17f8303.jpg",
-          "width": 2400,
-          "height": 1477,
-          "source": "commons.wikimedia.org",
-          "license": "kyoto-autumn"
+          "url": "https://api.dandelist.knightaiav.com/media/6859e7925cd75112483fe6e7c5f5b9984ff9a6569e43ab7cc2bb2e77c0375aed.jpg",
+          "width": 2048,
+          "height": 2048,
+          "source": "unsplash.com",
+          "credit": "Ritz, Shinichi Kotoku",
+          "license": "Unsplash License"
+        },
+        {
+          "url": "https://api.dandelist.knightaiav.com/media/3fe65931c6cd1893bcd1739d4d3bf4f60db749253a2fe78f912aa6ec3fdeca4b.jpg",
+          "width": 1800,
+          "height": 2520,
+          "source": "unsplash.com",
+          "credit": "Ritz, Shinichi Kotoku",
+          "license": "Unsplash License"
+        },
+        {
+          "url": "https://api.dandelist.knightaiav.com/media/1b7d76a32c8e1089166cdab8c85055039ba77920feb38a86aac9573fdebfb6a7.jpg",
+          "width": 3000,
+          "height": 1125,
+          "source": "unsplash.com",
+          "credit": "Ritz, Shinichi Kotoku",
+          "license": "Unsplash License"
         }
       ]
     }
@@ -197,16 +232,33 @@
     "seller": "onepeloton.com",
     "url": "https://www.onepeloton.com/bike-plus",
     "checkedAt": "2026-10-27T22:18:57.980Z",
-    "imageUrl": "https://api.dandelist.knightaiav.com/media/87f3add9014cc6466396ce2cc7c263c494bc3d4306565009426086f140672795.jpg",
+    "imageUrl": "https://api.dandelist.knightaiav.com/media/ee13a8e4c479a939521add5a6bd83179d050fb2428c5ebb455736d2df0eb3885.jpg",
     "media": {
       "kind": "product",
       "images": [
         {
-          "url": "https://api.dandelist.knightaiav.com/media/87f3add9014cc6466396ce2cc7c263c494bc3d4306565009426086f140672795.jpg",
-          "width": 2400,
-          "height": 1260,
-          "source": "onepeloton.com",
-          "credit": "Peloton"
+          "url": "https://api.dandelist.knightaiav.com/media/ee13a8e4c479a939521add5a6bd83179d050fb2428c5ebb455736d2df0eb3885.jpg",
+          "width": 2048,
+          "height": 2048,
+          "source": "unsplash.com",
+          "credit": "Andrew Valdivia",
+          "license": "Unsplash License"
+        },
+        {
+          "url": "https://api.dandelist.knightaiav.com/media/ec53f6b70cabcd1d9dc3e80e1bead27b16de78d7a20c83a0baf755fbb0936778.jpg",
+          "width": 1800,
+          "height": 2520,
+          "source": "unsplash.com",
+          "credit": "Andrew Valdivia",
+          "license": "Unsplash License"
+        },
+        {
+          "url": "https://api.dandelist.knightaiav.com/media/998db7918c6eba67dfd170f60487a92fd52366da802dfcd30df63e96d2379f44.jpg",
+          "width": 3000,
+          "height": 1125,
+          "source": "unsplash.com",
+          "credit": "Andrew Valdivia",
+          "license": "Unsplash License"
         }
       ]
     }
@@ -223,30 +275,33 @@
     "seller": "rimowa.com/us/en",
     "url": "https://www.google.com/search?ibp=oshop&q=Rimowa+Original+Cabin+aluminium&prds=localAnnotatedOfferId:1,catalogid:12019736635646603971,gpcid:8735516789527914786,pvo:2,pvt:hg&gl=us&udm=28&pvorigin=2",
     "checkedAt": "2026-10-27T22:21:20.966Z",
-    "imageUrl": "https://api.dandelist.knightaiav.com/media/c4ebf3adc52b847de3fcd083af2fdcd574dcc8a432c13e551d9685afe4da8a87.jpg",
+    "imageUrl": "https://api.dandelist.knightaiav.com/media/266771a699a89b0f3f79b18621f65778f3e666d092c99eb8f201aa7f12b1dafe.jpg",
     "media": {
       "kind": "product",
       "images": [
         {
-          "url": "https://api.dandelist.knightaiav.com/media/c4ebf3adc52b847de3fcd083af2fdcd574dcc8a432c13e551d9685afe4da8a87.jpg",
+          "url": "https://api.dandelist.knightaiav.com/media/266771a699a89b0f3f79b18621f65778f3e666d092c99eb8f201aa7f12b1dafe.jpg",
           "width": 2048,
           "height": 2048,
-          "source": "rimowa.com",
-          "credit": "RIMOWA"
+          "source": "unsplash.com",
+          "credit": "Sam, my random photo",
+          "license": "Unsplash License"
         },
         {
-          "url": "https://api.dandelist.knightaiav.com/media/9fb7b1662115b156229503e3dc1ce600d524f8a0e5493be4b2b3435ba0265ca6.jpg",
-          "width": 1500,
-          "height": 2100,
-          "source": "rimowa.com",
-          "credit": "RIMOWA"
+          "url": "https://api.dandelist.knightaiav.com/media/38d0ee180c583e8912c198478c2d315d3cc379482181e979ba258f02588d3064.jpg",
+          "width": 1800,
+          "height": 2520,
+          "source": "unsplash.com",
+          "credit": "Sam, my random photo",
+          "license": "Unsplash License"
         },
         {
-          "url": "https://api.dandelist.knightaiav.com/media/ede3b945e6671cd89f8d8ec955d5caf0c62e6972a607cadc6fb2fbd72a9c0bd7.jpg",
-          "width": 2400,
-          "height": 900,
-          "source": "rimowa.com",
-          "credit": "RIMOWA"
+          "url": "https://api.dandelist.knightaiav.com/media/11a98a64a55337d1826f71437bf212b276230a9b661635fd0d412d7e4f2c072c.jpg",
+          "width": 3000,
+          "height": 1125,
+          "source": "unsplash.com",
+          "credit": "Sam, my random photo",
+          "license": "Unsplash License"
         }
       ]
     }
@@ -263,39 +318,35 @@
     "seller": "Land Rover USA",
     "url": "https://www.rangerover.com/en-us/index.html?dclid=CM3RzMum5IgDFbEHaAgdj8gARA",
     "checkedAt": "2026-10-27T13:56:36.320Z",
-    "imageUrl": "https://api.dandelist.knightaiav.com/media/e533ac972f6fcfcb3cc6c8faedf335d1d854486ac9c3494b245d378f880b8394.jpg",
+    "imageUrl": "https://api.dandelist.knightaiav.com/media/181500f22eef95d96b3c6e447b62f03b87dee69377881f2eeaeafa9b34af4c52.jpg",
     "media": {
       "kind": "vehicle",
       "images": [
         {
-          "url": "https://api.dandelist.knightaiav.com/media/e533ac972f6fcfcb3cc6c8faedf335d1d854486ac9c3494b245d378f880b8394.jpg",
+          "url": "https://api.dandelist.knightaiav.com/media/181500f22eef95d96b3c6e447b62f03b87dee69377881f2eeaeafa9b34af4c52.jpg",
           "width": 2048,
           "height": 2048,
-          "source": "rangerover.com",
-          "credit": "Land Rover"
+          "source": "commons.wikimedia.org",
+          "credit": "Franco Debartolo, Mr.choppers",
+          "license": "CC BY-SA 3.0 / Unsplash License"
         },
         {
-          "url": "https://api.dandelist.knightaiav.com/media/ced3323f7fe3b7dffa2d0c8c0eff47e788216c4353e2a9a9db6ee7e0819af708.jpg",
-          "width": 1500,
-          "height": 2100,
-          "source": "rangerover.com",
-          "credit": "Land Rover"
+          "url": "https://api.dandelist.knightaiav.com/media/baf4bbcd9ac5da2e55015abeace64d6ba4f54e522b80daf56b03829f2f72248e.jpg",
+          "width": 1800,
+          "height": 2520,
+          "source": "commons.wikimedia.org",
+          "credit": "Franco Debartolo, Mr.choppers",
+          "license": "CC BY-SA 3.0 / Unsplash License"
         },
         {
-          "url": "https://api.dandelist.knightaiav.com/media/9201c9c4f68748af0021b8342f84e862506c1caa9d47bab21f606b66ca567195.jpg",
-          "width": 2400,
-          "height": 900,
-          "source": "rangerover.com",
-          "credit": "Land Rover"
+          "url": "https://api.dandelist.knightaiav.com/media/627ac190f29127b9b639167d96747fd7f08e2d6882085134e3f90a53007089c3.jpg",
+          "width": 3000,
+          "height": 1125,
+          "source": "commons.wikimedia.org",
+          "credit": "Franco Debartolo, Mr.choppers",
+          "license": "CC BY-SA 3.0 / Unsplash License"
         }
-      ],
-      "cutout": {
-        "url": "https://api.dandelist.knightaiav.com/media/7b70f037793276a0c7ac4a7ce5b5226c0ad4af940d0882a17d9d56cf445c27c0.png",
-        "width": 1545,
-        "height": 864,
-        "from": "https://www.rangerover.com/content/dam/lrdx/global/l461/26my/int/L46126GL_303105617_SV_CORE_F34_ARROIOS_16x9.jpg",
-        "model": "sam-3.1"
-      }
+      ]
     }
   },
   {
@@ -310,17 +361,33 @@
     "seller": "Lufthansa, Hotel Marincanto",
     "url": "https://www.tripexpert.com/",
     "checkedAt": "2026-10-27T22:22:03.736Z",
-    "imageUrl": "https://api.dandelist.knightaiav.com/media/9bc14f198e35e95cf5c06ebdec0903b75dbb17aebdcf3b936cd7a0d0615edecf.jpg",
+    "imageUrl": "https://api.dandelist.knightaiav.com/media/dc81b1b799a162b31f3166e5fa0983cc8d1c234cd441219828892eaf0425d0b5.jpg",
     "media": {
       "kind": "place",
       "images": [
         {
-          "url": "https://api.dandelist.knightaiav.com/media/9bc14f198e35e95cf5c06ebdec0903b75dbb17aebdcf3b936cd7a0d0615edecf.jpg",
-          "width": 2400,
-          "height": 1472,
-          "source": "commons.wikimedia.org",
-          "credit": "Bernard Gagnon",
-          "license": "CC BY 4.0"
+          "url": "https://api.dandelist.knightaiav.com/media/dc81b1b799a162b31f3166e5fa0983cc8d1c234cd441219828892eaf0425d0b5.jpg",
+          "width": 2048,
+          "height": 2048,
+          "source": "unsplash.com",
+          "credit": "Ricardo Gomez Angel, Sebastian Leonhardt",
+          "license": "Unsplash License"
+        },
+        {
+          "url": "https://api.dandelist.knightaiav.com/media/e42b818b43f503292f01c009fbfb01c5f890a61b9672baf9a9babf4689ad5f32.jpg",
+          "width": 1800,
+          "height": 2520,
+          "source": "unsplash.com",
+          "credit": "Ricardo Gomez Angel, Sebastian Leonhardt",
+          "license": "Unsplash License"
+        },
+        {
+          "url": "https://api.dandelist.knightaiav.com/media/df961a1aa75bda4c44d550262488976fdc6c560d47f8b100d3a51835dfa425ad.jpg",
+          "width": 3000,
+          "height": 1125,
+          "source": "unsplash.com",
+          "credit": "Ricardo Gomez Angel, Sebastian Leonhardt",
+          "license": "Unsplash License"
         }
       ]
     }
@@ -337,39 +404,35 @@
     "seller": "Herman Miller",
     "url": "https://www.google.com/search?ibp=oshop&q=Herman+Miller+Eames+Lounge+Chair+and+Ottoman&prds=localAnnotatedOfferId:1,catalogid:8830621110811062881,gpcid:9541738175038401560,pvo:2,pvt:hg&gl=us&udm=28&pvorigin=2",
     "checkedAt": "2026-10-27T22:23:32.651Z",
-    "imageUrl": "https://api.dandelist.knightaiav.com/media/b7de33ff12f9cb86788e49541e8af7a252112afd03e989b9c2c98e875ba0a165.jpg",
+    "imageUrl": "https://api.dandelist.knightaiav.com/media/c6abd77cfd15c0df73b6cac9c5e9137a185f801ee24ccb4d2ee35941a3f1e668.jpg",
     "media": {
       "kind": "product",
       "images": [
         {
-          "url": "https://api.dandelist.knightaiav.com/media/b7de33ff12f9cb86788e49541e8af7a252112afd03e989b9c2c98e875ba0a165.jpg",
+          "url": "https://api.dandelist.knightaiav.com/media/c6abd77cfd15c0df73b6cac9c5e9137a185f801ee24ccb4d2ee35941a3f1e668.jpg",
           "width": 2048,
           "height": 2048,
-          "source": "hermanmiller.com",
-          "credit": "Herman Miller"
+          "source": "unsplash.com",
+          "credit": "Clay Banks, Josh Hemsley",
+          "license": "Unsplash License"
         },
         {
-          "url": "https://api.dandelist.knightaiav.com/media/7a30c58f28ae310e63b3d351c91b16dfdfbde0d38e1ef0579876baf2d17219ad.jpg",
-          "width": 1500,
-          "height": 2100,
-          "source": "hermanmiller.com",
-          "credit": "Herman Miller"
+          "url": "https://api.dandelist.knightaiav.com/media/42f878778162318d197bf80393e69ce6dfa5914030cd836c6ce0fbfb278e66e3.jpg",
+          "width": 1800,
+          "height": 2520,
+          "source": "unsplash.com",
+          "credit": "Clay Banks, Josh Hemsley",
+          "license": "Unsplash License"
         },
         {
-          "url": "https://api.dandelist.knightaiav.com/media/eb4dcaa32540c48e1da264ae75d0739726f97e06885dcd2968670589a50a4a28.jpg",
-          "width": 2400,
-          "height": 900,
-          "source": "hermanmiller.com",
-          "credit": "Herman Miller"
+          "url": "https://api.dandelist.knightaiav.com/media/58c4d57370fdf84b2cfb57f6e39b92526552144fd0c8fb00e84fc071b15b8362.jpg",
+          "width": 3000,
+          "height": 1125,
+          "source": "unsplash.com",
+          "credit": "Clay Banks, Josh Hemsley",
+          "license": "Unsplash License"
         }
-      ],
-      "cutout": {
-        "url": "https://api.dandelist.knightaiav.com/media/6cebb106d93e9528f982661df1f5c175a465bb6a145af55a60f25dbb1867f54d.png",
-        "width": 1837,
-        "height": 1741,
-        "from": "https://images.hermanmiller.group/asset/51f9c4c7-a3ec-4d1f-9cfc-0c400937d965/W/HM_5667_9121537_palisander_black_p.png",
-        "model": "sam-3.1"
-      }
+      ]
     }
   },
   {
@@ -384,42 +447,35 @@
     "seller": "apple.com",
     "url": "https://www.apple.com/shop/buy-vision/apple-vision-pro",
     "checkedAt": "2026-10-27T14:01:59.157Z",
-    "imageUrl": "https://api.dandelist.knightaiav.com/media/c7c71c7ee161d032751113d0f87aa080d05c401aded2dc1a94d538cb08c89519.jpg",
+    "imageUrl": "https://api.dandelist.knightaiav.com/media/d46b7e775b0b2b099a7fdaa4d4ab2b07a137583db38070caea96df7be7e38452.jpg",
     "media": {
       "kind": "product",
       "images": [
         {
-          "url": "https://api.dandelist.knightaiav.com/media/c7c71c7ee161d032751113d0f87aa080d05c401aded2dc1a94d538cb08c89519.jpg",
+          "url": "https://api.dandelist.knightaiav.com/media/d46b7e775b0b2b099a7fdaa4d4ab2b07a137583db38070caea96df7be7e38452.jpg",
           "width": 2048,
           "height": 2048,
-          "source": "commons.wikimedia.org",
-          "credit": "AzureSaturn",
-          "license": "CC0"
+          "source": "unsplash.com",
+          "credit": "Roméo A., Shojol Islam",
+          "license": "Unsplash License"
         },
         {
-          "url": "https://api.dandelist.knightaiav.com/media/6685338729ff0cd3e37a49e13b0855a914311f1ca1f0decb5227a9d2e021f9ed.jpg",
-          "width": 1500,
-          "height": 2100,
-          "source": "commons.wikimedia.org",
-          "credit": "AzureSaturn",
-          "license": "CC0"
+          "url": "https://api.dandelist.knightaiav.com/media/111e860f6084dc11d4668119fdd7fd4cde7497ec895550ff2479f70ff1eebfca.jpg",
+          "width": 1800,
+          "height": 2520,
+          "source": "unsplash.com",
+          "credit": "Roméo A., Shojol Islam",
+          "license": "Unsplash License"
         },
         {
-          "url": "https://api.dandelist.knightaiav.com/media/d5f72feb46e35c671622ed5b5c0c46dbb359fa650a03153109a3e35d0d4493b7.jpg",
-          "width": 2400,
-          "height": 900,
-          "source": "commons.wikimedia.org",
-          "credit": "AzureSaturn",
-          "license": "CC0"
+          "url": "https://api.dandelist.knightaiav.com/media/c40404501f9bddb6a4a643958c14fabd7880264c5786be6e2e698735c9fda3dc.jpg",
+          "width": 3000,
+          "height": 1125,
+          "source": "unsplash.com",
+          "credit": "Roméo A., Shojol Islam",
+          "license": "Unsplash License"
         }
-      ],
-      "cutout": {
-        "url": "https://api.dandelist.knightaiav.com/media/e20abbea99a665068ae9493c691543d3333ade9662cb6025dfd189a8703f8d9b.png",
-        "width": 1861,
-        "height": 1897,
-        "from": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/8d/Apple_Vision_Pro_%28M5%2C_2025%29_with_Dual_Knit_Band_on_Display.jpg/3840px-Apple_Vision_Pro_%28M5%2C_2025%29_with_Dual_Knit_Band_on_Display.jpg",
-        "model": "sam-3.1"
-      }
+      ]
     }
   }
 ]

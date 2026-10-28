@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PGlite } from "@electric-sql/pglite";
 import { beforeEach, describe, expect, it } from "vitest";
-import { admissible, matchEntity, pgArchive, words, type ArchiveEntity, type ArchivePhoto } from "../src/archive/archive";
+import { admissible, exactEntity, matchEntity, pgArchive, words, type ArchiveEntity, type ArchivePhoto } from "../src/archive/archive";
 import { loadSeed } from "../src/archive/seed";
 import { migrate, type Db } from "../src/db";
 
@@ -50,6 +50,14 @@ describe("archive matching", () => {
     expect(matchEntity("A Lisbon apartment", "place", ENTITIES)?.id).toBe("lisbon-apartment");
   });
 
+  it("lets offers add only to an entity the subject names word for word", () => {
+    expect(exactEntity("Porsche 911 Carrera", "vehicle", ENTITIES)?.id).toBe("porsche-911-carrera-992");
+    expect(exactEntity("Lisboa", "place", ENTITIES)?.id).toBe("lisbon");
+    expect(exactEntity("Lisbon red", "place", ENTITIES)).toBeNull();
+    expect(exactEntity("A month in Lisbon", "place", ENTITIES)).toBeNull();
+    expect(exactEntity("Lisbon", "vehicle", ENTITIES)).toBeNull();
+  });
+
   it("admits only API-licensed real photos of 3000 px or more", () => {
     expect(admissible(photo(1))).toBe(true);
     expect(admissible(photo(2, { license: "Unsplash License", source: "unsplash" }))).toBe(true);
@@ -89,13 +97,13 @@ describe("archive store", () => {
   it("puts an agent's finds live only when a second person's agent offers the same photos", async () => {
     await loadSeed(db, await seed([{ id: "kyoto", domain: "Travel", category: "City breaks", subcategory: "Japan", name: "Kyoto", kind: "place", priceModel: "trip", tier: 1 }]));
     const archive = pgArchive(db);
-    expect(await archive.contribute("Two weeks in Kyoto", "place", [photo(10), photo(11), photo(12, { license: "All rights reserved" })], "user-a")).toBe(2);
+    expect(await archive.contribute("Kyoto", "place", [photo(10), photo(11), photo(12, { license: "All rights reserved" })], "user-a")).toBe(2);
     expect(await archive.lookup("Kyoto", "place")).toBeNull();
     await archive.contribute("Kyoto", "place", [photo(10), photo(11)], "user-a");
     expect(await archive.lookup("Kyoto", "place")).toBeNull();
     await archive.contribute("Kyoto temples at dusk", "place", [photo(10), photo(11)], "user-b");
     expect(await archive.lookup("Kyoto", "place")).toBeNull();
-    await archive.contribute("Kyoto in autumn", "place", [photo(10), photo(11)], "user-b");
+    await archive.contribute("Kyoto", "place", [photo(10), photo(11)], "user-b");
     expect((await archive.lookup("Kyoto", "place"))?.photos).toHaveLength(2);
     expect(await archive.contribute("Kyoto", "place", [photo(13)], "anonymous")).toBe(0);
   });
@@ -106,7 +114,16 @@ describe("archive store", () => {
     await archive.contribute("Faroe Islands", "place", [photo(20), photo(21)], "user-b");
     await archive.contribute("Faroe Islands", "place", [photo(20)], "user-c");
     expect(await archive.lookup("Faroe Islands", "place")).toBeNull();
-    const { rows } = await db.query<{ status: string }>("select status from archive_entities where id = 'faroe-islands'");
+    const { rows } = await db.query<{ status: string }>("select status from archive_entities where id = 'agent-faroe-islands'");
     expect(rows[0]?.status).toBe("pending");
+  });
+
+  it("never lets a new subject's photos land on a seed entity with the same name", async () => {
+    await loadSeed(db, await seed([{ id: "lisbon", domain: "Travel", category: "City breaks", subcategory: "Iberia", name: "Lisbon", kind: "place", priceModel: "trip", tier: 1 }]));
+    const archive = pgArchive(db);
+    await archive.contribute("Lisbon", "vehicle", [photo(30)], "user-a");
+    await archive.contribute("Lisbon", "vehicle", [photo(30)], "user-b");
+    const { rows } = await db.query<{ entity_id: string }>("select entity_id from archive_photos where url = $1", [photo(30).url]);
+    expect(rows[0]?.entity_id).toBe("agent-lisbon");
   });
 });

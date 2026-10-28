@@ -55,7 +55,7 @@ export const words = (s: string) =>
   s
     .toLowerCase()
     .normalize("NFKD")
-    .replace(/[̀-ͯ]/g, "")
+    .replace(/[\u0300-\u036f]/g, "")
     .split(/[^a-z0-9]+/)
     .filter((w) => w.length > 0 && !FILLER.has(w));
 
@@ -72,7 +72,7 @@ const SERVES: Record<MediaKind, string[]> = {
  * The entity a subject names. Every word of one of its names must appear in the subject, and that name must cover
  * at least two thirds of the subject's own words, so "Porsche 911 GT3 RS Weissach" never borrows a GT3's photos.
  */
-export function matchEntity(subject: string, kind: MediaKind, entities: ArchiveEntity[], minCover = 0.65): ArchiveEntity | null {
+export function matchEntity(subject: string, kind: MediaKind, entities: ArchiveEntity[]): ArchiveEntity | null {
   const said = new Set(words(subject));
   if (!said.size) return null;
   const allowed = SERVES[kind];
@@ -83,11 +83,32 @@ export function matchEntity(subject: string, kind: MediaKind, entities: ArchiveE
       const w = [...new Set(words(name.replace(/\([^)]*\)/g, " ")))];
       if (!w.length || !w.every((x) => said.has(x))) continue;
       const cover = w.length / said.size;
-      if (cover < minCover) continue;
+      if (cover < 0.65) continue;
       if (!best || cover > best.cover || (cover === best.cover && (w.length > best.len || (w.length === best.len && e.tier < best.e.tier)))) best = { e, cover, len: w.length };
     }
   }
   return best?.e ?? null;
+}
+
+const plain = (s: string) =>
+  s
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\([^)]*\)/g, " ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+
+/**
+ * The entity whose name or alias is the subject word for word (nothing dropped, not even filler), used for offers:
+ * the photos were found by searching the subject as typed, so only a subject that is exactly a known name may add
+ * to that entity.
+ */
+export function exactEntity(subject: string, kind: MediaKind, entities: ArchiveEntity[]): ArchiveEntity | null {
+  const key = plain(subject);
+  const allowed = SERVES[kind];
+  if (!key) return null;
+  return entities.find((e) => (!allowed.length || allowed.includes(e.kind)) && [e.name, ...e.aliases].some((n) => plain(n) === key)) ?? null;
 }
 
 /** Licences an API reported that allow use in the app without asking: CC0, public domain, CC BY, CC BY-SA, Unsplash, Pexels. */
@@ -144,18 +165,21 @@ export function pgArchive(db: Db, now: () => Date = () => new Date()): Archive {
       // Only a signed-in person's agent may offer photos, and only real API-licensed 4K ones.
       const ok = photos.filter(admissible);
       if (!ok.length || !by || by === "anonymous" || by === "seed") return 0;
-      // Offers attach to a known entity only when the subject names nothing else ("Porsche 911 Carrera", not
-      // "Porsche 911 Carrera plus anything"), so extra words can't steer what a search finds onto a known page.
-      let e = matchEntity(subject, kind, await entities(), 1);
+      // Offers attach to a known entity only when the subject is exactly one of its names ("Porsche 911 Carrera",
+      // not "Porsche 911 Carrera plus anything"), so extra words can't steer what a search finds onto a known page.
+      let e = exactEntity(subject, kind, await entities());
       if (!e) {
-        // Something new waits, with its photos, until someone reviews it; it is never promoted automatically.
-        const id = slug(subject);
+        // Something new waits, with its photos, until someone reviews it; it is never promoted automatically. Its id
+        // is in its own namespace, so it can never land on a seed entity.
+        const id = slug(subject) && `agent-${slug(subject)}`;
         if (!id || kind === "other") return 0;
         await db.query(
           `insert into archive_entities (id, domain, category, subcategory, name, kind, price_model, tier, origin, status)
            values ($1, 'proposed', 'proposed', 'proposed', $2, $3, 'one-off', 3, 'agent', 'pending') on conflict (id) do nothing`,
           [id, subject.slice(0, 120), kind],
         );
+        const own = await db.query<{ origin: string }>("select origin from archive_entities where id = $1", [id]);
+        if (own.rows[0]?.origin !== "agent") return 0;
         e = { id, name: subject, aliases: [], kind, tier: 3, subcategory: "proposed" };
       }
       // A photo goes live only once two different people's agents offered it for the same thing, so one account
