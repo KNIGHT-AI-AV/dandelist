@@ -2,6 +2,7 @@ import { equivalentMonthly, formatCents, horizonCashOutlay, recurringBreakdown, 
 import type { ImagesResult, ResponsesResult } from "@dandelist/meta";
 import { z } from "zod";
 import { eventStep, type AgentEvent } from "./events";
+import type { Archive } from "../archive/archive";
 import { huntMedia, type MediaHint, type MediaOptions } from "./hunt";
 import { MEDIA_KINDS, sketchfabSearch, type Media, type ModelCandidate } from "./media";
 import { matchOffer, type ShoppingOffer } from "./shopping";
@@ -295,6 +296,10 @@ export interface ResearchContext {
   shopping?: (query: string) => Promise<ShoppingOffer[]>;
   /** Cutouts, upscales and generated pictures, each off unless switched on. Real-photo hunting always runs. */
   media?: MediaOptions;
+  /** The shared photo archive, asked before any hunt and offered what the hunt finds. */
+  archive?: Archive;
+  /** Whose agent this is, recorded on photos it offers the archive. */
+  contributor?: string;
 }
 
 function brief(draft: Draft, answers: Answer[], home: string): string {

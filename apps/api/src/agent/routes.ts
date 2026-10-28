@@ -10,6 +10,7 @@ import { SAM_MODEL } from "./cutout";
 import type { MediaOptions } from "./hunt";
 import { SHOPPING_ACTOR, SHOPPING_MAX_RESULTS, SHOPPING_PRICE_PER_RESULT_USD, shoppingSearch } from "./shopping";
 import type { Fetcher } from "./tools";
+import { pgArchive, type Archive } from "../archive/archive";
 
 export const RUNS_PER_USER_PER_DAY = 20;
 /** Every judge shares one account, so it gets more runs; its share of the daily spend cap still bounds it. */
@@ -29,6 +30,8 @@ export interface AgentDeps extends AuthDeps {
   apify?: { token: string; dailyUsd: number; actor?: string; fetch?: Fetcher };
   /** Pictures Meta's models make. Each is off unless switched on, and each has a daily count cap. */
   media?: { store?: MediaStore; cutouts?: boolean; generate?: boolean; upscale?: boolean; cutoutsPerDay: number; imagesPerDay: number };
+  /** The shared photo archive (defaults to the database's). Tests pass their own or none. */
+  archive?: Archive | null;
 }
 
 const IMAGE_MODEL = "muse-image-1.0";
@@ -71,6 +74,7 @@ export function agentRoutes(deps: AgentDeps) {
   const app = new Hono<{ Variables: AuthVars }>();
   const { db } = deps;
   const caps = deps.spendCaps ?? { dailyUsd: 10, totalUsd: 120 };
+  const archive = deps.archive === undefined ? pgArchive(db) : deps.archive ?? undefined;
   app.use("*", requireAuth(deps));
 
   /** A Meta client that checks the spend caps before each call and records what each call cost. */
@@ -193,7 +197,7 @@ export function agentRoutes(deps: AgentDeps) {
       void (await db.query("update agent_runs set steps = steps || $1::jsonb, updated_at = $2 where id = $3", [JSON.stringify([step]), touch(), run.id]));
     // The agent keeps working after this response; the app polls GET /agent/runs/:id for its trail.
     const shopping = shoppingFor(userId, draft.region, draft.currency, addCost);
-    void research(metaFor(userId, "research", addCost), { draft, answers, onStep, fetcher: deps.webFetch, now: deps.now, shopping, media: mediaOptions() })
+    void research(metaFor(userId, "research", addCost), { draft, answers, onStep, fetcher: deps.webFetch, now: deps.now, shopping, media: mediaOptions(), archive, contributor: userId })
       .then((result) => db.query("update agent_runs set status = 'done', result = $1::jsonb, updated_at = $2 where id = $3", [JSON.stringify(result), touch(), run.id]))
       .catch((e) => {
         console.error("research failed", run.id, e instanceof MetaApiError ? `${e.status} ${e.body.slice(0, 200)}` : e);

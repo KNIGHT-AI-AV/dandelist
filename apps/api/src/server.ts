@@ -1,5 +1,6 @@
 import { serve } from "@hono/node-server";
 import { createApp } from "./app";
+import { loadSeed } from "./archive/seed";
 import { migrate, openDb } from "./db";
 import { readEnv } from "./env";
 import { consoleMailer, resendMailer } from "./mailer";
@@ -46,3 +47,8 @@ const app = createApp({
 });
 
 serve({ fetch: app.fetch, port: env.PORT }, (info) => console.log(`dandelist api listening on ${info.port}`));
+
+// The master list loads after the server is up, so a large seed never delays a deploy's health check.
+void loadSeed(db)
+  .then((r) => r && console.log(`archive seed ${r.version}: ${r.entities} entities, ${r.photos} photos`))
+  .catch((e) => console.error("archive seed failed", e));

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { toMediaImage as archiveImage } from "../archive/archive";
 import type { MediaStore, MediaType } from "../media-store";
 import type { Meta, PriceOption, ResearchContext } from "./agent";
 import { cutoutSource, makeCutout, SAM_MODEL, type Segmenter } from "./cutout";
@@ -178,7 +179,10 @@ export async function huntMedia(
     return probes.get(url)!;
   };
 
-  const commons = kind === "place" || kind === "experience" || kind === "vehicle" ? await commonsPhotos(hint.subject, fetcher).catch(() => []) : [];
+  // The shared archive first: a known subject already has curated real photos, so nothing needs hunting or drawing.
+  const archived = ctx.archive ? await ctx.archive.lookup(hint.subject, kind).catch((e) => (console.error("archive lookup failed", (e as Error).message), null)) : null;
+  const fromArchive = archived ? archived.photos.map(archiveImage) : [];
+  const commons = !archived && (kind === "place" || kind === "experience" || kind === "vehicle") ? await commonsPhotos(hint.subject, fetcher).catch(() => []) : [];
 
   if ((kind === "vehicle" || kind === "product") && !models.size) {
     try {
@@ -200,7 +204,12 @@ export async function huntMedia(
     }
   }
   if (picked.model3d) await ctx.onStep(eventStep({ kind: "model3d", name: picked.model3d.name, author: picked.model3d.author }, at()));
-  const photos = picked.photos.map(commonsImage);
+  const photos = [...fromArchive, ...picked.photos.map(commonsImage)];
+  // Freely licensed 4K photos found for a new subject go back to the archive for the next person.
+  if (ctx.archive && !archived && picked.photos.length) {
+    const offered = picked.photos.map((p) => ({ url: p.url, width: p.width, height: p.height, source: "commons" as const, sourcePage: p.page, photographer: p.credit, license: p.license, hero: false }));
+    void ctx.archive.contribute(hint.subject, kind, offered, ctx.contributor ?? "anonymous").catch((e) => console.error("archive contribute failed", (e as Error).message));
+  }
 
   let generated: Promise<MediaImage | null> | undefined;
   const generateOnce = () =>
@@ -257,10 +266,15 @@ export async function huntMedia(
     for (const [other, p] of optionPages) if (other !== option && p.ok) candidates.push(...p.images.slice(0, 4).map((url) => ({ url, source: hostOf(p.url), credit: other.seller })));
     for (const o of offers.slice(0, 3)) if (o.image) candidates.push({ url: o.image, source: "Google Shopping", credit: o.merchant });
 
-    const real = kind === "place" && photos.length >= 5 ? [] : await huntImages(candidates, probe, 16);
+    const real = (kind === "place" && photos.length >= 5) || fromArchive.length >= 3 ? [] : await huntImages(candidates, probe, 16);
     const pageImages = real.map(toMediaImage);
-    let images: MediaImage[] =
-      kind === "place" ? [...photos, ...pageImages.filter((i) => (i.width ?? 0) >= 1600 && (i.width ?? 0) > (i.height ?? 0))] : kind === "product" || kind === "other" ? pageImages : [...pageImages, ...photos].sort(byResolution);
+    let images: MediaImage[] = fromArchive.length
+      ? [...fromArchive, ...pageImages]
+      : kind === "place"
+        ? [...photos, ...pageImages.filter((i) => (i.width ?? 0) >= 1600 && (i.width ?? 0) > (i.height ?? 0))]
+        : kind === "product" || kind === "other"
+          ? pageImages
+          : [...pageImages, ...photos].sort(byResolution);
     images = images.slice(0, MAX_IMAGES[kind]);
 
     // Only when no real photo reaches the bar: a re-rendered small product photo, or one generated picture.

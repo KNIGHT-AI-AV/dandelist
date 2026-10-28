@@ -304,6 +304,8 @@ const MAX_WIDTH = 3840;
 export interface CommonsPhoto {
   id: string;
   title: string;
+  /** The file's page on Commons, where its licence and author are stated. */
+  page: string;
   description: string;
   url: string;
   width: number;
@@ -378,6 +380,7 @@ export async function commonsPhotos(subject: string, fetcher: Fetcher, opts: { m
       found.set(String(p.pageid), {
         id: String(p.pageid),
         title: p.title.replace(/^File:/, "").replace(/\.[a-z]+$/i, ""),
+        page: `https://commons.wikimedia.org/wiki/${encodeURIComponent(p.title.replace(/ /g, "_"))}`,
         description: stripHtml(m.ImageDescription?.value).slice(0, 160),
         url: noTracking(scaled ? info.thumburl : String(info.url)),
         width: scaled ? MAX_WIDTH : w,
