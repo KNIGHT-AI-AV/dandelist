@@ -1,25 +1,48 @@
 import { Redirect, router, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { Animated, Linking, PanResponder, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import { Animated, Linking, PanResponder, Pressable, StyleSheet, Text, View, useWindowDimensions, type NativeScrollEvent, type NativeSyntheticEvent, type ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { AgentDot, Breathing, ErrorLine, Eyebrow, Grain, IconButton, Photo, Protect, QuietButton, Shade } from "../../components/lux";
+import { Atmosphere } from "../../components/atmosphere";
+import { HeroGallery } from "../../components/detail/gallery";
+import { CONTROL_TOP, HERO_SHADE, PARALLAX } from "../../components/detail/metrics";
+import { Recheck } from "../../components/detail/recheck";
+import { Swap } from "../../components/detail/swap";
+import { PhotoViewer, type ViewerFrom } from "../../components/detail/viewer";
+import { AgentDot, Breathing, EdgeFade, ErrorLine, Eyebrow, Grain, IconButton, Protect, QuietButton, Shade } from "../../components/lux";
 import { MediaHero } from "../../components/media";
 import { Statement, Take } from "../../components/statement";
 import { useAuth } from "../../lib/auth";
-import { FLICK, ease, native, spring, useReducedMotion } from "../../lib/motion";
-import { layout, radius, type, usePalette, useType } from "../../lib/theme";
 import { webOnly } from "../../lib/dream";
-import { useWishes } from "../../lib/wishes";
+import { photoCredit, realPhotos, showsGallery, trimBottom } from "../../lib/gallery";
+import { FLICK, ease, native, spring, step, useReducedMotion } from "../../lib/motion";
+import { layout, radius, type, usePalette, useType } from "../../lib/theme";
+import { useWishes, type Wish } from "../../lib/wishes";
 import { KIND_LABEL, TIER_LABEL, agentLine } from "../../lib/words";
 import { cardRect } from "../../lib/zoom";
-import { Atmosphere } from "../../components/atmosphere";
 
 const HERO = 470;
+/** How far the title block rises onto the photo, into its shade. */
+const TITLE_OVERLAP = 150;
+/** The list's tall card, so the loading shape matches what lands. */
+const CARD_PLACEHOLDER = 232;
+/** The text rises this far behind the photo as the page opens from a card. */
+const RISE_DELAY_MS = 60;
+/** The page fades out as the photo shrinks home: quicker than it came in, slower than a step leaves. */
+const EXIT_MS = 200;
+/** Pull-to-dismiss: claims a mostly vertical drag past 8 pt; a quarter-screen drag or a flick dismisses. */
+const PULL = { claim: 8, steep: 1.5, dismiss: 0.25, range: 240, scale: 0.9, follow: 0.6 };
+/** Title, price, source, remove: the regions that stagger in, top to bottom. */
+const SECTIONS = 4;
 
 /**
  * A wish in full. Opened from the list, its photograph grows out of the card it was (UI audit P1-17): the list
- * stays underneath while the page fades in, and the text rises 60 ms behind the photo. Dragging the photo down
- * follows the finger; a flick or a long enough drag sends it back into the card.
+ * stays underneath while the page fades in, and the regions rise 50 ms apart, 60 ms behind the photo. With two or
+ * more real photos the hero pages through them, and a tap opens the photo full screen. Scrolling slides the page
+ * over the photo with a gentle parallax. Dragging the photo down follows the finger; a flick or a long enough drag
+ * sends it back into the card.
+ *
+ * Rhythm: regions sit `stack.section` apart; inside one, the eyebrow and title sit `stack.tight` apart, the title and
+ * body `stack.base`, and lines of body `stack.tight`.
  */
 export default function WishDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -31,39 +54,88 @@ export default function WishDetail() {
   const { width: winW, height: winH } = useWindowDimensions();
   const reduced = useReducedMotion();
   const [confirm, setConfirm] = useState(false);
+  const [removing, setRemoving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const from = useRef(id ? cardRect(id) : undefined).current;
   const zoom = !!from && !reduced;
   // 0 = the card's rectangle, 1 = the full-width hero.
   const grow = useRef(new Animated.Value(zoom ? 0 : 1)).current;
-  const page = useRef(new Animated.Value(zoom ? 0 : 1)).current;
+  // The page's own background (the list shows through until it lands) and, without a card to grow from, the photo.
+  const page = useRef(new Animated.Value(0)).current;
+  // The photo itself: already there when it grows from a card, faded up with the page otherwise.
+  const photo = useRef(new Animated.Value(zoom ? 1 : 0)).current;
+  const sections = useRef(Array.from({ length: SECTIONS }, () => new Animated.Value(0))).current;
   const pull = useRef(new Animated.Value(0)).current;
   const leaving = useRef(false);
+  // The gallery takes over from the single grown photo once the zoom has landed, and hands back before it shrinks.
+  const [settled, setSettled] = useState(!zoom);
+  const [photoIndex, setPhotoIndex] = useState(0);
+  const [viewing, setViewing] = useState<(ViewerFrom & { key: number }) | null>(null);
+  const scrollY = useRef(new Animated.Value(0)).current;
+  // The offset is also kept in JS: the pull gesture only claims at the top, and the viewer's flight starts from where
+  // the parallax has carried the photo (a measured rect would not include a native-driven transform).
+  const scrollTop = useRef(0);
+  const onScroll = useRef(
+    Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
+      useNativeDriver: native,
+      listener: (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+        scrollTop.current = e.nativeEvent.contentOffset.y;
+      },
+    }),
+  ).current;
+  const hero = useRef<View>(null);
+  // The wish as last seen, so the page stays whole while it fades out after a remove.
+  const kept = useRef<Wish | undefined>(undefined);
 
+  const regions = (to: 0 | 1, ms: number) => sections.map((v) => Animated.timing(v, { toValue: to, duration: ms, easing: ease.out, useNativeDriver: native }));
+
+  // The entrance plays once, when the wish is first there to show (at once from a card; after loading from a link).
+  const ready = wishes.some((x) => x.id === id);
+  const entered = useRef(false);
   useEffect(() => {
-    if (!zoom) return;
-    Animated.spring(grow, { toValue: 1, ...spring.settle, useNativeDriver: false }).start();
-    Animated.timing(page, { toValue: 1, duration: 320, delay: 60, easing: ease.out, useNativeDriver: false }).start();
-  }, [zoom, grow, page]);
+    if (!ready || entered.current) return;
+    entered.current = true;
+    if (zoom) {
+      Animated.spring(grow, { toValue: 1, ...spring.settle, useNativeDriver: false }).start(({ finished }) => finished && setSettled(true));
+      Animated.timing(page, { toValue: 1, duration: step.inMs, delay: RISE_DELAY_MS, easing: ease.out, useNativeDriver: false }).start();
+      Animated.sequence([Animated.delay(RISE_DELAY_MS), Animated.stagger(step.staggerMs, regions(1, step.inMs))]).start();
+      return;
+    }
+    // Opened without a card (a link, or reduced motion): the page fades up and the regions follow, or under
+    // reduced motion everything cross-fades in at once.
+    Animated.parallel([page, photo].map((v) => Animated.timing(v, { toValue: 1, duration: reduced ? step.outMs : step.inMs, easing: ease.out, useNativeDriver: false }))).start();
+    (reduced ? Animated.parallel(regions(1, step.outMs)) : Animated.stagger(step.staggerMs, regions(1, step.inMs))).start();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready]);
+
+  /** Plays the page out (faster than it came in) and then calls `done`. */
+  const exit = (done: () => void, home = zoom) => {
+    if (home) {
+      setSettled(false);
+      Animated.parallel([
+        Animated.spring(grow, { toValue: 0, ...spring.settle, useNativeDriver: false }),
+        Animated.timing(page, { toValue: 0, duration: EXIT_MS, easing: ease.out, useNativeDriver: false }),
+        Animated.timing(pull, { toValue: 0, duration: EXIT_MS, easing: ease.out, useNativeDriver: false }),
+        ...regions(0, step.outMs),
+      ]).start(done);
+      return;
+    }
+    Animated.parallel([...[page, photo].map((v) => Animated.timing(v, { toValue: 0, duration: step.outMs, easing: ease.out, useNativeDriver: false })), ...regions(0, step.outMs)]).start(done);
+  };
 
   const back = () => {
     if (leaving.current) return;
     leaving.current = true;
-    const done = () => (router.canGoBack() ? router.back() : router.replace("/wishes"));
-    if (!zoom) return done();
-    Animated.parallel([
-      Animated.spring(grow, { toValue: 0, ...spring.settle, useNativeDriver: false }),
-      Animated.timing(page, { toValue: 0, duration: 200, easing: ease.out, useNativeDriver: false }),
-      Animated.timing(pull, { toValue: 0, duration: 200, easing: ease.out, useNativeDriver: false }),
-    ]).start(done);
+    exit(() => (router.canGoBack() ? router.back() : router.replace("/wishes")));
   };
 
   const drag = useRef(
     PanResponder.create({
-      onMoveShouldSetPanResponder: (_e, g) => g.dy > 8 && Math.abs(g.dy) > Math.abs(g.dx) * 1.5,
+      // Only at the top of the page: scrolled down, a downward drag scrolls back up.
+      onMoveShouldSetPanResponder: (_e, g) => scrollTop.current <= 0 && g.dy > PULL.claim && Math.abs(g.dy) > Math.abs(g.dx) * PULL.steep,
       onPanResponderMove: (_e, g) => pull.setValue(Math.max(0, g.dy)),
       onPanResponderRelease: (_e, g) => {
-        if (g.vy > FLICK || g.dy > winH * 0.25) back();
+        if (g.vy > FLICK || g.dy > winH * PULL.dismiss) back();
         else Animated.spring(pull, { toValue: 0, ...spring.snap, useNativeDriver: false }).start();
       },
       onPanResponderTerminate: () => Animated.spring(pull, { toValue: 0, ...spring.snap, useNativeDriver: false }).start(),
@@ -71,12 +143,14 @@ export default function WishDetail() {
   ).current;
 
   if (auth.status === "signedOut") return <Redirect href="/sign-in" />;
-  const w = wishes.find((x) => x.id === id);
+  const found = wishes.find((x) => x.id === id);
+  if (found) kept.current = found;
+  const w = found ?? (removing ? kept.current : undefined);
   if (!w) {
     return (
-      <View style={{ flex: 1, backgroundColor: p.bg, alignItems: "center", justifyContent: "center", gap: 16, padding: 24 }}>
+      <View style={{ flex: 1, backgroundColor: p.bg, alignItems: "center", justifyContent: "center", gap: layout.stack.base, padding: layout.gutter(winW) }}>
         <Atmosphere />
-        {status === "loading" || status === "idle" ? <Breathing style={{ width: "100%", maxWidth: layout.list, height: 232 }} /> : <Text style={[type.callout, { color: p.ink2 }]}>That wish wasn't found.</Text>}
+        {status === "loading" || status === "idle" ? <Breathing style={{ width: "100%", maxWidth: layout.list, height: CARD_PLACEHOLDER }} /> : <Text style={[type.callout, { color: p.ink2 }]}>That wish wasn't found.</Text>}
         <QuietButton label="Back to your list" onPress={() => router.replace("/wishes")} />
       </View>
     );
@@ -84,26 +158,63 @@ export default function WishDetail() {
   const a = w.details.agent;
 
   async function onRemove() {
+    // Two taps: the first only arms it.
     if (!confirm) return setConfirm(true);
+    if (removing || leaving.current) return;
+    leaving.current = true;
+    setRemoving(true);
+    setError(null);
+    // The page fades out while the server removes it; it comes back with the reason if that fails.
+    const out = new Promise<void>((resolve) => exit(resolve, false));
     try {
-      await remove(w!.id);
+      await Promise.all([remove(w!.id), out]);
       router.replace("/wishes");
     } catch (e) {
+      leaving.current = false;
+      setRemoving(false);
+      setConfirm(false);
       setError((e as Error).message);
+      Animated.parallel([page, photo].map((v) => Animated.timing(v, { toValue: 1, duration: step.inMs, easing: ease.out, useNativeDriver: false }))).start();
+      Animated.stagger(step.staggerMs, regions(1, step.inMs)).start();
     }
   }
 
   const r = from ?? { x: 0, y: 0, width: winW, height: HERO };
   const lerp = (a0: number, b0: number) => grow.interpolate({ inputRange: [0, 1], outputRange: [a0, b0] });
-  // Pulling down shrinks the photo to 0.9 and rounds its corners over the first 240 px.
-  const pulled = pull.interpolate({ inputRange: [0, 240], outputRange: [1, 0.9], extrapolate: "clamp" });
+  // Pulling down shrinks the photo and rounds its corners over the first PULL.range points.
+  const pulled = pull.interpolate({ inputRange: [0, PULL.range], outputRange: [1, PULL.scale], extrapolate: "clamp" });
   const gutter = layout.gutter(winW);
+  const column: ViewStyle = { width: "100%", maxWidth: layout.list + 2 * gutter, alignSelf: "center", paddingHorizontal: gutter };
+  const enter = (i: number) => ({
+    opacity: sections[i]!,
+    transform: [{ translateY: sections[i]!.interpolate({ inputRange: [0, 1], outputRange: [reduced ? 0 : layout.stack.base, 0] }) }],
+  });
+  const photos = realPhotos(a?.media);
+  const gallery = showsGallery(a?.media);
+  // The photo drifts down at a fraction of the scroll, so the page slides over it. Transform only; off under reduced motion.
+  const drift = reduced ? undefined : { transform: [{ translateY: scrollY.interpolate({ inputRange: [0, HERO], outputRange: [0, HERO * PARALLAX], extrapolate: "clamp" }) }] };
+  const openPhoto = (index: number) =>
+    hero.current?.measureInWindow((x, y, width, height) => {
+      const frame = { x, y, width, height };
+      // The photo layer sits where the parallax has carried it, below the hero's own top.
+      const shift = reduced ? 0 : PARALLAX * Math.min(HERO, Math.max(0, scrollTop.current));
+      const image = { ...frame, y: frame.y + shift };
+      // A second tap before the viewer is up must not re-key it mid-presentation.
+      setViewing((v) => v ?? { key: Date.now(), index, image, hero: frame, clip: trimBottom(frame, TITLE_OVERLAP) });
+    });
+  // A new figure (after "Use the new price") cross-fades the statement rather than snapping it.
+  const priceKey = [w.item.upfrontCents, ...w.item.recurring.map((rr) => `${rr.amountCents}/${rr.period}`)].join("|");
 
   return (
     <View style={{ flex: 1 }}>
       <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: p.bg, opacity: page }]} />
-      <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 40 }} style={{ scrollbarWidth: "thin", scrollbarColor: `rgba(${p.inkRgb},0.2) transparent` } as object}>
-        <View style={{ height: HERO, width: "100%" }} {...drag.panHandlers}>
+      <Animated.ScrollView
+        onScroll={onScroll}
+        scrollEventThrottle={16}
+        contentContainerStyle={{ paddingBottom: insets.bottom + layout.stack.sectionLg }}
+        style={{ scrollbarWidth: "thin", scrollbarColor: `rgba(${p.inkRgb},0.2) transparent` } as object}
+      >
+        <View ref={hero} style={{ height: HERO, width: "100%" }} {...drag.panHandlers}>
           <Animated.View
             style={{
               position: "absolute",
@@ -111,48 +222,117 @@ export default function WishDetail() {
               top: lerp(r.y, 0),
               width: lerp(r.width, winW),
               height: lerp(r.height, HERO),
-              borderRadius: Animated.add(lerp(radius.lg, 0), pull.interpolate({ inputRange: [0, 240], outputRange: [0, radius.lg], extrapolate: "clamp" })),
+              borderRadius: Animated.add(lerp(radius.lg, 0), pull.interpolate({ inputRange: [0, PULL.range], outputRange: [0, radius.lg], extrapolate: "clamp" })),
+              borderCurve: "continuous",
               overflow: "hidden",
-              transform: [{ translateY: Animated.multiply(pull, 0.6) }, { scale: pulled }],
+              opacity: photo,
+              transform: [{ translateY: Animated.multiply(pull, PULL.follow) }, { scale: pulled }],
             }}
           >
-            <MediaHero media={a?.media} fallbackUri={a?.imageUrl} kind={w.kind} style={StyleSheet.absoluteFill} />
-            <Shade from={0.2} />
+            {gallery ? (
+              <HeroGallery photos={photos} width={winW} height={HERO} topInset={insets.top} live={settled} index={photoIndex} onIndex={setPhotoIndex} onOpen={openPhoto} drift={drift}>
+                <Shade from={HERO_SHADE} />
+              </HeroGallery>
+            ) : (
+              <>
+                <Animated.View style={[StyleSheet.absoluteFill, drift]}>
+                  <MediaHero media={a?.media} fallbackUri={a?.imageUrl} kind={w.kind} style={StyleSheet.absoluteFill} />
+                </Animated.View>
+                <Shade from={HERO_SHADE} />
+              </>
+            )}
           </Animated.View>
         </View>
-        <Animated.View style={{ opacity: page, transform: [{ translateY: page.interpolate({ inputRange: [0, 1], outputRange: [16, 0] }) }] }}>
-          <View style={{ marginTop: -150, paddingHorizontal: gutter, gap: layout.stack.tight, width: "100%", maxWidth: layout.list + 2 * gutter, alignSelf: "center" }}>
-            {/* Text protection over the photo: a 35% dimming layer behind the title block (HIG Materials, P1-22). */}
-            <Protect />
-            <Eyebrow>{[KIND_LABEL[w.kind], TIER_LABEL[w.tier], a?.seller].filter(Boolean).join(" · ")}</Eyebrow>
-            <Text accessibilityRole="header" style={[t.title1, { color: p.ink }]}>{w.name}</Text>
-          </View>
-          <View style={{ paddingHorizontal: gutter, marginTop: layout.stack.base + 4, gap: 20, width: "100%", maxWidth: layout.list + 2 * gutter, alignSelf: "center" }}>
-            <Statement item={w.item} monthlyHint={w.item.recurring.map((rr) => rr.label).filter(Boolean).join(", ")} />
-            {a?.explanation ? <Take>{a.explanation}</Take> : null}
-            <View style={{ gap: 8 }}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                {a ? <AgentDot /> : null}
-                <Text style={[type.footnote, { color: p.ink2 }]}>{agentLine(w)}</Text>
-              </View>
-              {a && a.source.currency !== "USD" ? (
-                <Text style={[type.footnote, { color: p.ink3 }]}>{`Listed at ${a.source.price.toLocaleString("en-US")} ${a.source.currency}, converted at ${a.source.rate} on ${a.source.rateDate}.`}</Text>
-              ) : null}
-              {a ? (
-                <Pressable accessibilityRole="link" onPress={() => webOnly(a.url) && Linking.openURL(webOnly(a.url))} style={{ alignSelf: "flex-start", minHeight: 44, justifyContent: "center" }}>
-                  <Text style={[type.label, { color: p.accentText }]}>Open the source page</Text>
-                </Pressable>
-              ) : null}
-            </View>
-            <ErrorLine>{error}</ErrorLine>
-            <QuietButton label={confirm ? "Tap again to remove it" : "Remove from my list"} onPress={onRemove} style={{ alignSelf: "flex-start" }} />
-          </View>
+
+        {/* Title: over the photo's shaded foot. */}
+        <Animated.View style={[column, { marginTop: -TITLE_OVERLAP, gap: layout.stack.tight }, enter(0)]}>
+          {/* Text protection over the photo: a 35% dimming layer behind the title block (HIG Materials, P1-22). */}
+          <Protect />
+          <Eyebrow>{[KIND_LABEL[w.kind], TIER_LABEL[w.tier]].join(" · ")}</Eyebrow>
+          <Text accessibilityRole="header" style={[t.title1, { color: p.ink }]}>
+            {w.name}
+          </Text>
+          {/* The showing photo's credit and licence, as a caption: the hero's foot is under the title. */}
+          {gallery && photos[photoIndex] ? (
+            <Swap id={photos[photoIndex]!.url}>
+              <Text numberOfLines={1} style={[type.figure, { color: p.ink3 }]}>
+                {photoCredit(photos[photoIndex]!)}
+              </Text>
+            </Swap>
+          ) : null}
         </Animated.View>
-      </ScrollView>
-      <Animated.View style={{ position: "absolute", top: insets.top + 4, left: 16, opacity: page }}>
+
+        <View style={[column, { marginTop: layout.stack.section, gap: layout.stack.section }]}>
+          {/* Price: the statement, then the agent's take. */}
+          <Animated.View style={[{ gap: layout.stack.base }, enter(1)]}>
+            <Swap id={priceKey}>
+              <Statement item={w.item} monthlyHint={w.item.recurring.map((rr) => rr.label).filter(Boolean).join(", ")} />
+            </Swap>
+            {a?.explanation ? <Take>{a.explanation}</Take> : null}
+          </Animated.View>
+
+          {/* Source: who sells it, how the price was found, and the check. */}
+          <Animated.View style={[{ gap: layout.stack.base }, enter(2)]}>
+            <View style={{ gap: layout.stack.tight }}>
+              <Eyebrow>Source</Eyebrow>
+              <Text style={[type.title3, { color: p.ink }]}>{a ? a.seller : agentLine(w)}</Text>
+            </View>
+            {a ? (
+              <View style={{ gap: layout.stack.tight }}>
+                <Swap id={agentLine(w)}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: layout.stack.tight }}>
+                    <AgentDot />
+                    <Text style={[type.footnote, { color: p.ink2 }]}>{agentLine(w)}</Text>
+                  </View>
+                </Swap>
+                {a.source && a.source.currency !== "USD" ? (
+                  <Text style={[type.footnote, { color: p.ink3 }]}>{`Listed at ${a.source.price.toLocaleString("en-US")} ${a.source.currency}, converted at ${a.source.rate} on ${a.source.rateDate}.`}</Text>
+                ) : null}
+                {webOnly(a.url) ? (
+                  <Pressable accessibilityRole="link" onPress={() => Linking.openURL(webOnly(a.url))} style={{ alignSelf: "flex-start", minHeight: layout.control.chip, justifyContent: "center" }}>
+                    <Text style={[type.label, { color: p.accentText }]}>Open the source page</Text>
+                  </Pressable>
+                ) : null}
+                <Recheck key={w.id} wish={w} />
+              </View>
+            ) : null}
+          </Animated.View>
+
+          {/* Remove: two taps, the second labelled. */}
+          <Animated.View style={[{ alignItems: "flex-start" }, enter(3)]}>
+            {/* The reason sits a tight step above the button; an empty slot adds no gap. */}
+            <Swap id={error ?? ""}>{error ? <View style={{ paddingBottom: layout.stack.tight }}><ErrorLine>{error}</ErrorLine></View> : null}</Swap>
+            <Swap id={confirm ? "confirm" : "remove"}>
+              <QuietButton label={confirm ? "Tap again to remove it" : "Remove from my list"} onPress={onRemove} />
+            </Swap>
+          </Animated.View>
+        </View>
+      </Animated.ScrollView>
+      {/* A scroll edge under the back button: once the photo has scrolled away, text fades before it reaches the button. */}
+      <Animated.View
+        pointerEvents="none"
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          height: insets.top + layout.headerBar + layout.stack.base,
+          // Fully in by the time the title's top (HERO − TITLE_OVERLAP in the page) reaches the fade's lower edge.
+          opacity: scrollY.interpolate({
+            inputRange: [HERO - TITLE_OVERLAP - 2 * (layout.headerBar + layout.stack.base), HERO - TITLE_OVERLAP - (layout.headerBar + layout.stack.base)],
+            outputRange: [0, 1],
+            extrapolate: "clamp",
+          }),
+          transform: [{ scaleY: -1 }],
+        }}
+      >
+        <EdgeFade height={insets.top + layout.headerBar + layout.stack.base} />
+      </Animated.View>
+      <Animated.View style={{ position: "absolute", top: insets.top + CONTROL_TOP, left: gutter, opacity: page }}>
         <IconButton icon="back" label="Back" onPress={back} />
       </Animated.View>
       <Grain />
+      {viewing ? <PhotoViewer key={viewing.key} photos={photos} from={viewing} reduced={reduced} onSettle={setPhotoIndex} onClose={() => setViewing(null)} /> : null}
     </View>
   );
 }
