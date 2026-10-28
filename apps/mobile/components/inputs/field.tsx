@@ -16,7 +16,7 @@ export function caretColors(p: Palette): Partial<TextInputProps> {
 
 /** The web draws focus with our border, not the browser's outline; the caret takes the accent. */
 export function webInput(p: Palette): StyleProp<TextStyle> {
-  return Platform.OS === "web" ? ({ outlineWidth: 0, caretColor: p.accentText } as object) : null;
+  return Platform.OS === "web" ? ({ outlineWidth: 0, outlineStyle: "none", caretColor: p.accentText } as object) : null;
 }
 
 /** A border drawn over a field's own, faded in by opacity so it can run on the native driver. */

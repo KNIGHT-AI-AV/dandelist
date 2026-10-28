@@ -189,7 +189,7 @@ export const CodeField = forwardRef<CodeFieldHandle, CodeFieldProps>(function Co
           selectionHandleColor="transparent"
           accessibilityLabel={label}
           accessibilityHint={error ?? undefined}
-          style={[StyleSheet.absoluteFill, type.body, { opacity: HIDDEN_INPUT_OPACITY, color: "transparent" }, Platform.OS === "web" ? ({ outlineWidth: 0 } as object) : null]}
+          style={[StyleSheet.absoluteFill, type.body, { opacity: HIDDEN_INPUT_OPACITY, color: "transparent" }, Platform.OS === "web" ? ({ outlineWidth: 0, outlineStyle: "none" } as object) : null]}
         />
       </Animated.View>
       <FieldError message={error} />
