@@ -6,7 +6,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Animated, Easing, Image as RNImage, Platform, Pressable, StyleSheet, Text, TextInput, View, type StyleProp, type TextInputProps, type TextStyle, type ViewStyle } from "react-native";
 import { formatCents } from "../lib/money";
 import { ease, haptic, native, usePress, useReducedMotion } from "../lib/motion";
-import { layout, radius, type, usePalette, useType } from "../lib/theme";
+import { layout, radius, type, usePalette, useTheme, useType, type ThemeId } from "../lib/theme";
 import { Odometer, type OdometerProps } from "./odometer";
 
 /** The luxury kit: photographs, glass, Bodoni figures and the agent's champagne dot. Screens compose these. */
@@ -376,10 +376,38 @@ export function Hairline({ style }: { style?: StyleProp<ViewStyle> }) {
   return <View style={[{ height: StyleSheet.hairlineWidth, backgroundColor: p.hair }, style]} />;
 }
 
-/** The header wordmark (Bodoni Title 21). */
-export function Wordmark({ style }: { style?: StyleProp<TextStyle> }) {
-  const p = usePalette();
-  return <Text style={[type.brand, { color: p.ink }, style]}>Dandelist</Text>;
+/**
+ * The logo, Wish Dot (owner, 2026-10-27): Instrument Serif with a gold dandelion clock for the i's dot. Drawn per
+ * theme as two layers on one canvas, the word in the theme's ink and the clock in its accent, so the title sequence
+ * can set the word and then land the dot. Source: Desktop\Dandelist Design\logo-final\_build\final.py.
+ */
+const WORDMARK: Record<ThemeId, readonly [number, number]> = {
+  emerald: [require("../assets/brand/wordmark-emerald-letters.png"), require("../assets/brand/wordmark-emerald-dot.png")],
+  bordeaux: [require("../assets/brand/wordmark-bordeaux-letters.png"), require("../assets/brand/wordmark-bordeaux-dot.png")],
+  noir: [require("../assets/brand/wordmark-noir-letters.png"), require("../assets/brand/wordmark-noir-dot.png")],
+  ivory: [require("../assets/brand/wordmark-ivory-letters.png"), require("../assets/brand/wordmark-ivory-dot.png")],
+  delina: [require("../assets/brand/wordmark-delina-letters.png"), require("../assets/brand/wordmark-delina-dot.png")],
+  sapphire: [require("../assets/brand/wordmark-sapphire-letters.png"), require("../assets/brand/wordmark-sapphire-dot.png")],
+};
+/** Width over height of the wordmark canvas, from the clock's top to the baseline. */
+export const WORDMARK_ASPECT = 3.7751;
+
+type AnimatedViewStyle = Animated.WithAnimatedValue<StyleProp<ViewStyle>>;
+
+/** The wordmark at `height` (24 in headers). `word` and `dot` animate the two layers. */
+export function Wordmark({ height = 24, word, dot, style }: { height?: number; word?: AnimatedViewStyle; dot?: AnimatedViewStyle; style?: StyleProp<ViewStyle> }) {
+  const { id } = useTheme();
+  const [letters, clock] = WORDMARK[id];
+  return (
+    <View accessible accessibilityRole="image" accessibilityLabel="Dandelist" style={[{ width: Math.round(height * WORDMARK_ASPECT), height }, style]}>
+      <Animated.View style={[StyleSheet.absoluteFill, word]}>
+        <Image source={letters} style={StyleSheet.absoluteFill} contentFit="contain" />
+      </Animated.View>
+      <Animated.View style={[StyleSheet.absoluteFill, dot]}>
+        <Image source={clock} style={StyleSheet.absoluteFill} contentFit="contain" />
+      </Animated.View>
+    </View>
+  );
 }
 
 /** A soft breathing placeholder while something loads; static under reduced motion (UI audit P2-26). */

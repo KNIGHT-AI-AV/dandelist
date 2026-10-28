@@ -18,7 +18,7 @@
     "android": {
       "package": "com.knightaiav.dandelist",
       "adaptiveIcon": {
-        "backgroundColor": "#0E0F11",
+        "backgroundColor": "#03140D",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"

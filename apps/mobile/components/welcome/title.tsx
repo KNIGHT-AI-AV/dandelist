@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ease, useReducedMotion } from "../../lib/motion";
 import { fonts, layout, type, usePalette } from "../../lib/theme";
 import { hostOf, monthYearLong, reachBy, shortDate } from "../../lib/welcome";
-import { Grain, Shade } from "../lux";
+import { Grain, Shade, Wordmark } from "../lux";
 import { Odometer, dollars } from "../odometer";
 import { GlassReveal } from "../reveal";
 import type { Stage } from "../reveal-clock";
@@ -78,7 +78,6 @@ export function TitleSequence({ hero, short, onDone }: { hero: Entry; short: boo
   const dateOut = range(3800, 4400, 1, 0);
   const rule = range(4500, 5200, 0, 1, ease.inOut);
   const line = range(5200, 5900);
-  const tracking = range(3800, 5200, 6, 1.2, ease.cinema);
   const by = monthYearLong(reachBy(hero.upfrontCents, EXAMPLE_MONTHLY_CENTS));
   const gutter = layout.gutter(width);
   const focus = FOCUS[hero.id];
@@ -112,26 +111,13 @@ export function TitleSequence({ hero, short, onDone }: { hero: Entry; short: boo
         </Animated.View>
       </View>
 
-      {/* The wordmark sets, letter by letter, as the tracking tightens; a champagne hairline draws beneath it. */}
+      {/* The word comes into focus, then its gold clock drifts down onto the i; a champagne hairline draws beneath. */}
       <View pointerEvents="none" style={{ position: "absolute", left: 0, right: 0, top: "38%", alignItems: "center", gap: 16 }}>
-        <View style={{ flexDirection: "row" }} accessible accessibilityLabel={BRAND}>
-          {BRAND.split("").map((ch, i) => (
-            <Animated.Text
-              key={i}
-              style={[
-                type.wordmark,
-                {
-                  color: p.ink,
-                  letterSpacing: tracking,
-                  opacity: range(3800 + i * 36, 4400 + i * 36),
-                  transform: [{ translateY: range(3800 + i * 36, 4400 + i * 36, 8, 0) }],
-                },
-              ]}
-            >
-              {ch}
-            </Animated.Text>
-          ))}
-        </View>
+        <Wordmark
+          height={64}
+          word={{ opacity: range(3800, 4600, 0, 1, ease.cinema), transform: [{ translateY: range(3800, 4600, 8, 0, ease.cinema) }, { scale: range(3800, 5000, 1.035, 1, ease.cinema) }] }}
+          dot={{ opacity: range(4500, 5100), transform: [{ translateY: range(4500, 5300, -16, 0, ease.cinema) }] }}
+        />
         <Animated.View style={{ width: 120, height: StyleSheet.hairlineWidth * 2, backgroundColor: p.accent, transform: [{ scaleX: rule }] }} />
         <Animated.Text style={[type.title3, { color: p.ink2, opacity: line, transform: [{ translateY: range(5200, 5900, 10, 0) }] }]}>
           Price the life you <Text style={{ fontFamily: fonts.titleItalic, color: p.accentText }}>want</Text>.
