@@ -119,6 +119,7 @@ export function dreamRoutes(deps: DreamDeps) {
             await assertUserBudget(db, userId, await userCapUsd(db, userId, USER_DAILY_USD, deps.judge, caps), deps.now());
           },
           () => client.responses(b),
+          userId,
         );
       },
     };

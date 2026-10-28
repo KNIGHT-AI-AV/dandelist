@@ -34,22 +34,39 @@ const dayStart = (now: Date) => new Date(Date.UTC(now.getUTCFullYear(), now.getU
  * conservative, since a held call is briefly counted twice once its cost is recorded.
  */
 let held = 0;
+const heldBy = new Map<string, { usd: number; calls: number }>();
 export const HOLD_USD = 0.1;
+/** Calls one person may have in flight at once, so nobody can inflate the shared hold and lock others out. */
+export const MAX_INFLIGHT_PER_USER = 4;
 
-/** Holds `usd` against the caps until the returned release is called (safe to call twice). */
-export function hold(usd = HOLD_USD): () => void {
+/** Holds `usd` against the caps (and against `userId`'s own) until the returned release is called (safe twice). */
+export function hold(usd = HOLD_USD, userId?: string): () => void {
+  if (userId) {
+    const mine = heldBy.get(userId) ?? { usd: 0, calls: 0 };
+    if (mine.calls >= MAX_INFLIGHT_PER_USER) throw new SpendLimitError("user");
+    heldBy.set(userId, { usd: mine.usd + usd, calls: mine.calls + 1 });
+  }
   held += usd;
   let done = false;
   return () => {
     if (done) return;
     done = true;
     held = Math.max(0, held - usd);
+    if (userId) {
+      const mine = heldBy.get(userId);
+      if (!mine) return;
+      if (mine.calls <= 1) heldBy.delete(userId);
+      else heldBy.set(userId, { usd: Math.max(0, mine.usd - usd), calls: mine.calls - 1 });
+    }
   };
 }
 
+/** What `userId` has in flight right now. */
+export const heldFor = (userId: string) => heldBy.get(userId)?.usd ?? 0;
+
 /** Runs one Meta call under a hold: hold, check the caps with the hold counted, call, then release. */
-export async function withHold<T>(check: () => Promise<void>, run: () => Promise<T>): Promise<T> {
-  const release = hold();
+export async function withHold<T>(check: () => Promise<void>, run: () => Promise<T>, userId?: string): Promise<T> {
+  const release = hold(HOLD_USD, userId);
   try {
     await check();
     return await run();
@@ -83,7 +100,8 @@ export async function assertUserBudget(db: Db, userId: string, capUsd: number, n
     userId,
     new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString(),
   ]);
-  if (Number(rows[0]?.spent ?? 0) >= capUsd) throw new SpendLimitError("user");
+  const spent = Number(rows[0]?.spent ?? 0);
+  if (spent >= capUsd || spent + heldFor(userId) > capUsd) throw new SpendLimitError("user");
 }
 
 /** The judge account's share of the service's daily cap; the rest stays for everyone else. */

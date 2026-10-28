@@ -1,7 +1,7 @@
 import { PGlite } from "@electric-sql/pglite";
 import { beforeEach, describe, expect, it } from "vitest";
 import { migrate, type Db } from "../src/db";
-import { HOLD_USD, SpendLimitError, assertBudget, withHold } from "../src/spend";
+import { HOLD_USD, MAX_INFLIGHT_PER_USER, SpendLimitError, assertBudget, withHold } from "../src/spend";
 
 describe("spend holds", () => {
   let db: Db;
@@ -31,5 +31,16 @@ describe("spend holds", () => {
   it("refuses a call whose hold alone would pass the cap", async () => {
     await spend(10 - HOLD_USD / 2);
     await expect(withHold(() => assertBudget(db, caps, now), async () => "ok")).rejects.toBeInstanceOf(SpendLimitError);
+  });
+
+  it("caps one person's calls in flight, so nobody can lock the budget for everyone", async () => {
+    let open!: () => void;
+    const gate = new Promise<void>((r) => (open = r));
+    const mine = Array.from({ length: MAX_INFLIGHT_PER_USER }, () => withHold(async () => {}, () => gate, "user-a"));
+    await expect(withHold(async () => {}, async () => "ok", "user-a")).rejects.toBeInstanceOf(SpendLimitError);
+    await expect(withHold(async () => {}, async () => "ok", "user-b")).resolves.toBe("ok");
+    open();
+    await Promise.all(mine);
+    await expect(withHold(async () => {}, async () => "ok", "user-a")).resolves.toBe("ok");
   });
 });

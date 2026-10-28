@@ -92,8 +92,8 @@ export function agentRoutes(deps: AgentDeps) {
       await assertUserBudget(db, userId, await userCapUsd(db, userId, USER_DAILY_USD, deps.judge, caps), deps.now());
     };
     return {
-      responses: (body) => withHold(guard, () => client.responses(body)),
-      images: (op, body) => withHold(guard, () => client.images(op, body)),
+      responses: (body) => withHold(guard, () => client.responses(body), userId),
+      images: (op, body) => withHold(guard, () => client.images(op, body), userId),
     };
   };
 
