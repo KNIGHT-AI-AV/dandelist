@@ -13,6 +13,7 @@ import { useWishes, type WishTier } from "../../lib/wishes";
 import { KIND_LABEL, hostOf } from "../../lib/words";
 import { Atmosphere } from "../../components/atmosphere";
 import { Carve, RevealPhoto, ThoughtLine } from "../../components/wish-reveal";
+import { WishField } from "../../components/wish-field";
 import { Rise } from "../../components/welcome/kit";
 import { haptic } from "../../lib/motion";
 import { clarityOf, deckFor, thoughtOf } from "../../lib/reveal";
@@ -30,8 +31,6 @@ const TIERS: { value: WishTier; label: string }[] = [
   { value: "nice", label: "Nice" },
   { value: "dream", label: "Dream" },
 ];
-// The browser draws its own focus box around text fields; the hairline underneath is the focus cue here.
-const NO_OUTLINE = Platform.OS === "web" ? ({ outlineWidth: 0 } as object) : null;
 
 type Stage = "describe" | "ask" | "research";
 
@@ -74,6 +73,7 @@ export default function NewWish() {
   const [showTrail, setShowTrail] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const field = useRef<TextInput>(null);
   const alive = useRef(true);
   useEffect(() => () => void (alive.current = false), []);
   const working = run?.status === "running";
@@ -209,20 +209,10 @@ export default function NewWish() {
             </View>
             {stage === "describe" ? (
               <>
-                <TextInput
-                  accessibilityLabel="Your wish"
-                  value={text}
-                  onChangeText={setText}
-                  multiline
-                  autoFocus={Platform.OS !== "web"}
-                  editable={!reading}
-                  placeholder="A week at Amanzoe with my wife in May"
-                  placeholderTextColor={p.ink3}
-                  style={[type.title3, { fontFamily: fonts.titleItalic, color: p.ink, minHeight: 96, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: p.line, textAlignVertical: "top" }, NO_OUTLINE]}
-                />
-                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                <WishField ref={field} value={text} onChangeText={setText} onSubmit={() => void read()} editable={!reading} placeholder="A week at Amanzoe with my wife in May" />
+                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: layout.stack.tight }}>
                   {EXAMPLES.map((e) => (
-                    <Chip key={e} label={e} selected={text === e} onPress={reading ? undefined : () => setText(e)} />
+                    <Chip key={e} label={e} selected={text === e} onPress={reading ? undefined : () => { haptic.select(); setText(e); field.current?.focus(); }} />
                   ))}
                 </View>
                 <ErrorLine>{error}</ErrorLine>
@@ -246,7 +236,7 @@ export default function NewWish() {
                       <Text style={[type.callout, { color: p.ink }]}>{q.question}</Text>
                       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
                         {q.choices.map((c) => (
-                          <Chip key={c} label={c} selected={answers[q.question] === c} onPress={() => setAnswers((a) => ({ ...a, [q.question]: a[q.question] === c ? "" : c }))} />
+                          <Chip key={c} label={c} selected={answers[q.question] === c} onPress={() => { haptic.select(); setAnswers((a) => ({ ...a, [q.question]: a[q.question] === c ? "" : c })); }} />
                         ))}
                       </View>
                     </View>
