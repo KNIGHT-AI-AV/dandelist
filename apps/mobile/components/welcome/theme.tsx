@@ -108,7 +108,7 @@ function Body({ id, totalCents, by, held, onPick, onChoose, cta, roll }: { id: T
         </View>
         <Text style={[type.title3, { fontFamily: fonts.titleItalic, color: p.ink2 }]}>{THEMES[id].mood}</Text>
         <Glass style={{ padding: layout.cardPad, gap: 4, borderRadius: radius.lg }}>
-          <Eyebrow color={p.accentText}>Your life</Eyebrow>
+          <Eyebrow color={p.accentText}>Your Dandelist</Eyebrow>
           <Odometer cents={totalCents} format={dollars} size={t.title1.fontSize ?? 34} family="bodoni" smallPrefix tracking={-0.34} color={p.ink} rollOnMount={first.current ? "cinema" : false} />
           <Text style={[type.figure, { color: p.ink2 }]}>{`yours by ${by}`}</Text>
         </Glass>

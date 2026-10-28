@@ -25,7 +25,7 @@ import { hostOf, midSentence, whenChecked } from "../../lib/words";
 import { rememberCard, type Rect } from "../../lib/zoom";
 
 /**
- * After any sign-in (code, Apple, Google, GitHub), the life someone kept on the welcome screen becomes their first
+ * After any sign-in (code, Apple, Google, GitHub), the list someone kept on the welcome screen becomes their first
  * wishes. It runs once: the saved picks are cleared before the wishes are added, so a reload can't add them twice.
  */
 function useAdoptWelcome(ready: boolean, add: ReturnType<typeof useWishes>["add"]) {
@@ -35,7 +35,7 @@ function useAdoptWelcome(ready: boolean, add: ReturnType<typeof useWishes>["add"
     started.current = true;
     void (async () => {
       const kept = await loadWelcome();
-      if (!kept?.kept || !kept.picks.length) return;
+      if (!kept?.kept || (!kept.items.length && !kept.wish?.option)) return;
       await saveWelcome(null);
       for (const w of toWishes(kept)) await add(w).catch(() => null);
     })();
@@ -149,8 +149,8 @@ export default function LifeList() {
 
   const items = visible.map((w) => w.item);
   const monthly = recurringBreakdown(items).perMonth;
-  // The briefing is the agent's most recent real check, never an invented event.
-  const latest = visible.filter((w) => w.details.agent).sort((a, b) => b.details.agent!.checkedAt.localeCompare(a.details.agent!.checkedAt))[0];
+  // The briefing is the agent's most recent real check, never an invented event (a typical price has no page).
+  const latest = visible.filter((w) => w.details.agent?.url).sort((a, b) => b.details.agent!.checkedAt.localeCompare(a.details.agent!.checkedAt))[0];
   const gutter = layout.gutter(width);
   const dock = layout.dockHeight(insets.bottom);
   const count = `${visible.length} ${visible.length === 1 ? "wish" : "wishes"}`;

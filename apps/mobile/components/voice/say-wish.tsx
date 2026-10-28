@@ -1,26 +1,25 @@
 import { useEffect, useRef, useState } from "react";
 import { Animated, Pressable, Text, View } from "react-native";
-import { transcribeWish } from "../../lib/agent";
 import { ease, haptic, native, spring, step, useReducedMotion, usePress } from "../../lib/motion";
 import { layout, type, usePalette } from "../../lib/theme";
 import { AgentDot, Eyebrow, Glass } from "../lux";
 import { BARS } from "./recorder-types";
 import { useRecorder } from "./use-recorder";
 
-type Api = (path: string, init?: RequestInit) => Promise<Response>;
 export type VoicePhase = "idle" | "listening" | "hearing";
 
 /**
  * Say your wish. Tap the microphone, say it the way you'd tell a friend, and it stops by itself when you pause; Muse
  * Voice Transcribe writes it down and the words land in the field to check before pricing. Typing stays one tap away.
  */
-export function useVoiceWish({ api, onHeard, onError }: { api: Api; onHeard(text: string): void; onError(message: string | null): void }) {
+/** `transcribe` sends the clip: the signed-in route (lib/agent transcribeWish) or, before sign-in, the guest one. */
+export function useVoiceWish({ transcribe, onHeard, onError }: { transcribe(wav: Uint8Array): Promise<string>; onHeard(text: string): void; onError(message: string | null): void }) {
   const [phase, setPhase] = useState<VoicePhase>("idle");
   const recorder = useRecorder({
     onClip: async (wav) => {
       setPhase("hearing");
       try {
-        const text = await transcribeWish(api, wav);
+        const text = await transcribe(wav);
         haptic.success();
         onHeard(text);
       } catch (e) {

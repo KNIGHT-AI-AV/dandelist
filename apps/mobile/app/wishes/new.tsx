@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ledger } from "../../components/ledger";
 import { AgentDot, Backdrop, Chip, EdgeFade, ErrorLine, Eyebrow, Glass, Grain, Hairline, IconButton, Money, Photo, PrimaryButton, Protect, QuietButton, Shade } from "../../components/lux";
 import { Statement, Take } from "../../components/statement";
-import { getRun, interpretWish, startResearch, type Answer, type Draft, type PriceOption, type Question, type Run, type Step } from "../../lib/agent";
+import { getRun, interpretWish, startResearch, transcribeWish, type Answer, type Draft, type PriceOption, type Question, type Run, type Step } from "../../lib/agent";
 import { useAuth } from "../../lib/auth";
 import { fonts, layout, radius, space, type, usePalette, useType } from "../../lib/theme";
 import { useWishes, type WishTier } from "../../lib/wishes";
@@ -83,7 +83,7 @@ export default function NewWish() {
   // Say your wish: what Muse Voice heard lands in the field (rising in, counted by `heard`) to check before pricing.
   const [heard, setHeard] = useState(0);
   const voice = useVoiceWish({
-    api,
+    transcribe: (wav) => transcribeWish(api, wav),
     onHeard: (words) => {
       setText(words.slice(0, WISH_MAX));
       setHeard((n) => n + 1);

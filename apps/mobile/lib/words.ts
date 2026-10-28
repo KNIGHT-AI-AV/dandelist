@@ -28,6 +28,8 @@ export function whenChecked(iso: string, now = new Date()): string {
 export function agentLine(w: Wish): string {
   const a = w.details.agent;
   if (!a) return "Priced by you";
+  // A typical price from the archive has no single page to name.
+  if (!hostOf(a.url)) return "Typical price, an estimate";
   return a.status === "verified" ? `Checked ${whenChecked(a.checkedAt)} on ${hostOf(a.url)}` : `Estimate from ${hostOf(a.url)}`;
 }
 

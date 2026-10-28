@@ -11,6 +11,10 @@ const SHEEN = require("../assets/atmosphere/sheen.png");
  * movements"). The theme colour, then a guilloché engraving in the theme's ink at a few percent (tone on tone, the
  * way a watch dial is engine-turned) drifting a few points on a slow ellipse, and a soft light that crosses the page
  * and back about twice a minute. Still under reduced motion. Textures: scripts/make-atmosphere.py.
+ *
+ * Owner, 2026-10-28: every theme's page should be as rich as Emerald's. So each theme also gets its own light: a
+ * wide pool of its second colour from the upper left and a low warm glow of its accent from the lower right, both
+ * drifting slowly, the way a lit set has a key and a fill.
  */
 export function Atmosphere() {
   const p = usePalette();
@@ -33,8 +37,19 @@ export function Atmosphere() {
   const dy = drift.interpolate({ inputRange: quarters, outputRange: [10, 0, -10, 0, 10] });
   const size = Math.max(width, height) * 0.9;
   const along = (from: number, to: number) => sweep.interpolate({ inputRange: [0, 0.5, 1], outputRange: [from, to, from], easing: Easing.inOut(Easing.sin) });
+  const glow = Math.max(width, height) * 1.25;
   return (
     <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: p.bg, overflow: "hidden" }]} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+      {/* The fill: the theme's second colour pooled from the upper left. */}
+      <Animated.Image
+        source={SHEEN}
+        style={{ position: "absolute", left: -glow * 0.45, top: -glow * 0.42, width: glow, height: glow, tintColor: p.accent2, opacity: dark ? 0.42 : 0.3, transform: [{ translateX: dx }, { translateY: dy }] }}
+      />
+      {/* The key: a low warm glow of the accent from the lower right. */}
+      <Animated.Image
+        source={SHEEN}
+        style={{ position: "absolute", left: width - glow * 0.5, top: height - glow * 0.48, width: glow, height: glow, tintColor: p.accent, opacity: dark ? 0.11 : 0.14, transform: [{ translateX: Animated.multiply(dx, -1) }, { translateY: Animated.multiply(dy, -1) }] }}
+      />
       <Animated.Image
         source={GUILLOCHE}
         resizeMode="cover"
