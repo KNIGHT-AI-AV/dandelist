@@ -8,7 +8,7 @@ import { CONTROL_TOP, HERO_SHADE, PARALLAX } from "../../components/detail/metri
 import { Recheck } from "../../components/detail/recheck";
 import { Swap } from "../../components/detail/swap";
 import { PhotoViewer, type ViewerFrom } from "../../components/detail/viewer";
-import { AgentDot, Breathing, ErrorLine, Eyebrow, Grain, IconButton, Protect, QuietButton, Shade } from "../../components/lux";
+import { AgentDot, Breathing, EdgeFade, ErrorLine, Eyebrow, Grain, IconButton, Protect, QuietButton, Shade } from "../../components/lux";
 import { MediaHero } from "../../components/media";
 import { Statement, Take } from "../../components/statement";
 import { useAuth } from "../../lib/auth";
@@ -285,7 +285,7 @@ export default function WishDetail() {
                     <Text style={[type.footnote, { color: p.ink2 }]}>{agentLine(w)}</Text>
                   </View>
                 </Swap>
-                {a.source.currency !== "USD" ? (
+                {a.source && a.source.currency !== "USD" ? (
                   <Text style={[type.footnote, { color: p.ink3 }]}>{`Listed at ${a.source.price.toLocaleString("en-US")} ${a.source.currency}, converted at ${a.source.rate} on ${a.source.rateDate}.`}</Text>
                 ) : null}
                 {webOnly(a.url) ? (
@@ -308,6 +308,26 @@ export default function WishDetail() {
           </Animated.View>
         </View>
       </Animated.ScrollView>
+      {/* A scroll edge under the back button: once the photo has scrolled away, text fades before it reaches the button. */}
+      <Animated.View
+        pointerEvents="none"
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          height: insets.top + layout.headerBar + layout.stack.base,
+          // Fully in by the time the title's top (HERO − TITLE_OVERLAP in the page) reaches the fade's lower edge.
+          opacity: scrollY.interpolate({
+            inputRange: [HERO - TITLE_OVERLAP - 2 * (layout.headerBar + layout.stack.base), HERO - TITLE_OVERLAP - (layout.headerBar + layout.stack.base)],
+            outputRange: [0, 1],
+            extrapolate: "clamp",
+          }),
+          transform: [{ scaleY: -1 }],
+        }}
+      >
+        <EdgeFade height={insets.top + layout.headerBar + layout.stack.base} />
+      </Animated.View>
       <Animated.View style={{ position: "absolute", top: insets.top + CONTROL_TOP, left: gutter, opacity: page }}>
         <IconButton icon="back" label="Back" onPress={back} />
       </Animated.View>
