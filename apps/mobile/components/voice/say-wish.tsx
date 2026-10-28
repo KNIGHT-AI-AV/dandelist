@@ -173,7 +173,7 @@ export function ListeningPanel({ voice, height }: { voice: VoiceWish; height: nu
     >
       <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
         <AgentDot busy />
-        <Eyebrow color={p.ink2}>{hearing ? "Muse Voice · writing it down" : "Listening"}</Eyebrow>
+        <Eyebrow color={p.ink2}>{hearing ? "Writing it down" : "Listening"}</Eyebrow>
         {/* Beside the label, not at the far edge, where the microphone button sits. */}
         {!hearing ? <Text style={[type.figure, { color: p.ink3 }]}>{clock(voice.elapsedMs)}</Text> : null}
       </View>

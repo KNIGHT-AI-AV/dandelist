@@ -271,7 +271,7 @@ export function Intro({ pool, onStart, onLogIn }: { pool: PoolItem[]; onStart():
             >
               {current ? <NowShowing item={current} /> : null}
             </Card>
-            <Card index={1} width={cardW} height={cardH} scrollX={scrollX} uri={photo(PORSCHE)} title={<>Your agent finds the {em("real", p.accentText)} price.</>} body="Muse Spark by Meta reads the seller's own page and shows where every number came from.">
+            <Card index={1} width={cardW} height={cardH} scrollX={scrollX} uri={photo(PORSCHE)} title={<>Your Dandy finds the {em("real", p.accentText)} price.</>} body="It reads the seller's own page and shows where every number came from.">
               <PriceCheck active={page === 1} />
             </Card>
             <Card index={2} width={cardW} height={cardH} scrollX={scrollX} uri={photo(PELOTON)} title={<>And what it costs to {em("keep", p.accentText)}.</>} body="Memberships, insurance, upkeep and fuel, itemised, with the rate behind each one.">

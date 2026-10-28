@@ -107,7 +107,7 @@ export default function SignIn() {
               <Text accessibilityRole="header" style={[t.display, { color: p.ink }]}>
                 Price the life{"\n"}you <Text style={{ fontFamily: fonts.displayItalic, color: p.accentText }}>want</Text>.
               </Text>
-              <Text style={[type.body, { color: p.ink2, marginBottom: layout.stack.tight }]}>Your agent finds the real price of everything you want, and what it costs over the years.</Text>
+              <Text style={[type.body, { color: p.ink2, marginBottom: layout.stack.tight }]}>Dandelist finds the real price of everything you want, and what it costs over the years.</Text>
               {options ? <SignInOptions options={options} pending={provider} disabled={busy} onChoose={continueWith} /> : null}
               <Field
                 ref={emailInput}

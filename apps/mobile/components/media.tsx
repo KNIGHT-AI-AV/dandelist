@@ -27,7 +27,7 @@ function Credit({ children }: { children: ReactNode }) {
 }
 
 function creditFor(img: MediaImage): string {
-  if (img.generated) return "Image made with Muse Image";
+  if (img.generated) return "Image made with AI";
   return [img.credit, img.license, img.source].filter(Boolean).join(" · ");
 }
 

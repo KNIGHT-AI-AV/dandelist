@@ -13,7 +13,7 @@
  * apart from the ink.
  */
 
-export type ThemeId = "emerald" | "bordeaux" | "noir" | "ivory" | "delina" | "sapphire";
+export type ThemeId = "emerald" | "bordeaux" | "noir" | "ivory" | "delina" | "sapphire" | "cognac" | "amethyst" | "riviera";
 
 interface Base {
   bg: string;
@@ -97,8 +97,25 @@ export const THEMES: Record<ThemeId, { name: string; mood: string; palette: Retu
     mood: "Midnight blue and platinum.",
     palette: palette({ bg: "#050A18", bgRgb: "5, 10, 24", surface: "#0D1530", ink: "#EDF0F7", inkRgb: "237, 240, 247", accent: "#C7D0E2", accentText: "#8FA9E6", accent2: "#1C3F8F", scheme: "dark", danger: "#F0A595" }),
   },
+  // Three more looks (owner, 2026-10-28: "two or three more themes... whichever colours flesh us out"): a warm
+  // dark, a jewel dark and a cool light, so every temperature has a house.
+  cognac: {
+    name: "Cognac",
+    mood: "Saddle leather, brass and firelight.",
+    palette: palette({ bg: "#160C06", bgRgb: "22, 12, 6", surface: "#24150C", ink: "#F3E7D6", inkRgb: "243, 231, 214", accent: "#C8924A", accent2: "#7A3E1D", scheme: "dark", danger: "#F0A595" }),
+  },
+  amethyst: {
+    name: "Amethyst",
+    mood: "Plum velvet and rose gold.",
+    palette: palette({ bg: "#120A17", bgRgb: "18, 10, 23", surface: "#1F1428", ink: "#F1E8F2", inkRgb: "241, 232, 242", accent: "#D7A08C", accent2: "#5E3A6E", scheme: "dark", danger: "#F0A595" }),
+  },
+  riviera: {
+    name: "Riviera",
+    mood: "Sea glass, salt air and sun-bleached gold.",
+    palette: palette({ bg: "#EAF2F3", bgRgb: "234, 242, 243", surface: "#FFFFFF", ink: "#0D2B33", inkRgb: "13, 43, 51", accent: "#B98A3E", accentText: "#7E5C22", accent2: "#7FB7BE", scheme: "light", danger: "#B4402C", line: 0.56 }),
+  },
 };
-export const THEME_ORDER: ThemeId[] = ["emerald", "bordeaux", "noir", "ivory", "delina", "sapphire"];
+export const THEME_ORDER: ThemeId[] = ["emerald", "bordeaux", "noir", "ivory", "delina", "sapphire", "cognac", "amethyst", "riviera"];
 export const DEFAULT_THEME: ThemeId = "emerald";
 
 export type Palette = ReturnType<typeof palette>;

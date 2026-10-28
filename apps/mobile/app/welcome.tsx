@@ -3,11 +3,12 @@ import { router } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Animated, Pressable, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Grain, PrimaryButton, Wordmark } from "../components/lux";
+import { Grain, IconButton, PrimaryButton, Wordmark } from "../components/lux";
 import { SignInOptions } from "../components/sign-in-options";
 import { AgentWork, Appear, type Result } from "../components/welcome/agent-work";
 import { Ask } from "../components/welcome/ask";
-import { Aside, VotePair, WhenStep } from "../components/welcome/choose";
+import { VotePair, WhenStep } from "../components/welcome/choose";
+import { Comfort } from "../components/welcome/comfort";
 import { CodeSheet, RevealCard } from "../components/welcome/finale";
 import { Intro } from "../components/welcome/intro";
 import { AgentTicker, LifePill, Segments } from "../components/welcome/kit";
@@ -16,10 +17,11 @@ import { TitleSequence } from "../components/welcome/title";
 import { useAuth, useSignInOptions, type ProviderId, type SignInOption } from "../lib/auth";
 import type { Step as AgentStep } from "../lib/agent";
 import { ease, native, spring, step as stepMotion, useReducedMotion } from "../lib/motion";
+import { startIncome } from "../lib/comfort";
 import { ANSWERED_ROUNDS, chosen as chosenBy, groupsFor, nextPair, votingDone, type Vote } from "../lib/pairs";
 import { thoughtOf } from "../lib/reveal";
 import { layout, type, usePalette, useTheme } from "../lib/theme";
-import { emptyWelcome, fetchPool, listTotal, listed, loadWelcome, markTitleSeen, monthYearLong, saveWelcome, seenTitle, streamGuestWish, type FirstWish, type PoolItem, type WelcomeState } from "../lib/welcome";
+import { emptyWelcome, fetchPool, listTotal, listed, loadWelcome, markTitleSeen, saveWelcome, seenTitle, streamGuestWish, type FirstWish, type PoolItem, type WelcomeState } from "../lib/welcome";
 import { dollars } from "../components/odometer";
 import { Atmosphere } from "../components/atmosphere";
 
@@ -51,10 +53,10 @@ function WelcomeSocial() {
   );
 }
 
-type Step = { kind: "title" } | { kind: "intro" } | { kind: "ask" } | { kind: "vote"; pair: [PoolItem, PoolItem] } | { kind: "when" } | { kind: "aside" } | { kind: "agent" } | { kind: "reveal" } | { kind: "theme" };
+type Step = { kind: "title" } | { kind: "intro" } | { kind: "ask" } | { kind: "vote"; pair: [PoolItem, PoolItem] } | { kind: "when" } | { kind: "comfort" } | { kind: "agent" } | { kind: "reveal" } | { kind: "theme" };
 type Pricing = "idle" | "pricing" | "priced" | "failed";
 
-/** Ask, three answered rounds, when, the monthly amount, the agent: the segments under the header. */
+/** Ask, three answered rounds, when, what it would take, the agent: the segments under the header. */
 const SEGMENTS = 2 + ANSWERED_ROUNDS + 2;
 const HERO = entry("porsche-911") as Entry;
 /** How long the "found it" line stays above the meter once the first wish is priced. */
@@ -67,8 +69,9 @@ const ideaOf = (e: PoolItem) => (e.kind === "visit" && !/\b(week|weeks|month|tri
  * The pre-login experience (owner's walkthrough, 2026-10-28). A slow, centred title that dissolves from a touch;
  * interactive cards that show what Dandelist does, with Log in beneath; the first wish, typed, said or tapped, which
  * the agent prices for real while the person plays this or that from the pool (the first pair is a cover, later
- * pairs lean toward what they asked for); when they want it all; what they could put aside; the agent pricing the
- * whole list; the date. Only then do they save it, which is the sign-up.
+ * pairs lean toward what they asked for); when they want it all; what it would take, as a fader of incomes with a
+ * face for how it would feel; meeting their Dandy while it prices the whole list; the deck. Only then do they save it,
+ * which is the sign-up. Back goes one step at a time and undoes that step's picks.
  *
  * Steps fly instead of teleporting (UI audit P1-16): the old step leaves left in 150 ms, the new one arrives from
  * the right in 320 ms, and going back mirrors it. The header, the segments and the list meter stay put.
@@ -102,6 +105,8 @@ export default function Welcome() {
   const rounds = useRef(0);
   const answered = useRef(0);
   const run = useRef<AbortController | null>(null);
+  /** Where Back returns to: each step left behind, with the list and the counts as they were on it. */
+  const history = useRef<{ step: Step; items: PoolItem[]; answered: number; rounds: number; done: number }[]>([]);
   // Votes land after an animation; they read the list as it is then, not as it was when the pair was drawn.
   const latest = useRef(state);
   latest.current = state;
@@ -138,6 +143,7 @@ export default function Welcome() {
   const go = (next: Step, back = false) => {
     if (moving.current) return;
     moving.current = true;
+    if (!back && step && step.kind !== "title" && step.kind !== "theme") history.current.push({ step, items: latest.current.items, answered: answered.current, rounds: rounds.current, done });
     const d = back ? -1 : 1;
     const enter = () => {
       setStep(next);
@@ -238,8 +244,21 @@ export default function Welcome() {
     });
   };
 
+  /** One step back, undoing what that step added to the list. */
+  const goBack = () => {
+    const prev = history.current.pop();
+    if (!prev || moving.current) return;
+    answered.current = prev.answered;
+    rounds.current = prev.rounds;
+    setDone(prev.done);
+    patch((s) => ({ ...s, items: prev.items }));
+    if (prev.step.kind === "ask" || prev.step.kind === "intro") run.current?.abort();
+    go(prev.step, true);
+  };
+
   /** Clears the list and goes back to the first wish, with what they asked for still in the field. */
   const restart = () => {
+    history.current = [{ step: { kind: "intro" }, items: [], answered: 0, rounds: 0, done: 0 }];
     run.current?.abort();
     setPricing("idle");
     setResult(null);
@@ -255,8 +274,10 @@ export default function Welcome() {
   if (!step) return <View style={{ flex: 1, backgroundColor: p.bg }} />;
 
   const total = listTotal(state);
-  const metered = step.kind === "vote" || step.kind === "when" || step.kind === "aside" || step.kind === "agent";
-  const segmented = metered || step.kind === "ask";
+  // The fader step carries its own total in the faces, and needs the room the meter would take on a phone.
+  const metered = step.kind === "vote" || step.kind === "when" || step.kind === "agent";
+  const canGoBack = history.current.length > 0 && step.kind !== "intro" && step.kind !== "title" && step.kind !== "theme";
+  const segmented = metered || step.kind === "ask" || step.kind === "comfort";
   const framed = step.kind !== "title" && step.kind !== "theme";
   const gutter = layout.gutter(width);
   const headerColumn = width >= 760 && step.kind === "vote" ? 932 : layout.column;
@@ -291,10 +312,10 @@ export default function Welcome() {
       break;
     }
     case "when":
-      body = <WhenStep value={state.when} onPick={(when) => { patch((s) => ({ ...s, when })); setDone(2 + ANSWERED_ROUNDS); setTimeout(() => go({ kind: "aside" }), 220); }} />;
+      body = <WhenStep value={state.when} onPick={(when) => { patch((s) => ({ ...s, when })); setDone(2 + ANSWERED_ROUNDS); setTimeout(() => go({ kind: "comfort" }), 220); }} />;
       break;
-    case "aside":
-      body = <Aside value={state.monthlyCents} totalCents={Math.max(total, 1)} onChange={(c) => patch((s) => ({ ...s, monthlyCents: c }))} onDone={() => { setDone(3 + ANSWERED_ROUNDS); go({ kind: "agent" }); }} />;
+    case "comfort":
+      body = <Comfort incomeCents={state.incomeCents ?? startIncome(total)} totalCents={Math.max(total, 1)} onChange={(c) => patch((s) => ({ ...s, incomeCents: c }))} onDone={() => { setDone(3 + ANSWERED_ROUNDS); go({ kind: "agent" }); }} />;
       break;
     case "agent":
       body = (
@@ -304,7 +325,6 @@ export default function Welcome() {
             ready={pricing !== "pricing"}
             waiting={pricing === "pricing" ? { title: wishTitle, line: thought?.mine ? thought.text : "" } : null}
             onResult={(r) => { setResult(r); setDone(SEGMENTS); }}
-            onFollowUp={(name) => patch((s) => ({ ...s, last: name ? (name === wishTitle ? "wish" : s.items.find((e) => e.name === name)?.id) : undefined }))}
             onRestart={restart}
           />
           <Appear when={!!result}>
@@ -316,7 +336,7 @@ export default function Welcome() {
       );
       break;
     case "theme":
-      body = result ? <ThemeChooser totalCents={result.upfrontCents} by={monthYearLong(new Date(`${result.everythingBy}-01T00:00:00`))} onDone={(id) => { theme.set(id); setSheet(true); }} /> : null;
+      body = result ? <ThemeChooser totalCents={result.upfrontCents} onDone={(id) => { theme.set(id); setSheet(true); }} /> : null;
       break;
     case "reveal":
       body = result ? (
@@ -324,9 +344,8 @@ export default function Welcome() {
           picks={listed(state)}
           upfrontCents={result.upfrontCents}
           monthlyRunningCents={result.monthlyRunningCents}
-          everythingBy={result.everythingBy}
           onKeep={() => { patch((s) => ({ ...s, kept: true })); go({ kind: "theme" }); }}
-          onChange={restart}
+          onRestart={restart}
         />
       ) : null;
       break;
@@ -344,7 +363,10 @@ export default function Welcome() {
         <View pointerEvents="box-none" style={{ position: "absolute", top: insets.top, left: 0, right: 0, alignItems: "center", paddingHorizontal: gutter }}>
           <View pointerEvents="box-none" style={{ width: "100%", maxWidth: headerColumn }}>
             <View pointerEvents="box-none" style={{ height: layout.headerBar, flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-              <Wordmark />
+              <View pointerEvents="box-none" style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                {canGoBack ? <IconButton icon="back" label="Back" onPress={goBack} /> : null}
+                <Wordmark />
+              </View>
               {/* The intro has its own Log in under the cards; everywhere else it waits up here. */}
               {step.kind !== "intro" ? (
                 <Pressable accessibilityRole="link" onPress={() => router.push("/sign-in")} style={{ minHeight: 44, minWidth: 44, justifyContent: "center", alignItems: "flex-end" }}>

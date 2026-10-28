@@ -58,7 +58,10 @@ export interface WelcomeState {
   items: PoolItem[];
   wish: FirstWish | null;
   when: When | null;
+  /** The preview's monthly figure; the welcome no longer asks for it (owner: "not a savings app"). */
   monthlyCents: number;
+  /** Where they left the "what would it take" fader: a year's income, in cents. */
+  incomeCents?: number;
   /** The one the agent suggested buying last, if they took the suggestion ("wish" for the first wish). */
   last?: string;
   /** Set when they pressed "Keep this list"; only then does it become wishes after sign-in. */

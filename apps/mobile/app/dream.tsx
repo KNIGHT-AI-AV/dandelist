@@ -9,6 +9,7 @@ import { Composer, KeyboardDock, KeyboardScroll, dockRoom } from "../components/
 import { AgentDot, Chip, Eyebrow, Glass, Grain, IconButton, PrimaryButton } from "../components/lux";
 import { Rise } from "../components/welcome/kit";
 import { ListeningStrip, MicButton, useVoiceWish } from "../components/voice/say-wish";
+import { useDandy } from "../lib/dandy";
 import { useAuth } from "../lib/auth";
 import { transcribeWish } from "../lib/agent";
 import { dreamTurn, wishFrom, type DreamAction, type DreamEvent, type FeedItem, type LifeContext, type Widget } from "../lib/dream";
@@ -40,6 +41,7 @@ export default function Dream() {
   const [regionOpen, setRegionOpen] = useState(false);
   // The docked composer's height, measured (it grows with its text); one capsule until the first layout.
   const [dock, setDock] = useState<number>(layout.control.primary);
+  const dandy = useDandy();
   const session = useRef<string | null>(null);
   const scroll = useRef<ScrollView>(null);
   // Say it instead of typing: the words land in the composer to read over, then send as usual.
@@ -133,7 +135,7 @@ export default function Dream() {
           <Rise style={{ gap: 18, paddingTop: 24 }}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
               <AgentDot />
-              <Eyebrow>Your agent · Muse Spark by Meta</Eyebrow>
+              <Eyebrow>{dandy.name}</Eyebrow>
             </View>
             <Text style={[type.title1, { color: p.ink }]}>
               Tell me the life you <Text style={{ fontFamily: fonts.displayItalic, color: p.accentText }}>want</Text>.

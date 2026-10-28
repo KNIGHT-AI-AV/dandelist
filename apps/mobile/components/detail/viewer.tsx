@@ -12,7 +12,7 @@ import { CONTROL_TOP, HERO_SHADE, VIEWER_FOOTER, viewerTop } from "./metrics";
 import { Swap } from "./swap";
 
 /** Photos are looked at in a dark room: the light themes borrow their nearest night palette for the viewer. */
-const DARK_ROOM: Record<ThemeId, ThemeId> = { emerald: "emerald", bordeaux: "bordeaux", noir: "noir", ivory: "noir", delina: "bordeaux", sapphire: "sapphire" };
+const DARK_ROOM: Record<ThemeId, ThemeId> = { emerald: "emerald", bordeaux: "bordeaux", noir: "noir", ivory: "noir", delina: "bordeaux", sapphire: "sapphire", cognac: "cognac", amethyst: "amethyst", riviera: "sapphire" };
 
 /** Near-opaque, so the photo is the only thing lit and the page beneath is only a memory. */
 const SCRIM = 0.96;

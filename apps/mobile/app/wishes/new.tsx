@@ -16,6 +16,7 @@ import { Carve, RevealPhoto, ThoughtLine } from "../../components/wish-reveal";
 import { FIELD_MIN, WISH_MAX, WishField } from "../../components/wish-field";
 import { ListeningPanel, MicButton, useVoiceWish } from "../../components/voice/say-wish";
 import { KeyboardDock, KeyboardScroll, dockRoom } from "../../components/inputs";
+import { useDandy } from "../../lib/dandy";
 import { Rise } from "../../components/welcome/kit";
 import { haptic } from "../../lib/motion";
 import { clarityOf, deckFor, thoughtOf } from "../../lib/reveal";
@@ -52,6 +53,7 @@ const asItem = (o: PriceOption): Item => ({ id: o.url, upfrontCents: o.upfrontCe
 
 export default function NewWish() {
   const { api } = useAuth();
+  const dandy = useDandy();
   const { wishes, add } = useWishes();
   const p = usePalette();
   const t = useType();
@@ -253,7 +255,7 @@ export default function NewWish() {
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
                     <AgentDot />
                     <Text style={[type.footnote, { color: p.ink2 }]}>
-                      {questions.length ? `Your agent · ${questions.length === 1 ? "one quick question" : `${questions.length} quick questions`}` : "Your agent · that's clear enough to price"}
+                      {questions.length ? `${dandy.name} · ${questions.length === 1 ? "one quick question" : `${questions.length} quick questions`}` : `${dandy.name} · that's clear enough to price`}
                     </Text>
                   </View>
                   <Text style={[type.title2, { color: p.ink }]}>{draft.title}</Text>
@@ -316,7 +318,7 @@ export default function NewWish() {
           <Protect />
           <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
             {working ? <AgentDot busy /> : null}
-            <Eyebrow>{working ? `Researching · ${clock} · Meta Muse Spark` : run?.status === "error" ? "Research stopped" : `${KIND_LABEL[draft?.kind ?? "buy"]} · what it costs`}</Eyebrow>
+            <Eyebrow>{working ? `Researching · ${clock}` : run?.status === "error" ? "Research stopped" : `${KIND_LABEL[draft?.kind ?? "buy"]} · what it costs`}</Eyebrow>
           </View>
           <Text accessibilityRole="header" style={[t.title1, { color: p.ink }]}>{draft?.title}</Text>
           {option ? (
