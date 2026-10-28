@@ -245,7 +245,7 @@ export default function Welcome() {
       ) : null}
 
       {building ? (
-        <View pointerEvents="box-none" style={{ position: "absolute", left: 0, right: 0, bottom: insets.bottom + 16, alignItems: "center", paddingHorizontal: 16 }}>
+        <View pointerEvents="box-none" style={{ position: "absolute", left: 0, right: 0, bottom: insets.bottom + layout.dockGap, alignItems: "center", paddingHorizontal: gutter }}>
           <LifePill cents={total} onLayoutRef={(v) => (pill.current = v)} style={{ width: "100%", maxWidth: layout.list }} />
         </View>
       ) : null}

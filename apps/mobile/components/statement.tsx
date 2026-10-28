@@ -1,6 +1,6 @@
 import { equivalentMonthly, horizonCashOutlay, recurringBreakdown, type Item } from "@dandelist/cost";
 import { Text, View } from "react-native";
-import { fonts, radius, type, usePalette } from "../lib/theme";
+import { fonts, layout, radius, type, usePalette } from "../lib/theme";
 import { Glass, Hairline, StatementRow } from "./lux";
 
 export const HORIZON_YEARS = 5;
@@ -10,7 +10,7 @@ export function Statement({ item, years = HORIZON_YEARS, monthlyHint }: { item: 
   const monthly = recurringBreakdown([item]).perMonth;
   const total = horizonCashOutlay([item], years);
   return (
-    <Glass style={{ borderRadius: radius.lg, padding: 20, gap: 12 }}>
+    <Glass style={{ borderRadius: radius.lg, padding: layout.cardPad, gap: 12 }}>
       <StatementRow label="Upfront" cents={item.upfrontCents} big />
       <Hairline />
       {monthly ? <StatementRow label="Every month" hint={monthlyHint || "Running costs you'd actually pay"} cents={monthly} /> : null}

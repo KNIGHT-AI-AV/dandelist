@@ -58,6 +58,9 @@ function palette(b: Base) {
     /** The champagne light that crosses the reveal figure. */
     shine: dark ? "#F6E7C1" : accentText,
     ivory: "#EDE6D8",
+    /** Marks drawn over photographs (progress bars, counters): always light, whatever the theme. */
+    onPhoto: "#EDE6D8",
+    onPhotoTrack: "rgba(237, 230, 216, 0.28)",
     /** Text on an ink-filled button. */
     onAccent: b.bg,
   };
@@ -220,6 +223,12 @@ export function scaleType(width: number, web: boolean): typeof type {
 /** Spacing on a 4 pt base with an 8 pt rhythm (UI audit §3.1). */
 export const space = { 0: 0, 2: 2, 4: 4, 8: 8, 12: 12, 16: 16, 20: 20, 24: 24, 32: 32, 40: 40, 48: 48, 64: 64, 80: 80 } as const;
 
+/** Control heights: chips, fields, the primary button, the Life meter, and round icon buttons (all at least 44). */
+const CONTROL = { chip: 50, field: 52, primary: 56, meter: 52, icon: 44 } as const;
+/** Vertical rhythm: eyebrow to title is tight, title to body is base, header to content is section. */
+const STACK = { tight: 8, base: 16, section: 32, sectionLg: 48 } as const;
+const DOCK_GAP = 20;
+
 export const layout = {
   /** One side gutter for every screen. */
   gutter: (w: number) => (w < 400 ? 20 : w < 744 ? 24 : 32),
@@ -233,15 +242,18 @@ export const layout = {
   segmentsTop: 50,
   /** Where step content starts, from the top inset (32 below the segments). */
   contentTop: 84,
-  control: { chip: 44, field: 52, primary: 56, meter: 52 },
+  control: CONTROL,
+  /** From the bottom inset to a docked button or pill. */
+  dockGap: DOCK_GAP,
   /** Height of a floating CTA plus the fade beneath it. */
-  dockHeight: (bottomInset: number) => bottomInset + 56 + 20 + 48,
-  stack: { tight: 8, base: 16, section: 32, sectionLg: 48 },
+  dockHeight: (bottomInset: number) => bottomInset + CONTROL.primary + DOCK_GAP + STACK.sectionLg,
+  stack: STACK,
   cardPad: 20,
 };
 
 /** Nested radii: inner = outer − padding, never below 6. */
-export const radius = { xs: 6, sm: 12, md: 18, lg: 26, sheet: 28, pill: 999 } as const;
+/** `control` is the one corner for every button, chip and field. */
+export const radius = { xs: 6, sm: 12, control: 16, md: 18, lg: 26, sheet: 28, pill: 999 } as const;
 
 /** Two-layer shadows (RN New Architecture `boxShadow`, which the web build passes straight to CSS). */
 export const shadow = {

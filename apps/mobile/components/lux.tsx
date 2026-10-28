@@ -65,7 +65,7 @@ export function Glass({ children, style, intensity = 40, tint }: { children?: Re
   return (
     // zIndex 0 makes the panel its own stack, so the blur (at -1) always sits behind the content, including on web,
     // where absolutely positioned layers otherwise paint over inputs and text.
-    <View style={[{ borderRadius: radius.md, overflow: "hidden", borderWidth: StyleSheet.hairlineWidth, borderColor: p.hair, zIndex: 0 }, style]}>
+    <View style={[{ borderRadius: radius.md, borderCurve: "continuous", overflow: "hidden", borderWidth: StyleSheet.hairlineWidth, borderColor: p.hair, zIndex: 0 }, style]}>
       <BlurView intensity={intensity} tint={p.scheme} style={[StyleSheet.absoluteFill, { zIndex: -1 }]} />
       <View style={[StyleSheet.absoluteFill, { backgroundColor: tint ?? p.glassTint, zIndex: -1 }]} />
       {children}
@@ -212,7 +212,7 @@ export function IconButton({ icon, label, onPress, style }: { icon: "back" | "cl
 }
 
 /**
- * The one primary button (UI audit P1-14): 56 tall, radius 28, full width up to 400, centred. Disabled is a quiet
+ * The one primary button (UI audit P1-14): 56 tall, the control radius, full width up to 400, centred. Disabled is a quiet
  * outline whose fill fades in when it becomes available; busy crossfades the label (to `busyLabel` when given) at
  * a fixed width. `commit` adds the soft haptic for actions that keep something.
  */
@@ -253,7 +253,7 @@ export function PrimaryButton({ label, busyLabel, onPress, busy = false, disable
         <Animated.View
           style={{
             minHeight: layout.control.primary,
-            borderRadius: 16,
+            borderRadius: radius.control,
             borderCurve: "continuous",
             borderWidth: 1,
             borderColor: fill.interpolate({ inputRange: [0, 1], outputRange: [`rgba(${p.inkRgb}, 0.28)`, p.ink] }),
@@ -314,11 +314,11 @@ export function Chip({ label, selected = false, onPress, style }: { label: strin
     >
       <Animated.View
         style={{
-          minHeight: 50,
-          paddingHorizontal: 18,
+          minHeight: layout.control.chip,
+          paddingHorizontal: layout.stack.base,
           alignItems: "center",
           justifyContent: "center",
-          borderRadius: 14,
+          borderRadius: radius.control,
           borderCurve: "continuous",
           borderWidth: StyleSheet.hairlineWidth * 2,
           borderColor: selected ? p.ink : `rgba(${p.inkRgb}, ${p.scheme === "dark" ? 0.16 : 0.2})`,
@@ -351,13 +351,13 @@ export function GlassField({ label, style, inputStyle, ...props }: TextInputProp
   const p = usePalette();
   const [focused, setFocused] = useState(false);
   return (
-    <View style={[{ gap: 8 }, style]}>
+    <View style={[{ gap: layout.stack.tight }, style]}>
       <Eyebrow>{label}</Eyebrow>
-      <Glass style={{ borderRadius: radius.sm, borderWidth: 1, borderColor: focused ? p.ink2 : p.line }}>
+      <Glass style={{ borderRadius: radius.control, borderWidth: 1, borderColor: focused ? p.ink2 : p.line }}>
         <TextInput
           accessibilityLabel={label}
           placeholderTextColor={p.ink3}
-          style={[type.body, { minHeight: layout.control.field, paddingHorizontal: 16, color: p.ink }, Platform.OS === "web" ? ({ outlineWidth: 0 } as object) : null, inputStyle]}
+          style={[type.body, { minHeight: layout.control.field, paddingHorizontal: layout.stack.base, color: p.ink }, Platform.OS === "web" ? ({ outlineWidth: 0 } as object) : null, inputStyle]}
           {...props}
           onFocus={(e) => {
             setFocused(true);
@@ -440,5 +440,5 @@ export function Breathing({ style }: { style?: StyleProp<ViewStyle> }) {
     loop.start();
     return () => loop.stop();
   }, [reduced, v]);
-  return <Animated.View style={[{ backgroundColor: p.surface, borderRadius: radius.lg, opacity: v }, style]} />;
+  return <Animated.View style={[{ backgroundColor: p.surface, borderRadius: radius.lg, borderCurve: "continuous", opacity: v }, style]} />;
 }

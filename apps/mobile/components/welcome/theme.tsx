@@ -99,13 +99,15 @@ function Body({ id, totalCents, by, held, onPick, onChoose, cta, roll }: { id: T
   const first = useRef(roll);
   return (
     <View style={{ flex: 1, justifyContent: "flex-end", paddingHorizontal: gutter, paddingBottom: insets.bottom + 24, gap: 20, maxWidth: layout.column + 2 * gutter, width: "100%", alignSelf: "center" }}>
-      <View style={{ gap: 8 }}>
-        <Eyebrow color={p.accentText}>Make it yours</Eyebrow>
-        <Text accessibilityRole="header" style={[t.display, { color: p.ink }]}>
-          {THEMES[id].name}
-        </Text>
+      <View style={{ gap: layout.stack.base }}>
+        <View style={{ gap: layout.stack.tight }}>
+          <Eyebrow color={p.accentText}>Make it yours</Eyebrow>
+          <Text accessibilityRole="header" style={[t.display, { color: p.ink }]}>
+            {THEMES[id].name}
+          </Text>
+        </View>
         <Text style={[type.title3, { fontFamily: fonts.titleItalic, color: p.ink2 }]}>{THEMES[id].mood}</Text>
-        <Glass style={{ marginTop: 8, padding: layout.cardPad, gap: 4, borderRadius: radius.md }}>
+        <Glass style={{ padding: layout.cardPad, gap: 4, borderRadius: radius.lg }}>
           <Eyebrow color={p.accentText}>Your life</Eyebrow>
           <Odometer cents={totalCents} format={dollars} size={t.title1.fontSize ?? 34} family="bodoni" smallPrefix tracking={-0.34} color={p.ink} rollOnMount={first.current ? "cinema" : false} />
           <Text style={[type.figure, { color: p.ink2 }]}>{`yours by ${by}`}</Text>

@@ -85,7 +85,7 @@ export default function Plan() {
         </View>
 
         {monthly && rows.length ? (
-          <Glass style={{ padding: 16, gap: 8, borderRadius: radius.md }}>
+          <Glass style={{ padding: layout.cardPad, gap: layout.stack.tight, borderRadius: radius.lg }}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
               <AgentDot />
               <Eyebrow>Your agent</Eyebrow>
@@ -101,7 +101,7 @@ export default function Plan() {
           <Money cents={running} size="title" align="right" />
         </View>
       </ScrollView>
-      <IconButton icon="back" label="Back" onPress={() => (router.canGoBack() ? router.back() : router.replace("/wishes"))} style={{ position: "absolute", top: insets.top + 4, left: 16 }} />
+      <IconButton icon="back" label="Back" onPress={() => (router.canGoBack() ? router.back() : router.replace("/wishes"))} style={{ position: "absolute", top: insets.top + (layout.headerBar - layout.control.icon) / 2, left: gutter }} />
       <Grain />
     </View>
   );
