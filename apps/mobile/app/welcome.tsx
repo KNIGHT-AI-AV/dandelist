@@ -15,6 +15,7 @@ import { useAuth, useSignInOptions, type ProviderId, type SignInOption } from ".
 import { ease, native, spring, step as stepMotion, useReducedMotion } from "../lib/motion";
 import { layout, type, usePalette, useTheme } from "../lib/theme";
 import { loadWelcome, markTitleSeen, monthYearLong, picked, saveWelcome, seenTitle, type WelcomeState } from "../lib/welcome";
+import { Atmosphere } from "../components/atmosphere";
 
 /** Apple, Google and GitHub in the save sheet; the kept picks are already on this device for after the redirect. */
 function WelcomeSocial() {
@@ -223,6 +224,7 @@ export default function Welcome() {
 
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
+      <Atmosphere />
       <Animated.View style={{ flex: 1, opacity: stage, borderRadius: sheet ? 24 : 0, overflow: sheet ? "hidden" : "visible", transform: [{ translateX: shift }, { scale: behind }], paddingTop: framed ? insets.top + layout.contentTop : 0, paddingBottom: building ? insets.bottom + pillSpace : 0 }}>{body}</Animated.View>
 
       {framed ? (

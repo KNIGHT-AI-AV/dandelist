@@ -8,6 +8,7 @@ import { Statement } from "../../components/statement";
 import { parseDollars } from "../../lib/money";
 import { layout, type, usePalette, useType } from "../../lib/theme";
 import { useWishes, type WishKind, type WishTier } from "../../lib/wishes";
+import { Atmosphere } from "../../components/atmosphere";
 
 const KINDS: { value: WishKind; label: string }[] = [
   { value: "buy", label: "Buy" },
@@ -89,6 +90,7 @@ export default function ManualWish() {
 
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
+      <Atmosphere />
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingTop: insets.top + layout.contentTop, paddingBottom: insets.bottom + 40, paddingHorizontal: gutter, gap: 20, width: "100%", maxWidth: layout.list + 2 * gutter, alignSelf: "center" }}>
         <View style={{ gap: layout.stack.tight }}>
           <Eyebrow>New wish</Eyebrow>

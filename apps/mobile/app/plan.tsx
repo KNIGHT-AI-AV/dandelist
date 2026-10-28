@@ -10,6 +10,7 @@ import { getSecret, setSecret } from "../lib/storage";
 import { fonts, layout, radius, type, usePalette, useType } from "../lib/theme";
 import { useWishes } from "../lib/wishes";
 import { TIER_LABEL, monthYear } from "../lib/words";
+import { Atmosphere } from "../components/atmosphere";
 
 const KEY = "dandelist.monthlyAside";
 const RANK = { must: 0, nice: 1, dream: 2 } as const;
@@ -52,6 +53,7 @@ export default function Plan() {
 
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
+      <Atmosphere />
       <ScrollView contentContainerStyle={{ paddingTop: insets.top + layout.contentTop, paddingBottom: insets.bottom + 40, paddingHorizontal: gutter, gap: 20, width: "100%", maxWidth: layout.list + 2 * gutter, alignSelf: "center" }}>
         <View style={{ gap: layout.stack.tight }}>
           <Eyebrow>The plan</Eyebrow>

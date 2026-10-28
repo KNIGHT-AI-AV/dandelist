@@ -4,6 +4,7 @@ import { ActivityIndicator, Platform, View } from "react-native";
 import { Backdrop, Eyebrow, Grain, Shade } from "../../components/lux";
 import { isBrokerPending, useAuth } from "../../lib/auth";
 import { usePalette } from "../../lib/theme";
+import { Atmosphere } from "../../components/atmosphere";
 
 /**
  * Where a Google, GitHub or Apple sign-in comes back with its one-time ticket (the web at /auth/callback, a phone at
@@ -39,6 +40,7 @@ export default function AuthReturn() {
 
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
+      <Atmosphere />
       <Backdrop source={require("../../assets/backdrop.jpg")} />
       <Shade from={0.05} />
       <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 16 }}>

@@ -3,6 +3,7 @@ import { ScrollView, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { layout, type, usePalette, useType } from "../lib/theme";
 import { EdgeFade, Eyebrow, IconButton } from "./lux";
+import { Atmosphere } from "./atmosphere";
 
 export interface LegalSection {
   heading: string;
@@ -17,6 +18,7 @@ export function LegalPage({ eyebrow, title, updated, sections }: { eyebrow: stri
   const { width } = useWindowDimensions();
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
+      <Atmosphere />
       <ScrollView contentContainerStyle={{ paddingTop: insets.top + layout.contentTop, paddingBottom: insets.bottom + 48, paddingHorizontal: layout.gutter(width), gap: layout.stack.section, maxWidth: 680, width: "100%", alignSelf: "center" }}>
         <View style={{ gap: 8 }}>
           <Eyebrow>{eyebrow}</Eyebrow>

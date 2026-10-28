@@ -23,10 +23,10 @@ describe("type roles (UI audit §3.2)", () => {
     for (const r of Object.values(type)) expect(r.fontSize).toBeGreaterThanOrEqual(11);
   });
   it("keep the phone sizes at 390 wide and follow the web clamps", () => {
-    expect(scaleType(390, false).hero.fontSize).toBe(56);
-    expect(scaleType(320, false).hero.fontSize).toBe(Math.round(56 * 0.92));
-    expect(scaleType(1280, true).hero.fontSize).toBe(80);
-    expect(scaleType(1280, true).title1.fontSize).toBe(48);
-    expect(scaleType(390, true).display.fontSize).toBe(Math.round(Math.max(44, 2.4 * 3.9 + 35)));
+    expect(scaleType(390, false).hero.fontSize).toBe(60);
+    expect(scaleType(320, false).hero.fontSize).toBe(Math.round(60 * 0.92));
+    expect(scaleType(1280, true).hero.fontSize).toBe(84);
+    expect(scaleType(1280, true).title1.fontSize).toBe(52);
+    expect(scaleType(390, true).display.fontSize).toBe(Math.round(Math.max(46, 2.4 * 3.9 + 37)));
   });
 });

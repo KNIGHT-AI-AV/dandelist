@@ -3,7 +3,7 @@ import { BlurView } from "expo-blur";
 import { Image, type ImageContentPosition } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Animated, Easing, Image as RNImage, Platform, Pressable, StyleSheet, Text, TextInput, View, type StyleProp, type TextInputProps, type TextStyle, type ViewStyle } from "react-native";
+import { Animated, Easing, Image as RNImage, Platform, Pressable, StyleSheet, Text, TextInput, View, useWindowDimensions, type StyleProp, type TextInputProps, type TextStyle, type ViewStyle } from "react-native";
 import { formatCents } from "../lib/money";
 import { ease, haptic, native, usePress, useReducedMotion } from "../lib/motion";
 import { layout, radius, type, usePalette, useTheme, useType, type ThemeId } from "../lib/theme";
@@ -130,9 +130,24 @@ export function Grain() {
   if (Platform.OS === "web") {
     return <View pointerEvents="none" aria-hidden style={[StyleSheet.absoluteFill, { backgroundImage: `url(${GRAIN_URI})`, backgroundRepeat: "repeat", opacity: 0.35, mixBlendMode: "overlay" } as object]} />;
   }
+  return <GrainTiles />;
+}
+
+const TILE = 256;
+
+/**
+ * Phones lay the grain tile out by hand. `resizeMode="repeat"` drew it once in the top-left corner on iOS (owner,
+ * 2026-10-27: "a weird cutout block on the top left corner of the background").
+ */
+function GrainTiles() {
+  const { width, height } = useWindowDimensions();
+  const cols = Math.ceil(width / TILE);
+  const rows = Math.ceil(height / TILE);
   return (
-    <View pointerEvents="none" style={StyleSheet.absoluteFill} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-      <RNImage source={grain} resizeMode="repeat" style={[StyleSheet.absoluteFill, { opacity: 0.5 }]} />
+    <View pointerEvents="none" style={[StyleSheet.absoluteFill, { opacity: 0.4, overflow: "hidden" }]} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+      {Array.from({ length: rows * cols }, (_, i) => (
+        <RNImage key={i} source={grain} fadeDuration={0} style={{ position: "absolute", left: (i % cols) * TILE, top: Math.floor(i / cols) * TILE, width: TILE, height: TILE }} />
+      ))}
     </View>
   );
 }
@@ -238,7 +253,8 @@ export function PrimaryButton({ label, busyLabel, onPress, busy = false, disable
         <Animated.View
           style={{
             minHeight: layout.control.primary,
-            borderRadius: 28,
+            borderRadius: 16,
+            borderCurve: "continuous",
             borderWidth: 1,
             borderColor: fill.interpolate({ inputRange: [0, 1], outputRange: [`rgba(${p.inkRgb}, 0.28)`, p.ink] }),
             backgroundColor: fill.interpolate({ inputRange: [0, 1], outputRange: [`rgba(${p.inkRgb}, 0)`, p.ink] }),
@@ -277,10 +293,11 @@ export function QuietButton({ label, onPress, style, color }: { label: string; o
 }
 
 /**
- * The one chip (UI audit P1-14): 44 tall, Inter 600 14, a `line` border, ink when selected. Choosing one gives a
- * selection tick. `ghost` is the wider outline pill for "Both" and "Neither".
+ * The one choice button (readability pass, 2026-10-27, replacing thin outline pills the owner called janky): 50 tall,
+ * a filled tonal surface with a faint hairline, continuous corners, Inter 600 15; ink-filled when selected. Parents
+ * give it `flex: 1` to set choices in equal columns.
  */
-export function Chip({ label, selected = false, onPress, ghost = false, style }: { label: string; selected?: boolean; onPress?: () => void; ghost?: boolean; style?: StyleProp<ViewStyle> }) {
+export function Chip({ label, selected = false, onPress, style }: { label: string; selected?: boolean; onPress?: () => void; style?: StyleProp<ViewStyle> }) {
   const p = usePalette();
   const press = usePress(0.97);
   return (
@@ -297,17 +314,19 @@ export function Chip({ label, selected = false, onPress, ghost = false, style }:
     >
       <Animated.View
         style={{
-          minHeight: layout.control.chip,
-          paddingHorizontal: ghost ? 20 : 16,
+          minHeight: 50,
+          paddingHorizontal: 18,
+          alignItems: "center",
           justifyContent: "center",
-          borderRadius: radius.pill,
-          borderWidth: 1,
-          borderColor: selected ? p.ink : p.line,
-          backgroundColor: selected ? p.ink : ghost ? "transparent" : p.glassTint,
+          borderRadius: 14,
+          borderCurve: "continuous",
+          borderWidth: StyleSheet.hairlineWidth * 2,
+          borderColor: selected ? p.ink : `rgba(${p.inkRgb}, ${p.scheme === "dark" ? 0.16 : 0.2})`,
+          backgroundColor: selected ? p.ink : `rgba(${p.inkRgb}, ${p.scheme === "dark" ? 0.07 : 0.05})`,
           transform: [{ scale: press.scale }],
         }}
       >
-        <Text style={[type.label, { color: selected ? p.onAccent : p.ink }]}>{label}</Text>
+        <Text style={[type.label, { color: selected ? p.onAccent : p.ink }]} numberOfLines={1}>{label}</Text>
       </Animated.View>
     </Pressable>
   );

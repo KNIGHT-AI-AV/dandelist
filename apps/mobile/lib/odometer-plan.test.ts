@@ -14,10 +14,10 @@ describe("cells keyed by place value (§2.1)", () => {
     const b = cellsOf("$10,000").find((c) => c.key === "d0")!;
     expect(a.place).toBe(b.place);
   });
-  it("measures $9,999 and $10,000 as the audit does", () => {
+  it("measures $9,999 and $10,000 in the serif (Instrument Serif since 2026-10-27)", () => {
     const w = (s: string) => cellsOf(s).reduce((sum, c) => sum + emWidth(c, "bodoni"), 0);
-    expect(w("$9,999")).toBeCloseTo(3.088, 3);
-    expect(w("$10,000")).toBeCloseTo(3.668, 3);
+    expect(w("$9,999")).toBeCloseTo(2.354, 3);
+    expect(w("$10,000")).toBeCloseTo(2.784, 3);
   });
 });
 

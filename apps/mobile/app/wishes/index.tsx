@@ -12,6 +12,7 @@ import { loadWelcome, saveWelcome, toWishes } from "../../lib/welcome";
 import { useWishes, type Wish } from "../../lib/wishes";
 import { TIER_LABEL, agentLine, hostOf, whenChecked } from "../../lib/words";
 import { rememberCard } from "../../lib/zoom";
+import { Atmosphere } from "../../components/atmosphere";
 
 function WishCard({ w, tall }: { w: Wish; tall: boolean }) {
   const p = usePalette();
@@ -111,6 +112,7 @@ export default function LifeList() {
 
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
+      <Atmosphere />
       <ScrollView style={{ scrollbarWidth: "thin", scrollbarColor: `rgba(${p.inkRgb},0.2) transparent` } as object} contentContainerStyle={{ paddingTop: insets.top, paddingBottom: dock, paddingHorizontal: gutter, width: "100%", maxWidth: layout.list + 2 * gutter, alignSelf: "center" }}>
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", height: layout.headerBar }}>
           <Wordmark />

@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { AccessibilityInfo, Animated, Easing, Platform, Text, View, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
 import { ease, native, useReducedMotion } from "../lib/motion";
 import { METRICS, REPEATS, REST, cellsOf, emWidth, lineAt, normalize, plan, target, wheelTables, type Cell, type Mode, type Trend, type WheelCmd } from "../lib/odometer-plan";
-import { bodoni, fonts, usePalette } from "../lib/theme";
+import { fonts, serif, usePalette } from "../lib/theme";
 import { EdgeMask } from "./odometer-mask";
 
 /**
@@ -72,15 +72,15 @@ function useLook({ size = 22, family = "mono", color, smallPrefix = false, prefi
   // The edge fade runs past the pad into the empty space above and below the digits, so passing digits dissolve.
   const F = P + Math.round(size * 0.16);
   const m = METRICS[family];
-  const fontFamily = family === "bodoni" ? bodoni(size) : fonts.figure;
+  const fontFamily = family === "bodoni" ? serif(size) : fonts.figure;
   const text: TextStyle = { fontFamily, fontSize: size, lineHeight: H, color: color ?? p.ink, textAlign: "center", includeFontPadding: false, fontVariant: ["tabular-nums", "lining-nums"], ...(glow ? { textShadowColor: glow, textShadowRadius: size * 0.25, textShadowOffset: { width: 0, height: 0 } } : null) };
   const widthOf = (c: Pick<Cell, "kind" | "char">) => {
     if (c.kind === "prefix" && smallPrefix) return emWidth(c, family) * size * 0.5 + size * 0.04;
     return emWidth(c, family) * size + tracking * (c.kind === "prefix" || c.kind === "suffix" ? c.char.length : 1);
   };
-  // The half-size `$` sits with its top on the digits' top (fontTools: digits reach 0.76 em, `$` 0.83 em).
+  // The half-size `$` sits with its top on the digits' top (fontTools: digits reach 0.73 em, `$` 0.83 em).
   const mid = (m.ascent - m.descent) / 2;
-  const prefixLift = smallPrefix ? size * (mid - 0.76) - size * 0.5 * (mid - 0.83) : 0;
+  const prefixLift = smallPrefix ? size * (mid - 0.73) - size * 0.5 * (mid - 0.83) : 0;
   return { p, H, P, L, F, text, widthOf, prefixLift, size, smallPrefix, prefixColor: prefixColor ?? p.ink2 };
 }
 

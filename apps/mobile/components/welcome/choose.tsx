@@ -2,6 +2,7 @@ import type { Entry } from "@dandelist/catalogue";
 import { recurringBreakdown } from "@dandelist/cost";
 import { heroFor, toItem } from "@dandelist/catalogue";
 import { useEffect, useRef, useState } from "react";
+import { LinearGradient } from "expo-linear-gradient";
 import { Animated, PanResponder, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions, type LayoutChangeEvent } from "react-native";
 import { ease, haptic, native, spring, usePress, useReducedMotion } from "../../lib/motion";
 import { formatCents } from "../../lib/money";
@@ -51,7 +52,9 @@ function PhotoCard({ e, onPress, style, big = false }: { e: Entry; onPress(ref: 
       <Animated.View onLayout={(ev) => { const { width: w, height: h } = ev.nativeEvent.layout; if (w > 0 && h > 0 && Math.abs(w / h - aspect) > 0.1) setAspect(w / h); }} style={{ flex: 1, borderRadius: radius.lg, overflow: "hidden", transform: [{ scale: press.scale }] }}>
         <GlassReveal uri={heroFor(e, aspect) ?? null} standby={standbyFor(e)} stage="clear" treatment="pane" style={StyleSheet.absoluteFill} />
         <Shade />
-        <View style={{ position: "absolute", left: layout.cardPad, right: layout.cardPad, bottom: layout.cardPad, gap: 8 }}>
+        {/* Wide cards keep their words in a left column over a scrim, so a name never runs into the photo. */}
+        {big ? null : <LinearGradient pointerEvents="none" colors={[`rgba(${p.bgRgb}, 0.9)`, `rgba(${p.bgRgb}, 0.7)`, `rgba(${p.bgRgb}, 0)`]} locations={[0, 0.38, 0.72]} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={StyleSheet.absoluteFill} />}
+        <View style={{ position: "absolute", left: layout.cardPad, right: big ? layout.cardPad : "30%", bottom: layout.cardPad, gap: 6 }}>
           <Text style={[type.title2, { color: p.ink }]} numberOfLines={2}>
             {e.name}
           </Text>
@@ -91,7 +94,8 @@ export function FirstPick({ entries, onPick }: { entries: Entry[]; onPick(e: Ent
         style={{ paddingHorizontal: gutter, gap: layout.stack.tight, width: "100%", maxWidth: wide ? Math.max(cardW * 3 + 32, 0) + 2 * gutter : undefined, alignSelf: "center" }}
       >
         <Eyebrow>Your first pick</Eyebrow>
-        <Text accessibilityRole="header" style={[t.title1, { color: p.ink }]}>
+        {/* Two even lines, never an orphaned "to." */}
+        <Text accessibilityRole="header" style={[t.title1, { color: p.ink, maxWidth: wide ? undefined : 290 }]}>
           Start with one you'd say <Text style={{ fontFamily: fonts.displayItalic, color: p.accentText }}>yes</Text> to.
         </Text>
       </Rise>
@@ -109,7 +113,7 @@ export function FirstPick({ entries, onPick }: { entries: Entry[]; onPick(e: Ent
 
 /**
  * Step 3: this or that. Two full-bleed halves; tapping one grows it a touch while the other dims and slides away.
- * "Both" and "Neither" are always there as outline pills, and on the web the arrow keys vote.
+ * "Both" and "Neither" are always there as two equal buttons, and on the web the arrow keys vote.
  */
 export function VotePair({ a, b, round, rounds, onVote }: { a: Entry; b: Entry; round: number; rounds: number; onVote(chosen: Entry[], from: View | null): void }) {
   const p = usePalette();
@@ -174,9 +178,9 @@ export function VotePair({ a, b, round, rounds, onVote }: { a: Entry; b: Entry; 
           </Animated.View>
         ))}
       </View>
-      <View style={{ flexDirection: "row", justifyContent: "center", gap: 12 }}>
-        <Chip ghost label="Both" onPress={() => pick("both")} />
-        <Chip ghost label="Neither" onPress={() => pick("neither")} />
+      <View style={{ flexDirection: "row", gap: 12, paddingHorizontal: side ? gutter : 16, maxWidth: 560 + 2 * gutter, width: "100%", alignSelf: "center" }}>
+        <Chip label="Both" onPress={() => pick("both")} style={{ flex: 1 }} />
+        <Chip label="Neither" onPress={() => pick("neither")} style={{ flex: 1 }} />
       </View>
     </View>
   );
@@ -192,14 +196,15 @@ export function Horizon({ value, onPick }: { value: number | null | undefined; o
     <View style={{ flex: 1, justifyContent: "center", paddingHorizontal: layout.gutter(width), gap: layout.stack.section, maxWidth: layout.column + 2 * layout.gutter(width), width: "100%", alignSelf: "center" }}>
       <Rise style={{ gap: layout.stack.tight }}>
         <Eyebrow>Your horizon</Eyebrow>
-        <Text accessibilityRole="header" style={[t.title1, { color: p.ink }]}>
+        <Text accessibilityRole="header" style={[t.title1, { color: p.ink, maxWidth: width >= 760 ? undefined : 290 }]}>
           When should this life be <Text style={{ fontFamily: fonts.displayItalic, color: p.accentText }}>yours</Text>?
         </Text>
         <Text style={[type.callout, { color: p.ink2, marginTop: 8 }]}>We'll show what changes if it takes longer.</Text>
       </Rise>
-      <Rise delay={50} style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+      {/* Equal columns, two by two, with "Not sure" across the full width beneath. */}
+      <Rise delay={50} style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
         {options.map(([label, years]) => (
-          <Chip key={label} label={label} selected={value === years} onPress={() => onPick(years)} />
+          <Chip key={label} label={label} selected={value === years} onPress={() => onPick(years)} style={{ flexBasis: years === null ? "100%" : "47%", flexGrow: 1 }} />
         ))}
       </Rise>
     </View>

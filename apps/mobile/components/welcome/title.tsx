@@ -85,7 +85,7 @@ export function TitleSequence({ hero, short, onDone }: { hero: Entry; short: boo
   return (
     // Tapping anywhere skips too. The root is a plain view with a responder, not a button, so the Skip button is the
     // one real control (UI audit P0-8: no button inside a button on the web).
-    <View onStartShouldSetResponder={() => skippable} onResponderRelease={finish} style={{ flex: 1, backgroundColor: p.bg, overflow: "hidden" }}>
+    <View onStartShouldSetResponder={() => skippable} onResponderRelease={finish} style={{ flex: 1, overflow: "hidden" }}>
       {/* On a tall screen the landscape hero sits in a frame at the top whose floor dissolves into the page, so the
           subject stays whole instead of being cropped to a door (UI audit P1-20). */}
       <Animated.View style={[frame, { opacity: photo, transform: [{ scale: push }] }]}>
@@ -101,7 +101,8 @@ export function TitleSequence({ hero, short, onDone }: { hero: Entry; short: boo
       <View pointerEvents="none" style={{ position: "absolute", left: gutter, right: gutter, bottom: insets.bottom + 120 }}>
         <Animated.View style={{ opacity: Animated.multiply(priceIn, priceOut), transform: [{ translateY: priceLift }], gap: 8 }}>
           {price ? <Odometer cents={hero.upfrontCents} format={dollars} size={48} family="bodoni" smallPrefix tracking={-0.96} rollOnMount="cinema" /> : <View style={{ height: Math.round(48 * 1.18) }} />}
-          <Text style={[type.figure, { color: p.ink2 }]}>{`${hero.name} · ${hostOf(hero.url)} · checked ${shortDate(hero.checkedAt)}`}</Text>
+          <Text style={[type.callout, { color: p.ink }]} numberOfLines={1}>{hero.name}</Text>
+          <Text style={[type.figure, { color: p.ink2 }]} numberOfLines={1}>{`${hostOf(hero.url)} · checked ${shortDate(hero.checkedAt)}`}</Text>
         </Animated.View>
         <Animated.View style={{ position: "absolute", left: 0, right: 0, bottom: 0, opacity: Animated.multiply(dateIn, dateOut), transform: [{ translateY: range(2720, 3420, 16, 0) }] }}>
           {/* A deliberate two-line set, so the year is never orphaned. */}

@@ -11,6 +11,7 @@ import { useAuth } from "../../lib/auth";
 import { fonts, layout, radius, type, usePalette, useType } from "../../lib/theme";
 import { useWishes, type WishTier } from "../../lib/wishes";
 import { KIND_LABEL, hostOf } from "../../lib/words";
+import { Atmosphere } from "../../components/atmosphere";
 
 const EXAMPLES = ["A week at Amanzoe for two", "A Leica Q3", "Learning to surf in Bali", "A Porsche 911 Carrera"];
 const TIERS: { value: WishTier; label: string }[] = [
@@ -171,6 +172,7 @@ export default function NewWish() {
   if (stage === "describe" || stage === "ask") {
     return (
       <View style={{ flex: 1, backgroundColor: p.bg }}>
+        <Atmosphere />
         {latestImage ? (
           <View style={StyleSheet.absoluteFill}>
             <Photo uri={latestImage} />
@@ -259,6 +261,7 @@ export default function NewWish() {
 
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
+      <Atmosphere />
       <ScrollView contentContainerStyle={{ paddingBottom: result?.options.length ? dock : insets.bottom + 40 }} style={{ scrollbarWidth: "thin", scrollbarColor: `rgba(${p.inkRgb},0.2) transparent` } as object}>
         <View style={{ height: 440, width: "100%" }}>
           <Photo uri={heroImage} kind={draft?.kind} />

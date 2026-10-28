@@ -12,6 +12,7 @@ import { webOnly } from "../../lib/dream";
 import { useWishes } from "../../lib/wishes";
 import { KIND_LABEL, TIER_LABEL, agentLine } from "../../lib/words";
 import { cardRect } from "../../lib/zoom";
+import { Atmosphere } from "../../components/atmosphere";
 
 const HERO = 470;
 
@@ -74,6 +75,7 @@ export default function WishDetail() {
   if (!w) {
     return (
       <View style={{ flex: 1, backgroundColor: p.bg, alignItems: "center", justifyContent: "center", gap: 16, padding: 24 }}>
+        <Atmosphere />
         {status === "loading" || status === "idle" ? <Breathing style={{ width: "100%", maxWidth: layout.list, height: 232 }} /> : <Text style={[type.callout, { color: p.ink2 }]}>That wish wasn't found.</Text>}
         <QuietButton label="Back to your list" onPress={() => router.replace("/wishes")} />
       </View>

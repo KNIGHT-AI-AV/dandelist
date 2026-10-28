@@ -1,16 +1,17 @@
 import { Redirect, router } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CarBuilder, HomeBuilder, RegionPicker } from "../components/dream/builders";
 import { SwipeDeck } from "../components/dream/deck";
 import { ServiceQuote, WishReady } from "../components/dream/quotes";
-import { AgentDot, Eyebrow, Glass, Grain, PrimaryButton } from "../components/lux";
+import { AgentDot, Chip, Eyebrow, Glass, Grain, PrimaryButton } from "../components/lux";
 import { Rise } from "../components/welcome/kit";
 import { useAuth } from "../lib/auth";
 import { dreamTurn, wishFrom, type DreamAction, type DreamEvent, type FeedItem, type LifeContext, type Widget } from "../lib/dream";
 import { fonts, radius, usePalette, type } from "../lib/theme";
 import { useWishes } from "../lib/wishes";
+import { Atmosphere } from "../components/atmosphere";
 
 const IDEAS = ["A villa by the sea with a pool", "A black G-Wagon", "Private security for my family", "A year living in Kyoto"];
 let seq = 0;
@@ -108,6 +109,7 @@ export default function Dream() {
 
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
+      <Atmosphere />
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }}>
         <ScrollView ref={scroll} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingTop: insets.top + 64, paddingBottom: 140, paddingHorizontal: 16, gap: 14, width: "100%", maxWidth: 600, alignSelf: "center" }}>
           {!feed.length ? (
@@ -122,9 +124,7 @@ export default function Dream() {
               <Text style={[type.callout, { color: p.ink2 }]}>Anything at all. I'll find the real thing, its price, and what it costs to keep.</Text>
               <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
                 {IDEAS.map((i) => (
-                  <Pressable key={i} accessibilityRole="button" onPress={() => submit(i)} style={({ pressed }) => ({ paddingHorizontal: 14, minHeight: 40, justifyContent: "center", borderRadius: radius.pill, borderWidth: StyleSheet.hairlineWidth, borderColor: p.hair, backgroundColor: pressed ? p.glassTint : "transparent" })}>
-                    <Text style={[type.callout, { color: p.ink }]}>{i}</Text>
-                  </Pressable>
+                  <Chip key={i} label={i} onPress={() => submit(i)} />
                 ))}
               </View>
             </Rise>

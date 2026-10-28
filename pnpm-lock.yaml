@@ -86,6 +86,9 @@ importers:
       '@expo-google-fonts/dm-mono':
         specifier: ^0.4.2
         version: 0.4.2
+      '@expo-google-fonts/instrument-serif':
+        specifier: ^0.4.1
+        version: 0.4.1
       '@expo-google-fonts/inter':
         specifier: 0.4.2
         version: 0.4.2
@@ -1053,6 +1056,9 @@ packages:
 
   '@expo-google-fonts/dm-mono@0.4.2':
     resolution: {integrity: sha512-loMaZOkQRs1r7yt4rN39zcr9e0J+smwnSx929yuODkuiPfsY4PaW18C9SEZ0BvXfcBKoRhatGoIBl8V2MOYVPQ==}
+
+  '@expo-google-fonts/instrument-serif@0.4.1':
+    resolution: {integrity: sha512-1CgCrLbTSgE7RV8ZrTT7i06UAyNQDBrhxQuxkReNnfq5yvUhTmvpOK17grlEsXG5p04lJ1ZXGiIjPeHo6X0sXg==}
 
   '@expo-google-fonts/inter-tight@0.4.2':
     resolution: {integrity: sha512-/b4YLh8v145nMfrtw0FF2EB8eRhw/SVt/LdhzN1+Faz/uSFvZkF7EtxfipV8iacDSb1PUqyssHd0tZjlzhhf2g==}
@@ -4911,6 +4917,8 @@ snapshots:
   '@expo-google-fonts/bodoni-moda@0.4.2': {}
 
   '@expo-google-fonts/dm-mono@0.4.2': {}
+
+  '@expo-google-fonts/instrument-serif@0.4.1': {}
 
   '@expo-google-fonts/inter-tight@0.4.2': {}
 

@@ -4,6 +4,7 @@ import { View } from "react-native";
 import { ThemeChooser } from "../components/welcome/theme";
 import { usePalette, useTheme } from "../lib/theme";
 import { useWishes } from "../lib/wishes";
+import { Atmosphere } from "../components/atmosphere";
 
 /** The theme chooser from the welcome flow, reachable from the life list menu. */
 export default function ThemeScreen() {
@@ -13,6 +14,7 @@ export default function ThemeScreen() {
   const total = upfrontCashCents(wishes.map((w) => w.item));
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
+      <Atmosphere />
       <ThemeChooser
         totalCents={total}
         by="your plan"

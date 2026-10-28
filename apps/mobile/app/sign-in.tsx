@@ -6,6 +6,7 @@ import { Backdrop, ErrorLine, Eyebrow, GlassField, Grain, PrimaryButton, QuietBu
 import { SignInOptions } from "../components/sign-in-options";
 import { signInErrorMessage, useAuth, useSignInOptions, type ProviderId, type SignInOption } from "../lib/auth";
 import { fonts, layout, type, usePalette, useType } from "../lib/theme";
+import { Atmosphere } from "../components/atmosphere";
 
 export default function SignIn() {
   const auth = useAuth();
@@ -53,6 +54,7 @@ export default function SignIn() {
 
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
+      <Atmosphere />
       <Backdrop source={require("../assets/backdrop.jpg")} />
       <Shade from={0.05} />
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }}>

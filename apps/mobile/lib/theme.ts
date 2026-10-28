@@ -8,7 +8,7 @@ import { getSecret, setSecret } from "./storage";
  * `lib/palette.ts`, which has no React in it so tests can check contrast and sizes. Screens read only these.
  */
 
-export { DEFAULT_THEME, THEMES, THEME_ORDER, bodoni, contrast, fonts, layout, radius, shadow, space, type } from "./palette";
+export { DEFAULT_THEME, THEMES, THEME_ORDER, serif, contrast, fonts, layout, radius, shadow, space, type } from "./palette";
 export type { Palette, ThemeId, TypeRole } from "./palette";
 
 const KEY = "dandelist.theme";

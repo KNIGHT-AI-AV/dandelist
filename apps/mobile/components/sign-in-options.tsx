@@ -3,7 +3,7 @@ import { Image } from "expo-image";
 import { useState } from "react";
 import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { providerName, type ProviderId, type SignInOption } from "../lib/auth";
-import { radius, type, usePalette } from "../lib/theme";
+import { type, usePalette } from "../lib/theme";
 import { Eyebrow, Glass, Hairline } from "./lux";
 
 /** Google, GitHub and Apple sign-in buttons for the sign-in screen, set in the lux kit: glass, hairlines, Inter. */
@@ -34,14 +34,14 @@ function ProviderButton({ id, busy, disabled, onPress }: { id: ProviderId; busy:
       onHoverIn={() => setHovered(true)}
       onHoverOut={() => setHovered(false)}
       style={({ pressed }) => [
-        { borderRadius: radius.pill, opacity: disabled && !busy ? 0.45 : pressed ? 0.82 : 1, transform: [{ scale: pressed ? 0.985 : 1 }] },
+        { borderRadius: 16, borderCurve: "continuous", opacity: disabled && !busy ? 0.45 : pressed ? 0.82 : 1, transform: [{ scale: pressed ? 0.985 : 1 }] },
         Platform.OS === "web" ? ({ outlineWidth: 0, cursor: inactive ? "default" : "pointer" } as object) : null,
       ]}
     >
       {focused ? (
-        <View pointerEvents="none" style={{ position: "absolute", top: -4, left: -4, right: -4, bottom: -4, borderRadius: radius.pill, borderWidth: 1, borderColor: p.accent }} />
+        <View pointerEvents="none" style={{ position: "absolute", top: -4, left: -4, right: -4, bottom: -4, borderRadius: 20, borderCurve: "continuous", borderWidth: 1, borderColor: p.accent }} />
       ) : null}
-      <Glass intensity={34} style={{ height: HEIGHT, borderRadius: radius.pill, justifyContent: "center", borderColor: hovered && !inactive ? p.ink2 : p.line }}>
+      <Glass intensity={34} style={{ height: HEIGHT, borderRadius: 16, borderCurve: "continuous", justifyContent: "center", borderColor: hovered && !inactive ? p.ink2 : p.line }}>
         <View style={{ position: "absolute", left: 22, top: 0, bottom: 0, justifyContent: "center" }}>
           <Image source={MARK[id]} style={{ width: 18, height: 18 }} contentFit="contain" accessible={false} />
         </View>

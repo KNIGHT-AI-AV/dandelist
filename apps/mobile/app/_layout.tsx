@@ -1,6 +1,7 @@
 import { BodoniModa_400Regular, BodoniModa_400Regular_Italic } from "@expo-google-fonts/bodoni-moda";
 import { DMMono_400Regular } from "@expo-google-fonts/dm-mono";
-import { Inter_400Regular, Inter_600SemiBold } from "@expo-google-fonts/inter";
+import { InstrumentSerif_400Regular, InstrumentSerif_400Regular_Italic } from "@expo-google-fonts/instrument-serif";
+import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold } from "@expo-google-fonts/inter";
 import { InterTight_400Regular } from "@expo-google-fonts/inter-tight";
 import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
@@ -30,7 +31,11 @@ function Root() {
     BodoniTitle_Italic: require("../assets/fonts/BodoniModaTitle-Italic.ttf"),
     BodoniModa_400Regular,
     BodoniModa_400Regular_Italic,
+    // Instrument Serif (OFL), the logo's face, sets every serif role since the readability pass of 2026-10-27.
+    InstrumentSerif_400Regular,
+    InstrumentSerif_400Regular_Italic,
     Inter_400Regular,
+    Inter_500Medium,
     Inter_600SemiBold,
     InterTight_400Regular,
     DMMono_400Regular,

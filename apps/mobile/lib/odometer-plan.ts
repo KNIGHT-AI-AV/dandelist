@@ -231,7 +231,9 @@ export function plan(prev: Cell[], next: Cell[], mode: "ui" | "cinema", trend: T
 
 /** Em widths from the bundled fonts (fontTools): Bodoni's tabular digits are 0.58 em, DM Mono is 0.6 throughout. */
 export const METRICS: Record<"bodoni" | "mono", { digit: number; glyph: Record<string, number>; fallback: number; ascent: number; descent: number; cap: number }> = {
-  bodoni: { digit: 0.58, glyph: { $: 0.554, ",": 0.214, ".": 0.2, " ": 0.25, "+": 0.6, "/": 0.32 }, fallback: 0.55, ascent: 1.125, descent: 0.4, cap: 0.75 },
+  // "bodoni" is the serif family; since 2026-10-27 that is Instrument Serif (fontTools on the shipped TTF). Its figures
+  // are proportional (no tnum), so a wheel is 0.43 em: the widest digits fit and a 1 sits centred with air.
+  bodoni: { digit: 0.43, glyph: { $: 0.417, ",": 0.217, ".": 0.213, " ": 0.17, "+": 0.531, "/": 0.258 }, fallback: 0.42, ascent: 0.99, descent: 0.31, cap: 0.72 },
   mono: { digit: 0.6, glyph: {}, fallback: 0.6, ascent: 0.992, descent: 0.31, cap: 0.7 },
 };
 

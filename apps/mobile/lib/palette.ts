@@ -29,9 +29,9 @@ interface Base {
   danger: string;
   /** The accent as text, when the accent itself is too faint on this background. */
   accentText?: string;
-  /** Alpha of secondary text (default 0.64). */
+  /** Alpha of secondary text (default 0.76). */
   ink2?: number;
-  /** Alpha of tertiary text (default 0.50 dark, 0.60 light). */
+  /** Alpha of tertiary text (default 0.62 dark, 0.68 light). */
   ink3?: number;
   /** Alpha of field and chip borders (default 0.37 dark, 0.47 light). */
   line?: number;
@@ -47,8 +47,8 @@ function palette(b: Base) {
     glassTint: dark ? `rgba(${b.bgRgb}, 0.35)` : "rgba(255, 255, 255, 0.4)",
     /** The thick material for text-heavy floating layers such as the save sheet (HIG Materials). */
     sheet: dark ? `rgba(${b.bgRgb}, 0.86)` : "rgba(255, 255, 255, 0.88)",
-    ink2: `rgba(${b.inkRgb}, ${b.ink2 ?? 0.64})`,
-    ink3: `rgba(${b.inkRgb}, ${b.ink3 ?? (dark ? 0.5 : 0.6)})`,
+    ink2: `rgba(${b.inkRgb}, ${b.ink2 ?? 0.76})`,
+    ink3: `rgba(${b.inkRgb}, ${b.ink3 ?? (dark ? 0.62 : 0.68)})`,
     /** Non-text only: dividers, ticks, idle marks. */
     ink4: `rgba(${b.inkRgb}, 0.4)`,
     hair: `rgba(${b.inkRgb}, ${dark ? 0.13 : 0.16})`,
@@ -87,7 +87,7 @@ export const THEMES: Record<ThemeId, { name: string; mood: string; palette: Retu
   delina: {
     name: "Delina",
     mood: "Perfume pink and gold.",
-    palette: palette({ bg: "#F6E3E7", bgRgb: "246, 227, 231", surface: "#FFF6F7", ink: "#3B1E28", inkRgb: "59, 30, 40", accent: "#B48A4A", accentText: "#826335", accent2: "#E7A3B5", scheme: "light", danger: "#B4402C", ink2: 0.72, ink3: 0.66, line: 0.52 }),
+    palette: palette({ bg: "#F6E3E7", bgRgb: "246, 227, 231", surface: "#FFF6F7", ink: "#3B1E28", inkRgb: "59, 30, 40", accent: "#B48A4A", accentText: "#826335", accent2: "#E7A3B5", scheme: "light", danger: "#B4402C", ink2: 0.8, ink3: 0.72, line: 0.52 }),
   },
   sapphire: {
     name: "Sapphire",
@@ -127,28 +127,27 @@ export function contrast(fg: string, bg: string): number {
 }
 
 /**
- * Font families as registered in app/_layout.tsx. Bodoni has three optical cuts (P1-9): Display (opsz 72) at
- * 28 px and up, Title (opsz 28) at 18–27 px, and the bundled 11 pt text cut at 17 px and below. Inter sets all UI
- * text; Inter Tight is kept for display-size sans (20 px and up).
+ * Font families as registered in app/_layout.tsx. Readability pass (owner, 2026-10-27: Bodoni was "dainty... hard to
+ * read"): Instrument Serif, the logo's face, sets every serif role. It is sturdier than Bodoni's hairlines and has a
+ * taller x-height, so headlines and prices read at phone size. Inter sets all UI text; small text is never serif.
  */
 export const fonts = {
-  display: "BodoniDisplay",
-  displayItalic: "BodoniDisplay_Italic",
-  title: "BodoniTitle",
-  titleItalic: "BodoniTitle_Italic",
-  text: "BodoniModa_400Regular",
-  textItalic: "BodoniModa_400Regular_Italic",
+  display: "InstrumentSerif_400Regular",
+  displayItalic: "InstrumentSerif_400Regular_Italic",
+  title: "InstrumentSerif_400Regular",
+  titleItalic: "InstrumentSerif_400Regular_Italic",
+  text: "InstrumentSerif_400Regular",
+  textItalic: "InstrumentSerif_400Regular_Italic",
   body: "Inter_400Regular",
+  medium: "Inter_500Medium",
   label: "Inter_600SemiBold",
   sansDisplay: "InterTight_400Regular",
   figure: "DMMono_400Regular",
 };
 
-/** The Bodoni cut for a size: Display at 28 px and up, Title at 18–27 px, the text cut below. */
-export function bodoni(size: number, italic = false): string {
-  if (size >= 28) return italic ? fonts.displayItalic : fonts.display;
-  if (size >= 18) return italic ? fonts.titleItalic : fonts.title;
-  return italic ? fonts.textItalic : fonts.text;
+/** The serif for a size (one cut now; kept as a function so callers don't care). */
+export function serif(_size: number, italic = false): string {
+  return italic ? fonts.displayItalic : fonts.display;
 }
 
 /** Text style shape without importing react-native (kept structural so tests can load this file). */
@@ -168,28 +167,29 @@ const tab: Role["fontVariant"] = ["tabular-nums", "lining-nums"];
  * phone; `scaleType` grows `hero`, `display`, `title1` and `title2` with the window. No role goes under 11 px.
  */
 export const type = {
-  hero: { fontFamily: fonts.display, fontSize: 56, lineHeight: 56, letterSpacing: -1.1, fontVariant: tab },
-  display: { fontFamily: fonts.display, fontSize: 44, lineHeight: 46, letterSpacing: -0.66 },
-  title1: { fontFamily: fonts.display, fontSize: 34, lineHeight: 38, letterSpacing: -0.34 },
-  title2: { fontFamily: fonts.title, fontSize: 27, lineHeight: 31 },
-  title3: { fontFamily: fonts.title, fontSize: 21, lineHeight: 28 },
+  hero: { fontFamily: fonts.display, fontSize: 60, lineHeight: 60, letterSpacing: -0.6, fontVariant: tab },
+  display: { fontFamily: fonts.display, fontSize: 46, lineHeight: 48, letterSpacing: -0.4 },
+  title1: { fontFamily: fonts.display, fontSize: 38, lineHeight: 40, letterSpacing: -0.2 },
+  title2: { fontFamily: fonts.title, fontSize: 30, lineHeight: 32 },
+  title3: { fontFamily: fonts.title, fontSize: 23, lineHeight: 28 },
   headline: { fontFamily: fonts.label, fontSize: 17, lineHeight: 22 },
   button: { fontFamily: fonts.label, fontSize: 16, lineHeight: 20 },
-  body: { fontFamily: fonts.body, fontSize: 16, lineHeight: 22 },
-  callout: { fontFamily: fonts.body, fontSize: 15, lineHeight: 20 },
+  body: { fontFamily: fonts.body, fontSize: 16, lineHeight: 23 },
+  callout: { fontFamily: fonts.body, fontSize: 15, lineHeight: 21 },
   /** Callout weight for chips and quiet actions. */
-  label: { fontFamily: fonts.label, fontSize: 14, lineHeight: 18 },
+  label: { fontFamily: fonts.label, fontSize: 15, lineHeight: 20 },
   footnote: { fontFamily: fonts.body, fontSize: 13, lineHeight: 18, letterSpacing: 0.1 },
-  eyebrow: { fontFamily: fonts.label, fontSize: 11, lineHeight: 14, letterSpacing: 1.3, textTransform: "uppercase" },
-  figure: { fontFamily: fonts.figure, fontSize: 12, lineHeight: 16, letterSpacing: 0.2 },
+  eyebrow: { fontFamily: fonts.label, fontSize: 12, lineHeight: 16, letterSpacing: 1.2, textTransform: "uppercase" },
+  /** Source lines and small figures: Inter Medium, tabular, so they read at a glance (mono read as code). */
+  figure: { fontFamily: fonts.medium, fontSize: 13, lineHeight: 18, letterSpacing: 0.1, fontVariant: tab },
   figure13: { fontFamily: fonts.figure, fontSize: 13, lineHeight: 18 },
   figure15: { fontFamily: fonts.figure, fontSize: 15, lineHeight: 20 },
-  /** Card prices: Bodoni Title with tabular figures. */
-  cardPrice: { fontFamily: fonts.title, fontSize: 22, lineHeight: 24, fontVariant: tab },
+  /** Card prices: the serif with tabular figures. */
+  cardPrice: { fontFamily: fonts.title, fontSize: 26, lineHeight: 28, fontVariant: tab },
   /** The title-sequence wordmark, the one brand exception to the scale. */
   wordmark: { fontFamily: fonts.display, fontSize: 54, lineHeight: 60 },
   /** The title sequence's two-line "Yours by / Month Year". */
-  dateline: { fontFamily: fonts.display, fontSize: 40, lineHeight: 44 },
+  dateline: { fontFamily: fonts.display, fontSize: 44, lineHeight: 46 },
   /** The header wordmark beside the avatar or the account link. */
   brand: { fontFamily: fonts.title, fontSize: 21, lineHeight: 26 },
 } satisfies Record<string, Role>;
@@ -210,10 +210,10 @@ export function scaleType(width: number, web: boolean): typeof type {
   const fit = (r: Role, s: number): Role => ({ ...r, fontSize: Math.round(s), lineHeight: Math.round((s * r.lineHeight) / r.fontSize), letterSpacing: r.letterSpacing === undefined ? undefined : +((r.letterSpacing * s) / r.fontSize).toFixed(2) });
   return {
     ...type,
-    hero: fit(type.hero, size("hero", 56, 3.2, 44, 80)),
-    display: fit(type.display, size("display", 44, 2.4, 35, 64)),
-    title1: fit(type.title1, size("title1", 34, 1.6, 28, 48)),
-    title2: fit(type.title2, size("title2", 27, 0.8, 24, 34)),
+    hero: fit(type.hero, size("hero", 60, 3.2, 48, 84)),
+    display: fit(type.display, size("display", 46, 2.4, 37, 66)),
+    title1: fit(type.title1, size("title1", 38, 1.6, 32, 52)),
+    title2: fit(type.title2, size("title2", 30, 0.8, 27, 36)),
   } as typeof type;
 }
 
