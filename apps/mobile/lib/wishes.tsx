@@ -51,6 +51,8 @@ interface WishStore {
   reload(): Promise<void>;
   add(w: NewWish): Promise<Wish>;
   remove(id: string): Promise<void>;
+  /** Moves a wish to another tier. Shows at once; goes back if the server says no. */
+  setTier(id: string, tier: WishTier): Promise<void>;
 }
 
 type ServerWish = {
@@ -142,6 +144,20 @@ export function WishProvider({ children }: { children: ReactNode }) {
         if (res?.ok || res?.status === 404) return;
         setWishes(before);
         throw await failure(res, "Couldn't remove the wish.");
+      },
+      async setTier(id, tier) {
+        const was = wishes.find((x) => x.id === id)?.tier;
+        if (!was || was === tier) return;
+        setWishes((ws) => ws.map((x) => (x.id === id ? { ...x, tier } : x)));
+        const res = await api(`/wishes/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ tier }),
+        }).catch(() => null);
+        if (res?.ok) return;
+        // Only undo this change: a later tap may already have moved the wish on.
+        setWishes((ws) => ws.map((x) => (x.id === id && x.tier === tier ? { ...x, tier: was } : x)));
+        throw await failure(res, "Couldn't save the wish.");
       },
     }),
     [wishes, status, error, reload, api],
