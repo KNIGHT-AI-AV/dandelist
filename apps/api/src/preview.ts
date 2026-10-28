@@ -1,5 +1,5 @@
-import { entry, toItem, type Entry } from "@dandelist/catalogue";
-import { formatCents, recurringBreakdown, upfrontCashCents } from "@dandelist/cost";
+import { entries as catalogue } from "@dandelist/catalogue";
+import { formatCents, recurringBreakdown, upfrontCashCents, type Item } from "@dandelist/cost";
 import { MetaClient } from "@dandelist/meta";
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
@@ -7,6 +7,7 @@ import { z } from "zod";
 import { unknownNumbers } from "./agent/agent";
 import { getPage, pageShowsPrice, publicFetch, type Fetcher } from "./agent/tools";
 import type { AgentDeps } from "./agent/routes";
+import { fromCatalogue, resolvePicks, type PoolItem } from "./pool";
 import { SpendLimitError, assertBudget, recordSpend } from "./spend";
 
 /**
@@ -20,12 +21,29 @@ export const PREVIEWS_PER_IP_PER_HOUR = 6;
 export const PREVIEWS_PER_DAY = 400;
 const CHECK_TIMEOUT_MS = 6000;
 
-const body = z.object({
-  // One first pick plus Both in each of the four voting rounds.
-  picks: z.array(z.string().max(40)).min(1).max(9),
-  monthlyCents: z.number().int().min(1000).max(10_000_000),
-  horizonYears: z.number().int().min(1).max(30).nullable().default(null),
-});
+const recurringSchema = z.object({ label: z.string().max(60), amountCents: z.number().int().min(0).max(1_000_000_000), period: z.enum(["month", "year"]) });
+const body = z
+  .object({
+    // Pool items from this-or-that: a few rounds, each "Both" adds two.
+    picks: z.array(z.string().max(80)).max(12).default([]),
+    // The wish someone typed or said, as the guest agent priced it. Shown only to them, before they save anything.
+    extra: z.object({ name: z.string().trim().min(1).max(120), upfrontCents: z.number().int().min(1).max(100_000_000_000), recurring: z.array(recurringSchema).max(6).default([]) }).optional(),
+    monthlyCents: z.number().int().min(1000).max(10_000_000),
+    horizonYears: z.number().int().min(1).max(30).nullable().default(null),
+  })
+  .refine((b) => b.picks.length > 0 || !!b.extra);
+
+/** Something on the list, as the plan sums it: a pool item or the priced wish. */
+interface ListItem {
+  id: string;
+  name: string;
+  upfrontCents: number;
+  recurring: PoolItem["recurring"];
+  status?: PoolItem["status"];
+  url?: string;
+  checkedAt?: string;
+}
+const toItem = (p: ListItem): Item => ({ id: p.id, upfrontCents: p.upfrontCents, recurring: p.recurring.map(({ amountCents, period, label }) => ({ amountCents, period, label })) });
 
 const month = new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
 const day = new Intl.DateTimeFormat("en-US", { day: "numeric", month: "short", timeZone: "UTC" });
@@ -34,7 +52,7 @@ export function reachBy(cents: number, monthlyCents: number, now: Date): Date {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + Math.ceil(cents / monthlyCents), 1));
 }
 
-export function planFacts(picks: Entry[], monthlyCents: number, now: Date) {
+export function planFacts(picks: ListItem[], monthlyCents: number, now: Date) {
   const items = picks.map(toItem);
   const upfront = upfrontCashCents(items);
   const running = recurringBreakdown(items).perMonth;
@@ -53,7 +71,7 @@ export function planFacts(picks: Entry[], monthlyCents: number, now: Date) {
 
 export function fallbackNote(f: ReturnType<typeof planFacts>): string {
   if (f.largest.rest_by_if_bought_last && f.largest.share_percent >= 40) {
-    return `The ${f.largest.name} is ${f.largest.share_percent}% of this life. Buy it last and the rest lands by ${f.largest.rest_by_if_bought_last}; everything lands by ${f.everything_by}.`;
+    return `The ${f.largest.name} is ${f.largest.share_percent}% of this list. Buy it last and the rest lands by ${f.largest.rest_by_if_bought_last}; everything lands by ${f.everything_by}.`;
   }
   return `At ${f.set_aside_per_month} a month, everything lands by ${f.everything_by}.`;
 }
@@ -68,7 +86,7 @@ export const ipOf = (h: (name: string) => string | undefined) => (h("x-forwarded
 export const PREVIEW_DAILY_USD = 1;
 const MAX_TRACKED_IPS = 5000;
 
-export function previewRoutes(deps: AgentDeps & { webFetch?: Fetcher }) {
+export function previewRoutes(deps: AgentDeps & { webFetch?: Fetcher; pool?: () => Promise<PoolItem[]> }) {
   const app = new Hono();
   const { db } = deps;
   const hits = new Map<string, number[]>();
@@ -78,7 +96,9 @@ export function previewRoutes(deps: AgentDeps & { webFetch?: Fetcher }) {
   app.post("/", async (c) => {
     const parsed = body.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: "Check your picks and try again." }, 400);
-    const picks = parsed.data.picks.map(entry).filter((e): e is Entry => !!e);
+    const pool = deps.pool ? await deps.pool() : catalogue.map(fromCatalogue);
+    const { extra } = parsed.data;
+    const picks: ListItem[] = [...(extra ? [{ id: "wish", ...extra }] : []), ...resolvePicks(parsed.data.picks, pool)];
     if (!picks.length) return c.json({ error: "Pick something first." }, 400);
 
     const now = deps.now();
@@ -88,7 +108,7 @@ export function previewRoutes(deps: AgentDeps & { webFetch?: Fetcher }) {
       for (const [k, v] of hits) if (!v.some((t) => now.getTime() - t < 3_600_000)) hits.delete(k);
       if (hits.size > MAX_TRACKED_IPS) hits.clear();
     }
-    if (recent.length >= PREVIEWS_PER_IP_PER_HOUR) return c.json({ error: "That's a lot of lives for one hour. Try again soon." }, 429);
+    if (recent.length >= PREVIEWS_PER_IP_PER_HOUR) return c.json({ error: "That's a lot of lists for one hour. Try again soon." }, 429);
     const today = now.toISOString().slice(0, 10);
     if (today !== dayKey) [dayKey, dayCount] = [today, 0];
     if (dayCount >= PREVIEWS_PER_DAY) return c.json({ error: "The agent is resting until tomorrow." }, 429);
@@ -101,8 +121,8 @@ export function previewRoutes(deps: AgentDeps & { webFetch?: Fetcher }) {
       await send({ type: "row", id: "read", state: "done", text: `Read your ${picks.length} ${picks.length === 1 ? "pick" : "picks"}.` });
 
       // One live check per visit: the most expensive pick that was checked on its seller's page.
-      const target = [...picks].filter((p) => p.status === "verified").sort((a, b) => b.upfrontCents - a.upfrontCents)[0];
-      if (target) {
+      const target = [...picks].filter((p) => p.status === "verified" && p.url && p.checkedAt).sort((a, b) => b.upfrontCents - a.upfrontCents)[0];
+      if (target?.url && target.checkedAt) {
         const host = new URL(target.url).hostname.replace(/^www\./, "");
         await send({ type: "row", id: "check", state: "running", text: `Checking ${target.name} on ${host}` });
         const fetcher: Fetcher = (u, init) => (deps.webFetch ?? publicFetch)(u, { ...init, signal: AbortSignal.timeout(CHECK_TIMEOUT_MS) });
@@ -138,7 +158,7 @@ export function previewRoutes(deps: AgentDeps & { webFetch?: Fetcher }) {
           const client = new MetaClient({ ...deps.meta, onUsage: (usage, cost) => recordSpend(db, null, "preview", usage, cost, deps.now()) });
           const res = await client.responses({
             instructions:
-              "You are Dandelist's agent. In two or three short sentences, under 45 words, tell this person something useful about when they can have the life they picked. If one pick is a large share, say what happens if they buy it last. Use only numbers and dates that appear in FACTS, written exactly as given, including the % sign on percentages. Plain, specific, warm. No financial advice, no hype, no questions.",
+              "You are Dandelist's agent. In two or three short sentences, under 45 words, tell this person something useful about when they can have everything on their list. If one pick is a large share, say what happens if they buy it last. Use only numbers and dates that appear in FACTS, written exactly as given, including the % sign on percentages. Plain, specific, warm. No financial advice, no hype, no questions.",
             input: `FACTS: ${JSON.stringify(noteFacts)}`,
           });
           const text = res.text.trim();

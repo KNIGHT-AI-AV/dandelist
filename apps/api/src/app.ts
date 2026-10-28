@@ -3,6 +3,8 @@ import { cors } from "hono/cors";
 import { agentRoutes, type AgentDeps } from "./agent/routes";
 import { authRoutes, requireAuth, type AuthVars } from "./auth";
 import { dreamRoutes } from "./dream/routes";
+import { guestRoutes } from "./guest";
+import { poolSource } from "./pool";
 import { previewRoutes } from "./preview";
 import { MEDIA_KEY } from "./media-store";
 import { wishRoutes } from "./wishes";
@@ -41,7 +43,10 @@ export function createApp(deps: AppDeps) {
   app.route("/auth", authRoutes(deps));
   app.route("/wishes", wishRoutes(deps));
   app.route("/agent", agentRoutes(deps));
-  app.route("/preview", previewRoutes(deps));
+  // The pre-login pool (catalogue plus archive subjects with photos), shared by the preview and the guest routes.
+  const pool = poolSource(db, deps.now);
+  app.route("/preview", previewRoutes({ ...deps, pool }));
+  app.route("/guest", guestRoutes({ ...deps, pool }));
   app.route("/", dreamRoutes(deps));
 
   app.use("/me", requireAuth(deps));

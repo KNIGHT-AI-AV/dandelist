@@ -10,6 +10,7 @@ import { AgentDot, Chip, Eyebrow, Glass, Grain, IconButton, PrimaryButton } from
 import { Rise } from "../components/welcome/kit";
 import { ListeningStrip, MicButton, useVoiceWish } from "../components/voice/say-wish";
 import { useAuth } from "../lib/auth";
+import { transcribeWish } from "../lib/agent";
 import { dreamTurn, wishFrom, type DreamAction, type DreamEvent, type FeedItem, type LifeContext, type Widget } from "../lib/dream";
 import { haptic } from "../lib/motion";
 import { fonts, layout, radius, space, usePalette, type } from "../lib/theme";
@@ -43,7 +44,7 @@ export default function Dream() {
   const scroll = useRef<ScrollView>(null);
   // Say it instead of typing: the words land in the composer to read over, then send as usual.
   const voice = useVoiceWish({
-    api: auth.api,
+    transcribe: (wav) => transcribeWish(auth.api, wav),
     onHeard: setText,
     onError: (message) => message && setFeed((f) => [...f, { id: nextId(), kind: "agent", text: message }]),
   });

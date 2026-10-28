@@ -1,23 +1,29 @@
-import { entry, firstPick, pairs, type Entry } from "@dandelist/catalogue";
+import { entry, type Entry } from "@dandelist/catalogue";
 import { router } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Animated, Pressable, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Grain, PrimaryButton, Wordmark } from "../components/lux";
 import { SignInOptions } from "../components/sign-in-options";
 import { AgentWork, Appear, type Result } from "../components/welcome/agent-work";
-import { Aside, FirstPick, Horizon, VotePair } from "../components/welcome/choose";
+import { Ask } from "../components/welcome/ask";
+import { Aside, VotePair, WhenStep } from "../components/welcome/choose";
 import { CodeSheet, RevealCard } from "../components/welcome/finale";
-import { LifePill, Segments } from "../components/welcome/kit";
+import { Intro } from "../components/welcome/intro";
+import { AgentTicker, LifePill, Segments } from "../components/welcome/kit";
 import { ThemeChooser } from "../components/welcome/theme";
 import { TitleSequence } from "../components/welcome/title";
 import { useAuth, useSignInOptions, type ProviderId, type SignInOption } from "../lib/auth";
+import type { Step as AgentStep } from "../lib/agent";
 import { ease, native, spring, step as stepMotion, useReducedMotion } from "../lib/motion";
+import { ANSWERED_ROUNDS, chosen as chosenBy, groupsFor, nextPair, votingDone, type Vote } from "../lib/pairs";
+import { thoughtOf } from "../lib/reveal";
 import { layout, type, usePalette, useTheme } from "../lib/theme";
-import { loadWelcome, markTitleSeen, monthYearLong, picked, saveWelcome, seenTitle, type WelcomeState } from "../lib/welcome";
+import { emptyWelcome, fetchPool, listTotal, listed, loadWelcome, markTitleSeen, monthYearLong, saveWelcome, seenTitle, streamGuestWish, type FirstWish, type PoolItem, type WelcomeState } from "../lib/welcome";
+import { dollars } from "../components/odometer";
 import { Atmosphere } from "../components/atmosphere";
 
-/** Apple, Google and GitHub in the save sheet; the kept picks are already on this device for after the redirect. */
+/** Apple, Google and GitHub in the save sheet; the kept list is already on this device for after the redirect. */
 function WelcomeSocial() {
   const p = usePalette();
   const auth = useAuth();
@@ -45,19 +51,27 @@ function WelcomeSocial() {
   );
 }
 
-type Step = { kind: "title" } | { kind: "first" } | { kind: "vote"; round: number } | { kind: "horizon" } | { kind: "aside" } | { kind: "agent" } | { kind: "reveal" } | { kind: "theme" };
+type Step = { kind: "title" } | { kind: "intro" } | { kind: "ask" } | { kind: "vote"; pair: [PoolItem, PoolItem] } | { kind: "when" } | { kind: "aside" } | { kind: "agent" } | { kind: "reveal" } | { kind: "theme" };
+type Pricing = "idle" | "pricing" | "priced" | "failed";
 
-const SEGMENTS = 7;
-const firstEntries = firstPick.map(entry).filter((e): e is Entry => !!e);
-const pairEntries = pairs.map(([a, b]) => [entry(a), entry(b)]).filter((pr): pr is [Entry, Entry] => !!pr[0] && !!pr[1]);
+/** Ask, three answered rounds, when, the monthly amount, the agent: the segments under the header. */
+const SEGMENTS = 2 + ANSWERED_ROUNDS + 2;
+const HERO = entry("porsche-911") as Entry;
+/** How long the "found it" line stays above the meter once the first wish is priced. */
+const FOUND_HOLD_MS = 4200;
+
+/** An idea chip from a pool item: travel reads as a stay ("A week in Dublin"), everything else by its name. */
+const ideaOf = (e: PoolItem) => (e.kind === "visit" && !/\b(week|weeks|month|trip|tour|route|safari|cruise|days?|nights?|in)\b/i.test(e.name) ? `A week in ${e.name}` : e.name);
 
 /**
- * The pre-login experience (onboarding research, 2026-10-27): a short title sequence, then the person builds the
- * life they want from real, sourced prices, watches the agent price it, sees the date, and only then saves it.
- * Everything chosen here becomes wishes on the new account.
+ * The pre-login experience (owner's walkthrough, 2026-10-28). A slow, centred title that dissolves from a touch;
+ * interactive cards that show what Dandelist does, with Log in beneath; the first wish, typed, said or tapped, which
+ * the agent prices for real while the person plays this or that from the pool (the first pair is a cover, later
+ * pairs lean toward what they asked for); when they want it all; what they could put aside; the agent pricing the
+ * whole list; the date. Only then do they save it, which is the sign-up.
  *
  * Steps fly instead of teleporting (UI audit P1-16): the old step leaves left in 150 ms, the new one arrives from
- * the right in 320 ms, and going back mirrors it. The header, the progress segments and the Life pill stay put.
+ * the right in 320 ms, and going back mirrors it. The header, the segments and the list meter stay put.
  */
 export default function Welcome() {
   const p = usePalette();
@@ -68,10 +82,14 @@ export default function Welcome() {
   const theme = useTheme();
   const [step, setStep] = useState<Step | null>(null);
   const [short, setShort] = useState(false);
-  const [state, setState] = useState<WelcomeState>({ picks: [], horizonYears: null, monthlyCents: 100_000 });
-  const [answered, setAnswered] = useState(0);
+  const [pool, setPool] = useState<PoolItem[]>([]);
+  const [state, setState] = useState<WelcomeState>(emptyWelcome);
+  const [done, setDone] = useState(0);
   const [result, setResult] = useState<Result | null>(null);
   const [sheet, setSheet] = useState(false);
+  const [pricing, setPricing] = useState<Pricing>("idle");
+  const [trail, setTrail] = useState<AgentStep[]>([]);
+  const [found, setFound] = useState(false);
   const [flight, setFlight] = useState<{ text: string; from: { x: number; y: number }; to: { x: number; y: number } } | null>(null);
   const fly = useRef(new Animated.Value(0)).current;
   const stage = useRef(new Animated.Value(1)).current;
@@ -80,25 +98,41 @@ export default function Welcome() {
   const behind = useRef(new Animated.Value(1)).current;
   const moving = useRef(false);
   const pill = useRef<View | null>(null);
+  const seen = useRef(new Set<string>());
+  const rounds = useRef(0);
+  const answered = useRef(0);
+  const run = useRef<AbortController | null>(null);
+  // Votes land after an animation; they read the list as it is then, not as it was when the pair was drawn.
+  const latest = useRef(state);
+  latest.current = state;
+  // Ideas are drawn once per pool, so typing doesn't reshuffle the chips under a finger.
+  const ideas = useMemo(() => [...pool].sort(() => Math.random() - 0.5).slice(0, 4).map(ideaOf), [pool]);
 
   useEffect(() => {
     void (async () => {
-      const [seen, saved] = await Promise.all([seenTitle(), loadWelcome()]);
-      setShort(seen);
-      if (saved?.picks.length) setState(saved);
+      const [seenBefore, saved, items] = await Promise.all([seenTitle(), loadWelcome(), fetchPool()]);
+      setShort(seenBefore);
+      setPool(items);
+      // A first wish that was still being priced when they left is asked again rather than half-shown.
+      if (saved) setState({ ...saved, wish: saved.wish?.option ? saved.wish : null });
       setStep({ kind: "title" });
     })();
+    return () => run.current?.abort();
   }, []);
 
-  // Signed in by any route (code, Apple, Google, GitHub): the life list adopts the kept picks (see useAdoptWelcome).
+  // Signed in by any route (code, Apple, Google, GitHub): the list adopts what was kept (see useAdoptWelcome).
   useEffect(() => {
     if (auth.status === "signedIn") router.replace("/wishes");
   }, [auth.status]);
 
-  const update = (next: WelcomeState) => {
-    setState(next);
-    void saveWelcome(next);
-  };
+  /** Changes the list and keeps it on this device; event handlers arriving later always see the latest list. */
+  const patch = (fn: (s: WelcomeState) => WelcomeState) =>
+    setState((s) => {
+      const next = fn(s);
+      void saveWelcome(next);
+      return next;
+    });
+  const patchWish = (fn: (w: FirstWish) => FirstWish) => patch((s) => (s.wish ? { ...s, wish: fn(s.wish) } : s));
 
   /** Leaves the current step and brings in the next one; `back` mirrors the direction. */
   const go = (next: Step, back = false) => {
@@ -120,17 +154,17 @@ export default function Welcome() {
     ]).start(enter);
   };
 
-  /** The chosen price flies along a short arc into the Life meter, then the meter rolls up. */
-  const launch = (es: Entry[], from: View | null, then: () => void) => {
+  /** The chosen price flies along a short arc into the list meter, then the meter rolls up. */
+  const launch = (es: PoolItem[], from: View | null, then: () => void) => {
     const commit = () => {
-      update({ ...state, picks: [...new Set([...state.picks, ...es.map((e) => e.id)])] });
+      patch((s) => ({ ...s, items: [...s.items, ...es.filter((e) => !s.items.some((x) => x.id === e.id))] }));
       then();
     };
     if (reduced || !es.length || !from || !pill.current) return commit();
     from.measureInWindow((x, y, w, h) =>
       pill.current?.measureInWindow((px, py, pw, ph) => {
-        const total = es.reduce((s, e) => s + e.upfrontCents, 0);
-        setFlight({ text: `+$${Math.round(total / 100).toLocaleString("en-US")}`, from: { x: x + w / 2 - 50, y: y + h / 2 }, to: { x: px + pw - 110, y: py + ph / 2 - 14 } });
+        const total = es.reduce((n, e) => n + e.upfrontCents, 0);
+        setFlight({ text: `+${dollars(total)}`, from: { x: x + w / 2 - 50, y: y + h / 2 }, to: { x: px + pw - 110, y: py + ph / 2 - 14 } });
         fly.setValue(0);
         Animated.timing(fly, { toValue: 1, duration: 500, easing: ease.inOut, useNativeDriver: native }).start(() => {
           setFlight(null);
@@ -140,84 +174,158 @@ export default function Welcome() {
     );
   };
 
+  /** Starts the agent on the first wish; it keeps working while this or that goes on. */
+  const priceWish = (text: string) => {
+    run.current?.abort();
+    const ctrl = new AbortController();
+    run.current = ctrl;
+    setTrail([]);
+    setFound(false);
+    setPricing("pricing");
+    patch((s) => ({ ...s, wish: { text } }));
+    streamGuestWish(
+      text,
+      (e) => {
+        if (ctrl.signal.aborted) return;
+        if (e.type === "draft") patchWish((w) => ({ ...w, title: e.title, kind: e.kind }));
+        else if (e.type === "step") setTrail((t) => [...t, e.step]);
+        else if (e.type === "priced") {
+          const { label, seller, url, upfrontCents, recurring, status, statusLabel, checkedAt, imageUrl, media, source } = e.option;
+          patchWish((w) => ({ ...w, title: e.title, kind: e.kind, option: { label, seller, url, upfrontCents, recurring, status, statusLabel, checkedAt, imageUrl, media, source } }));
+          setPricing("priced");
+          setFound(true);
+          setTimeout(() => setFound(false), FOUND_HOLD_MS);
+        } else if (e.type === "error") {
+          patchWish((w) => ({ ...w, failed: e.message }));
+          setPricing("failed");
+        }
+      },
+      ctrl.signal,
+    ).catch((err: Error) => {
+      if (ctrl.signal.aborted) return;
+      patchWish((w) => ({ ...w, failed: err instanceof TypeError ? "Couldn't reach Dandelist just now." : err.message }));
+      setPricing("failed");
+    });
+  };
+
+  /** The next pair: a cover first, then pairs leaning toward what the first wish turned out to be. */
+  const nextVote = (s: WelcomeState): Step | null => {
+    const pair = nextPair(pool, seen.current, rounds.current === 0 ? null : groupsFor(s.wish?.kind));
+    if (!pair) return null;
+    pair.forEach((e) => seen.current.add(e.id));
+    return { kind: "vote", pair };
+  };
+
+  const startVoting = (text: string) => {
+    priceWish(text);
+    seen.current = new Set();
+    rounds.current = 0;
+    answered.current = 0;
+    patch((s) => ({ ...s, items: [] }));
+    setDone(1);
+    go(nextVote(latest.current) ?? { kind: "when" });
+  };
+
+  const vote = (pair: [PoolItem, PoolItem], picked: PoolItem[], from: View | null) => {
+    const v: Vote = picked.length === 2 ? "both" : picked.length === 0 ? "neither" : picked[0]!.id === pair[0].id ? "a" : "b";
+    launch(chosenBy(pair, v), from, () => {
+      rounds.current++;
+      if (v !== "neither") answered.current++;
+      setDone(1 + Math.min(answered.current, ANSWERED_ROUNDS));
+      const left = pool.filter((e) => !seen.current.has(e.id)).length;
+      const next = votingDone(answered.current, rounds.current, left) ? null : nextVote(latest.current);
+      go(next ?? { kind: "when" });
+    });
+  };
+
+  /** Clears the list and goes back to the first wish, with what they asked for still in the field. */
+  const restart = () => {
+    run.current?.abort();
+    setPricing("idle");
+    setResult(null);
+    setDone(0);
+    patch((s) => ({ ...s, items: [], when: null, kept: false }));
+    go({ kind: "ask" }, true);
+  };
+
   useEffect(() => {
     Animated.spring(behind, { toValue: sheet && !reduced ? 0.96 : 1, ...spring.settle, useNativeDriver: native }).start();
   }, [sheet, reduced, behind]);
 
   if (!step) return <View style={{ flex: 1, backgroundColor: p.bg }} />;
 
-  const total = picked(state).reduce((s, e) => s + e.upfrontCents, 0);
-  const building = step.kind === "first" || step.kind === "vote" || step.kind === "horizon" || step.kind === "aside" || step.kind === "agent";
+  const total = listTotal(state);
+  const metered = step.kind === "vote" || step.kind === "when" || step.kind === "aside" || step.kind === "agent";
+  const segmented = metered || step.kind === "ask";
   const framed = step.kind !== "title" && step.kind !== "theme";
   const gutter = layout.gutter(width);
-  // The header and segments sit on the step's own column: three cards across on wide screens, else 560.
-  const headerColumn = width >= 760 && (step.kind === "first" || step.kind === "vote") ? 932 : layout.column;
-  const pillSpace = layout.control.meter + 32;
-  /** Clears the picks and starts the flow over from the first choice. */
-  const restart = () => { update({ ...state, picks: [] }); setAnswered(0); setResult(null); go({ kind: "first" }, true); };
+  const headerColumn = width >= 760 && step.kind === "vote" ? 932 : layout.column;
+  const wishTitle = state.wish?.title ?? state.wish?.text ?? "";
+  const thought = thoughtOf(trail);
+  // The line above the meter: what the agent is doing with the first wish, then a moment of "found it".
+  const ticker =
+    step.kind === "vote" && state.wish
+      ? pricing === "pricing"
+        ? { text: thought?.text ?? `Finding the real price of ${wishTitle}`, done: false }
+        : found && state.wish.option
+          ? { text: `${wishTitle}: ${dollars(state.wish.option.upfrontCents)}, on your list`, done: true }
+          : null
+      : null;
+  const pillSpace = layout.control.meter + 32 + (ticker ? 44 : 0);
 
   let body: React.ReactNode;
   switch (step.kind) {
     case "title":
-      body = <TitleSequence hero={firstEntries[0]!} short={short} onDone={() => { void markTitleSeen(); go({ kind: "first" }); }} />;
+      body = <TitleSequence hero={HERO} short={short} onDone={() => { void markTitleSeen(); go({ kind: "intro" }); }} />;
       break;
-    case "first":
-      body = <FirstPick entries={firstEntries} onPick={(e, from) => launch([e], from, () => { setAnswered(1); go({ kind: "vote", round: 0 }); })} />;
+    case "intro":
+      body = <Intro pool={pool} onStart={() => go({ kind: "ask" })} onLogIn={() => router.push("/sign-in")} />;
+      break;
+    case "ask":
+      body = <Ask ideas={ideas} initial={state.wish?.text ?? ""} bottomInset={insets.bottom} onSubmit={startVoting} />;
       break;
     case "vote": {
-      const [a, b] = pairEntries[step.round]!;
-      body = (
-        <VotePair
-          key={step.round}
-          a={a}
-          b={b}
-          round={step.round + 1}
-          rounds={pairEntries.length}
-          onVote={(chosen, from) =>
-            launch(chosen, from, () => {
-              setAnswered(2 + step.round);
-              go(step.round + 1 < pairEntries.length ? { kind: "vote", round: step.round + 1 } : { kind: "horizon" });
-            })
-          }
-        />
-      );
+      const [a, b] = step.pair;
+      const label = `This or that · ${Math.min(answered.current + 1, ANSWERED_ROUNDS)} of ${ANSWERED_ROUNDS}`;
+      body = <VotePair key={`${a.id}|${b.id}`} a={a} b={b} label={label} onVote={(picked, from) => vote(step.pair, picked, from)} />;
       break;
     }
-    case "horizon":
-      body = <Horizon value={answered >= 6 ? state.horizonYears : undefined} onPick={(years) => { update({ ...state, horizonYears: years }); setAnswered(6); setTimeout(() => go({ kind: "aside" }), 200); }} />;
+    case "when":
+      body = <WhenStep value={state.when} onPick={(when) => { patch((s) => ({ ...s, when })); setDone(2 + ANSWERED_ROUNDS); setTimeout(() => go({ kind: "aside" }), 220); }} />;
       break;
     case "aside":
-      body = <Aside value={state.monthlyCents} totalCents={Math.max(total, 1)} onChange={(c) => update({ ...state, monthlyCents: c })} onDone={() => { setAnswered(7); go({ kind: "agent" }); }} />;
+      body = <Aside value={state.monthlyCents} totalCents={Math.max(total, 1)} onChange={(c) => patch((s) => ({ ...s, monthlyCents: c }))} onDone={() => { setDone(3 + ANSWERED_ROUNDS); go({ kind: "agent" }); }} />;
       break;
     case "agent":
       body = (
         <View style={{ flex: 1 }}>
-          <AgentWork state={state} onResult={setResult} onFollowUp={(name) => update({ ...state, last: name ? picked(state).find((e) => e.name === name)?.id : undefined })} onRestart={restart} />
+          <AgentWork
+            state={state}
+            ready={pricing !== "pricing"}
+            waiting={pricing === "pricing" ? { title: wishTitle, line: thought?.mine ? thought.text : "" } : null}
+            onResult={(r) => { setResult(r); setDone(SEGMENTS); }}
+            onFollowUp={(name) => patch((s) => ({ ...s, last: name ? (name === wishTitle ? "wish" : s.items.find((e) => e.name === name)?.id) : undefined }))}
+            onRestart={restart}
+          />
           <Appear when={!!result}>
             <View style={{ paddingHorizontal: gutter, paddingBottom: 16 }}>
-              <PrimaryButton label="See my life" onPress={() => go({ kind: "reveal" })} />
+              <PrimaryButton label="See my Dandelist" onPress={() => go({ kind: "reveal" })} />
             </View>
           </Appear>
         </View>
       );
       break;
     case "theme":
-      body = result ? (
-        <ThemeChooser
-          totalCents={result.upfrontCents}
-          by={monthYearLong(new Date(`${result.everythingBy}-01T00:00:00`))}
-          onDone={(id) => { theme.set(id); setSheet(true); }}
-        />
-      ) : null;
+      body = result ? <ThemeChooser totalCents={result.upfrontCents} by={monthYearLong(new Date(`${result.everythingBy}-01T00:00:00`))} onDone={(id) => { theme.set(id); setSheet(true); }} /> : null;
       break;
     case "reveal":
       body = result ? (
         <RevealCard
-          picks={picked(state)}
+          picks={listed(state)}
           upfrontCents={result.upfrontCents}
           monthlyRunningCents={result.monthlyRunningCents}
           everythingBy={result.everythingBy}
-          onKeep={() => { update({ ...state, kept: true }); go({ kind: "theme" }); }}
+          onKeep={() => { patch((s) => ({ ...s, kept: true })); go({ kind: "theme" }); }}
           onChange={restart}
         />
       ) : null;
@@ -227,7 +335,9 @@ export default function Welcome() {
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
       <Atmosphere />
-      <Animated.View style={{ flex: 1, opacity: stage, borderRadius: sheet ? 24 : 0, overflow: sheet ? "hidden" : "visible", transform: [{ translateX: shift }, { scale: behind }], paddingTop: framed ? insets.top + layout.contentTop : 0, paddingBottom: building ? insets.bottom + pillSpace : 0 }}>{body}</Animated.View>
+      <Animated.View style={{ flex: 1, opacity: stage, borderRadius: sheet ? 24 : 0, overflow: sheet ? "hidden" : "visible", transform: [{ translateX: shift }, { scale: behind }], paddingTop: framed ? insets.top + layout.contentTop : 0, paddingBottom: metered ? insets.bottom + pillSpace : step.kind === "intro" ? insets.bottom + layout.stack.base : 0 }}>
+        {body}
+      </Animated.View>
 
       {framed ? (
         // A 44 pt header bar from the top inset, then the segments at +50, both on the content column (UI audit P0-3).
@@ -235,17 +345,21 @@ export default function Welcome() {
           <View pointerEvents="box-none" style={{ width: "100%", maxWidth: headerColumn }}>
             <View pointerEvents="box-none" style={{ height: layout.headerBar, flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
               <Wordmark />
-              <Pressable accessibilityRole="link" onPress={() => router.push("/sign-in")} style={{ minHeight: 44, minWidth: 44, justifyContent: "center", alignItems: "flex-end" }}>
-                <Text style={[type.label, { color: p.ink2 }]}>I have an account</Text>
-              </Pressable>
+              {/* The intro has its own Log in under the cards; everywhere else it waits up here. */}
+              {step.kind !== "intro" ? (
+                <Pressable accessibilityRole="link" onPress={() => router.push("/sign-in")} style={{ minHeight: 44, minWidth: 44, justifyContent: "center", alignItems: "flex-end" }}>
+                  <Text style={[type.label, { color: p.ink2 }]}>Log in</Text>
+                </Pressable>
+              ) : null}
             </View>
-            {building ? <Segments count={SEGMENTS} done={answered} style={{ marginTop: layout.segmentsTop - layout.headerBar }} /> : null}
+            {segmented ? <Segments count={SEGMENTS} done={done} style={{ marginTop: layout.segmentsTop - layout.headerBar }} /> : null}
           </View>
         </View>
       ) : null}
 
-      {building ? (
-        <View pointerEvents="box-none" style={{ position: "absolute", left: 0, right: 0, bottom: insets.bottom + layout.dockGap, alignItems: "center", paddingHorizontal: gutter }}>
+      {metered ? (
+        <View pointerEvents="box-none" style={{ position: "absolute", left: 0, right: 0, bottom: insets.bottom + layout.dockGap, alignItems: "center", paddingHorizontal: gutter, gap: 8 }}>
+          {ticker ? <AgentTicker text={ticker.text} done={ticker.done} style={{ width: "100%", maxWidth: layout.list }} /> : null}
           <LifePill cents={total} onLayoutRef={(v) => (pill.current = v)} style={{ width: "100%", maxWidth: layout.list }} />
         </View>
       ) : null}

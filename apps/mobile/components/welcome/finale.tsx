@@ -1,4 +1,3 @@
-import type { Entry } from "@dandelist/catalogue";
 import { heroFor, heroOf } from "@dandelist/catalogue";
 import { formatCents } from "@dandelist/cost";
 import { useEffect, useRef, useState } from "react";
@@ -6,18 +5,18 @@ import { Animated, Keyboard, Linking, PanResponder, Platform, Pressable, StyleSh
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { FLICK, ease, haptic, native, spring, useReducedMotion } from "../../lib/motion";
 import { fonts, layout, radius, shadow, space, type, usePalette, useType } from "../../lib/theme";
-import { monthYearLong } from "../../lib/welcome";
+import { monthYearLong, type PoolItem } from "../../lib/welcome";
 import { CodeField, DismissKeyboard, Field, isEmail, useKeyboardLift, type CodeFieldHandle } from "../inputs";
 import { Eyebrow, Glass, Money, PrimaryButton, QuietButton } from "../lux";
-import { Odometer } from "../odometer";
+import { Odometer, dollars } from "../odometer";
 import { GlassReveal } from "../reveal";
 
 /**
- * Step 7, the peak: "Your life: $X. Yours by Month Year." on one centred axis. The picks that have photographs fan
+ * The peak: "Your Dandelist: $X. Yours by Month Year." on one centred axis. The picks that have photographs fan
  * into a still life, the figure spins on every wheel and lands on the total it already showed (it never counts up
  * from $0) with the one success haptic, the date rises in, and a single champagne light crosses the glyphs.
  */
-export function RevealCard({ picks, upfrontCents, monthlyRunningCents, everythingBy, onKeep, onChange }: { picks: Entry[]; upfrontCents: number; monthlyRunningCents: number; everythingBy: string; onKeep(): void; onChange(): void }) {
+export function RevealCard({ picks, upfrontCents, monthlyRunningCents, everythingBy, onKeep, onChange }: { picks: PoolItem[]; upfrontCents: number; monthlyRunningCents: number; everythingBy: string; onKeep(): void; onChange(): void }) {
   const p = usePalette();
   const t = useType();
   const { width } = useWindowDimensions();
@@ -26,7 +25,7 @@ export function RevealCard({ picks, upfrontCents, monthlyRunningCents, everythin
   const date = useRef(new Animated.Value(reduced ? 1 : 0)).current;
   const sweep = useRef(new Animated.Value(0)).current;
   const withPhotos = picks.filter((e) => heroOf(e));
-  const shown = withPhotos.length >= 3 ? withPhotos.slice(0, 5) : [withPhotos[0] ?? picks[0]].filter((e): e is Entry => !!e);
+  const shown = withPhotos.length >= 3 ? withPhotos.slice(0, 5) : [withPhotos[0] ?? picks[0]].filter((e): e is PoolItem => !!e);
   const fans = useRef(shown.map(() => new Animated.Value(reduced ? 1 : 0))).current;
   const [figureW, setFigureW] = useState(0);
   const by = monthYearLong(new Date(`${everythingBy}-01T00:00:00`));
@@ -83,9 +82,9 @@ export function RevealCard({ picks, upfrontCents, monthlyRunningCents, everythin
         })}
       </View>
       <View style={{ gap: 12, alignItems: "center" }}>
-        <Eyebrow>Your life</Eyebrow>
+        <Eyebrow>Your Dandelist</Eyebrow>
         <View onLayout={(e) => setFigureW(e.nativeEvent.layout.width)}>
-          <Money cents={upfrontCents} size="hero" rollOnMount="cinema" onLand={landed} />
+          <Money cents={upfrontCents} size="hero" format={dollars} rollOnMount="cinema" onLand={landed} />
           {/* The light crosses the glyphs only: a narrow window slides over a champagne copy that stays put (P0-5).
               Two nested windows (56 px soft, 24 px bright) give the band a soft edge on every platform. */}
           {!reduced && figureW > 0
@@ -94,7 +93,7 @@ export function RevealCard({ picks, upfrontCents, monthlyRunningCents, everythin
                 return (
                   <Animated.View key={win} pointerEvents="none" style={{ position: "absolute", top: 0, left: 0, width: win, height: Math.round(hero * 1.18), overflow: "hidden", transform: [{ translateX: x }], opacity: sweep.interpolate({ inputRange: [0, 0.15, 0.85, 1], outputRange: [0, alpha, alpha, 0] }) }}>
                     <Animated.View style={{ width: figureW, transform: [{ translateX: Animated.multiply(x, -1) }] }}>
-                      <Odometer cents={upfrontCents} format={formatCents} size={hero} family="bodoni" smallPrefix tracking={-0.02 * hero} color={p.shine} prefixColor={p.shine} glow={p.accent} mode="instant" />
+                      <Odometer cents={upfrontCents} format={dollars} size={hero} family="bodoni" smallPrefix tracking={-0.02 * hero} color={p.shine} prefixColor={p.shine} glow={p.accent} mode="instant" />
                     </Animated.View>
                   </Animated.View>
                 );
@@ -109,8 +108,8 @@ export function RevealCard({ picks, upfrontCents, monthlyRunningCents, everythin
         </Animated.Text>
       </View>
       <View style={{ gap: 4 }}>
-        <PrimaryButton label="Keep this life" commit onPress={onKeep} />
-        <QuietButton label="Change picks" onPress={onChange} />
+        <PrimaryButton label="Keep this list" commit onPress={onKeep} />
+        <QuietButton label="Start over" onPress={onChange} />
       </View>
     </Animated.View>
   );
@@ -250,7 +249,7 @@ export function CodeSheet({ startEmail, verifyEmail, onClose, extra }: { startEm
               >
                 {!sentTo ? (
                   <>
-                    <Eyebrow>Save your life list</Eyebrow>
+                    <Eyebrow>Save your Dandelist</Eyebrow>
                     <Text style={[t.title2, { color: p.ink }]}>Where should we keep it?</Text>
                     {extra}
                     <Field

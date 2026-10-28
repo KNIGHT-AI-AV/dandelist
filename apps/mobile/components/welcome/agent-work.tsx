@@ -42,10 +42,12 @@ function StreamedNote({ text }: { text: string }) {
 }
 
 /**
- * Step 6: Muse Spark at work. Every row and the note come from the server's real work (lib/welcome streamPreview).
- * Finished rows stay at least 350 ms so they can be read, with at most 1.2 s of added pause in all.
+ * Muse Spark at work on the whole list. Every row and the note come from the server's real work (lib/welcome
+ * streamPreview). When the first wish is still being priced, its live trail shows first (`waiting`), and the plan
+ * starts once it lands (`ready`). Finished rows stay at least 350 ms so they can be read, with at most 1.2 s of
+ * added pause in all.
  */
-export function AgentWork({ state, onResult, onFollowUp, onRestart }: { state: WelcomeState; onResult(r: Result): void; onFollowUp(last: string | null): void; onRestart(): void }) {
+export function AgentWork({ state, ready, waiting, onResult, onFollowUp, onRestart }: { state: WelcomeState; ready: boolean; waiting: { title: string; line: string } | null; onResult(r: Result): void; onFollowUp(last: string | null): void; onRestart(): void }) {
   const p = usePalette();
   const t = useType();
   const { width } = useWindowDimensions();
@@ -61,6 +63,7 @@ export function AgentWork({ state, onResult, onFollowUp, onRestart }: { state: W
   const scroll = useRef<ScrollView>(null);
 
   useEffect(() => {
+    if (!ready) return;
     if (attempt) {
       setRows([]);
       setNote(null);
@@ -96,7 +99,7 @@ export function AgentWork({ state, onResult, onFollowUp, onRestart }: { state: W
     }, ctrl.signal).catch((e: Error) => !ctrl.signal.aborted && setError(e instanceof TypeError ? "Couldn't reach Dandelist. Check your connection." : e.message));
     return () => ctrl.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [attempt]);
+  }, [attempt, ready]);
 
   // Centred while it fits; once the note and choices outgrow a phone screen it scrolls inside its own frame, following
   // the newest line, instead of spilling under the header and the button (QA 2026-10-28 at iPhone 15 size).
@@ -116,10 +119,16 @@ export function AgentWork({ state, onResult, onFollowUp, onRestart }: { state: W
               <Eyebrow>Your agent · Muse Spark by Meta</Eyebrow>
             </View>
             <Text accessibilityRole="header" style={[t.title1, { color: p.ink }]}>
-              Pricing your life.
+              Pricing your list.
             </Text>
           </Rise>
           <Glass style={{ padding: layout.cardPad, gap: 12, minHeight: 68 }}>
+            {waiting ? (
+              <View style={{ gap: 8 }}>
+                <AgentRow row={{ id: "wish", state: "running", text: `Finding the real price of ${waiting.title}` }} />
+                {waiting.line ? <Text style={[type.callout, { fontFamily: fonts.titleItalic, color: p.ink2, marginLeft: 29 }]}>{waiting.line}</Text> : null}
+              </View>
+            ) : null}
             {rows.map((r) => (
               <AgentRow key={r.id} row={r} />
             ))}

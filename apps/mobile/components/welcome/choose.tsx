@@ -1,13 +1,11 @@
-import type { Entry } from "@dandelist/catalogue";
-import { recurringBreakdown } from "@dandelist/cost";
-import { heroFor, toItem } from "@dandelist/catalogue";
+import { heroFor } from "@dandelist/catalogue";
 import { useEffect, useRef, useState } from "react";
 import { LinearGradient } from "expo-linear-gradient";
-import { Animated, PanResponder, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions, type LayoutChangeEvent } from "react-native";
+import { Animated, PanResponder, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions, type LayoutChangeEvent } from "react-native";
 import { ease, haptic, native, spring, usePress, useReducedMotion } from "../../lib/motion";
 import { formatCents } from "../../lib/money";
 import { fonts, layout, radius, shadow, type, usePalette, useType } from "../../lib/theme";
-import { hostOf, monthYearLong, reachBy, shortDate } from "../../lib/welcome";
+import { hostOf, monthYearLong, monthlyOf, reachBy, shortDate, type PoolItem, type When } from "../../lib/welcome";
 import { Eyebrow, Glass, Money, PrimaryButton, QuietButton, Shade } from "../lux";
 import { dollars } from "../odometer";
 import { GlassReveal } from "../reveal";
@@ -18,20 +16,27 @@ const STANDBY: Record<string, number> = {
   travel: require("../../assets/standby/travel.jpg"),
   live: require("../../assets/standby/life.jpg"),
 };
-const standbyFor = (e: Entry) => STANDBY[e.category] ?? require("../../assets/standby/object.jpg");
-const monthly = (e: Entry) => recurringBreakdown([toItem(e)]).perMonth;
+const standbyFor = (e: PoolItem) => STANDBY[e.category] ?? require("../../assets/standby/object.jpg");
 
-/** The source line every card carries: where the price was checked, and when; estimates say so. */
-function Source({ e }: { e: Entry }) {
+/**
+ * The source line every card carries: where the price was checked, and when; estimates say so. A typical price
+ * from the archive says what it covers instead, and a photo whose licence asks for credit gets it.
+ */
+function Source({ e }: { e: PoolItem }) {
   const p = usePalette();
   // A shopping-search link names Google, not the shop, so the seller's name stands in for it.
   const where = /(^|\.)google\./.test(hostOf(e.url)) ? e.seller : hostOf(e.url);
-  return <Text numberOfLines={1} style={[type.figure, { color: p.ink2 }]}>{`${where} · ${e.status === "verified" ? "checked" : "estimate"} ${shortDate(e.checkedAt)}`}</Text>;
+  return (
+    <View style={{ gap: 2 }}>
+      <Text numberOfLines={1} style={[type.figure, { color: p.ink2 }]}>{e.note ?? `${where} · ${e.status === "verified" ? "checked" : "estimate"} ${shortDate(e.checkedAt)}`}</Text>
+      {e.credit ? <Text numberOfLines={1} style={[type.figure, { color: p.ink3, fontSize: 11 }]}>{e.credit}</Text> : null}
+    </View>
+  );
 }
 
-function Price({ e }: { e: Entry }) {
+function Price({ e }: { e: PoolItem }) {
   const p = usePalette();
-  const m = monthly(e);
+  const m = monthlyOf(e);
   return (
     <View style={{ gap: 2 }}>
       <Money cents={e.upfrontCents} size="card" />
@@ -41,7 +46,7 @@ function Price({ e }: { e: Entry }) {
 }
 
 /** A photo card whose picture surfaces through a frosted pane as it loads (never bent: people judge these photos). */
-function PhotoCard({ e, onPress, style, big = false }: { e: Entry; onPress(ref: View | null): void; style?: object; big?: boolean }) {
+export function PhotoCard({ e, onPress, style, big = false }: { e: PoolItem; onPress(ref: View | null): void; style?: object; big?: boolean }) {
   const p = usePalette();
   const ref = useRef<View>(null);
   const press = usePress(0.985);
@@ -66,56 +71,12 @@ function PhotoCard({ e, onPress, style, big = false }: { e: Entry; onPress(ref: 
   );
 }
 
-/** Air between the bottom of the first-pick cards and the floating Life pill. */
-const BREATH = 16;
-
-/** Step 2: "Start with one you'd say yes to." Three cards: a snap carousel on phones, three across on wide screens. */
-export function FirstPick({ entries, onPick }: { entries: Entry[]; onPick(e: Entry, from: View | null): void }) {
-  const p = usePalette();
-  const t = useType();
-  const { width } = useWindowDimensions();
-  const wide = width >= 760;
-  const gutter = layout.gutter(width);
-  const ratio = wide ? 1.4 : 1.42;
-  // The step already stops above the floating Life pill; the cards fill what the headline leaves, keeping their shape.
-  const [room, setRoom] = useState<{ box: number; title: number } | null>(null);
-  const fits = room && room.box > 0 && room.title > 0 ? Math.max(220, room.box - room.title - layout.stack.section - BREATH) : Infinity;
-  const cardH = Math.min((wide ? Math.min(300, (Math.min(width, 1040) - 64 - 32) / 3) : Math.min(320, width * 0.76)) * ratio, fits);
-  const cardW = cardH / ratio;
-  const cards = entries.map((e, i) => (
-    <Rise key={e.id} delay={60 * i}>
-      <PhotoCard e={e} big onPress={(ref) => onPick(e, ref)} style={{ width: cardW, height: cardH }} />
-    </Rise>
-  ));
-  return (
-    <View style={{ flex: 1, justifyContent: "center", gap: layout.stack.section }} onLayout={(ev) => { const box = ev.nativeEvent.layout.height; setRoom((r) => (r && Math.abs(r.box - box) < 1 ? r : { box, title: r?.title ?? 0 })); }}>
-      <Rise
-        onLayout={(ev) => { const title = ev.nativeEvent.layout.height; setRoom((r) => (r && Math.abs(r.title - title) < 1 ? r : { box: r?.box ?? 0, title })); }}
-        style={{ paddingHorizontal: gutter, gap: layout.stack.tight, width: "100%", maxWidth: wide ? Math.max(cardW * 3 + 32, 0) + 2 * gutter : undefined, alignSelf: "center" }}
-      >
-        <Eyebrow>Your first pick</Eyebrow>
-        {/* Two even lines, never an orphaned "to." */}
-        <Text accessibilityRole="header" style={[t.title1, { color: p.ink, maxWidth: wide ? undefined : 290 }]}>
-          Start with one you'd say <Text style={{ fontFamily: fonts.displayItalic, color: p.accentText }}>yes</Text> to.
-        </Text>
-      </Rise>
-      {wide ? (
-        // Three across: a row, not a scroller, so nothing stacks or gets cut (UI audit P0-4).
-        <View style={{ flexDirection: "row", justifyContent: "center", gap: 16, paddingHorizontal: 32 }}>{cards}</View>
-      ) : (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} snapToInterval={cardW + 12} decelerationRate="fast" contentContainerStyle={{ paddingHorizontal: gutter, gap: 12 }}>
-          {cards}
-        </ScrollView>
-      )}
-    </View>
-  );
-}
-
 /**
- * Step 3: this or that. Two full-bleed halves; tapping one grows it a touch while the other dims and slides away.
- * "Both" and "Neither" are always there as two equal buttons, and on the web the arrow keys vote.
+ * This or that. Two full-bleed halves; tapping one grows it a touch while the other dims and slides away. "Both"
+ * and "Neither" are always there as two equal buttons, and on the web the arrow keys vote. The pair comes from the
+ * pool (lib/pairs); a "Neither" brings another pair rather than counting as an answer.
  */
-export function VotePair({ a, b, round, rounds, onVote }: { a: Entry; b: Entry; round: number; rounds: number; onVote(chosen: Entry[], from: View | null): void }) {
+export function VotePair({ a, b, label, onVote }: { a: PoolItem; b: PoolItem; label: string; onVote(chosen: PoolItem[], from: View | null): void }) {
   const p = usePalette();
   const t = useType();
   const reduced = useReducedMotion();
@@ -164,7 +125,7 @@ export function VotePair({ a, b, round, rounds, onVote }: { a: Entry; b: Entry; 
   return (
     <View style={{ flex: 1, gap: layout.stack.section }}>
       <Rise style={{ paddingHorizontal: gutter, gap: layout.stack.tight, width: "100%", maxWidth: side ? 932 + 2 * gutter : undefined, alignSelf: "center" }}>
-        <Eyebrow>{`This or that · ${round} of ${rounds}`}</Eyebrow>
+        <Eyebrow>{label}</Eyebrow>
         <Text accessibilityRole="header" style={[t.title1, { color: p.ink }]}>
           Which one is more <Text style={{ fontFamily: fonts.displayItalic, color: p.accentText }}>you</Text>?
         </Text>
@@ -186,26 +147,53 @@ export function VotePair({ a, b, round, rounds, onVote }: { a: Entry; b: Entry; 
   );
 }
 
-/** Step 4: when should this life be yours? */
-export function Horizon({ value, onPick }: { value: number | null | undefined; onPick(years: number | null): void }) {
+/** When they'd most want all of it, in words rather than years (owner, 2026-10-28). */
+const WHEN_OPTIONS: { id: When; label: string; hint: string }[] = [
+  { id: "now", label: "As soon as I can", hint: "Within the year" },
+  { id: "soon", label: "Soon", hint: "In the next few years" },
+  { id: "time", label: "In good time", hint: "No rush, done right" },
+  { id: "unsure", label: "Show me", hint: "Let the numbers decide" },
+];
+
+/** A choice that reads like a sentence: the answer large, a quiet line under it. */
+function WhenOption({ label, hint, selected, onPress }: { label: string; hint: string; selected: boolean; onPress(): void }) {
+  const p = usePalette();
+  const press = usePress(0.97);
+  return (
+    <Pressable accessibilityRole="radio" accessibilityState={{ selected }} accessibilityLabel={`${label}. ${hint}`} onPress={onPress} onPressIn={press.onPressIn} onPressOut={press.onPressOut}>
+      <Animated.View style={{ transform: [{ scale: press.scale }] }}>
+        <Glass intensity={selected ? 70 : 40} style={{ minHeight: 84, borderRadius: radius.control, borderCurve: "continuous", paddingHorizontal: 16, paddingVertical: 14, gap: 4, justifyContent: "center", borderColor: selected ? p.accent : p.line }}>
+          <Text style={[type.title3, { color: p.ink }]}>{label}</Text>
+          <Text style={[type.footnote, { color: p.ink2 }]}>{hint}</Text>
+        </Glass>
+      </Animated.View>
+    </Pressable>
+  );
+}
+
+/** "When would you most want all this?" */
+export function WhenStep({ value, onPick }: { value: When | null | undefined; onPick(when: When): void }) {
   const p = usePalette();
   const t = useType();
   const { width } = useWindowDimensions();
-  const options: [string, number | null][] = [["1 year", 1], ["3 years", 3], ["5 years", 5], ["10 years", 10], ["Not sure, show me", null]];
   return (
     <View style={{ flex: 1, justifyContent: "center", paddingHorizontal: layout.gutter(width), gap: layout.stack.section, maxWidth: layout.column + 2 * layout.gutter(width), width: "100%", alignSelf: "center" }}>
       <Rise style={{ gap: layout.stack.tight }}>
-        <Eyebrow>Your horizon</Eyebrow>
-        <Text accessibilityRole="header" style={[t.title1, { color: p.ink, maxWidth: width >= 760 ? undefined : 290 }]}>
-          When should this life be <Text style={{ fontFamily: fonts.displayItalic, color: p.accentText }}>yours</Text>?
+        <Eyebrow>Your timing</Eyebrow>
+        <Text accessibilityRole="header" style={[t.title1, { color: p.ink, maxWidth: width >= 760 ? undefined : 320 }]}>
+          When would you most want <Text style={{ fontFamily: fonts.displayItalic, color: p.accentText }}>all this</Text>?
         </Text>
         <Text style={[type.callout, { color: p.ink2, marginTop: 8 }]}>We'll show what changes if it takes longer.</Text>
       </Rise>
-      {/* Equal columns, two by two, with "Not sure" across the full width beneath. */}
-      <Rise delay={50} style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
-        {options.map(([label, years]) => (
-          <Chip key={label} label={label} selected={value === years} onPress={() => onPick(years)} style={{ flexBasis: years === null ? "100%" : "47%", flexGrow: 1 }} />
-        ))}
+      <Rise delay={50}>
+        {/* Two by two, so all four fit above the list meter on a phone. */}
+        <View accessibilityRole="radiogroup" style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
+          {WHEN_OPTIONS.map((o) => (
+            <View key={o.id} style={{ flexBasis: "47%", flexGrow: 1 }}>
+              <WhenOption label={o.label} hint={o.hint} selected={value === o.id} onPress={() => { haptic.select(); onPick(o.id); }} />
+            </View>
+          ))}
+        </View>
       </Rise>
     </View>
   );
@@ -327,7 +315,7 @@ export function Aside({ value, totalCents, onChange, onDone }: { value: number; 
         <YoursBy by={by} />
       </Rise>
       <Rise delay={100} style={{ gap: 4 }}>
-        <PrimaryButton label="Show me my life" onPress={onDone} />
+        <PrimaryButton label="Show me my list" onPress={onDone} />
         <QuietButton label="Use $500 for now" onPress={() => { onChange(50_000); onDone(); }} />
       </Rise>
     </View>

@@ -86,10 +86,11 @@ describe("pre-login preview", () => {
     expect(ev.find((e) => e.type === "result").upfrontCents).toBe(picks.reduce((sum, id) => sum + entry(id)!.upfrontCents, 0));
   });
 
-  it("rejects more than the onboarding flow's nine picks before fetching a seller", async () => {
+  it("rejects more than twelve picks before fetching a seller", async () => {
     const webFetch = vi.fn(sellerPage("$1.00"));
-    const picks = [...firstPick.slice(0, 2), ...pairs.flat()];
-    expect(picks).toHaveLength(10);
+    // The flow's longest list is three answered rounds of Both plus Neither rounds: well under twelve.
+    const picks = [...firstPick, ...pairs.flat(), ...firstPick.slice(0, 2)];
+    expect(picks).toHaveLength(13);
     const res = await post(makeApp(webFetch), { picks, monthlyCents: 100_000 });
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({ error: "Check your picks and try again." });
