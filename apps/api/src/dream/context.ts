@@ -58,6 +58,8 @@ export interface DreamCtx {
   emit: (e: DreamEvent) => Promise<void>;
   /** Steps show the person the agent's real work as it happens. */
   step: (id: string, state: "running" | "done", text: string) => Promise<void>;
+  /** The Dandy's voice line (agent/persona.ts), or empty. */
+  voice?: string;
 }
 
 /** Strict JSON schema helpers in the shape Meta's Responses API takes. */

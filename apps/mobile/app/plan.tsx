@@ -1,4 +1,5 @@
 import { recurringBreakdown } from "@dandelist/cost";
+import { useDandy } from "../lib/dandy";
 import { Redirect, router } from "expo-router";
 import { useEffect, useState } from "react";
 import { Pressable, Text, View, useWindowDimensions } from "react-native";
@@ -23,6 +24,7 @@ function reachBy(cumulativeCents: number, monthlyCents: number, now = new Date()
 }
 
 export default function Plan() {
+  const dandy = useDandy();
   const auth = useAuth();
   const { wishes } = useWishes();
   const p = usePalette();
@@ -89,7 +91,7 @@ export default function Plan() {
           <Glass style={{ padding: layout.cardPad, gap: layout.stack.tight, borderRadius: radius.lg }}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
               <AgentDot />
-              <Eyebrow>Your agent</Eyebrow>
+              <Eyebrow>{dandy.name}</Eyebrow>
             </View>
             <Text style={[type.callout, { color: p.ink }]}>
               {lastMust ? `At ${formatCents(monthly)} a month, your must-haves are covered by ${monthYear(lastMust.when!)}.` : `At ${formatCents(monthly)} a month, everything on your list is covered by ${monthYear(rows[rows.length - 1]!.when!)}.`}

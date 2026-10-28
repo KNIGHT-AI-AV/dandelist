@@ -3,6 +3,7 @@ import { MetaApiError, MetaClient } from "@dandelist/meta";
 import { Hono, type Context } from "hono";
 import { streamSSE } from "hono/streaming";
 import { z } from "zod";
+import { personaSchema, voiceLine } from "../agent/persona";
 import type { Meta } from "../agent/agent";
 import { USER_DAILY_USD, type AgentDeps } from "../agent/routes";
 import { publicFetch } from "../agent/tools";
@@ -36,7 +37,7 @@ const actionSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("region"), home: homeSchema }),
   z.object({ type: z.literal("pick"), widgetId: z.string().max(40), listingId: z.string().max(40).optional() }),
 ]);
-const turnBody = z.object({ sessionId: z.string().uuid().nullish(), action: actionSchema });
+const turnBody = z.object({ sessionId: z.string().uuid().nullish(), action: actionSchema, persona: personaSchema });
 
 type SessionRow = { id: string; transcript: unknown; state: unknown };
 const parse = (v: unknown) => (typeof v === "string" ? JSON.parse(v) : v);
@@ -149,6 +150,7 @@ export function dreamRoutes(deps: DreamDeps) {
         budget,
         emit,
         step: (id, state, text) => emit({ type: "step", id, state, text }),
+        voice: voiceLine(body.data.persona),
       };
       try {
         await runTurn(ctx, transcript, state, body.data.action);

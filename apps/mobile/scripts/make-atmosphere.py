@@ -1,7 +1,7 @@
 """Draws the background textures in assets/atmosphere/ (run once; the PNGs are committed).
 
 - guilloche.png: an engine-turned pattern, the fine machine engraving on watch dials and banknotes. A field of
-  interfering waves fills the page and a rose-engine rosette sits off the top right corner. White lines on
+  interfering waves fills the page and a rose-engine rosette turns just past the top right corner, its centre off the page. White lines on
   transparency; the app tints it with the theme's ink at a few percent, so it reads tone on tone.
 - sheen.png: a soft round light the app drifts slowly across the page.
 
@@ -32,7 +32,9 @@ def guilloche() -> Image.Image:
               + gap * 0.6 * np.sin(2 * math.pi * xs / (w * 0.13) - k * 0.071))
         d.line(list(zip(xs.tolist(), ys.tolist())), fill=150, width=SS)
     # The rosette: scalloped rings turned on a rose engine, alternate rings out of phase so they braid.
-    cx, cy = w * 0.84, h * 0.13
+    # The rosette's centre sits just past the top right corner (owner, 2026-10-28: where the rings met, the page
+    # showed a hole). Only its outer arcs reach the page, so the convergence is never on screen, even as it drifts.
+    cx, cy = w * 1.04, -h * 0.02
     t = np.linspace(0, 2 * math.pi, 2400)
     rings = 120
     for i in range(rings):

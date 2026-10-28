@@ -69,11 +69,11 @@ export function planFacts(picks: ListItem[], monthlyCents: number, now: Date) {
   };
 }
 
+/** The note when the model can't write one: what the list comes to, never a date or a budget (owner, 2026-10-28). */
 export function fallbackNote(f: ReturnType<typeof planFacts>): string {
-  if (f.largest.rest_by_if_bought_last && f.largest.share_percent >= 40) {
-    return `The ${f.largest.name} is ${f.largest.share_percent}% of this list. Buy it last and the rest lands by ${f.largest.rest_by_if_bought_last}; everything lands by ${f.everything_by}.`;
-  }
-  return `At ${f.set_aside_per_month} a month, everything lands by ${f.everything_by}.`;
+  const keep = f.running_costs_per_month_once_owned !== "none" ? `, plus ${f.running_costs_per_month_once_owned} a month to keep` : "";
+  if (f.picks.length > 1 && f.largest.share_percent >= 40) return `The ${f.largest.name} is ${f.largest.share_percent}% of this list, which comes to ${f.everything_upfront}${keep}.`;
+  return `Everything on this list comes to ${f.everything_upfront}${keep}.`;
 }
 
 /**
@@ -144,7 +144,7 @@ export function previewRoutes(deps: AgentDeps & { webFetch?: Fetcher; pool?: () 
       const facts = planFacts(picks, monthlyCents, now);
       const labels = [...new Set(picks.flatMap((p) => p.recurring.map((r) => r.label?.toLowerCase()).filter(Boolean)))];
       await send({ type: "row", id: "running", state: "done", text: labels.length ? `Added running costs: ${labels.slice(0, 3).join(", ")}.` : "No running costs on these picks." });
-      await send({ type: "row", id: "fit", state: "done", text: `Fitted ${facts.set_aside_per_month}/mo against ${facts.everything_upfront}.` });
+      await send({ type: "row", id: "total", state: "done", text: `Added it all up: ${facts.everything_upfront}.` });
 
       let note = fallbackNote(facts);
       if (deps.meta) {
@@ -158,7 +158,7 @@ export function previewRoutes(deps: AgentDeps & { webFetch?: Fetcher; pool?: () 
           const client = new MetaClient({ ...deps.meta, onUsage: (usage, cost) => recordSpend(db, null, "preview", usage, cost, deps.now()) });
           const res = await client.responses({
             instructions:
-              "You are Dandelist's agent. In two or three short sentences, under 45 words, tell this person something useful about when they can have everything on their list. If one pick is a large share, say what happens if they buy it last. Use only numbers and dates that appear in FACTS, written exactly as given, including the % sign on percentages. Plain, specific, warm. No financial advice, no hype, no questions.",
+              "You are Dandelist's agent. In two short sentences, under 40 words, say something useful about this wish list: what stands out, the largest share, and what it costs to keep each month if anything. Use only numbers that appear in FACTS, written exactly as given, including the % sign on percentages. No dates, no saving or budgeting advice, no financial advice, no hype, no questions.",
             input: `FACTS: ${JSON.stringify(noteFacts)}`,
           });
           const text = res.text.trim();

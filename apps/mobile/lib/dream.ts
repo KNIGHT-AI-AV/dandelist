@@ -1,4 +1,5 @@
 import type { DreamAction, DreamEvent, KeepLine, LifeContext, Widget } from "@dandelist/catalogue/dream";
+import { currentPersona } from "./persona-state";
 import type { NewWish } from "./wishes";
 
 export type { DreamAction, DreamEvent, KeepLine, LifeContext, Widget };
@@ -17,7 +18,7 @@ export async function dreamTurn(apiStream: ApiStream, sessionId: string | null, 
   const res = await apiStream("/dream/turn", {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
-    body: JSON.stringify({ sessionId, action }),
+    body: JSON.stringify({ sessionId, action, persona: currentPersona() }),
     signal,
   });
   if (!res.ok || !res.body) {

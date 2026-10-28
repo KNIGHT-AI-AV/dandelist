@@ -5,36 +5,51 @@ import { Animated, Keyboard, Linking, PanResponder, Platform, Pressable, StyleSh
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { FLICK, ease, haptic, native, spring, useReducedMotion } from "../../lib/motion";
 import { fonts, layout, radius, shadow, space, type, usePalette, useType } from "../../lib/theme";
-import { monthYearLong, type PoolItem } from "../../lib/welcome";
+import { type PoolItem } from "../../lib/welcome";
+import { useDandy } from "../../lib/dandy";
+import { DandyAvatar } from "../dandy-avatar";
+import { Chip, Rise } from "./kit";
 import { CodeField, DismissKeyboard, Field, isEmail, useKeyboardLift, type CodeFieldHandle } from "../inputs";
 import { Eyebrow, Glass, Money, PrimaryButton, QuietButton } from "../lux";
 import { Odometer, dollars } from "../odometer";
 import { GlassReveal } from "../reveal";
 
 /**
- * The peak: "Your Dandelist: $X. Yours by Month Year." on one centred axis. The picks that have photographs fan
- * into a still life, the figure spins on every wheel and lands on the total it already showed (it never counts up
- * from $0) with the one success haptic, the date rises in, and a single champagne light crosses the glyphs.
+ * The peak: the list as a deck that shuffles and spreads, then "Your Dandelist: $X", curated by the person's Dandy.
+ * No dates and no budgets (owner, 2026-10-28: "we're not telling them when they're gonna have this, we're just showing
+ * them what it is"). The cards arrive stacked, riffle twice like a dealer's shuffle, then fan out across the table;
+ * the figure spins on every wheel and lands with the one success haptic, and a champagne light crosses the glyphs.
+ * "Start over?" asks before it clears anything.
  */
-export function RevealCard({ picks, upfrontCents, monthlyRunningCents, everythingBy, onKeep, onChange }: { picks: PoolItem[]; upfrontCents: number; monthlyRunningCents: number; everythingBy: string; onKeep(): void; onChange(): void }) {
+export function RevealCard({ picks, upfrontCents, monthlyRunningCents, onKeep, onRestart }: { picks: PoolItem[]; upfrontCents: number; monthlyRunningCents: number; onKeep(): void; onRestart(): void }) {
   const p = usePalette();
   const t = useType();
   const { width } = useWindowDimensions();
   const reduced = useReducedMotion();
+  const dandy = useDandy();
   const card = useRef(new Animated.Value(reduced ? 1 : 0)).current;
   const date = useRef(new Animated.Value(reduced ? 1 : 0)).current;
   const sweep = useRef(new Animated.Value(0)).current;
+  const riffle = useRef(new Animated.Value(0)).current;
   const withPhotos = picks.filter((e) => heroOf(e));
-  const shown = withPhotos.length >= 3 ? withPhotos.slice(0, 5) : [withPhotos[0] ?? picks[0]].filter((e): e is PoolItem => !!e);
+  const shown = (withPhotos.length ? withPhotos : picks).slice(0, 7);
   const fans = useRef(shown.map(() => new Animated.Value(reduced ? 1 : 0))).current;
   const [figureW, setFigureW] = useState(0);
-  const by = monthYearLong(new Date(`${everythingBy}-01T00:00:00`));
-  const single = shown.length < 3;
+  const [confirm, setConfirm] = useState(false);
+  const checked = picks.filter((e) => e.status === "verified").length;
 
   useEffect(() => {
     if (reduced) return;
     Animated.spring(card, { toValue: 1, ...spring.reveal, useNativeDriver: native }).start();
-    Animated.stagger(70, fans.map((f) => Animated.spring(f, { toValue: 1, ...spring.settle, useNativeDriver: native }))).start();
+    // Stacked, then two riffles, then the spread.
+    Animated.sequence([
+      Animated.delay(200),
+      Animated.timing(riffle, { toValue: 1, duration: 260, easing: ease.inOut, useNativeDriver: native }),
+      Animated.timing(riffle, { toValue: 0, duration: 220, easing: ease.inOut, useNativeDriver: native }),
+      Animated.timing(riffle, { toValue: 1, duration: 240, easing: ease.inOut, useNativeDriver: native }),
+      Animated.timing(riffle, { toValue: 0, duration: 200, easing: ease.inOut, useNativeDriver: native }),
+      Animated.stagger(60, fans.map((f) => Animated.spring(f, { toValue: 1, ...spring.settle, useNativeDriver: native }))),
+    ]).start();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -48,15 +63,19 @@ export function RevealCard({ picks, upfrontCents, monthlyRunningCents, everythin
   const hero = t.hero.fontSize ?? 56;
   const WINDOW = 56;
   const windowX = sweep.interpolate({ inputRange: [0, 1], outputRange: [-WINDOW, figureW] });
+  const w = 92;
+  const h = 124;
+  const mid = (shown.length - 1) / 2;
+  const spread = Math.min(46, (Math.min(width, 520) - 2 * layout.gutter(width) - w) / Math.max(1, shown.length - 1));
+  const facts = [`${picks.length} ${picks.length === 1 ? "wish" : "wishes"}`, checked ? `${checked} checked on the seller's own site` : null, monthlyRunningCents ? `${formatCents(Math.round(monthlyRunningCents))} a month to keep` : null].filter(Boolean).join(" · ");
   return (
     <Animated.View style={{ flex: 1, justifyContent: "center", paddingHorizontal: layout.gutter(width), gap: layout.stack.section, maxWidth: layout.column + 2 * layout.gutter(width), width: "100%", alignSelf: "center", opacity: card, transform: [{ scale: card.interpolate({ inputRange: [0, 1], outputRange: [0.94, 1] }) }] }}>
-      {/* The still life: the picks fanned like prints on a table, each arriving through film. */}
-      <View style={{ height: single ? 200 : 168, alignItems: "center", justifyContent: "center" }}>
+      {/* The deck: stacked, riffled, then fanned across the table like prints. */}
+      <View style={{ height: h + 40, alignItems: "center", justifyContent: "center" }}>
         {shown.map((e, i) => {
-          const mid = (shown.length - 1) / 2;
-          const angle = shown.length > 1 ? ((i - mid) / mid) * 8 : 0;
-          const w = single ? 140 : 104;
-          const h = single ? 188 : 140;
+          const off = i - mid;
+          const side = i % 2 ? 1 : -1;
+          const angle = shown.length > 1 ? (off / Math.max(1, mid)) * 12 : 0;
           return (
             <Animated.View
               key={e.id}
@@ -66,16 +85,15 @@ export function RevealCard({ picks, upfrontCents, monthlyRunningCents, everythin
                 height: h,
                 borderRadius: radius.sm,
                 boxShadow: shadow.print,
-                opacity: fans[i],
                 transform: [
-                  { translateX: fans[i]!.interpolate({ inputRange: [0, 1], outputRange: [0, (i - mid) * 56] }) },
-                  { translateY: fans[i]!.interpolate({ inputRange: [0, 1], outputRange: [20, Math.abs(i - mid) * 7] }) },
-                  { rotate: fans[i]!.interpolate({ inputRange: [0, 1], outputRange: ["0deg", `${angle}deg`] }) },
+                  { translateX: Animated.add(fans[i]!.interpolate({ inputRange: [0, 1], outputRange: [i * 0.6, off * spread] }), riffle.interpolate({ inputRange: [0, 1], outputRange: [0, side * 34] })) },
+                  { translateY: fans[i]!.interpolate({ inputRange: [0, 1], outputRange: [-i * 0.8, Math.abs(off) * 6] }) },
+                  { rotate: Animated.add(fans[i]!.interpolate({ inputRange: [0, 1], outputRange: [0, angle] }), riffle.interpolate({ inputRange: [0, 1], outputRange: [0, side * 5] })).interpolate({ inputRange: [-90, 90], outputRange: ["-90deg", "90deg"] }) },
                 ],
               }}
             >
-              <View style={{ flex: 1, borderRadius: radius.sm, overflow: "hidden", borderWidth: StyleSheet.hairlineWidth, borderColor: p.hair }}>
-                <GlassReveal uri={heroFor(e, 0.75) ?? null} standby={require("../../assets/standby/object.jpg")} stage="clear" treatment="film" style={StyleSheet.absoluteFill} />
+              <View style={{ flex: 1, borderRadius: radius.sm, overflow: "hidden", borderWidth: StyleSheet.hairlineWidth, borderColor: p.hair, backgroundColor: p.surface }}>
+                <GlassReveal uri={heroFor(e, w / h) ?? null} standby={require("../../assets/standby/object.jpg")} stage="clear" treatment="film" style={StyleSheet.absoluteFill} />
               </View>
             </Animated.View>
           );
@@ -100,17 +118,28 @@ export function RevealCard({ picks, upfrontCents, monthlyRunningCents, everythin
               })
             : null}
         </View>
-        <Animated.Text style={[t.title2, { color: p.ink, textAlign: "center", opacity: date, transform: [{ translateY: date.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }) }] }]}>
-          Yours by <Text style={{ fontFamily: fonts.titleItalic, color: p.accentText }}>{by}</Text>.
-        </Animated.Text>
-        <Animated.Text style={[type.figure13, { color: p.ink2, textAlign: "center", opacity: date }]}>
-          {monthlyRunningCents ? `Running costs once it's yours: ${formatCents(Math.round(monthlyRunningCents))}/mo` : "No running costs"}
-        </Animated.Text>
+        <Animated.View style={{ flexDirection: "row", alignItems: "center", gap: 10, opacity: date, transform: [{ translateY: date.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }) }] }}>
+          <DandyAvatar dandy={dandy} size={28} />
+          <Text style={[t.title2, { color: p.ink }]}>
+            Curated by <Text style={{ fontFamily: fonts.titleItalic, color: p.accentText }}>{dandy.name}</Text>
+          </Text>
+        </Animated.View>
+        <Animated.Text style={[type.figure13, { color: p.ink2, textAlign: "center", opacity: date }]}>{facts}</Animated.Text>
       </View>
-      <View style={{ gap: 4 }}>
-        <PrimaryButton label="Keep this list" commit onPress={onKeep} />
-        <QuietButton label="Start over" onPress={onChange} />
-      </View>
+      {confirm ? (
+        <Rise style={{ gap: 10 }}>
+          <Text style={[type.callout, { color: p.ink, textAlign: "center" }]}>Start over? Your list and picks will be cleared.</Text>
+          <View style={{ flexDirection: "row", gap: 10 }}>
+            <Chip label="Keep my list" onPress={() => setConfirm(false)} style={{ flex: 1 }} />
+            <Chip label="Start over" onPress={() => { haptic.select(); onRestart(); }} style={{ flex: 1 }} />
+          </View>
+        </Rise>
+      ) : (
+        <View style={{ gap: 4 }}>
+          <PrimaryButton label="Keep my Dandelist" commit onPress={onKeep} />
+          <QuietButton label="Start over?" onPress={() => setConfirm(true)} />
+        </View>
+      )}
     </Animated.View>
   );
 }

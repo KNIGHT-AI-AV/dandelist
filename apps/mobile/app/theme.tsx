@@ -17,7 +17,6 @@ export default function ThemeScreen() {
       <Atmosphere />
       <ThemeChooser
         totalCents={total}
-        by="your plan"
         cta="Use this theme"
         onDone={(id) => {
           theme.set(id);

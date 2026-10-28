@@ -1,4 +1,5 @@
 import type { Period } from "@dandelist/cost";
+import { currentPersona } from "./persona-state";
 import type { WishKind } from "./wishes";
 
 /** Shapes the API's wish agent returns. The app shows these numbers; it never asks the model for one. */
@@ -177,7 +178,7 @@ export async function transcribeWish(api: Api, wav: Uint8Array) {
 }
 
 export async function startResearch(api: Api, draft: Draft, answers: Answer[]) {
-  return (await read<{ run: Run }>(await api("/agent/runs", json({ draft, answers })).catch(() => null), "Couldn't start the research.")).run;
+  return (await read<{ run: Run }>(await api("/agent/runs", json({ draft, answers, persona: currentPersona() })).catch(() => null), "Couldn't start the research.")).run;
 }
 
 export async function getRun(api: Api, id: string) {

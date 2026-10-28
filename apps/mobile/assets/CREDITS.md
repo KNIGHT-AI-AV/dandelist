@@ -14,3 +14,6 @@
 # Font credits
 
 - `fonts/BodoniModa*.ttf`: static optical-size cuts (opsz 72 "Display", opsz 28 "Title") made with fontTools from Google Fonts' Bodoni Moda variable font, Copyright 2020 The Bodoni Moda Project Authors, SIL Open Font License 1.1 (`fonts/OFL-BodoniModa.txt`; no Reserved Font Name).
+
+- `faces/*.png`: the five comfort faces on the welcome fader, generated for Dandelist with image generation (OpenAI image_gen via Codex), 2026-10-28. Source sheet and prompts: Desktop\Dandelist Designaces.
+- `themes/cognac.jpg`, `themes/amethyst.jpg`, `themes/riviera.jpg`: mood backgrounds for the Cognac, Amethyst and Riviera themes, generated for Dandelist with image generation (OpenAI image_gen via Codex), 2026-10-28. Prompts: Desktop\Dandelist Design	hemes-new\make-moods.sh.

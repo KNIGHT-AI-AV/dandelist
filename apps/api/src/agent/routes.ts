@@ -13,6 +13,7 @@ import { SHOPPING_ACTOR, SHOPPING_MAX_RESULTS, SHOPPING_PRICE_PER_RESULT_USD, sh
 import type { Fetcher } from "./tools";
 import { pgArchive, type Archive } from "../archive/archive";
 import { MAX_CLIP_BYTES, TRANSCRIBES_PER_USER_PER_DAY, WISH_KEYWORDS, cleanTranscript, clipProblem, readWav } from "./transcribe";
+import { personaSchema, voiceLine } from "./persona";
 
 export const RUNS_PER_USER_PER_DAY = 20;
 /** Every judge shares one account, so it gets more runs; its share of the daily spend cap still bounds it. */
@@ -39,7 +40,7 @@ export interface AgentDeps extends AuthDeps {
 const IMAGE_MODEL = "muse-image-1.0";
 
 const interpretBody = z.object({ text: z.string().trim().min(2).max(1000) });
-const runBody = z.object({ draft: draftSchema, answers: z.array(answerSchema).max(3).default([]) });
+const runBody = z.object({ draft: draftSchema, answers: z.array(answerSchema).max(3).default([]), persona: personaSchema });
 
 type RunRow = {
   id: string;
@@ -224,7 +225,7 @@ export function agentRoutes(deps: AgentDeps) {
       void (await db.query("update agent_runs set steps = steps || $1::jsonb, updated_at = $2 where id = $3", [JSON.stringify([step]), touch(), run.id]));
     // The agent keeps working after this response; the app polls GET /agent/runs/:id for its trail.
     const shopping = shoppingFor(userId, draft.region, draft.currency, addCost);
-    void research(metaFor(userId, "research", addCost), { draft, answers, onStep, fetcher: deps.webFetch, now: deps.now, shopping, media: mediaOptions(), archive, contributor: userId })
+    void research(metaFor(userId, "research", addCost), { draft, answers, onStep, fetcher: deps.webFetch, now: deps.now, shopping, media: mediaOptions(), archive, contributor: userId, voice: voiceLine(body.data.persona) })
       .then((result) => db.query("update agent_runs set status = 'done', result = $1::jsonb, updated_at = $2 where id = $3", [JSON.stringify(result), touch(), run.id]))
       .catch((e) => {
         console.error("research failed", run.id, e instanceof MetaApiError ? `${e.status} ${e.body.slice(0, 200)}` : e);

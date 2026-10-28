@@ -14,6 +14,8 @@ import type { Stage } from "../reveal-clock";
 export const BRAND = "Dandelist";
 /** Owner, 2026-10-28: the opening "happens too fast"; it should feel like an experience opening. About ten seconds. */
 const TITLE_MS = 10_000;
+/** The clock runs this much slower than the timeline, so every beat holds a little longer (about twelve seconds). */
+const PACE = 1.2;
 /** Return visits start at the wordmark and take this long. */
 const SHORT_MS = 1600;
 const SHORT_FROM = 6600;
@@ -55,10 +57,10 @@ export function TitleSequence({ hero, short, onDone }: { hero: Entry; short: boo
   };
 
   useEffect(() => {
-    const total = short ? SHORT_MS : reduced ? 400 : TITLE_MS;
+    const total = short ? SHORT_MS : reduced ? 400 : TITLE_MS * PACE;
     const anim = Animated.timing(t, { toValue: TITLE_MS, duration: total, easing: Easing.linear, useNativeDriver: false });
     anim.start(({ finished: ok }) => ok && setTimeout(() => finish(), short || reduced ? 150 : 500));
-    const timers = short || reduced ? [] : [setTimeout(() => setStage("found"), 800), setTimeout(() => setStage("clear"), 1600), setTimeout(() => setPrice(true), 2200)];
+    const timers = short || reduced ? [] : [setTimeout(() => setStage("found"), 800 * PACE), setTimeout(() => setStage("clear"), 1600 * PACE), setTimeout(() => setPrice(true), 2200 * PACE)];
     if (short || reduced) setStage("clear");
     timers.push(setTimeout(() => setSkippable(true), 600));
     return () => {

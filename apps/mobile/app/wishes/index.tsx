@@ -20,6 +20,7 @@ import { haptic, usePress } from "../../lib/motion";
 import { UNDO_MS } from "../../lib/removal";
 import { layout, radius, space, type, usePalette, useType } from "../../lib/theme";
 import { loadWelcome, saveWelcome, toWishes } from "../../lib/welcome";
+import { useDandy } from "../../lib/dandy";
 import { useWishes, type Wish } from "../../lib/wishes";
 import { hostOf, midSentence, whenChecked } from "../../lib/words";
 import { rememberCard, type Rect } from "../../lib/zoom";
@@ -58,6 +59,7 @@ const SKELETON_AFTER_MS = 200;
 const errorText = (e: unknown, fallback: string) => (e instanceof Error ? e.message : fallback);
 
 export default function LifeList() {
+  const dandy = useDandy();
   const auth = useAuth();
   const { wishes, status, error, reload, add, remove, setTier } = useWishes();
   useAdoptWelcome(auth.status === "signedIn" && status === "ready", add);
@@ -239,7 +241,7 @@ export default function LifeList() {
               <Glass style={{ marginTop: layout.stack.base, padding: layout.cardPad, gap: layout.stack.tight }}>
                 <View style={{ flexDirection: "row", alignItems: "center", gap: space[8] }}>
                   <AgentDot />
-                  <Eyebrow>Your agent</Eyebrow>
+                  <Eyebrow>{dandy.name}</Eyebrow>
                 </View>
                 <Swap k={briefing}>
                   <Text style={[type.callout, { color: p.ink }]}>{briefing}</Text>

@@ -400,7 +400,7 @@ export function Hairline({ style }: { style?: StyleProp<ViewStyle> }) {
  * theme as two layers on one canvas, the word in the theme's ink and the dot in its accent, so the title sequence
  * can set the word and then land the dot. Source: Desktop\Dandelist Design\logo-final\_build\wordmark2.py.
  */
-const WORDMARK: Record<ThemeId, readonly [number, number]> = {
+const WORDMARK: Partial<Record<ThemeId, readonly [number, number]>> = {
   emerald: [require("../assets/brand/wordmark-emerald-letters.png"), require("../assets/brand/wordmark-emerald-dot.png")],
   bordeaux: [require("../assets/brand/wordmark-bordeaux-letters.png"), require("../assets/brand/wordmark-bordeaux-dot.png")],
   noir: [require("../assets/brand/wordmark-noir-letters.png"), require("../assets/brand/wordmark-noir-dot.png")],
@@ -416,14 +416,17 @@ type AnimatedViewStyle = Animated.WithAnimatedValue<StyleProp<ViewStyle>>;
 /** The wordmark at `height` (24 in headers). `word` and `dot` animate the two layers. */
 export function Wordmark({ height = 24, word, dot, style }: { height?: number; word?: AnimatedViewStyle; dot?: AnimatedViewStyle; style?: StyleProp<ViewStyle> }) {
   const { id } = useTheme();
-  const [letters, clock] = WORDMARK[id];
+  // Themes added after the logo pass (Cognac, Amethyst, Riviera) tint the emerald artwork to their ink and accent.
+  const art = WORDMARK[id];
+  const [letters, clock] = art ?? WORDMARK.emerald!;
+  const p = usePalette();
   return (
     <View accessible accessibilityRole="image" accessibilityLabel="Dandelist" style={[{ width: Math.round(height * WORDMARK_ASPECT), height }, style]}>
       <Animated.View style={[StyleSheet.absoluteFill, word]}>
-        <Image source={letters} style={StyleSheet.absoluteFill} contentFit="contain" />
+        <Image source={letters} style={StyleSheet.absoluteFill} contentFit="contain" tintColor={art ? undefined : p.ink} />
       </Animated.View>
       <Animated.View style={[StyleSheet.absoluteFill, dot]}>
-        <Image source={clock} style={StyleSheet.absoluteFill} contentFit="contain" />
+        <Image source={clock} style={StyleSheet.absoluteFill} contentFit="contain" tintColor={art ? undefined : p.accent} />
       </Animated.View>
     </View>
   );
