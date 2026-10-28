@@ -22,7 +22,10 @@ function afterLayout(fn: () => void): () => void {
 export interface KeyboardScrollProps extends ScrollViewProps {
   /** Height of this screen's KeyboardDock content (its `onHeight`); focused fields are kept above it. */
   dock?: number;
-  /** Add the keyboard's height to the bottom padding (the default). Off inside a KeyboardLift, which moves the whole view. */
+  /**
+   * Add the keyboard's height to the bottom padding and scroll focused fields into view (the default). Off inside a
+   * KeyboardLift, which moves the whole view and so keeps bottom-anchored fields in sight itself.
+   */
   inset?: boolean;
   /** When the keyboard shows and no field in here has focus, scroll to the end: a chat whose composer is docked. */
   keepEnd?: boolean;
@@ -73,17 +76,17 @@ export const KeyboardScroll = forwardRef<ScrollView, KeyboardScrollProps>(functi
   useEffect(() => {
     const grew = kb.end > lastEnd.current;
     lastEnd.current = kb.end;
-    if (!grew || Platform.OS === "web") return;
+    if (!grew || !inset || Platform.OS === "web") return;
     return afterLayout(() => {
       if (target.current) bringIntoView(target.current);
       else if (keepEnd) scroll.current?.scrollToEnd({ animated: true });
     });
-  }, [kb.end, keepEnd, bringIntoView]);
+  }, [kb.end, keepEnd, inset, bringIntoView]);
 
   const base = StyleSheet.flatten(contentContainerStyle)?.paddingBottom;
   const room = inset && kb.inset ? { paddingBottom: (typeof base === "number" ? base : 0) + kb.inset } : null;
   return (
-    <RevealContext.Provider value={reveal}>
+    <RevealContext.Provider value={inset ? reveal : null}>
       <ScrollView
         ref={scroll}
         keyboardShouldPersistTaps="handled"
