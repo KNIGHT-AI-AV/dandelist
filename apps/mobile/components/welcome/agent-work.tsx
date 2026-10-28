@@ -3,7 +3,7 @@ import { Animated, ScrollView, Text, View, useWindowDimensions } from "react-nat
 import { ease, native, useReducedMotion } from "../../lib/motion";
 import { fonts, layout, type, usePalette, useType } from "../../lib/theme";
 import { streamPreview, type PreviewEvent, type WelcomeState } from "../../lib/welcome";
-import { AgentDot, Eyebrow, Glass, Icon } from "../lux";
+import { AgentDot, EdgeFade, Eyebrow, Glass, Icon } from "../lux";
 import { Chip, Rise } from "./kit";
 
 type Row = { id: string; state: "running" | "done"; text: string };
@@ -101,45 +101,51 @@ export function AgentWork({ state, onResult, onFollowUp, onRestart }: { state: W
   // Centred while it fits; once the note and choices outgrow a phone screen it scrolls inside its own frame, following
   // the newest line, instead of spilling under the header and the button (QA 2026-10-28 at iPhone 15 size).
   return (
-    <ScrollView
-      ref={scroll}
-      style={{ flex: 1 }}
-      contentContainerStyle={{ flexGrow: 1, justifyContent: "center", paddingVertical: 8 }}
-      showsVerticalScrollIndicator={false}
-      onContentSizeChange={() => scroll.current?.scrollToEnd({ animated: true })}
-    >
-      <View style={{ paddingHorizontal: gutter, gap: layout.stack.section - 8, maxWidth: layout.column + 2 * gutter, width: "100%", alignSelf: "center" }}>
-        <Rise style={{ gap: layout.stack.tight }}>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-            <AgentDot busy={!result && !error} />
-            <Eyebrow>Your agent · Muse Spark by Meta</Eyebrow>
-          </View>
-          <Text accessibilityRole="header" style={[t.title1, { color: p.ink }]}>
-            Pricing your life.
-          </Text>
-        </Rise>
-        <Glass style={{ padding: layout.cardPad, gap: 12, minHeight: 68 }}>
-          {rows.map((r) => (
-            <AgentRow key={r.id} row={r} />
-          ))}
-          {error ? <Text style={[type.callout, { color: p.danger }]}>{error}</Text> : null}
-        </Glass>
-        {note ? <StreamedNote text={note} /> : null}
-        {result?.largest && note ? (
-          <Rise delay={note.split(" ").length * 26} style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-            <Chip label={`${result.largest.name} last`} selected={chosen === "last"} onPress={() => { setChosen("last"); onFollowUp(result.largest!.name); }} />
-            <Chip label="Keep this order" selected={chosen === "keep"} onPress={() => { setChosen("keep"); onFollowUp(null); }} />
+    <View style={{ flex: 1 }}>
+      <ScrollView
+        ref={scroll}
+        style={{ flex: 1 }}
+        contentContainerStyle={{ flexGrow: 1, justifyContent: "center", paddingVertical: 8 }}
+        showsVerticalScrollIndicator={false}
+        onContentSizeChange={() => scroll.current?.scrollToEnd({ animated: true })}
+      >
+        <View style={{ paddingHorizontal: gutter, gap: layout.stack.section, maxWidth: layout.column + 2 * gutter, width: "100%", alignSelf: "center" }}>
+          <Rise style={{ gap: layout.stack.tight }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+              <AgentDot busy={!result && !error} />
+              <Eyebrow>Your agent · Muse Spark by Meta</Eyebrow>
+            </View>
+            <Text accessibilityRole="header" style={[t.title1, { color: p.ink }]}>
+              Pricing your life.
+            </Text>
           </Rise>
-        ) : null}
-        {error ? (
-          // A failed preview used to be a dead end with no control on screen.
-          <Rise style={{ flexDirection: "row", gap: 8 }}>
-            <Chip label="Try again" onPress={() => setAttempt((n) => n + 1)} style={{ flex: 1 }} />
-            <Chip label="Change my picks" onPress={onRestart} style={{ flex: 1 }} />
-          </Rise>
-        ) : null}
+          <Glass style={{ padding: layout.cardPad, gap: 12, minHeight: 68 }}>
+            {rows.map((r) => (
+              <AgentRow key={r.id} row={r} />
+            ))}
+            {error ? <Text style={[type.callout, { color: p.danger }]}>{error}</Text> : null}
+          </Glass>
+          {note ? <StreamedNote text={note} /> : null}
+          {result?.largest && note ? (
+            <Rise delay={note.split(" ").length * 26} style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+              <Chip label={`${result.largest.name} last`} selected={chosen === "last"} onPress={() => { setChosen("last"); onFollowUp(result.largest!.name); }} />
+              <Chip label="Keep this order" selected={chosen === "keep"} onPress={() => { setChosen("keep"); onFollowUp(null); }} />
+            </Rise>
+          ) : null}
+          {error ? (
+            // A failed preview used to be a dead end with no control on screen.
+            <Rise style={{ flexDirection: "row", gap: 8 }}>
+              <Chip label="Try again" onPress={() => setAttempt((n) => n + 1)} style={{ flex: 1 }} />
+              <Chip label="Change my picks" onPress={onRestart} style={{ flex: 1 }} />
+            </Rise>
+          ) : null}
+        </View>
+      </ScrollView>
+      {/* A scroll edge, not a hard cut: lines scrolling up fade into the page before they reach the header. */}
+      <View pointerEvents="none" style={{ position: "absolute", top: 0, left: 0, right: 0, height: layout.stack.section, transform: [{ scaleY: -1 }] }}>
+        <EdgeFade height={layout.stack.section} />
       </View>
-    </ScrollView>
+    </View>
   );
 }
 

@@ -162,14 +162,14 @@ export function VotePair({ a, b, round, rounds, onVote }: { a: Entry; b: Entry; 
   });
 
   return (
-    <View style={{ flex: 1, gap: 16 }}>
+    <View style={{ flex: 1, gap: layout.stack.section }}>
       <Rise style={{ paddingHorizontal: gutter, gap: layout.stack.tight, width: "100%", maxWidth: side ? 932 + 2 * gutter : undefined, alignSelf: "center" }}>
         <Eyebrow>{`This or that · ${round} of ${rounds}`}</Eyebrow>
         <Text accessibilityRole="header" style={[t.title1, { color: p.ink }]}>
           Which one is more <Text style={{ fontFamily: fonts.displayItalic, color: p.accentText }}>you</Text>?
         </Text>
       </Rise>
-      <View style={{ flex: 1, flexDirection: side ? "row" : "column", gap: 12, paddingHorizontal: side ? gutter : 16, maxWidth: 932 + 2 * gutter, width: "100%", alignSelf: "center" }}>
+      <View style={{ flex: 1, flexDirection: side ? "row" : "column", gap: 12, paddingHorizontal: gutter, maxWidth: 932 + 2 * gutter, width: "100%", alignSelf: "center" }}>
         {[a, b].map((e, i) => (
           <Animated.View key={e.id} style={{ flex: 1, opacity: fade[i], transform: [{ scale: grow[i]! }] }}>
             <View ref={refs[i]} collapsable={false} style={{ flex: 1 }}>
@@ -178,7 +178,7 @@ export function VotePair({ a, b, round, rounds, onVote }: { a: Entry; b: Entry; 
           </Animated.View>
         ))}
       </View>
-      <View style={{ flexDirection: "row", gap: 12, paddingHorizontal: side ? gutter : 16, maxWidth: 560 + 2 * gutter, width: "100%", alignSelf: "center" }}>
+      <View style={{ flexDirection: "row", gap: 12, paddingHorizontal: gutter, maxWidth: 560 + 2 * gutter, width: "100%", alignSelf: "center" }}>
         <Chip label="Both" onPress={() => pick("both")} style={{ flex: 1 }} />
         <Chip label="Neither" onPress={() => pick("neither")} style={{ flex: 1 }} />
       </View>

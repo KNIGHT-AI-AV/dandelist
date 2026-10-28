@@ -108,11 +108,11 @@ export function Slideshow({ images, interval = 5200, style, children }: { images
       {images.length > 1 ? (
         <View pointerEvents="none" style={{ position: "absolute", top: 12, left: 14, right: 14, flexDirection: "row", gap: 4 }}>
           {images.map((img, i) => (
-            <View key={img.url} style={{ flex: 1, height: 2, borderRadius: 1, backgroundColor: "rgba(243,238,228,0.22)", overflow: "hidden" }}>
+            <View key={img.url} style={{ flex: 1, height: 2, borderRadius: 1, backgroundColor: p.onPhotoTrack, overflow: "hidden" }}>
               <Animated.View
                 style={{
                   height: 2,
-                  backgroundColor: p.ink,
+                  backgroundColor: p.onPhoto,
                   width: i < index ? "100%" : i === index ? progress.interpolate({ inputRange: [0, 1], outputRange: ["0%", "100%"] }) : "0%",
                 }}
               />

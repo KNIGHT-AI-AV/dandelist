@@ -43,7 +43,7 @@ export function LegalPage({ eyebrow, title, updated, sections }: { eyebrow: stri
       <View pointerEvents="none" style={{ position: "absolute", top: 0, left: 0, right: 0, height: insets.top + 64, transform: [{ scaleY: -1 }] }}>
         <EdgeFade height={insets.top + 64} />
       </View>
-      <IconButton icon="back" label="Back" onPress={() => (router.canGoBack() ? router.back() : router.replace("/"))} style={{ position: "absolute", top: insets.top + 4, left: 16 }} />
+      <IconButton icon="back" label="Back" onPress={() => (router.canGoBack() ? router.back() : router.replace("/"))} style={{ position: "absolute", top: insets.top + (layout.headerBar - layout.control.icon) / 2, left: layout.gutter(width) }} />
     </View>
   );
 }
