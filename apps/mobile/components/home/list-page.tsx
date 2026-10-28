@@ -1,0 +1,262 @@
+import { recurringBreakdown, upfrontCashCents } from "@dandelist/cost";
+import { router } from "expo-router";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Animated, Pressable, RefreshControl, ScrollView, Text, View, useWindowDimensions } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { AgentDot, Backdrop, EdgeFade, Eyebrow, Glass, Grain, Hairline, Icon, Money, PrimaryButton, QuietButton, Shade, Wordmark } from "../lux";
+import { ActionSheet, SheetRow } from "../list/action-sheet";
+import { choreo, delayFor } from "../list/choreo";
+import { AVATAR, CARD_GAP, DOCK_END, DOCK_LIFT, DOCK_PILL, DOCK_SEND, EMPTY_HEIGHT, cardHeights, toastBottom } from "../list/metrics";
+import { Presence, Rise, Swap } from "../list/presence";
+import { ListSkeleton } from "../list/skeleton";
+import { TierControl } from "../list/tier-control";
+import { Toast, type Note } from "../list/undo-toast";
+import { useRemovals } from "../list/use-removals";
+import { WishCard, WishFace, cardLabel } from "../list/wish-card";
+import { useAuth } from "../../lib/auth";
+import { formatCents } from "../../lib/money";
+import { haptic, usePress } from "../../lib/motion";
+import { UNDO_MS } from "../../lib/removal";
+import { layout, radius, space, type, usePalette, useType } from "../../lib/theme";
+import { loadWelcome, saveWelcome, toWishes } from "../../lib/welcome";
+import { useDandy } from "../../lib/dandy";
+import { useWishes, type Wish } from "../../lib/wishes";
+import { dockRoom } from "../inputs";
+import { useHome } from "./bridge";
+import { useTopRoom } from "./chrome";
+import { hostOf, midSentence, whenChecked } from "../../lib/words";
+import { rememberCard, type Rect } from "../../lib/zoom";
+
+/**
+ * After any sign-in (code, Apple, Google, GitHub), the list someone kept on the welcome screen becomes their first
+ * wishes. It runs once: the saved picks are cleared before the wishes are added, so a reload can't add them twice.
+ */
+function useAdoptWelcome(ready: boolean, add: ReturnType<typeof useWishes>["add"]) {
+  const started = useRef(false);
+  useEffect(() => {
+    if (!ready || started.current) return;
+    started.current = true;
+    void (async () => {
+      const kept = await loadWelcome();
+      if (!kept?.kept || (!kept.items.length && !kept.wish?.option)) return;
+      await saveWelcome(null);
+      for (const w of toWishes(kept)) await add(w).catch(() => null);
+    })();
+  }, [ready, add]);
+}
+
+/** True once `ms` have passed: waits under a second show nothing rather than a flash (NN/g, UI audit P2-26). */
+function useAfter(ms: number) {
+  const [on, setOn] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setOn(true), ms);
+    return () => clearTimeout(t);
+  }, [ms]);
+  return on;
+}
+
+/** Loading placeholders wait this long, so a quick load shows nothing rather than a flash. */
+const SKELETON_AFTER_MS = 200;
+
+const errorText = (e: unknown, fallback: string) => (e instanceof Error ? e.message : fallback);
+
+export function ListPage() {
+  const dandy = useDandy();
+  const auth = useAuth();
+  const home = useHome();
+  const top = useTopRoom();
+  const { wishes, status, error, reload, add, remove, setTier } = useWishes();
+  useAdoptWelcome(auth.status === "signedIn" && status === "ready", add);
+  const p = usePalette();
+  const t = useType();
+  const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const late = useAfter(SKELETON_AFTER_MS);
+  // When the wishes arrive after the screen (a cold start), the page builds itself top to bottom. When they are
+  // already here, the screen arrives with its navigation transition and nothing replays.
+  const [arriving] = useState(() => wishes.length === 0);
+  const appear = (order: number) => (arriving ? delayFor(order) : undefined);
+  // Cards that turn up later (a refresh, a delete the server refused) rise in rather than pop.
+  const [onScreenAtStart] = useState(() => new Set(wishes.map((w) => w.id)));
+  const cardAppear = (w: Wish, order: number) => (arriving ? delayFor(order) : onScreenAtStart.has(w.id) ? undefined : 0);
+
+  // Notes in the toast that aren't undo: a failed delete, tier change or refresh.
+  const [errorNote, setErrorNote] = useState<Note | null>(null);
+  const showError = useCallback((text: string) => setErrorNote({ key: `error:${Date.now()}`, text }), []);
+  useEffect(() => {
+    if (!errorNote) return;
+    const timer = setTimeout(() => setErrorNote(null), UNDO_MS);
+    return () => clearTimeout(timer);
+  }, [errorNote]);
+
+  const removals = useRemovals(remove, showError);
+  // Focus requests for the toast's Undo (see Toast's `claim`).
+  const [claim, setClaim] = useState(0);
+  const pendingId = removals.pending?.id;
+  const hidden = useMemo(() => new Set(pendingId ? [pendingId] : []), [pendingId]);
+  const visible = useMemo(() => wishes.filter((w) => !hidden.has(w.id)), [wishes, hidden]);
+  const heights = useMemo(() => cardHeights(wishes.map((w) => w.id), hidden), [wishes, hidden]);
+
+  // Quick actions: which card, where it sits, and what to do once the sheet has left. The sheet shows the store's
+  // copy of the wish (so a tier change shows at once) and keeps its own while a removal plays out under it.
+  const [quick, setQuick] = useState<{ wish: Wish; at: Rect } | null>(null);
+  const [quickOpen, setQuickOpen] = useState(false);
+  const afterQuick = useRef<(() => void) | null>(null);
+  const quickWish = quick ? (wishes.find((w) => w.id === quick.wish.id) ?? quick.wish) : null;
+  const closeQuick = useCallback((then?: () => void) => {
+    afterQuick.current = then ?? null;
+    setQuickOpen(false);
+  }, []);
+  const dismissQuick = useCallback(() => closeQuick(), [closeQuick]);
+  const onQuickClosed = useCallback(() => {
+    const then = afterQuick.current;
+    afterQuick.current = null;
+    setQuick(null);
+    then?.();
+  }, []);
+
+  const [pulling, setPulling] = useState(false);
+  const refresh = useCallback(async () => {
+    setPulling(true);
+    await reload();
+    setPulling(false);
+  }, [reload]);
+  // A failed refresh keeps the list on screen and says so in the toast; the full error state is for an empty list.
+  useEffect(() => {
+    if (status === "error" && error && wishes.length) showError(error);
+  }, [status, error]); // eslint-disable-line react-hooks/exhaustive-deps
+
+
+  const openWish = (w: Wish, at?: Rect) => {
+    // The detail zooms out of this card: remember where it is (by id, not by view) before navigating.
+    if (at) rememberCard(w.id, at);
+    router.push(`/wishes/${w.id}`);
+  };
+  const openQuick = (w: Wish, at: Rect) => {
+    haptic.select();
+    setQuick({ wish: w, at });
+    setQuickOpen(true);
+  };
+  const removeWish = (w: Wish, focusUndo: boolean) => {
+    removals.remove(w);
+    if (focusUndo) setClaim((c) => c + 1);
+  };
+
+  const items = visible.map((w) => w.item);
+  const monthly = recurringBreakdown(items).perMonth;
+  // The briefing is the agent's most recent real check, never an invented event (a typical price has no page).
+  const latest = visible.filter((w) => w.details.agent?.url).sort((a, b) => b.details.agent!.checkedAt.localeCompare(a.details.agent!.checkedAt))[0];
+  const gutter = layout.gutter(width);
+  const count = `${visible.length} ${visible.length === 1 ? "wish" : "wishes"}`;
+  const runLine = count;
+  const briefing = latest
+    ? `Priced ${midSentence(latest.name)} at ${formatCents(latest.item.upfrontCents)}, ${latest.details.agent!.status === "verified" ? "checked on" : "an estimate from"} ${hostOf(latest.details.agent!.url)} ${whenChecked(latest.details.agent!.checkedAt)}.`
+    : "";
+  const loading = (status === "loading" || status === "idle") && wishes.length === 0;
+  const pendingNote = removals.pending;
+  const note: Note | null = pendingNote
+    ? { key: pendingNote.id, text: `Removed ${pendingNote.name}`, action: { label: "Undo", onPress: () => removals.undo(pendingNote.id) } }
+    : errorNote;
+
+  return (
+    <View style={{ flex: 1 }}>
+      <ScrollView
+        refreshControl={<RefreshControl refreshing={pulling} onRefresh={refresh} tintColor={p.accent} colors={[p.accent]} progressBackgroundColor={p.surface} progressViewOffset={insets.top} />}
+        style={{ scrollbarWidth: "thin", scrollbarColor: `rgba(${p.inkRgb},0.2) transparent` } as object}
+        contentContainerStyle={{ paddingTop: top, paddingBottom: dockRoom(home.dock || DOCK_PILL, insets.bottom), paddingHorizontal: gutter, width: "100%", maxWidth: layout.list + 2 * gutter, alignSelf: "center" }}
+      >
+        {/* The content area. The loading placeholders lie over it and cross-fade into what arrives. */}
+        <View>
+          <Presence show={visible.length > 0} appear={appear(0)}>
+            <View style={{ paddingTop: layout.stack.section, gap: layout.stack.tight }}>
+              <Eyebrow>The list</Eyebrow>
+              <Money cents={upfrontCashCents(items)} size="hero" />
+              <Swap k={runLine}>
+                <Text style={[type.footnote, { color: p.ink2 }]}>{runLine}</Text>
+              </Swap>
+            </View>
+          </Presence>
+
+          <Presence show={!!latest} appear={appear(1)}>
+            {latest ? (
+              <Glass style={{ marginTop: layout.stack.base, padding: layout.cardPad, gap: layout.stack.tight }}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: space[8] }}>
+                  <AgentDot />
+                  <Eyebrow>{dandy.name}</Eyebrow>
+                </View>
+                <Swap k={briefing}>
+                  <Text style={[type.callout, { color: p.ink }]}>{briefing}</Text>
+                </Swap>
+              </Glass>
+            ) : null}
+          </Presence>
+
+          <View style={{ marginTop: layout.stack.base }}>
+            {wishes.map((w, i) => (
+              <Presence key={w.id} show={!hidden.has(w.id)} height={heights.get(w.id)} gap={CARD_GAP} appear={cardAppear(w, i + 2)}>
+                <WishCard w={w} hidden={hidden.has(w.id)} onOpen={openWish} onQuick={openQuick} onRemove={(x) => removeWish(x, true)} />
+              </Presence>
+            ))}
+
+            <Presence show={status === "error" && wishes.length === 0} appear={0}>
+              <Glass style={{ padding: layout.cardPad, gap: space[12] }}>
+                <Text style={[type.callout, { color: p.danger }]}>{error}</Text>
+                <PrimaryButton label="Try again" onPress={() => reload()} />
+              </Glass>
+            </Presence>
+
+            <Presence show={status === "ready" && visible.length === 0} appear={0}>
+              <View style={{ height: EMPTY_HEIGHT, borderRadius: radius.lg, borderCurve: "continuous", overflow: "hidden", justifyContent: "flex-end", padding: layout.cardPad, gap: space[12] }}>
+                <Backdrop source={require("../../assets/backdrop.jpg")} />
+                <Shade from={0.1} />
+                <Eyebrow color={p.ink}>Your first wish</Eyebrow>
+                <Text style={[t.title1, { color: p.ink }]}>What do you want?</Text>
+                <Text style={[type.callout, { color: p.ink2 }]}>{`Tell ${dandy.name} below. You get the real price, and what it costs to keep.`}</Text>
+              </View>
+            </Presence>
+          </View>
+
+          <Presence show={late && loading} appear={0} collapse={false} rise={false} style={{ position: "absolute", top: 0, left: 0, right: 0 }}>
+            <ListSkeleton />
+          </Presence>
+        </View>
+      </ScrollView>
+
+      <Toast note={note} bottom={toastBottom(insets.bottom)} side={gutter} claim={claim} onHold={removals.hold} onRelease={removals.release} />
+
+      {quick && quickWish ? (
+        <ActionSheet
+          anchor={quick.at}
+          open={quickOpen}
+          label={quickWish.name}
+          onRequestClose={dismissQuick}
+          onClosed={onQuickClosed}
+          preview={
+            <Pressable accessibilityRole="button" accessibilityLabel={cardLabel(quickWish)} onPress={() => closeQuick(() => openWish(quickWish, quick.at))} style={{ flex: 1, borderRadius: radius.lg, borderCurve: "continuous", overflow: "hidden" }}>
+              <WishFace w={quickWish} still />
+            </Pressable>
+          }
+        >
+          <Rise delay={delayFor(1)}>
+            <TierControl value={quickWish.tier} onChange={(tier) => setTier(quickWish.id, tier).catch((e: unknown) => showError(errorText(e, "Couldn't save the wish.")))} />
+          </Rise>
+          <Rise delay={delayFor(2)}>
+            <Hairline style={{ marginVertical: space[8] }} />
+            <SheetRow label="Open" onPress={() => closeQuick(() => openWish(quickWish, quick.at))} />
+          </Rise>
+          <Rise delay={delayFor(3)}>
+            <SheetRow
+              label="Remove"
+              danger
+              onPress={() => {
+                // The card fades out under its lifted copy while the sheet leaves, so the two read as one.
+                removeWish(quickWish, false);
+                closeQuick(() => setClaim((c) => c + 1));
+              }}
+            />
+          </Rise>
+        </ActionSheet>
+      ) : null}
+    </View>
+  );
+}

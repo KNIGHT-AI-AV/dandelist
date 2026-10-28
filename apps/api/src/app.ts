@@ -3,6 +3,7 @@ import { cors } from "hono/cors";
 import { agentRoutes, type AgentDeps } from "./agent/routes";
 import { authRoutes, requireAuth, type AuthVars } from "./auth";
 import { dreamRoutes } from "./dream/routes";
+import { fxRoutes } from "./fx";
 import { guestRoutes } from "./guest";
 import { poolSource } from "./pool";
 import { previewRoutes } from "./preview";
@@ -40,6 +41,7 @@ export function createApp(deps: AppDeps) {
     });
   });
 
+  app.route("/fx", fxRoutes(deps));
   app.route("/auth", authRoutes(deps));
   app.route("/wishes", wishRoutes(deps));
   app.route("/agent", agentRoutes(deps));

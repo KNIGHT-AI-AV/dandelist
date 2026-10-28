@@ -9,6 +9,7 @@ import { StatusBar } from "expo-status-bar";
 import { View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AuthProvider } from "../lib/auth";
+import { CurrencyProvider } from "../lib/currency";
 import { ThemeProvider, usePalette } from "../lib/theme";
 import { WishProvider } from "../lib/wishes";
 
@@ -45,13 +46,15 @@ function Root() {
   return (
     <SafeAreaProvider>
       <AuthProvider>
-        <WishProvider>
-          <StatusBar style={p.scheme === "dark" ? "light" : "dark"} />
-          <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: p.bg } }}>
-            {/* The detail grows out of its card over the list, so the list stays underneath (UI audit P1-17). */}
-            <Stack.Screen name="wishes/[id]" options={{ presentation: "transparentModal", animation: "none", contentStyle: { backgroundColor: "transparent" } }} />
-          </Stack>
-        </WishProvider>
+        <CurrencyProvider>
+          <WishProvider>
+            <StatusBar style={p.scheme === "dark" ? "light" : "dark"} />
+            <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: p.bg } }}>
+              {/* The detail grows out of its card over the list, so the list stays underneath (UI audit P1-17). */}
+              <Stack.Screen name="wishes/[id]" options={{ presentation: "transparentModal", animation: "none", contentStyle: { backgroundColor: "transparent" } }} />
+            </Stack>
+          </WishProvider>
+        </CurrencyProvider>
       </AuthProvider>
     </SafeAreaProvider>
   );

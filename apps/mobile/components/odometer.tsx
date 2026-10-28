@@ -391,11 +391,13 @@ function Crossfade(props: OdometerProps) {
     if (props.rollOnMount) onLand?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  const hasPrefix = smallPrefix && /^\D/.test(shown);
+  // "$", "€" or "CN¥": everything before the first digit.
+  const prefix = smallPrefix ? (shown.match(/^\D+/)?.[0] ?? "") : "";
+  const hasPrefix = prefix.length > 0;
   return (
     <Animated.View style={[{ height: H, flexDirection: "row", alignSelf: align === "right" ? "flex-end" : "flex-start", opacity: o }, style]} accessible accessibilityRole={ROLE} accessibilityLabel={figure} accessibilityLiveRegion={live ? "polite" : "none"}>
-      {hasPrefix ? <Text style={[text, { fontSize: size * 0.5, color: prefixColor, marginRight: size * 0.04, transform: [{ translateY: prefixLift }] }]}>{shown[0]}</Text> : null}
-      <Text style={[text, { color: props.color ?? p.ink, letterSpacing: props.tracking }]}>{hasPrefix ? shown.slice(1) : shown}</Text>
+      {hasPrefix ? <Text style={[text, { fontSize: size * 0.5, color: prefixColor, marginRight: size * 0.04, transform: [{ translateY: prefixLift }] }]}>{prefix}</Text> : null}
+      <Text style={[text, { color: props.color ?? p.ink, letterSpacing: props.tracking }]}>{shown.slice(prefix.length)}</Text>
     </Animated.View>
   );
 }
