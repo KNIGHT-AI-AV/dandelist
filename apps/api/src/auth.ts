@@ -60,6 +60,9 @@ export function requireAuth(deps: Pick<AuthDeps, "db" | "jwtSecret" | "now">): M
 export function authRoutes(deps: AuthDeps) {
   const app = new Hono<{ Variables: AuthVars }>();
   const { db } = deps;
+  const judge = deps.judge
+    ? { email: normalizeEmail(deps.judge.email), hash: hashCode(deps.codePepper, normalizeEmail(deps.judge.email), deps.judge.code) }
+    : undefined;
   const startsPerIp = new RateLimiter(10, 60 * 60 * 1000);
   const verifiesPerIp = new RateLimiter(30, 60 * 60 * 1000);
   const sendsNew = new RateLimiter(300, 60 * 60 * 1000);
@@ -78,6 +81,12 @@ export function authRoutes(deps: AuthDeps) {
     return { accessToken, refreshToken: token, expiresIn: 15 * 60 };
   }
 
+  async function issueEmailSession(email: string) {
+    await db.query("insert into users (email) values ($1) on conflict (email) do nothing", [email]);
+    const user = (await db.query<{ id: string; email: string }>("select id, email from users where email = $1", [email])).rows[0]!;
+    return { user, ...(await issueSession(user.id)) };
+  }
+
   app.post("/email/start", async (c) => {
     const parsed = emailBody.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: "Enter a valid email address." }, 400);
@@ -85,24 +94,25 @@ export function authRoutes(deps: AuthDeps) {
     if (!startsPerIp.take(ip(c), nowMs)) return c.json({ error: "Too many sign-in attempts from this network. Try again in an hour." }, 429);
     const email = normalizeEmail(parsed.data.email);
 
+    // The configured judge code is reusable. Shared one-time rows would let one caller exhaust it for every judge.
+    // Keep the network limit above, but do not create or count email-code rows for this account.
+    if (email === judge?.email) return c.body(null, 204);
+
     // Past the per-email cap we stop sending but still answer 204, so a stranger can't lock someone out:
     // the codes already in their inbox keep working.
     const hourAgo = new Date(nowMs - 60 * 60 * 1000).toISOString();
     const recent = await db.query<{ n: string }>("select count(*) as n from email_codes where email = $1 and created_at > $2", [email, hourAgo]);
     if (Number(recent.rows[0]?.n ?? 0) >= MAX_CODES_PER_HOUR) return c.body(null, 204);
 
-    const isJudge = deps.judge && email === normalizeEmail(deps.judge.email);
     // Separate hourly send budgets for new and existing addresses, so a flood of fake signups can't starve
     // existing users. Hitting either one answers exactly like a normal send, so the reply never reveals
     // whether an account exists.
-    if (!isJudge) {
-      const known = (await db.query("select 1 from users where email = $1", [email])).rows.length > 0;
-      if (!(known ? sendsKnown : sendsNew).take("all", nowMs)) {
-        console.warn(`sign-in email budget reached (${known ? "existing" : "new"} addresses); skipping send`);
-        return c.body(null, 204);
-      }
+    const known = (await db.query("select 1 from users where email = $1", [email])).rows.length > 0;
+    if (!(known ? sendsKnown : sendsNew).take("all", nowMs)) {
+      console.warn(`sign-in email budget reached (${known ? "existing" : "new"} addresses); skipping send`);
+      return c.body(null, 204);
     }
-    const code = isJudge ? deps.judge!.code : newCode();
+    const code = newCode();
     const expires = new Date(nowMs + CODE_TTL_MS).toISOString();
     await db.query("insert into email_codes (email, code_hash, expires_at, created_at) values ($1, $2, $3, $4)", [
       email,
@@ -110,7 +120,7 @@ export function authRoutes(deps: AuthDeps) {
       expires,
       deps.now().toISOString(),
     ]);
-    if (!isJudge) await deps.mailer.sendCode(email, code);
+    await deps.mailer.sendCode(email, code);
     return c.body(null, 204);
   });
 
@@ -119,6 +129,13 @@ export function authRoutes(deps: AuthDeps) {
     if (!parsed.success) return c.json({ error: "Enter the 6-digit code from your email." }, 400);
     if (!verifiesPerIp.take(ip(c), deps.now().getTime())) return c.json({ error: "Too many tries from this network. Try again in an hour." }, 429);
     const email = normalizeEmail(parsed.data.email);
+    if (email === judge?.email) {
+      // Both hashes have the same fixed size; sameHash uses timingSafeEqual for the secret comparison.
+      if (!sameHash(judge.hash, hashCode(deps.codePepper, email, parsed.data.code))) {
+        return c.json({ error: "That code doesn't match. Check the email and try again." }, 400);
+      }
+      return c.json(await issueEmailSession(email));
+    }
     const now = deps.now().toISOString();
     const active = await db.query("select 1 from email_codes where email = $1 and consumed_at is null and expires_at > $2 limit 1", [email, now]);
     if (!active.rows.length) return c.json({ error: "That code has expired. Request a new one." }, 400);
@@ -135,9 +152,7 @@ export function authRoutes(deps: AuthDeps) {
     if (!row) return c.json({ error: "That code doesn't match. Check the email and try again." }, 400);
     const consumed = await db.query("update email_codes set consumed_at = $2 where id = $1 and consumed_at is null returning id", [row.id, now]);
     if (!consumed.rows.length) return c.json({ error: "That code was already used. Request a new one." }, 400);
-    await db.query("insert into users (email) values ($1) on conflict (email) do nothing", [email]);
-    const user = (await db.query<{ id: string; email: string }>("select id, email from users where email = $1", [email])).rows[0]!;
-    return c.json({ user, ...(await issueSession(user.id)) });
+    return c.json(await issueEmailSession(email));
   });
 
   app.post("/refresh", async (c) => {

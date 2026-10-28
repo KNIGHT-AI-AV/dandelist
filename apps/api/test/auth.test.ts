@@ -35,6 +35,12 @@ const post = (path: string, body: unknown, token?: string) =>
     body: JSON.stringify(body),
   });
 const get = (path: string, token: string) => app.request(path, { headers: { Authorization: `Bearer ${token}` } });
+const postFromIp = (path: string, body: unknown, ip: string) =>
+  app.request(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Forwarded-For": ip },
+    body: JSON.stringify(body),
+  });
 
 async function signIn(email = "Ada@Example.com") {
   expect((await post("/auth/email/start", { email })).status).toBe(204);
@@ -114,6 +120,48 @@ describe("email-code sign-in", () => {
     expect((await post("/auth/email/start", { email: JUDGE.email })).status).toBe(204);
     expect(mail).toHaveLength(0);
     expect((await post("/auth/email/verify", { email: JUDGE.email, code: JUDGE.code })).status).toBe(200);
+  });
+
+  it("allows ten judge sign-ins in one hour without creating shared email codes", async () => {
+    const refreshTokens = new Set<string>();
+    for (let i = 0; i < 10; i++) {
+      const ip = `192.0.2.${i + 1}`;
+      const email = "  JUDGE@DANDELIST.COM  ";
+      expect((await postFromIp("/auth/email/start", { email }, ip)).status).toBe(204);
+      const res = await postFromIp("/auth/email/verify", { email, code: JUDGE.code }, ip);
+      expect(res.status).toBe(200);
+      const session = (await res.json()) as { accessToken: string; refreshToken: string };
+      refreshTokens.add(session.refreshToken);
+      expect((await get("/me", session.accessToken)).status).toBe(200);
+    }
+    expect(refreshTokens.size).toBe(10);
+    expect(mail).toHaveLength(0);
+    expect((await db.query("select count(*) as n from email_codes")).rows[0]).toEqual({ n: 0 });
+  });
+
+  it("does not let wrong judge guesses from one network exhaust another judge's code", async () => {
+    await postFromIp("/auth/email/start", { email: JUDGE.email }, "192.0.2.1");
+    for (let i = 0; i < 5; i++) {
+      expect((await postFromIp("/auth/email/verify", { email: JUDGE.email, code: "000000" }, "192.0.2.1")).status).toBe(400);
+    }
+    expect((await postFromIp("/auth/email/verify", JUDGE, "192.0.2.2")).status).toBe(200);
+  });
+
+  it("keeps the judge verification limit per network", async () => {
+    await postFromIp("/auth/email/start", { email: JUDGE.email }, "192.0.2.1");
+    for (let i = 0; i < 30; i++) {
+      expect((await postFromIp("/auth/email/verify", { email: JUDGE.email, code: "000000" }, "192.0.2.1")).status).toBe(400);
+    }
+    expect((await postFromIp("/auth/email/verify", JUDGE, "192.0.2.1")).status).toBe(429);
+    expect((await postFromIp("/auth/email/verify", JUDGE, "192.0.2.2")).status).toBe(200);
+  });
+
+  it("keeps the judge start limit per network", async () => {
+    for (let i = 0; i < 10; i++) {
+      expect((await postFromIp("/auth/email/start", { email: JUDGE.email }, "192.0.2.1")).status).toBe(204);
+    }
+    expect((await postFromIp("/auth/email/start", { email: JUDGE.email }, "192.0.2.1")).status).toBe(429);
+    expect((await postFromIp("/auth/email/start", { email: JUDGE.email }, "192.0.2.2")).status).toBe(204);
   });
 
   it("deletes the account and everything that hangs off it", async () => {
