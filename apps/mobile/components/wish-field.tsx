@@ -7,7 +7,7 @@ import { fonts, layout, type, usePalette } from "../lib/theme";
 export const WISH_MAX = 300;
 const COUNT_FROM = 60;
 /** Three lines of the serif to start; the field grows with the wish to five lines, then scrolls inside itself. */
-const FIELD_MIN = 96;
+export const FIELD_MIN = 96;
 const FIELD_MAX = 5 * (type.title3.lineHeight ?? 0) + 2 * layout.stack.tight;
 // The browser draws its own focus box around text fields; the drawn underline is the focus cue here.
 const NO_OUTLINE = Platform.OS === "web" ? ({ outlineWidth: 0, outlineStyle: "none" } as object) : null;
@@ -16,8 +16,8 @@ const NO_OUTLINE = Platform.OS === "web" ? ({ outlineWidth: 0, outlineStyle: "no
  * The wish, written in the app's serif. Return sends it (Shift+Return makes a new line on the web); focus draws a
  * line across from the left; a quiet countdown appears near the limit. The parent owns the text and the submit.
  */
-export const WishField = forwardRef<TextInput, { value: string; onChangeText(t: string): void; onSubmit(): void; editable: boolean; placeholder: string }>(
-  function WishField({ value, onChangeText, onSubmit, editable, placeholder }, ref) {
+export const WishField = forwardRef<TextInput, { value: string; onChangeText(t: string): void; onSubmit(): void; editable: boolean; placeholder: string; inset?: number }>(
+  function WishField({ value, onChangeText, onSubmit, editable, placeholder, inset = 0 }, ref) {
     const p = usePalette();
     const reduced = useReducedMotion();
     const [focused, setFocused] = useState(false);
@@ -62,7 +62,7 @@ export const WishField = forwardRef<TextInput, { value: string; onChangeText(t: 
           scrollEnabled={height >= FIELD_MAX}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
-          style={[type.title3, { fontFamily: fonts.titleItalic, color: p.ink, height, paddingVertical: layout.stack.tight, textAlignVertical: "top" }, NO_OUTLINE]}
+          style={[type.title3, { fontFamily: fonts.titleItalic, color: p.ink, height, paddingVertical: layout.stack.tight, paddingRight: inset, textAlignVertical: "top" }, NO_OUTLINE]}
         />
         <View style={{ height: 1, backgroundColor: p.line }}>
           <Animated.View
