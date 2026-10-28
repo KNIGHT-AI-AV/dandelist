@@ -8,6 +8,7 @@ import { ServiceQuote, WishReady } from "../components/dream/quotes";
 import { Composer, KeyboardDock, KeyboardScroll, dockRoom } from "../components/inputs";
 import { AgentDot, Chip, Eyebrow, Glass, Grain, IconButton, PrimaryButton } from "../components/lux";
 import { Rise } from "../components/welcome/kit";
+import { ListeningStrip, MicButton, useVoiceWish } from "../components/voice/say-wish";
 import { useAuth } from "../lib/auth";
 import { dreamTurn, wishFrom, type DreamAction, type DreamEvent, type FeedItem, type LifeContext, type Widget } from "../lib/dream";
 import { haptic } from "../lib/motion";
@@ -40,6 +41,12 @@ export default function Dream() {
   const [dock, setDock] = useState<number>(layout.control.primary);
   const session = useRef<string | null>(null);
   const scroll = useRef<ScrollView>(null);
+  // Say it instead of typing: the words land in the composer to read over, then send as usual.
+  const voice = useVoiceWish({
+    api: auth.api,
+    onHeard: setText,
+    onError: (message) => message && setFeed((f) => [...f, { id: nextId(), kind: "agent", text: message }]),
+  });
 
   useEffect(() => {
     if (auth.status !== "signedIn") return;
@@ -163,7 +170,16 @@ export default function Dream() {
       </KeyboardScroll>
 
       <KeyboardDock onHeight={setDock} maxWidth={layout.column}>
-        <Composer value={text} onChangeText={setText} onSend={submit} placeholder="Tell me what you want..." label="Message" busy={busy} />
+        <Composer
+          value={text}
+          onChangeText={setText}
+          onSend={submit}
+          placeholder="Tell me what you want..."
+          label="Message"
+          busy={busy}
+          idleAction={voice.supported ? <MicButton voice={voice} compact /> : undefined}
+          cover={voice.phase !== "idle" ? <ListeningStrip voice={voice} /> : undefined}
+        />
       </KeyboardDock>
 
       <View pointerEvents="box-none" style={{ position: "absolute", top: insets.top + space[4], left: gutter, right: gutter, flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>

@@ -71,7 +71,7 @@ function MicGlyph({ color }: { color: string }) {
  * breathes with the voice (the halo follows the loudness on a critically damped spring); while the words are being
  * written it holds still with the agent dot.
  */
-export function MicButton({ voice }: { voice: VoiceWish }) {
+export function MicButton({ voice, compact = false }: { voice: VoiceWish; compact?: boolean }) {
   const p = usePalette();
   const reduced = useReducedMotion();
   const press = usePress(0.94);
@@ -95,7 +95,8 @@ export function MicButton({ voice }: { voice: VoiceWish }) {
       hitSlop={8}
     >
       <Animated.View style={{ width: SIZE, height: SIZE, transform: [{ scale: press.scale }] }}>
-        {listening ? (
+        {/* Inside the chat capsule there is no room for the halo; the bars beside it carry the voice instead. */}
+        {listening && !compact ? (
           <Animated.View
             pointerEvents="none"
             style={{
@@ -131,6 +132,8 @@ const LOUD = 6;
 const BAR_W = 3;
 const BAR_GAP = 3;
 const BAR_MAX = 40;
+/** Bar height for a loudness reading. Loudness reads better on a curve: quiet speech still moves, a shout doesn't clip. */
+const barHeight = (level: number, max: number) => Math.max(3, Math.min(max, 3 + Math.pow(Math.min(1, level * LOUD), 0.7) * (max - 3)));
 
 const clock = (ms: number) => {
   const s = Math.floor(ms / 1000);
@@ -177,8 +180,7 @@ export function ListeningPanel({ voice, height }: { voice: VoiceWish; height: nu
       </View>
       <View style={{ height: BAR_MAX, width, flexDirection: "row", alignItems: "center", gap: BAR_GAP, overflow: "hidden" }} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
         {bars.map((lv, i) => {
-          // Loudness reads better on a curve: quiet speech still moves, a shout doesn't clip every bar.
-          const h = hearing ? 3 : Math.max(3, Math.min(BAR_MAX, 3 + Math.pow(Math.min(1, lv * LOUD), 0.7) * (BAR_MAX - 3)));
+          const h = hearing ? 3 : barHeight(lv, BAR_MAX);
           return <View key={i} style={{ width: BAR_W, height: h, borderRadius: BAR_W / 2, backgroundColor: i === BARS - 1 && !hearing ? p.ink : p.ink2 }} />;
         })}
         {hearing && !reduced ? (
@@ -199,5 +201,44 @@ export function ListeningPanel({ voice, height }: { voice: VoiceWish; height: nu
       </View>
       <Text style={[type.footnote, { color: p.ink3 }]}>{hearing ? "One moment." : "Say it like you'd tell a friend. It stops when you pause."}</Text>
     </Animated.View>
+  );
+}
+
+const STRIP_BARS = 22;
+const STRIP_MAX = 20;
+
+/**
+ * The listening state inside the chat capsule, one line tall: the newest bars, the clock, and "Writing it down" while
+ * Meta has the clip. The capsule keeps its height, so the conversation above doesn't move.
+ */
+export function ListeningStrip({ voice }: { voice: VoiceWish }) {
+  const p = usePalette();
+  const hearing = voice.phase === "hearing";
+  const frozen = useRef<number[]>([]);
+  if (!hearing) frozen.current = voice.levels;
+  const shown = hearing ? frozen.current : voice.levels;
+  const bars = Array.from({ length: STRIP_BARS }, (_, i) => shown[shown.length - STRIP_BARS + i] ?? 0);
+  return (
+    <View
+      accessibilityLiveRegion="polite"
+      accessibilityLabel={hearing ? "Writing down your wish" : `Listening, ${clock(voice.elapsedMs)}`}
+      style={{ flexDirection: "row", alignItems: "center", gap: layout.stack.tight }}
+    >
+      {hearing ? (
+        <>
+          <AgentDot busy />
+          <Text style={[type.footnote, { color: p.ink2 }]}>Writing it down...</Text>
+        </>
+      ) : (
+        <>
+          <View style={{ height: STRIP_MAX, flexDirection: "row", alignItems: "center", gap: 2 }} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+            {bars.map((lv, i) => (
+              <View key={i} style={{ width: 2, height: barHeight(lv, STRIP_MAX), borderRadius: 1, backgroundColor: i === STRIP_BARS - 1 ? p.ink : p.ink2 }} />
+            ))}
+          </View>
+          <Text style={[type.figure, { color: p.ink3 }]}>{clock(voice.elapsedMs)}</Text>
+        </>
+      )}
+    </View>
   );
 }
