@@ -191,6 +191,37 @@ describe("archive store", () => {
     expect(await archive.contribute("Kyoto", "place", [photo(13)], "anonymous")).toBe(0);
   });
 
+  it("withdraws omitted seed photos without deleting provenance or changing other associations", async () => {
+    const entity = { id: "kyoto", domain: "Travel", category: "City breaks", subcategory: "Japan", name: "Kyoto", kind: "place", priceModel: "trip", tier: 1 };
+    const other = { ...entity, id: "japan-trip", name: "Japan trip", kind: "trip" };
+    const reviewed = [photo(90, { hero: true }), photo(91), photo(92)];
+    await loadSeed(db, await seed([{ ...entity, photos: reviewed }, { ...other, photos: reviewed }]));
+    const archive = pgArchive(db);
+    await archive.contribute("Kyoto", "place", [photo(93), photo(94)], "user-a");
+    await archive.contribute("Kyoto", "place", [photo(93), photo(94)], "user-b");
+    const before = (await db.query("select id, url, source_page, photographer, license from archive_photos where entity_id = 'kyoto' and contributed_by = 'seed' order by url")).rows;
+    const revised = await seed([{ ...entity, photos: [] }, { ...other, photos: reviewed }]);
+    expect(await loadSeed(db, revised)).toMatchObject({ entities: 2, photos: 3 });
+    expect((await archive.lookup("Kyoto", "place"))?.photos.map((p) => p.url).sort()).toEqual([photo(93).url, photo(94).url].sort());
+    expect((await archive.lookup("Japan trip", "place"))?.photos).toHaveLength(3);
+    const after = (await db.query("select id, url, source_page, photographer, license from archive_photos where entity_id = 'kyoto' and contributed_by = 'seed' order by url")).rows;
+    expect(after).toEqual(before);
+    expect((await db.query<{ status: string; hero: boolean }>("select status, hero from archive_photos where entity_id = 'kyoto' and contributed_by = 'seed'")).rows).toEqual(reviewed.map(() => ({ status: "rejected", hero: false })));
+    expect(await archive.contribute("Kyoto", "place", reviewed, "user-c")).toBe(0);
+    expect(await loadSeed(db, revised)).toBeNull();
+  });
+
+  it("does not keep a retired seed hero when a reviewed replacement set arrives", async () => {
+    const entity = { id: "kyoto", domain: "Travel", category: "City breaks", subcategory: "Japan", name: "Kyoto", kind: "place", priceModel: "trip", tier: 1 };
+    await loadSeed(db, await seed([{ ...entity, photos: [photo(100, { hero: true }), photo(101), photo(102)] }]));
+    await loadSeed(db, await seed([{ ...entity, photos: [photo(103, { hero: true }), photo(104), photo(105)] }]));
+    const hit = await pgArchive(db).lookup("Kyoto", "place");
+    expect(hit?.photos).toHaveLength(3);
+    expect(hit?.photos.filter((p) => p.hero).map((p) => p.url)).toEqual([photo(103).url]);
+    expect(hit?.photos.map((p) => p.url).sort()).toEqual([photo(103).url, photo(104).url, photo(105).url].sort());
+    expect((await db.query("select id from archive_photos where entity_id = 'kyoto'")).rows).toHaveLength(6);
+  });
+
   it("keeps something new waiting for review, however many people offer it", async () => {
     const archive = pgArchive(db);
     await archive.contribute("Faroe Islands", "place", [photo(20), photo(21)], "user-a");

@@ -27,7 +27,8 @@ const SEED = fileURLToPath(new URL("../../data/archive-seed.json", import.meta.u
  * Loads the master list into the archive when the seed file has changed since the last load: entities are
  * upserted, seed photos that pass the guard are added. Runs after the server is listening, so a big seed never
  * holds up a deploy's health check. Reviewed seed metadata takes ownership of matching entity/photo rows;
- * unrelated agent-contributed associations are left alone.
+ * omitted seed-owned photos are withdrawn without deleting their provenance. The photo list is authoritative
+ * for each included entity; unrelated entities and agent-contributed associations are left alone.
  */
 export async function loadSeed(db: Db, path = SEED): Promise<{ version: string; entities: number; photos: number } | null> {
   let raw: string;
@@ -51,7 +52,8 @@ export async function loadSeed(db: Db, path = SEED): Promise<{ version: string; 
          origin = 'seed', status = 'live', updated_at = now()`,
       [e.id, e.domain, e.category, e.subcategory, e.name, e.aliases ?? [], e.kind, e.priceModel, e.typical ?? null, e.running ?? null, e.tier, e.regions ?? ["US", "EU"]],
     );
-    for (const p of (e.photos ?? []).filter(admissible)) {
+    const reviewed = (e.photos ?? []).filter(admissible);
+    for (const p of reviewed) {
       const r = await db.query(
         `insert into archive_photos (entity_id, url, width, height, source, source_page, photographer, license, hero, status, contributed_by)
          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'approved', 'seed')
@@ -64,6 +66,11 @@ export async function loadSeed(db: Db, path = SEED): Promise<{ version: string; 
       );
       photos += r.rows.length;
     }
+    await db.query(
+      `update archive_photos set status = 'rejected', hero = false
+         where entity_id = $1 and contributed_by = 'seed' and not (url = any($2::text[]))`,
+      [e.id, reviewed.map((p) => p.url)],
+    );
   }
   await db.query("insert into archive_seed_runs (version, entities, photos) values ($1, $2, $3)", [version, entities.length, photos]);
   return { version, entities: entities.length, photos };
