@@ -8,4 +8,4 @@ export { CodeField, type CodeFieldHandle, type CodeFieldProps } from "./code-fie
 export { Composer, type ComposerProps } from "./composer";
 export { DismissKeyboard, KeyboardDock, KeyboardLift, KeyboardScroll, dockRoom, type KeyboardScrollProps } from "./keyboard";
 export { useKeyboard, useKeyboardLift, type KeyboardState } from "./use-keyboard";
-export { CODE_LENGTH, MONEY_MAX_CENTS, isEmail } from "./logic";
+export { CODE_LENGTH, MONEY_MAX_CENTS, centsToRaw, isEmail } from "./logic";

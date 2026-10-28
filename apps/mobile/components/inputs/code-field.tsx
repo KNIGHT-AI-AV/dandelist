@@ -2,7 +2,7 @@ import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState, 
 import { Animated, Platform, StyleSheet, TextInput, View, type StyleProp, type ViewStyle } from "react-native";
 import { ease, haptic, native, spring, step, useReducedMotion } from "../../lib/motion";
 import { layout, radius, type, usePalette } from "../../lib/theme";
-import { FieldError, Ring, useToggle, webInput } from "./field";
+import { FieldError, Ring, useToggle } from "./field";
 import { CODE_LENGTH, nextCode } from "./logic";
 import { useReveal } from "./reveal";
 import { CARET, CHECKING_LOW, CLEAR_MS, CODE_BOX, DIGIT, HIDDEN_INPUT_OPACITY, SHAKE } from "./tokens";
@@ -82,7 +82,6 @@ function Slot({ active, bad, children }: { active: boolean; bad: Animated.Value;
  * land as they're typed, and the sixth digit submits. `reject()` shakes, clears and keeps focus.
  */
 export const CodeField = forwardRef<CodeFieldHandle, CodeFieldProps>(function CodeField({ value, onChange, onComplete, busy = false, error, autoFocus, label = "Six-digit code", style }, ref) {
-  const p = usePalette();
   const reduced = useReducedMotion();
   const reveal = useReveal();
   const input = useRef<TextInput>(null);
@@ -190,7 +189,7 @@ export const CodeField = forwardRef<CodeFieldHandle, CodeFieldProps>(function Co
           selectionHandleColor="transparent"
           accessibilityLabel={label}
           accessibilityHint={error ?? undefined}
-          style={[StyleSheet.absoluteFill, type.body, { opacity: HIDDEN_INPUT_OPACITY, color: "transparent" }, webInput(p)]}
+          style={[StyleSheet.absoluteFill, type.body, { opacity: HIDDEN_INPUT_OPACITY, color: "transparent" }, Platform.OS === "web" ? ({ outlineWidth: 0 } as object) : null]}
         />
       </Animated.View>
       <FieldError message={error} />

@@ -1,9 +1,11 @@
 import type { LifeContext, Widget } from "@dandelist/catalogue/dream";
 import { useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { haptic } from "../../lib/motion";
 import { moneyIn } from "../../lib/dream";
 import { fonts, radius, usePalette, type } from "../../lib/theme";
+import { Field } from "../inputs";
+import { TARGET } from "../inputs/tokens";
 import { Eyebrow, Glass, PrimaryButton, Shade } from "../lux";
 import { GlassReveal } from "../reveal";
 import { Chip } from "../welcome/kit";
@@ -47,7 +49,7 @@ export function HomeBuilder({ w, onApply, onSearchNow, onRegion }: { w: HomeWidg
     <Glass style={{ padding: 18, gap: 18, borderRadius: radius.lg }}>
       <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
         <Eyebrow color={p.accent}>Your home</Eyebrow>
-        <Pressable accessibilityRole="button" onPress={onRegion} hitSlop={8}>
+        <Pressable accessibilityRole="button" accessibilityLabel={`In ${w.region}`} onPress={onRegion} hitSlop={8} style={{ minHeight: TARGET, justifyContent: "center" }}>
           <Text style={[type.footnote, { fontFamily: fonts.label, color: p.ink2 }]}>{`In ${w.region}  ▾`}</Text>
         </Pressable>
       </View>
@@ -177,13 +179,21 @@ export function RegionPicker({ current, onPick }: { current: LifeContext["home"]
           <Chip key={pl.label} label={pl.label} selected={current?.label === pl.label} onPress={() => { haptic.select(); onPick(pl); }} />
         ))}
       </View>
-      <TextInput
+      {/* A place, not an address: no address autofill (it would offer where they live now), but corrected spelling. */}
+      <Field
+        label="Somewhere else"
+        labelHidden
+        surface="plain"
         value={text}
         onChangeText={setText}
         placeholder="Somewhere else"
-        placeholderTextColor={p.ink3}
+        autoCapitalize="words"
+        autoCorrect
+        spellCheck
+        autoComplete="off"
+        textContentType="none"
+        returnKeyType="done"
         onSubmitEditing={() => text.trim() && onPick({ country: "", label: text.trim() })}
-        style={[type.callout, { minHeight: 48, paddingHorizontal: 16, borderRadius: radius.sm, borderWidth: StyleSheet.hairlineWidth, borderColor: p.hair, color: p.ink }]}
       />
     </Glass>
   );

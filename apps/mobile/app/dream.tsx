@@ -1,15 +1,17 @@
 import { Redirect, router } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Pressable, Text, View, useWindowDimensions, type ScrollView } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CarBuilder, HomeBuilder, RegionPicker } from "../components/dream/builders";
 import { SwipeDeck } from "../components/dream/deck";
 import { ServiceQuote, WishReady } from "../components/dream/quotes";
-import { AgentDot, Chip, Eyebrow, Glass, Grain, PrimaryButton } from "../components/lux";
+import { Composer, KeyboardDock, KeyboardScroll, dockRoom } from "../components/inputs";
+import { AgentDot, Chip, Eyebrow, Glass, Grain, IconButton, PrimaryButton } from "../components/lux";
 import { Rise } from "../components/welcome/kit";
 import { useAuth } from "../lib/auth";
 import { dreamTurn, wishFrom, type DreamAction, type DreamEvent, type FeedItem, type LifeContext, type Widget } from "../lib/dream";
-import { fonts, radius, usePalette, type } from "../lib/theme";
+import { haptic } from "../lib/motion";
+import { fonts, layout, radius, space, usePalette, type } from "../lib/theme";
 import { useWishes } from "../lib/wishes";
 import { Atmosphere } from "../components/atmosphere";
 
@@ -25,6 +27,8 @@ const nextId = () => `f${++seq}`;
 export default function Dream() {
   const p = usePalette();
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const gutter = layout.gutter(width);
   const auth = useAuth();
   const { add } = useWishes();
   const [feed, setFeed] = useState<FeedItem[]>([]);
@@ -32,6 +36,8 @@ export default function Dream() {
   const [busy, setBusy] = useState(false);
   const [life, setLife] = useState<LifeContext | null>(null);
   const [regionOpen, setRegionOpen] = useState(false);
+  // The docked composer's height, measured (it grows with its text); one capsule until the first layout.
+  const [dock, setDock] = useState<number>(layout.control.primary);
   const session = useRef<string | null>(null);
   const scroll = useRef<ScrollView>(null);
 
@@ -52,7 +58,10 @@ export default function Dream() {
     else if (e.type === "step") setFeed((f) => (f.some((x) => x.kind === "step" && x.id === e.id) ? f.map((x) => (x.kind === "step" && x.id === e.id ? { ...x, text: e.text, state: e.state } : x)) : [...f, { id: e.id, kind: "step", text: e.text, state: e.state }]));
     else if (e.type === "widget") push({ id: nextId(), kind: "widget", widget: e.widget });
     else if (e.type === "life") setLife(e.life);
-    else if (e.type === "error") push({ id: nextId(), kind: "agent", text: e.message });
+    else if (e.type === "error") {
+      haptic.error();
+      push({ id: nextId(), kind: "agent", text: e.message });
+    }
     setTimeout(() => scroll.current?.scrollToEnd({ animated: true }), 60);
   };
 
@@ -63,6 +72,7 @@ export default function Dream() {
     try {
       session.current = await dreamTurn(auth.apiStream, session.current, action, onEvent);
     } catch (e) {
+      haptic.error();
       push({ id: nextId(), kind: "agent", text: (e as Error).message });
     } finally {
       setBusy(false);
@@ -110,74 +120,55 @@ export default function Dream() {
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
       <Atmosphere />
-      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }}>
-        <ScrollView ref={scroll} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingTop: insets.top + 64, paddingBottom: 140, paddingHorizontal: 16, gap: 14, width: "100%", maxWidth: 600, alignSelf: "center" }}>
-          {!feed.length ? (
-            <Rise style={{ gap: 18, paddingTop: 24 }}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                <AgentDot />
-                <Eyebrow>Your agent · Muse Spark by Meta</Eyebrow>
-              </View>
-              <Text style={[type.title1, { color: p.ink }]}>
-                Tell me the life you <Text style={{ fontFamily: fonts.displayItalic, color: p.accent }}>want</Text>.
-              </Text>
-              <Text style={[type.callout, { color: p.ink2 }]}>Anything at all. I'll find the real thing, its price, and what it costs to keep.</Text>
-              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-                {IDEAS.map((i) => (
-                  <Chip key={i} label={i} onPress={() => submit(i)} />
-                ))}
-              </View>
+      <KeyboardScroll ref={scroll} keepEnd dock={dock} contentContainerStyle={{ paddingTop: insets.top + layout.contentTop, paddingBottom: dockRoom(dock, insets.bottom), paddingHorizontal: gutter, gap: space[12], width: "100%", maxWidth: layout.column + 2 * gutter, alignSelf: "center" }}>
+        {!feed.length ? (
+          <Rise style={{ gap: 18, paddingTop: 24 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+              <AgentDot />
+              <Eyebrow>Your agent · Muse Spark by Meta</Eyebrow>
+            </View>
+            <Text style={[type.title1, { color: p.ink }]}>
+              Tell me the life you <Text style={{ fontFamily: fonts.displayItalic, color: p.accent }}>want</Text>.
+            </Text>
+            <Text style={[type.callout, { color: p.ink2 }]}>Anything at all. I'll find the real thing, its price, and what it costs to keep.</Text>
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+              {IDEAS.map((i) => (
+                <Chip key={i} label={i} onPress={() => submit(i)} />
+              ))}
+            </View>
+          </Rise>
+        ) : null}
+        {feed.map((f) =>
+          f.kind === "you" ? (
+            <Rise key={f.id} style={{ alignSelf: "flex-end", maxWidth: "86%" }}>
+              <Glass style={{ paddingHorizontal: 16, paddingVertical: 11, borderRadius: radius.md }}>
+                <Text style={[type.callout, { color: p.ink }]}>{f.text}</Text>
+              </Glass>
             </Rise>
-          ) : null}
-          {feed.map((f) =>
-            f.kind === "you" ? (
-              <Rise key={f.id} style={{ alignSelf: "flex-end", maxWidth: "86%" }}>
-                <Glass style={{ paddingHorizontal: 16, paddingVertical: 11, borderRadius: radius.md }}>
-                  <Text style={[type.callout, { color: p.ink }]}>{f.text}</Text>
-                </Glass>
-              </Rise>
-            ) : f.kind === "agent" ? (
-              <Rise key={f.id} style={{ maxWidth: "94%" }}>
-                <Text style={[type.title3, { fontFamily: fonts.displayItalic, color: p.ink }]}>{f.text}</Text>
-              </Rise>
-            ) : f.kind === "step" ? (
-              <Rise key={f.id} style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-                <View style={{ width: 16, alignItems: "center" }}>{f.state === "running" ? <ActivityIndicator size="small" color={p.accent} /> : <Text style={[type.footnote, { fontFamily: fonts.label, color: p.accent }]}>✓</Text>}</View>
-                <Text style={[type.footnote, { flex: 1, color: f.state === "running" ? p.ink2 : p.ink }]}>{f.text}</Text>
-              </Rise>
-            ) : (
-              <Rise key={f.id}>{renderWidget(f.widget)}</Rise>
-            ),
-          )}
-          {regionOpen ? <RegionPicker current={life?.home ?? null} onPick={(home) => { setRegionOpen(false); void send({ type: "region", home }, `I'll live in ${home.label}.`); }} /> : null}
-          {busy && !feed.some((f) => f.kind === "step" && f.state === "running") ? <ActivityIndicator color={p.accent} style={{ alignSelf: "flex-start", marginTop: 6 }} /> : null}
-        </ScrollView>
+          ) : f.kind === "agent" ? (
+            <Rise key={f.id} style={{ maxWidth: "94%" }}>
+              <Text style={[type.title3, { fontFamily: fonts.displayItalic, color: p.ink }]}>{f.text}</Text>
+            </Rise>
+          ) : f.kind === "step" ? (
+            <Rise key={f.id} style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+              <View style={{ width: 16, alignItems: "center" }}>{f.state === "running" ? <ActivityIndicator size="small" color={p.accent} /> : <Text style={[type.footnote, { fontFamily: fonts.label, color: p.accent }]}>✓</Text>}</View>
+              <Text style={[type.footnote, { flex: 1, color: f.state === "running" ? p.ink2 : p.ink }]}>{f.text}</Text>
+            </Rise>
+          ) : (
+            <Rise key={f.id}>{renderWidget(f.widget)}</Rise>
+          ),
+        )}
+        {regionOpen ? <RegionPicker current={life?.home ?? null} onPick={(home) => { setRegionOpen(false); void send({ type: "region", home }, `I'll live in ${home.label}.`); }} /> : null}
+        {busy && !feed.some((f) => f.kind === "step" && f.state === "running") ? <ActivityIndicator color={p.accent} style={{ alignSelf: "flex-start", marginTop: 6 }} /> : null}
+      </KeyboardScroll>
 
-        <View style={{ position: "absolute", left: 0, right: 0, bottom: 0, paddingBottom: insets.bottom + 12, paddingTop: 12, paddingHorizontal: 14, alignItems: "center" }}>
-          <Glass intensity={60} style={{ width: "100%", maxWidth: 600, borderRadius: radius.pill, flexDirection: "row", alignItems: "center", paddingLeft: 20, paddingRight: 6, minHeight: 58 }}>
-            <TextInput
-              value={text}
-              onChangeText={setText}
-              placeholder="Tell me what you want..."
-              placeholderTextColor={p.ink3}
-              onSubmitEditing={() => submit()}
-              returnKeyType="send"
-              style={[type.body, { flex: 1, color: p.ink, paddingVertical: 12 }, Platform.OS === "web" ? ({ outlineWidth: 0 } as object) : null]}
-            />
-            <Pressable accessibilityRole="button" accessibilityLabel="Send" onPress={() => submit()} disabled={busy || !text.trim()} style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: p.ink, alignItems: "center", justifyContent: "center", opacity: busy || !text.trim() ? 0.4 : 1 }}>
-              <Text style={[type.headline, { color: p.onAccent, marginTop: -2 }]}>↑</Text>
-            </Pressable>
-          </Glass>
-        </View>
-      </KeyboardAvoidingView>
+      <KeyboardDock onHeight={setDock} maxWidth={layout.column}>
+        <Composer value={text} onChangeText={setText} onSend={submit} placeholder="Tell me what you want..." label="Message" busy={busy} />
+      </KeyboardDock>
 
-      <View pointerEvents="box-none" style={{ position: "absolute", top: insets.top + 12, left: 16, right: 16, flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => (router.canGoBack() ? router.back() : router.replace("/wishes"))} hitSlop={10}>
-          <Glass style={{ width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center" }}>
-            <Text style={[type.title3, { fontFamily: fonts.body, color: p.ink, marginTop: -3 }]}>‹</Text>
-          </Glass>
-        </Pressable>
-        <Pressable accessibilityRole="button" onPress={() => setRegionOpen((o) => !o)} hitSlop={8}>
+      <View pointerEvents="box-none" style={{ position: "absolute", top: insets.top + space[4], left: gutter, right: gutter, flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+        <IconButton icon="back" label="Back" onPress={() => (router.canGoBack() ? router.back() : router.replace("/wishes"))} />
+        <Pressable accessibilityRole="button" accessibilityLabel={life?.home ? `Living in ${life.home.label}` : "Where you'll live"} onPress={() => setRegionOpen((o) => !o)} hitSlop={8}>
           <Glass style={{ paddingHorizontal: 14, height: 36, borderRadius: 18, justifyContent: "center" }}>
             <Text style={[type.footnote, { fontFamily: fonts.label, color: p.ink }]}>{life?.home ? `Living in ${life.home.label}  ▾` : "Where you'll live  ▾"}</Text>
           </Glass>
