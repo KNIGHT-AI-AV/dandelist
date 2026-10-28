@@ -12,6 +12,17 @@ import { fonts, layout, radius, type, usePalette, useType } from "../../lib/them
 import { useWishes, type WishTier } from "../../lib/wishes";
 import { KIND_LABEL, hostOf } from "../../lib/words";
 import { Atmosphere } from "../../components/atmosphere";
+import { Carve, RevealPhoto, ThoughtLine } from "../../components/wish-reveal";
+import { Rise } from "../../components/welcome/kit";
+import { haptic } from "../../lib/motion";
+import { clarityOf, deckFor, thoughtOf } from "../../lib/reveal";
+
+/** The research hero's height, and its shape as the aspect the shuffle picks catalogue crops for. */
+const HERO_HEIGHT = 440;
+/** The price slot's carved width while no price is in: about the width of a six-figure price at title size. */
+const PRICE_SLOT = 132;
+/** When the answer lands, its parts rise in as the photo comes into focus: top to bottom, 80 ms apart. */
+const LAND_AT = { seller: 380, statement: 460, options: 540, take: 620, rest: 700 } as const;
 
 const EXAMPLES = ["A week at Amanzoe for two", "A Leica Q3", "Learning to surf in Bali", "A Porsche 911 Carrera"];
 const TIERS: { value: WishTier; label: string }[] = [
@@ -67,6 +78,11 @@ export default function NewWish() {
   useEffect(() => () => void (alive.current = false), []);
   const working = run?.status === "running";
   const clock = useClock(working ? startedAt : null);
+
+  // The answer landing is the moment that matters: one success tick, paired with the photo coming into focus.
+  useEffect(() => {
+    if (run?.status === "done" && run.result?.options.length) haptic.success();
+  }, [run?.status, run?.result?.options.length]);
 
   // Poll the research run until the agent finishes.
   useEffect(() => {
@@ -251,20 +267,26 @@ export default function NewWish() {
     );
   }
 
-  // Research: the photograph arrives first, then the ledger; when it's done, the price statement.
+  // Research: the card's space is carved out and pictures shuffle behind a blur that clears as the agent finds the
+  // real thing; its reasoning reads live. When it's done, the real photo lands in focus and the price statement follows.
   const result = run?.result;
   const option = result?.options[chosen];
-  // The hero is the chosen option's photo, else the last page the agent opened that had one.
-  const opened = [...(run?.steps ?? [])].reverse().find((s): s is Extract<Step, { type: "open" }> => s.type === "open" && !!s.imageUrl);
-  const heroImage = option?.imageUrl ?? opened?.imageUrl ?? latestImage;
-  const best = (run?.steps ?? []).filter((s): s is Extract<Step, { type: "price" }> => s.type === "price" && s.upfrontCents != null).sort((a, b) => a.upfrontCents! - b.upfrontCents!)[0];
+  const steps = run?.steps ?? [];
+  const settled = !!run && run.status !== "running";
+  // The hero is the chosen option's photo, else the last page the agent opened that had one. Never another wish's photo.
+  const opened = [...steps].reverse().find((s): s is Extract<Step, { type: "open" }> => s.type === "open" && !!s.imageUrl);
+  const heroImage = option?.imageUrl ?? opened?.imageUrl ?? null;
+  const best = steps.filter((s): s is Extract<Step, { type: "price" }> => s.type === "price" && s.upfrontCents != null).sort((a, b) => a.upfrontCents! - b.upfrontCents!)[0];
+  const pages = steps.filter((s) => s.type === "open" && s.ok).length;
+  const checks = steps.filter((s) => s.type === "check").length;
+  const tally = [pages ? `${pages} ${pages === 1 ? "page" : "pages"} read` : "", checks ? `${checks} checked` : ""].filter(Boolean).join(" · ");
 
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
       <Atmosphere />
       <ScrollView contentContainerStyle={{ paddingBottom: result?.options.length ? dock : insets.bottom + 40 }} style={{ scrollbarWidth: "thin", scrollbarColor: `rgba(${p.inkRgb},0.2) transparent` } as object}>
-        <View style={{ height: 440, width: "100%" }}>
-          <Photo uri={heroImage} kind={draft?.kind} />
+        <View style={{ height: HERO_HEIGHT, width: "100%" }}>
+          <RevealPhoto deck={deckFor(steps, draft?.kind, width / HERO_HEIGHT)} final={heroImage} clarity={clarityOf(steps, settled)} done={settled} />
           <Shade from={0.15} />
         </View>
         <View style={[column, { marginTop: -150, gap: layout.stack.tight }]}>
@@ -275,20 +297,25 @@ export default function NewWish() {
             <Eyebrow>{working ? `Researching · ${clock} · Meta Muse Spark` : run?.status === "error" ? "Research stopped" : `${KIND_LABEL[draft?.kind ?? "buy"]} · what it costs`}</Eyebrow>
           </View>
           <Text accessibilityRole="header" style={[t.title1, { color: p.ink }]}>{draft?.title}</Text>
-          {option ? <Text style={[type.footnote, { color: p.ink2 }]}>{`${option.seller} · ${hostOf(option.url)} · ${option.status === "verified" ? "price checked on the page" : "estimate"}`}</Text> : null}
+          {option ? (
+            <Rise delay={LAND_AT.seller}>
+              <Text style={[type.footnote, { color: p.ink2 }]}>{`${option.seller} · ${hostOf(option.url)} · ${option.status === "verified" ? "price checked on the page" : "estimate"}`}</Text>
+            </Rise>
+          ) : working ? (
+            <Carve width="62%" height={type.footnote.lineHeight ?? 0} />
+          ) : null}
         </View>
 
-        <View style={[column, { marginTop: 24, gap: 20 }]}>
+        <View style={[column, { marginTop: layout.stack.section - 8, gap: layout.stack.base + 4 }]}>
           {working ? (
-            <View>
-              <Ledger steps={run?.steps ?? []} startedAt={run!.createdAt} working />
-              {best ? (
-                <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: p.ink4, marginTop: 4, paddingTop: 12, flexDirection: "row", justifyContent: "space-between", alignItems: "baseline" }}>
-                  <Eyebrow>Best so far</Eyebrow>
-                  <Money cents={best.upfrontCents!} size="title" align="right" />
-                </View>
-              ) : null}
-            </View>
+            <>
+              <ThoughtLine thought={thoughtOf(steps)} tally={tally} />
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", minHeight: layout.control.primary }}>
+                <Eyebrow>Best so far</Eyebrow>
+                {best ? <Money cents={best.upfrontCents!} size="title" align="right" /> : <Carve width={PRICE_SLOT} height={type.title2.lineHeight ?? 0} />}
+              </View>
+              <Ledger steps={steps} startedAt={run!.createdAt} working />
+            </>
           ) : null}
 
           {run?.status === "error" ? (
@@ -300,30 +327,36 @@ export default function NewWish() {
 
           {result && option ? (
             <>
-              <Statement item={asItem(option)} years={result.horizonYears} monthlyHint={option.recurring.map((r) => r.label).join(", ")} />
+              <Rise delay={LAND_AT.statement}>
+                <Statement item={asItem(option)} years={result.horizonYears} monthlyHint={option.recurring.map((r) => r.label).join(", ")} />
+              </Rise>
               {result.options.length > 1 ? (
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingHorizontal: 2 }}>
-                  {result.options.map((o, i) => (
-                    <Pressable key={`${o.url}-${i}`} accessibilityRole="radio" accessibilityState={{ selected: i === chosen }} onPress={() => setChosen(i)}>
-                      <Glass style={{ paddingHorizontal: 16, paddingVertical: 12, borderRadius: radius.md, borderWidth: 1, borderColor: i === chosen ? p.ink : p.line, minWidth: 148, gap: 4 }}>
-                        <Text style={[type.footnote, { color: p.ink2 }]} numberOfLines={1}>{o.seller}</Text>
-                        <Money cents={o.upfrontCents} size="card" />
-                        <Text style={[type.eyebrow, { color: o.status === "verified" ? p.accentText : p.ink3 }]}>{o.status === "verified" ? "Checked" : "Estimate"}</Text>
-                      </Glass>
-                    </Pressable>
-                  ))}
-                </ScrollView>
+                <Rise delay={LAND_AT.options}>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingHorizontal: 2 }}>
+                    {result.options.map((o, i) => (
+                      <Pressable key={`${o.url}-${i}`} accessibilityRole="radio" accessibilityState={{ selected: i === chosen }} onPress={() => setChosen(i)}>
+                        <Glass style={{ paddingHorizontal: 16, paddingVertical: 12, borderRadius: radius.md, borderWidth: 1, borderColor: i === chosen ? p.ink : p.line, minWidth: 148, gap: 4 }}>
+                          <Text style={[type.footnote, { color: p.ink2 }]} numberOfLines={1}>{o.seller}</Text>
+                          <Money cents={o.upfrontCents} size="card" />
+                          <Text style={[type.eyebrow, { color: o.status === "verified" ? p.accentText : p.ink3 }]}>{o.status === "verified" ? "Checked" : "Estimate"}</Text>
+                        </Glass>
+                      </Pressable>
+                    ))}
+                  </ScrollView>
+                </Rise>
               ) : null}
-              <Take>{result.explanation}</Take>
+              <Rise delay={LAND_AT.take}>
+                <Take>{result.explanation}</Take>
+              </Rise>
               {result.note ? <Text style={[type.footnote, { color: p.ink2 }]}>{result.note}</Text> : null}
-              <View style={{ gap: 8 }}>
+              <Rise delay={LAND_AT.rest} style={{ gap: 8 }}>
                 <Eyebrow>How much you want it</Eyebrow>
                 <View style={{ flexDirection: "row", gap: 8 }}>
                   {TIERS.map((tr) => (
                     <Chip key={tr.value} label={tr.label} selected={tier === tr.value} onPress={() => setTier(tr.value)} />
                   ))}
                 </View>
-              </View>
+              </Rise>
               <ErrorLine>{error}</ErrorLine>
               <QuietButton label={`${showTrail ? "Hide" : "Show"} how it found this · ${run!.steps.length} steps${run!.cached ? " · saved from earlier today" : ""}`} onPress={() => setShowTrail((v) => !v)} style={{ alignSelf: "flex-start" }} />
               {showTrail ? <Ledger steps={run!.steps} startedAt={run!.createdAt} working={false} /> : null}

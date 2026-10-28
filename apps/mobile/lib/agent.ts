@@ -37,7 +37,9 @@ export type AgentEvent =
   /** Found a 3D model that truly matches. */
   | { kind: "model3d"; name: string; author: string }
   /** Image work with Meta's models: a SAM 3.1 cutout, a Muse Image upscale or a generated fallback picture. */
-  | { kind: "imagework"; how: "cutout" | "upscaled" | "generated"; label: string; ok: boolean };
+  | { kind: "imagework"; how: "cutout" | "upscaled" | "generated"; label: string; ok: boolean }
+  /** The agent's own one-line reason for what it does next. */
+  | { kind: "thought"; text: string };
 
 export type Step =
   | { type: "search"; query: string; at: string }
