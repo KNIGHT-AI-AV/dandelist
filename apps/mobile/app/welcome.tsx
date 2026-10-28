@@ -153,6 +153,8 @@ export default function Welcome() {
   // The header and segments sit on the step's own column: three cards across on wide screens, else 560.
   const headerColumn = width >= 760 && (step.kind === "first" || step.kind === "vote") ? 932 : layout.column;
   const pillSpace = layout.control.meter + 32;
+  /** Clears the picks and starts the flow over from the first choice. */
+  const restart = () => { update({ ...state, picks: [] }); setAnswered(0); setResult(null); go({ kind: "first" }, true); };
 
   let body: React.ReactNode;
   switch (step.kind) {
@@ -190,7 +192,7 @@ export default function Welcome() {
     case "agent":
       body = (
         <View style={{ flex: 1 }}>
-          <AgentWork state={state} onResult={setResult} onFollowUp={(name) => update({ ...state, last: name ? picked(state).find((e) => e.name === name)?.id : undefined })} />
+          <AgentWork state={state} onResult={setResult} onFollowUp={(name) => update({ ...state, last: name ? picked(state).find((e) => e.name === name)?.id : undefined })} onRestart={restart} />
           <Appear when={!!result}>
             <View style={{ paddingHorizontal: gutter, paddingBottom: 16 }}>
               <PrimaryButton label="See my life" onPress={() => go({ kind: "reveal" })} />
@@ -216,7 +218,7 @@ export default function Welcome() {
           monthlyRunningCents={result.monthlyRunningCents}
           everythingBy={result.everythingBy}
           onKeep={() => { update({ ...state, kept: true }); go({ kind: "theme" }); }}
-          onChange={() => { update({ ...state, picks: [] }); setAnswered(0); setResult(null); go({ kind: "first" }, true); }}
+          onChange={restart}
         />
       ) : null;
       break;
