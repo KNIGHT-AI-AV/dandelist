@@ -1,4 +1,4 @@
-import { space } from "../../lib/palette";
+import { layout, radius, space } from "../../lib/palette";
 
 /**
  * The few sizes the wish list owns (owner rule: every box has architecture). Spacing, radii and type come from
@@ -25,6 +25,17 @@ export const DOCK_END = space[8];
 export const DOCK_SEND = DOCK_PILL - 2 * DOCK_END;
 /** The undo toast floats this far above the composer, so it never covers it. */
 export const TOAST_GAP = space[12];
+
+/** The quick-actions sheet shares the card's corner (radius.lg) and sits this far inside it. */
+export const SHEET_PAD = space[12];
+/** Nested radii: the tier track and the row highlights round to the sheet's corner less its padding. */
+export const SHEET_INNER_RADIUS = radius.lg - SHEET_PAD;
+/** Rows inset so their text sits on the card's text column (layout.cardPad from the edge). */
+export const SHEET_ROW_INSET = layout.cardPad - SHEET_PAD;
+/** Space between the lifted card and the sheet, and the sheet's margin from the safe area. */
+export const SHEET_GAP = space[8];
+/** The page recedes behind the sheet: this much of the page colour over it, so the card and the sheet lead. */
+export const SCRIM = 0.72;
 
 /** Card height for a slot: the n-th card still on screen, counting from the top. */
 export function cardHeight(slot: number): number {

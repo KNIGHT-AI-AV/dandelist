@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { CARD_GAP, CARD_SHORT, CARD_TALL, DOCK_LIFT, DOCK_PILL, DOCK_SEND, EMPTY_HEIGHT, TOAST_GAP, cardHeight, cardHeights, toastBottom } from "./metrics";
+import { layout, radius } from "../../lib/palette";
+import { CARD_GAP, CARD_SHORT, CARD_TALL, DOCK_LIFT, DOCK_PILL, DOCK_SEND, EMPTY_HEIGHT, SHEET_INNER_RADIUS, SHEET_PAD, SHEET_ROW_INSET, TOAST_GAP, cardHeight, cardHeights, toastBottom } from "./metrics";
 
 describe("wish list rhythm", () => {
   it("runs two tall cards then one short", () => {
@@ -33,6 +34,12 @@ describe("wish list rhythm", () => {
 
   it("keeps the send disc concentric with the composer pill", () => {
     expect((DOCK_PILL - DOCK_SEND) / 2).toBe(8);
+  });
+
+  it("nests the sheet's inner corners and lines its rows up with the card text", () => {
+    expect(SHEET_INNER_RADIUS).toBe(radius.lg - SHEET_PAD);
+    expect(SHEET_INNER_RADIUS).toBeGreaterThanOrEqual(radius.xs);
+    expect(SHEET_PAD + SHEET_ROW_INSET).toBe(layout.cardPad);
   });
 
   it("floats the toast above the composer and the home indicator", () => {
