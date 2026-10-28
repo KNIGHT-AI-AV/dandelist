@@ -1,8 +1,9 @@
-import { estimateCostUsd, type Usage } from "./pricing";
+import { TRANSCRIBE_PRICE_PER_SECOND, estimateCostUsd, type Usage } from "./pricing";
 
 export const META_BASE_URL = "https://api.meta.ai/v1";
 export const DEFAULT_MODEL = "muse-spark-1.3";
 export const IMAGE_MODEL = "muse-image-1.0";
+export const TRANSCRIBE_MODEL = "muse-voice-transcribe-1.0";
 
 export class MetaApiError extends Error {
   constructor(
@@ -102,19 +103,27 @@ export class MetaClient {
     return { images, format: typeof raw.output_format === "string" ? raw.output_format : "", usage, costUsd };
   }
 
-  async transcribe(audio: Blob, filename: string): Promise<{ text: string; raw: unknown }> {
+  /**
+   * Muse Voice Transcribe on one finished clip (https://dev.meta.ai/docs/speech-to-text, read 2026-10-28): a `request`
+   * JSON part and an `audio` part holding a mono 16-bit PCM WAV at 16 or 24 kHz. Push-to-talk, so the clip is one turn.
+   * `keywords` biases recognition toward names the model would otherwise mishear.
+   */
+  async transcribe(wav: Blob, opts: { keywords?: string[]; sessionId?: string } = {}): Promise<{ text: string; durationMs: number; costUsd: number }> {
     const form = new FormData();
-    form.append("model", "muse-voice-transcribe-1.0");
-    form.append("file", audio, filename);
-    const res = await this.fetchImpl(`${this.baseUrl}/asr/transcribe`, {
+    const request = { model: TRANSCRIBE_MODEL, audioEncoding: "WAV", mode: "PUSH_TO_TALK", ...(opts.keywords?.length ? { keywords: opts.keywords } : {}) };
+    form.append("request", new Blob([JSON.stringify(request)], { type: "application/json" }));
+    form.append("audio", wav, "clip.wav");
+    const query = opts.sessionId ? `?sessionId=${encodeURIComponent(opts.sessionId)}` : "";
+    const res = await this.fetchImpl(`${this.baseUrl}/asr/transcribe${query}`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${this.opts.apiKey}` },
+      headers: { Authorization: `Bearer ${this.opts.apiKey}`, Accept: "application/json" },
       body: form,
     });
     const text = await res.text();
     if (!res.ok) throw new MetaApiError(res.status, text);
     const raw = JSON.parse(text) as Json;
-    return { text: String(raw.text ?? raw.transcript ?? ""), raw };
+    const durationMs = Math.max(0, Number(raw.audioDurationMs ?? 0)) || 0;
+    return { text: String(raw.transcript ?? "").trim(), durationMs, costUsd: (durationMs / 1000) * TRANSCRIBE_PRICE_PER_SECOND };
   }
 
   /** One retry, a second later, when Meta answers 502, 503 or 504: those failed before any work was billed. */

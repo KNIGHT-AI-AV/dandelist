@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
-import { MetaApiError, MetaClient } from "@dandelist/meta";
+import { MetaApiError, MetaClient, TRANSCRIBE_MODEL } from "@dandelist/meta";
 import { Hono } from "hono";
+import { bodyLimit } from "hono/body-limit";
 import { z } from "zod";
 import { requireAuth, type AuthDeps, type AuthVars } from "../auth";
 import type { MediaStore } from "../media-store";
@@ -11,6 +12,7 @@ import type { MediaOptions } from "./hunt";
 import { SHOPPING_ACTOR, SHOPPING_MAX_RESULTS, SHOPPING_PRICE_PER_RESULT_USD, shoppingSearch } from "./shopping";
 import type { Fetcher } from "./tools";
 import { pgArchive, type Archive } from "../archive/archive";
+import { MAX_CLIP_BYTES, TRANSCRIBES_PER_USER_PER_DAY, WISH_KEYWORDS, cleanTranscript, clipProblem, readWav } from "./transcribe";
 
 export const RUNS_PER_USER_PER_DAY = 20;
 /** Every judge shares one account, so it gets more runs; its share of the daily spend cap still bounds it. */
@@ -145,6 +147,37 @@ export function agentRoutes(deps: AgentDeps) {
       return c.json({ draft, questions });
     } catch (e) {
       return c.json({ error: friendly(e) }, e instanceof SpendLimitError ? 429 : 502);
+    }
+  });
+
+  // Say your wish: a short WAV in, the words out. Same caps as every Meta call, plus a per-person daily count.
+  // The size cap is enforced while the body streams in, so an oversized upload never sits in memory.
+  app.post("/transcribe", bodyLimit({ maxSize: MAX_CLIP_BYTES, onError: (c) => c.json({ error: "Keep it under a minute." }, 413) }), async (c) => {
+    if (!(c.req.header("content-type") ?? "").startsWith("audio/wav")) return c.json({ error: "Send the recording as a WAV file." }, 415);
+    const bytes = new Uint8Array(await c.req.arrayBuffer());
+    const problem = clipProblem(readWav(bytes));
+    if (problem) return c.json({ error: problem }, 400);
+    const userId = c.get("userId");
+    const said = await db.query<{ n: string | number }>("select count(*) as n from spend_ledger where user_id = $1 and kind = 'transcribe' and created_at > $2", [
+      userId,
+      new Date(deps.now().getTime() - CACHE_MS).toISOString(),
+    ]);
+    if (Number(said.rows[0]?.n ?? 0) >= TRANSCRIBES_PER_USER_PER_DAY) return c.json({ error: "That's today's voice wishes. Type it instead." }, 429);
+    try {
+      const guard = async () => {
+        await assertBudget(db, caps, deps.now());
+        await assertUserBudget(db, userId, await userCapUsd(db, userId, USER_DAILY_USD, deps.judge, caps), deps.now());
+      };
+      const client = new MetaClient(deps.meta!);
+      const heard = await withHold(guard, () => client.transcribe(new Blob([bytes], { type: "audio/wav" }), { keywords: WISH_KEYWORDS }), userId);
+      await recordToolSpend(db, userId, "transcribe", TRANSCRIBE_MODEL, heard.costUsd, deps.now());
+      const text = cleanTranscript(heard.text);
+      if (!text) return c.json({ error: "Didn't catch that. Try again a little closer." }, 422);
+      return c.json({ text });
+    } catch (e) {
+      if (e instanceof SpendLimitError) return c.json({ error: e.message }, 429);
+      if (e instanceof MetaApiError && e.status === 429) return c.json({ error: "The AI is busy right now. Try again in a minute." }, 429);
+      return c.json({ error: "Couldn't hear that just now. Try again, or type it." }, 502);
     }
   });
 

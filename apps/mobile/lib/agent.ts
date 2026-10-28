@@ -170,6 +170,12 @@ export async function interpretWish(api: Api, text: string) {
   return read<{ draft: Draft; questions: Question[] }>(await api("/agent/interpret", json({ text })).catch(() => null), "Couldn't read that wish. Try again.");
 }
 
+/** Say your wish: the recorded clip (a 16 kHz mono WAV) in, the words Muse Voice Transcribe heard out. */
+export async function transcribeWish(api: Api, wav: Uint8Array) {
+  const init: RequestInit = { method: "POST", headers: { "Content-Type": "audio/wav" }, body: wav as unknown as BodyInit };
+  return (await read<{ text: string }>(await api("/agent/transcribe", init).catch(() => null), "Couldn't hear that. Try again, or type it.")).text;
+}
+
 export async function startResearch(api: Api, draft: Draft, answers: Answer[]) {
   return (await read<{ run: Run }>(await api("/agent/runs", json({ draft, answers })).catch(() => null), "Couldn't start the research.")).run;
 }

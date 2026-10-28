@@ -13,7 +13,8 @@ import { useWishes, type WishTier } from "../../lib/wishes";
 import { KIND_LABEL, hostOf } from "../../lib/words";
 import { Atmosphere } from "../../components/atmosphere";
 import { Carve, RevealPhoto, ThoughtLine } from "../../components/wish-reveal";
-import { WishField } from "../../components/wish-field";
+import { FIELD_MIN, WISH_MAX, WishField } from "../../components/wish-field";
+import { ListeningPanel, MicButton, useVoiceWish } from "../../components/voice/say-wish";
 import { KeyboardDock, KeyboardScroll, dockRoom } from "../../components/inputs";
 import { Rise } from "../../components/welcome/kit";
 import { haptic } from "../../lib/motion";
@@ -79,6 +80,16 @@ export default function NewWish() {
   const [askDock, setAskDock] = useState<number>(layout.control.primary);
   const alive = useRef(true);
   useEffect(() => () => void (alive.current = false), []);
+  // Say your wish: what Muse Voice heard lands in the field (rising in, counted by `heard`) to check before pricing.
+  const [heard, setHeard] = useState(0);
+  const voice = useVoiceWish({
+    api,
+    onHeard: (words) => {
+      setText(words.slice(0, WISH_MAX));
+      setHeard((n) => n + 1);
+    },
+    onError: setError,
+  });
   const working = run?.status === "running";
   const clock = useClock(working ? startedAt : null);
 
@@ -184,6 +195,10 @@ export default function NewWish() {
     setError(null);
   }
 
+  const wishField = (
+    <WishField ref={field} value={text} onChangeText={setText} onSubmit={() => void read()} editable={!reading} placeholder="A week at Amanzoe with my wife in May" inset={voice.supported ? layout.control.icon + layout.stack.tight : 0} />
+  );
+
   const latestImage = wishes.find((w) => w.details.agent?.imageUrl)?.details.agent?.imageUrl;
   const close = <IconButton icon="close" label="Close" onPress={() => (router.canGoBack() ? router.back() : router.replace("/wishes"))} style={{ position: "absolute", top: insets.top + (layout.headerBar - layout.control.icon) / 2, left: gutter, zIndex: 10 }} />;
 
@@ -211,7 +226,18 @@ export default function NewWish() {
             </View>
             {stage === "describe" ? (
               <>
-                <WishField ref={field} value={text} onChangeText={setText} onSubmit={() => void read()} editable={!reading} placeholder="A week at Amanzoe with my wife in May" />
+                <View>
+                  {voice.phase !== "idle" ? (
+                    <ListeningPanel voice={voice} height={FIELD_MIN + layout.stack.tight + 1} />
+                  ) : heard ? (
+                    <Rise key={heard}>{wishField}</Rise>
+                  ) : (
+                    wishField
+                  )}
+                  <View style={{ position: "absolute", top: 0, right: 0 }}>
+                    <MicButton voice={voice} />
+                  </View>
+                </View>
                 <View style={{ flexDirection: "row", flexWrap: "wrap", gap: layout.stack.tight }}>
                   {EXAMPLES.map((e) => (
                     <Chip key={e} label={e} selected={text === e} onPress={reading ? undefined : () => { haptic.select(); setText(e); field.current?.focus(); }} />
@@ -250,7 +276,13 @@ export default function NewWish() {
             ) : null}
         </KeyboardScroll>
         <KeyboardDock onHeight={setAskDock}>
-          <PrimaryButton label={stage === "describe" ? "Find the real price" : "Research the price"} busyLabel="Reading your wish..." busy={reading} onPress={stage === "describe" ? read : research} />
+          <PrimaryButton
+            label={stage === "describe" ? "Find the real price" : "Research the price"}
+            busyLabel="Reading your wish..."
+            busy={reading}
+            disabled={stage === "describe" && voice.phase !== "idle"}
+            onPress={stage === "describe" ? read : research}
+          />
         </KeyboardDock>
         <Grain />
       </View>
