@@ -377,9 +377,9 @@ export function Hairline({ style }: { style?: StyleProp<ViewStyle> }) {
 }
 
 /**
- * The logo, Wish Dot (owner, 2026-10-27): Instrument Serif with a gold dandelion clock for the i's dot. Drawn per
- * theme as two layers on one canvas, the word in the theme's ink and the clock in its accent, so the title sequence
- * can set the word and then land the dot. Source: Desktop\Dandelist Design\logo-final\_build\final.py.
+ * The logo, Wish Dot (owner, 2026-10-27): Instrument Serif with a solid gold dot for the i. Drawn per
+ * theme as two layers on one canvas, the word in the theme's ink and the dot in its accent, so the title sequence
+ * can set the word and then land the dot. Source: Desktop\Dandelist Design\logo-final\_build\wordmark2.py.
  */
 const WORDMARK: Record<ThemeId, readonly [number, number]> = {
   emerald: [require("../assets/brand/wordmark-emerald-letters.png"), require("../assets/brand/wordmark-emerald-dot.png")],
@@ -389,8 +389,8 @@ const WORDMARK: Record<ThemeId, readonly [number, number]> = {
   delina: [require("../assets/brand/wordmark-delina-letters.png"), require("../assets/brand/wordmark-delina-dot.png")],
   sapphire: [require("../assets/brand/wordmark-sapphire-letters.png"), require("../assets/brand/wordmark-sapphire-dot.png")],
 };
-/** Width over height of the wordmark canvas, from the clock's top to the baseline. */
-export const WORDMARK_ASPECT = 3.7751;
+/** Width over height of the wordmark canvas, from the dot's top to the baseline. */
+export const WORDMARK_ASPECT = 4.095;
 
 type AnimatedViewStyle = Animated.WithAnimatedValue<StyleProp<ViewStyle>>;
 

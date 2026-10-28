@@ -111,7 +111,7 @@ export function TitleSequence({ hero, short, onDone }: { hero: Entry; short: boo
         </Animated.View>
       </View>
 
-      {/* The word comes into focus, then its gold clock drifts down onto the i; a champagne hairline draws beneath. */}
+      {/* The word comes into focus, then its gold dot drifts down onto the i; a champagne hairline draws beneath. */}
       <View pointerEvents="none" style={{ position: "absolute", left: 0, right: 0, top: "38%", alignItems: "center", gap: 16 }}>
         <Wordmark
           height={64}
