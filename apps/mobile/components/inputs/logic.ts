@@ -100,6 +100,11 @@ function rawIndex(text: string, pos: number): number {
   return n;
 }
 
+/** Cents for what a money field shows ("$12,500" → 1250000); null when empty. */
+export function textCents(text: string): number | null {
+  return rawToCents(rawOf(text));
+}
+
 /** The display position just after the `k`-th raw character (just after "$" for k = 0). */
 export function displayCaret(text: string, k: number): number {
   if (!text) return 0;
