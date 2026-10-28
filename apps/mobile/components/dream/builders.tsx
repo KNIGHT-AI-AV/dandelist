@@ -48,7 +48,7 @@ export function HomeBuilder({ w, onApply, onSearchNow, onRegion }: { w: HomeWidg
   return (
     <Glass style={{ padding: 18, gap: 18, borderRadius: radius.lg }}>
       <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-        <Eyebrow color={p.accent}>Your home</Eyebrow>
+        <Eyebrow color={p.accentText}>Your home</Eyebrow>
         <Pressable accessibilityRole="button" accessibilityLabel={`In ${w.region}`} onPress={onRegion} hitSlop={8} style={{ minHeight: TARGET, justifyContent: "center" }}>
           <Text style={[type.footnote, { fontFamily: fonts.label, color: p.ink2 }]}>{`In ${w.region}  ▾`}</Text>
         </Pressable>
@@ -121,7 +121,7 @@ export function CarBuilder({ w, onApply }: { w: CarWidget; onApply(values: Recor
   const values = () => Object.fromEntries(Object.entries(picked).map(([k, v]) => [k, multi(k) ? v : v[0]]));
   return (
     <Glass style={{ padding: 18, gap: 20, borderRadius: radius.lg }}>
-      <Eyebrow color={p.accent}>Build your car</Eyebrow>
+      <Eyebrow color={p.accentText}>Build your car</Eyebrow>
       {w.steps.map((step) => (
         <View key={step.id} style={{ gap: 10 }}>
           <Text style={[type.title3, { color: p.ink }]}>{step.title}</Text>
@@ -138,7 +138,7 @@ export function CarBuilder({ w, onApply }: { w: CarWidget; onApply(values: Recor
                     ) : null}
                     <View style={{ padding: 12, gap: 4 }}>
                       <Text style={[type.label, { color: p.ink }]}>{c.label}</Text>
-                      {c.priceCents ? <Text style={[type.figure, { color: p.accent }]}>{step.id === "trim" ? money(c.priceCents) : `+ ${money(c.priceCents)}`}</Text> : null}
+                      {c.priceCents ? <Text style={[type.figure, { color: p.accentText }]}>{step.id === "trim" ? money(c.priceCents) : `+ ${money(c.priceCents)}`}</Text> : null}
                       {c.detail ? <Text style={[type.footnote, { color: p.ink2 }]} numberOfLines={2}>{c.detail}</Text> : null}
                     </View>
                   </View>
@@ -172,7 +172,7 @@ export function RegionPicker({ current, onPick }: { current: LifeContext["home"]
   const [text, setText] = useState("");
   return (
     <Glass style={{ padding: 18, gap: 14, borderRadius: radius.lg }}>
-      <Eyebrow color={p.accent}>Where you'll live</Eyebrow>
+      <Eyebrow color={p.accentText}>Where you'll live</Eyebrow>
       <Text style={[type.callout, { color: p.ink2 }]}>Homes, staff, services and running costs are priced for this place.</Text>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
         {PLACES.map((pl) => (

@@ -21,7 +21,7 @@ import { UNDO_MS } from "../../lib/removal";
 import { layout, radius, space, type, usePalette, useType } from "../../lib/theme";
 import { loadWelcome, saveWelcome, toWishes } from "../../lib/welcome";
 import { useWishes, type Wish } from "../../lib/wishes";
-import { hostOf, whenChecked } from "../../lib/words";
+import { hostOf, midSentence, whenChecked } from "../../lib/words";
 import { rememberCard, type Rect } from "../../lib/zoom";
 
 /**
@@ -156,7 +156,7 @@ export default function LifeList() {
   const count = `${visible.length} ${visible.length === 1 ? "wish" : "wishes"}`;
   const runLine = monthly ? `${formatCents(monthly)} a month to run · ${count}` : count;
   const briefing = latest
-    ? `Priced ${latest.name} at ${formatCents(latest.item.upfrontCents)}, ${latest.details.agent!.status === "verified" ? "checked on" : "an estimate from"} ${hostOf(latest.details.agent!.url)} ${whenChecked(latest.details.agent!.checkedAt)}.`
+    ? `Priced ${midSentence(latest.name)} at ${formatCents(latest.item.upfrontCents)}, ${latest.details.agent!.status === "verified" ? "checked on" : "an estimate from"} ${hostOf(latest.details.agent!.url)} ${whenChecked(latest.details.agent!.checkedAt)}.`
     : "";
   const loading = (status === "loading" || status === "idle") && wishes.length === 0;
   const pendingNote = removals.pending;

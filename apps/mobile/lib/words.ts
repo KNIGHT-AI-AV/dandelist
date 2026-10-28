@@ -3,6 +3,9 @@ import type { Wish } from "./wishes";
 export const KIND_LABEL = { buy: "Buy", own: "Own", do: "Do", visit: "Visit" } as const;
 export const TIER_LABEL = { must: "Must", nice: "Nice", dream: "Dream" } as const;
 
+/** A name as it reads mid-sentence: "A month in Lisbon" becomes "a month in Lisbon"; proper names are left alone. */
+export const midSentence = (name: string) => name.replace(/^(A|An|The) /, (article) => article.toLowerCase());
+
 export function hostOf(url: string): string {
   try {
     return new URL(url).hostname.replace(/^www\./, "");

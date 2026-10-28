@@ -51,7 +51,7 @@ export function ServiceQuote({ w, onAccept }: { w: Extract<Widget, { kind: "serv
     <Glass style={{ padding: 16, gap: 14, borderRadius: radius.lg }}>
       <Hero images={w.images} />
       <View style={{ gap: 4 }}>
-        <Eyebrow color={p.accent}>{w.region}</Eyebrow>
+        <Eyebrow color={p.accentText}>{w.region}</Eyebrow>
         <Text style={[type.title2, { color: p.ink }]}>{w.service}</Text>
         <Text style={[type.callout, { color: p.ink2 }]}>{w.summary}</Text>
       </View>
@@ -85,7 +85,7 @@ export function WishReady({ w, onAdd }: { w: Extract<Widget, { kind: "wish_ready
     <Glass style={{ padding: 16, gap: 14, borderRadius: radius.lg }}>
       <Hero images={wish.images} height={260} />
       <View style={{ gap: 4 }}>
-        <Eyebrow color={p.accent}>{[wish.region, wish.seller].filter(Boolean).join(" · ") || "Found it"}</Eyebrow>
+        <Eyebrow color={p.accentText}>{[wish.region, wish.seller].filter(Boolean).join(" · ") || "Found it"}</Eyebrow>
         <Text style={[type.title2, { color: p.ink }]}>{wish.name}</Text>
       </View>
       <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
