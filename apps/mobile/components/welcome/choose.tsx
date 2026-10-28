@@ -29,7 +29,7 @@ function Source({ e }: { e: PoolItem }) {
   return (
     <View style={{ gap: 2 }}>
       <Text numberOfLines={1} style={[type.figure, { color: p.ink2 }]}>{e.note ?? `${where} · ${e.status === "verified" ? "checked" : "estimate"} ${shortDate(e.checkedAt)}`}</Text>
-      {e.credit ? <Text numberOfLines={1} style={[type.figure, { color: p.ink3, fontSize: 11 }]}>{e.credit}</Text> : null}
+      {e.credit ? <Text numberOfLines={1} style={[type.figure, { color: p.ink3 }]}>{e.credit}</Text> : null}
     </View>
   );
 }
