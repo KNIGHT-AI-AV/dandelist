@@ -327,24 +327,24 @@
           "width": 2048,
           "height": 2048,
           "source": "commons.wikimedia.org",
-          "credit": "Franco Debartolo, Mr.choppers",
-          "license": "CC BY-SA 3.0 / Unsplash License"
+          "credit": "Mr.choppers",
+          "license": "CC BY-SA 3.0"
         },
         {
           "url": "https://api.dandelist.knightaiav.com/media/baf4bbcd9ac5da2e55015abeace64d6ba4f54e522b80daf56b03829f2f72248e.jpg",
           "width": 1800,
           "height": 2520,
-          "source": "commons.wikimedia.org",
-          "credit": "Franco Debartolo, Mr.choppers",
-          "license": "CC BY-SA 3.0 / Unsplash License"
+          "source": "unsplash.com",
+          "credit": "Franco Debartolo",
+          "license": "Unsplash License"
         },
         {
           "url": "https://api.dandelist.knightaiav.com/media/627ac190f29127b9b639167d96747fd7f08e2d6882085134e3f90a53007089c3.jpg",
           "width": 3000,
           "height": 1125,
           "source": "commons.wikimedia.org",
-          "credit": "Franco Debartolo, Mr.choppers",
-          "license": "CC BY-SA 3.0 / Unsplash License"
+          "credit": "Mr.choppers",
+          "license": "CC BY-SA 3.0"
         }
       ]
     }
