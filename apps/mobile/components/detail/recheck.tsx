@@ -228,11 +228,10 @@ function Result({ basis, option, saving, error, onAdopt }: { basis: Basis; optio
       {change.direction !== "same" ? (
         <Animated.View pointerEvents={landed ? "auto" : "none"} style={rise(action)}>
           <PrimaryButton label="Use the new price" busyLabel="Saving..." busy={saving} commit onPress={onAdopt} />
+          {/* Inside the action's block, so an empty error slot adds no gap to the card. */}
+          <Swap id={error ?? ""}>{error ? <View style={{ paddingTop: layout.stack.tight }}><ErrorLine>{error}</ErrorLine></View> : null}</Swap>
         </Animated.View>
       ) : null}
-      <Swap id={error ?? ""}>
-        <ErrorLine>{error}</ErrorLine>
-      </Swap>
     </Glass>
   );
 }
