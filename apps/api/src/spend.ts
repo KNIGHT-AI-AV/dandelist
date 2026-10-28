@@ -27,7 +27,38 @@ const META_ONLY = `model not like '${TOOL_MODEL_PREFIX}%'`;
 
 const dayStart = (now: Date) => new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
 
-/** Refuses a Meta call when today's or the all-time spend has reached its cap. Meta's own limit only notifies. */
+/**
+ * Spend held for Meta calls that have started but not yet reported their cost. A call holds before it checks the
+ * caps and releases after its cost is in the ledger, so calls running at once can't all pass the same check and
+ * overshoot (Dandy List Master's review, 2026-10-27: $10.03 against a $10 cap). Per process; deliberately
+ * conservative, since a held call is briefly counted twice once its cost is recorded.
+ */
+let held = 0;
+export const HOLD_USD = 0.1;
+
+/** Holds `usd` against the caps until the returned release is called (safe to call twice). */
+export function hold(usd = HOLD_USD): () => void {
+  held += usd;
+  let done = false;
+  return () => {
+    if (done) return;
+    done = true;
+    held = Math.max(0, held - usd);
+  };
+}
+
+/** Runs one Meta call under a hold: hold, check the caps with the hold counted, call, then release. */
+export async function withHold<T>(check: () => Promise<void>, run: () => Promise<T>): Promise<T> {
+  const release = hold();
+  try {
+    await check();
+    return await run();
+  } finally {
+    release();
+  }
+}
+
+/** Refuses a Meta call when today's or the all-time spend has reached its cap, counting calls still in flight. */
 export async function assertBudget(db: Db, caps: SpendCaps, now: Date): Promise<void> {
   const { rows } = await db.query<{ today: string | null; total: string | null }>(
     `select coalesce(sum(cost_usd) filter (where created_at >= $1), 0) as today, coalesce(sum(cost_usd), 0) as total from spend_ledger where ${META_ONLY}`,
@@ -35,8 +66,8 @@ export async function assertBudget(db: Db, caps: SpendCaps, now: Date): Promise<
   );
   const today = Number(rows[0]?.today ?? 0);
   const total = Number(rows[0]?.total ?? 0);
-  if (total >= caps.totalUsd) throw new SpendLimitError("total");
-  if (today >= caps.dailyUsd) throw new SpendLimitError("daily");
+  if (total >= caps.totalUsd || total + held > caps.totalUsd) throw new SpendLimitError("total");
+  if (today >= caps.dailyUsd || today + held > caps.dailyUsd) throw new SpendLimitError("daily");
 }
 
 export async function recordSpend(db: Db, userId: string | null, kind: string, usage: Usage, costUsd: number, now: Date): Promise<void> {

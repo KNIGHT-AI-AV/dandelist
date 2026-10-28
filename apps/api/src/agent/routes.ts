@@ -4,7 +4,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { requireAuth, type AuthDeps, type AuthVars } from "../auth";
 import type { MediaStore } from "../media-store";
-import { SpendLimitError, TOOL_MODEL_PREFIX, assertBudget, assertUserBudget, callsToday, recordSpend, recordToolSpend, spentToday, userCapUsd, isJudge, type SpendCaps } from "../spend";
+import { SpendLimitError, TOOL_MODEL_PREFIX, assertBudget, assertUserBudget, callsToday, recordSpend, recordToolSpend, spentToday, userCapUsd, isJudge, withHold, type SpendCaps } from "../spend";
 import { answerSchema, clarify, draftSchema, interpret, research, type Meta, type Step } from "./agent";
 import { SAM_MODEL } from "./cutout";
 import type { MediaOptions } from "./hunt";
@@ -92,14 +92,8 @@ export function agentRoutes(deps: AgentDeps) {
       await assertUserBudget(db, userId, await userCapUsd(db, userId, USER_DAILY_USD, deps.judge, caps), deps.now());
     };
     return {
-      responses: async (body) => {
-        await guard();
-        return client.responses(body);
-      },
-      images: async (op, body) => {
-        await guard();
-        return client.images(op, body);
-      },
+      responses: (body) => withHold(guard, () => client.responses(body)),
+      images: (op, body) => withHold(guard, () => client.images(op, body)),
     };
   };
 

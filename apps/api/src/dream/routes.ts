@@ -7,7 +7,7 @@ import type { Meta } from "../agent/agent";
 import { USER_DAILY_USD, type AgentDeps } from "../agent/routes";
 import { publicFetch } from "../agent/tools";
 import { requireAuth, type AuthVars } from "../auth";
-import { assertBudget, assertUserBudget, recordSpend, SpendLimitError, userCapUsd } from "../spend";
+import { assertBudget, assertUserBudget, recordSpend, SpendLimitError, userCapUsd, withHold } from "../spend";
 import { deckWidget, runTurn } from "./agent";
 import { TurnBudget, TurnLimitError, type ApifyConfig, type DreamCtx } from "./context";
 import { homeSchema, lifeBody, readLife, writeLife } from "./life";
@@ -113,9 +113,13 @@ export function dreamRoutes(deps: DreamDeps) {
     const meta: Meta = {
       responses: async (b) => {
         budget.meta();
-        await assertBudget(db, caps, deps.now());
-        await assertUserBudget(db, userId, await userCapUsd(db, userId, USER_DAILY_USD, deps.judge, caps), deps.now());
-        return client.responses(b);
+        return withHold(
+          async () => {
+            await assertBudget(db, caps, deps.now());
+            await assertUserBudget(db, userId, await userCapUsd(db, userId, USER_DAILY_USD, deps.judge, caps), deps.now());
+          },
+          () => client.responses(b),
+        );
       },
     };
     const life = await readLife(db, userId);
