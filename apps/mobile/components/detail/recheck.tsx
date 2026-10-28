@@ -50,12 +50,12 @@ export function Recheck({ wish }: { wish: Wish }) {
   const [saveError, setSaveError] = useState<string | null>(null);
   const alive = useRef(true);
   const busy = useRef(false);
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    alive.current = true;
+    return () => {
       alive.current = false;
-    },
-    [],
-  );
+    };
+  }, []);
   const working = phase === "reading" || phase === "running";
   const clock = useClock(working ? since : null);
 

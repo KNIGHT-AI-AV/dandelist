@@ -4,7 +4,7 @@ import { Animated, Modal, Platform, StyleSheet, Text, View, useWindowDimensions,
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { MediaImage } from "../../lib/agent";
 import { containRect, pageAt, photoCredit, type Rect } from "../../lib/gallery";
-import { ease, native, spring, step, useReducedMotion } from "../../lib/motion";
+import { ease, native, spring, step } from "../../lib/motion";
 import { ThemeScope, layout, type, usePalette, useTheme, type ThemeId } from "../../lib/theme";
 import { IconButton, Shade } from "../lux";
 import { Frame, PageDots, knownAspect } from "./gallery";
@@ -35,11 +35,11 @@ type Phase = "opening" | "open" | "closing";
  * settle spring while the dark room fades up (a shared-element move: position, size and crop all interpolate from
  * one clock); the close button and the footer arrive 50 ms apart behind it. It then hands over to a paging viewer on
  * the same frame. Closing runs the flight back on a faster snap spring to whichever photo is showing, which the hero
- * has already turned to. Mount it once per opening (key it). Reduced motion swaps the flight for a short cross-fade.
+ * has already turned to. Mount it once per opening (key it). Reduced motion swaps the flight for a short cross-fade;
+ * the screen passes its already-resolved setting in, since a fresh hook reads "off" for its first frame.
  */
-export function PhotoViewer({ photos, from, onSettle, onClose }: { photos: MediaImage[]; from: ViewerFrom; onSettle(i: number): void; onClose(): void }) {
+export function PhotoViewer({ photos, from, reduced, onSettle, onClose }: { photos: MediaImage[]; from: ViewerFrom; reduced: boolean; onSettle(i: number): void; onClose(): void }) {
   const { id } = useTheme();
-  const reduced = useReducedMotion();
   const insets = useSafeAreaInsets();
   const { width: W, height: H } = useWindowDimensions();
   // One clock for the flight: 0 is the photo in the hero, 1 is the photo in the viewer. It drives layout, so JS.
@@ -48,6 +48,8 @@ export function PhotoViewer({ photos, from, onSettle, onClose }: { photos: Media
   const foot = useRef(new Animated.Value(0)).current;
   const x = useRef(new Animated.Value(from.index * W)).current;
   const pager = useRef<ScrollView | null>(null);
+  // A constant: a contentOffset that followed the page would yank a swipe at its halfway point.
+  const start = useRef({ x: from.index * W, y: 0 }).current;
   const [phase, setPhase] = useState<Phase>("opening");
   const phaseRef = useRef<Phase>("opening");
   const [cur, setCur] = useState(from.index);
@@ -168,7 +170,7 @@ export function PhotoViewer({ photos, from, onSettle, onClose }: { photos: Media
               showsHorizontalScrollIndicator={false}
               scrollEventThrottle={16}
               onScroll={onScroll}
-              contentOffset={{ x: curRef.current * W, y: 0 }}
+              contentOffset={start}
               onLayout={() => {
                 if (placedRef.current) return;
                 pager.current?.scrollTo({ x: curRef.current * W, animated: false });
@@ -183,7 +185,8 @@ export function PhotoViewer({ photos, from, onSettle, onClose }: { photos: Media
               {photos.map((p, i) => (
                 <View key={p.url} style={{ width: W, height: H }} accessible accessibilityRole="image" accessibilityLabel={`Photo ${i + 1} of ${photos.length}`}>
                   <View style={{ position: "absolute", left: area.x, top: area.y, width: area.width, height: area.height }}>
-                    {Math.abs(i - cur) <= 1 ? <Frame img={p} fit="contain" backdrop={false} onDisplay={() => setDrawn((s) => (s.has(i) ? s : new Set(s).add(i)))} /> : null}
+                    {/* No fade: the flying copy beneath hides the moment this draws, so a fade would dip to the scrim. */}
+                    {Math.abs(i - cur) <= 1 ? <Frame img={p} fit="contain" backdrop={false} fade={false} onDisplay={() => setDrawn((s) => (s.has(i) ? s : new Set(s).add(i)))} /> : null}
                   </View>
                 </View>
               ))}

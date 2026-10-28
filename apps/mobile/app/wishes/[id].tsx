@@ -1,6 +1,6 @@
 import { Redirect, router, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { Animated, Linking, PanResponder, Pressable, StyleSheet, Text, View, useWindowDimensions, type ViewStyle } from "react-native";
+import { Animated, Linking, PanResponder, Pressable, StyleSheet, Text, View, useWindowDimensions, type NativeScrollEvent, type NativeSyntheticEvent, type ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Atmosphere } from "../../components/atmosphere";
 import { HeroGallery } from "../../components/detail/gallery";
@@ -13,7 +13,7 @@ import { MediaHero } from "../../components/media";
 import { Statement, Take } from "../../components/statement";
 import { useAuth } from "../../lib/auth";
 import { webOnly } from "../../lib/dream";
-import { photoCredit, realPhotos, showsGallery, trimBottom, type Rect } from "../../lib/gallery";
+import { photoCredit, realPhotos, showsGallery, trimBottom } from "../../lib/gallery";
 import { FLICK, ease, native, spring, step, useReducedMotion } from "../../lib/motion";
 import { layout, radius, type, usePalette, useType } from "../../lib/theme";
 import { useWishes, type Wish } from "../../lib/wishes";
@@ -72,14 +72,29 @@ export default function WishDetail() {
   const [photoIndex, setPhotoIndex] = useState(0);
   const [viewing, setViewing] = useState<(ViewerFrom & { key: number }) | null>(null);
   const scrollY = useRef(new Animated.Value(0)).current;
-  const onScroll = useRef(Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: native })).current;
+  // The offset is also kept in JS: the pull gesture only claims at the top, and the viewer's flight starts from where
+  // the parallax has carried the photo (a measured rect would not include a native-driven transform).
+  const scrollTop = useRef(0);
+  const onScroll = useRef(
+    Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
+      useNativeDriver: native,
+      listener: (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+        scrollTop.current = e.nativeEvent.contentOffset.y;
+      },
+    }),
+  ).current;
   const hero = useRef<View>(null);
   // The wish as last seen, so the page stays whole while it fades out after a remove.
   const kept = useRef<Wish | undefined>(undefined);
 
   const regions = (to: 0 | 1, ms: number) => sections.map((v) => Animated.timing(v, { toValue: to, duration: ms, easing: ease.out, useNativeDriver: native }));
 
+  // The entrance plays once, when the wish is first there to show (at once from a card; after loading from a link).
+  const ready = wishes.some((x) => x.id === id);
+  const entered = useRef(false);
   useEffect(() => {
+    if (!ready || entered.current) return;
+    entered.current = true;
     if (zoom) {
       Animated.spring(grow, { toValue: 1, ...spring.settle, useNativeDriver: false }).start(({ finished }) => finished && setSettled(true));
       Animated.timing(page, { toValue: 1, duration: step.inMs, delay: RISE_DELAY_MS, easing: ease.out, useNativeDriver: false }).start();
@@ -91,7 +106,7 @@ export default function WishDetail() {
     Animated.parallel([page, photo].map((v) => Animated.timing(v, { toValue: 1, duration: reduced ? step.outMs : step.inMs, easing: ease.out, useNativeDriver: false }))).start();
     (reduced ? Animated.parallel(regions(1, step.outMs)) : Animated.stagger(step.staggerMs, regions(1, step.inMs))).start();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [ready]);
 
   /** Plays the page out (faster than it came in) and then calls `done`. */
   const exit = (done: () => void, home = zoom) => {
@@ -116,7 +131,8 @@ export default function WishDetail() {
 
   const drag = useRef(
     PanResponder.create({
-      onMoveShouldSetPanResponder: (_e, g) => g.dy > PULL.claim && Math.abs(g.dy) > Math.abs(g.dx) * PULL.steep,
+      // Only at the top of the page: scrolled down, a downward drag scrolls back up.
+      onMoveShouldSetPanResponder: (_e, g) => scrollTop.current <= 0 && g.dy > PULL.claim && Math.abs(g.dy) > Math.abs(g.dx) * PULL.steep,
       onPanResponderMove: (_e, g) => pull.setValue(Math.max(0, g.dy)),
       onPanResponderRelease: (_e, g) => {
         if (g.vy > FLICK || g.dy > winH * PULL.dismiss) back();
@@ -177,10 +193,14 @@ export default function WishDetail() {
   const gallery = showsGallery(a?.media);
   // The photo drifts down at a fraction of the scroll, so the page slides over it. Transform only; off under reduced motion.
   const drift = reduced ? undefined : { transform: [{ translateY: scrollY.interpolate({ inputRange: [0, HERO], outputRange: [0, HERO * PARALLAX], extrapolate: "clamp" }) }] };
-  const openPhoto = (index: number, image: Rect) =>
+  const openPhoto = (index: number) =>
     hero.current?.measureInWindow((x, y, width, height) => {
       const frame = { x, y, width, height };
-      setViewing({ key: Date.now(), index, image, hero: frame, clip: trimBottom(frame, TITLE_OVERLAP) });
+      // The photo layer sits where the parallax has carried it, below the hero's own top.
+      const shift = reduced ? 0 : PARALLAX * Math.min(HERO, Math.max(0, scrollTop.current));
+      const image = { ...frame, y: frame.y + shift };
+      // A second tap before the viewer is up must not re-key it mid-presentation.
+      setViewing((v) => v ?? { key: Date.now(), index, image, hero: frame, clip: trimBottom(frame, TITLE_OVERLAP) });
     });
   // A new figure (after "Use the new price") cross-fades the statement rather than snapping it.
   const priceKey = [w.item.upfrontCents, ...w.item.recurring.map((rr) => `${rr.amountCents}/${rr.period}`)].join("|");
@@ -292,7 +312,7 @@ export default function WishDetail() {
         <IconButton icon="back" label="Back" onPress={back} />
       </Animated.View>
       <Grain />
-      {viewing ? <PhotoViewer key={viewing.key} photos={photos} from={viewing} onSettle={setPhotoIndex} onClose={() => setViewing(null)} /> : null}
+      {viewing ? <PhotoViewer key={viewing.key} photos={photos} from={viewing} reduced={reduced} onSettle={setPhotoIndex} onClose={() => setViewing(null)} /> : null}
     </View>
   );
 }

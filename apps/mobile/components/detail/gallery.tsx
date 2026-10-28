@@ -1,9 +1,9 @@
 import { Image, type ImageContentFit } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
-import { useEffect, useMemo, useRef, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Animated, Pressable, StyleSheet, View, type NativeScrollEvent, type NativeSyntheticEvent, type ScrollView, type StyleProp, type ViewStyle } from "react-native";
 import type { MediaImage } from "../../lib/agent";
-import { aspectOf, pageAt, type Rect } from "../../lib/gallery";
+import { aspectOf, pageAt } from "../../lib/gallery";
 import { ease, native, step, useReducedMotion } from "../../lib/motion";
 import { layout, radius, usePalette } from "../../lib/theme";
 import { Glass } from "../lux";
@@ -80,18 +80,21 @@ export function HeroGallery({ photos, width, height, topInset, live, index, onIn
   live: boolean;
   index: number;
   onIndex(i: number): void;
-  onOpen(i: number, rect: Rect): void;
+  onOpen(i: number): void;
   drift?: AnimatedStyle;
   children?: ReactNode;
 }) {
   const reduced = useReducedMotion();
   const x = useRef(new Animated.Value(index * width)).current;
   const pager = useRef<ScrollView | null>(null);
-  const pages = useRef<(View | null)[]>([]);
   // The page the pager is on, as it last told the parent; a different `index` prop means someone else moved it.
   const at = useRef(index);
-  // The page showing when the pager took over: its photo is already on screen, so it skips the loading backdrop.
+  // Where the pager starts. A constant: a contentOffset that followed the page would yank a swipe at its halfway point.
+  const start = useRef({ x: index * width, y: 0 }).current;
+  // The page showing when the pager took over: the photo beneath already shows it, so until it has drawn it skips
+  // the loading backdrop and the fade, and the swap is invisible. After that every page loads the usual way.
   const handoff = useRef(index);
+  const [handedOff, setHandedOff] = useState(false);
   const dots = useRef(new Animated.Value(live ? 1 : 0)).current;
 
   useEffect(() => {
@@ -126,12 +129,6 @@ export function HeroGallery({ photos, width, height, topInset, live, index, onIn
     [x, width, photos.length, onIndex],
   );
 
-  const open = (i: number) => {
-    const page = pages.current[i];
-    if (!page) return;
-    page.measureInWindow((px, py, pw, ph) => onOpen(i, { x: px, y: py, width: pw, height: ph }));
-  };
-
   const current = photos[Math.min(index, photos.length - 1)];
   const rise = reduced ? 0 : layout.stack.tight;
   return (
@@ -147,24 +144,27 @@ export function HeroGallery({ photos, width, height, topInset, live, index, onIn
             showsHorizontalScrollIndicator={false}
             scrollEventThrottle={16}
             onScroll={onScroll}
-            contentOffset={{ x: at.current * width, y: 0 }}
+            contentOffset={start}
             onLayout={() => pager.current?.scrollTo({ x: at.current * width, animated: false })}
             style={StyleSheet.absoluteFill}
           >
             {photos.map((img, i) => (
               <Pressable
                 key={img.url}
-                ref={(r) => {
-                  pages.current[i] = r;
-                }}
                 accessibilityRole="imagebutton"
                 accessibilityLabel={`Photo ${i + 1} of ${photos.length}`}
                 accessibilityHint="Opens it full screen"
-                onPress={() => open(i)}
+                onPress={() => onOpen(i)}
                 style={{ width, height }}
               >
                 {/* Only the photos either side of the current one are drawn; the rest wait as quiet gradients. */}
-                {Math.abs(i - index) <= 1 ? <Frame img={img} backdrop={i !== handoff.current} fade={i !== handoff.current} /> : <Frame img={null} />}
+                {Math.abs(i - index) > 1 ? (
+                  <Frame img={null} />
+                ) : !handedOff && i === handoff.current ? (
+                  <Frame img={img} backdrop={false} fade={false} onDisplay={() => setHandedOff(true)} />
+                ) : (
+                  <Frame img={img} />
+                )}
               </Pressable>
             ))}
           </Animated.ScrollView>
