@@ -1,13 +1,14 @@
 import { recurringBreakdown } from "@dandelist/cost";
 import { Redirect, router } from "expo-router";
 import { useEffect, useState } from "react";
-import { Pressable, ScrollView, Text, View, useWindowDimensions } from "react-native";
+import { Pressable, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { AgentDot, Eyebrow, Glass, GlassField, Grain, Hairline, IconButton, Money, Photo } from "../components/lux";
+import { KeyboardScroll, MoneyField, centsToRaw } from "../components/inputs";
+import { AgentDot, Eyebrow, Glass, Grain, Hairline, IconButton, Money, Photo } from "../components/lux";
 import { useAuth } from "../lib/auth";
 import { formatCents, parseDollars } from "../lib/money";
 import { getSecret, setSecret } from "../lib/storage";
-import { fonts, layout, radius, type, usePalette, useType } from "../lib/theme";
+import { fonts, layout, radius, space, type, usePalette, useType } from "../lib/theme";
 import { useWishes } from "../lib/wishes";
 import { TIER_LABEL, monthYear } from "../lib/words";
 import { Atmosphere } from "../components/atmosphere";
@@ -28,13 +29,14 @@ export default function Plan() {
   const t = useType();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
-  const [aside, setAside] = useState("");
+  // Cents a month, or null while the field is empty. Stored as plain dollars ("3000"); older "$3,000" still reads.
+  const [aside, setAside] = useState<number | null>(null);
   useEffect(() => {
-    getSecret(KEY).then((v) => v && setAside(v));
+    getSecret(KEY).then((v) => v && setAside(parseDollars(v)));
   }, []);
   if (auth.status === "signedOut") return <Redirect href="/sign-in" />;
 
-  const monthly = aside.trim() ? parseDollars(aside) : null;
+  const monthly = aside || null;
   // Must before nice before dream; within a tier, the order they were added.
   const ordered = [...wishes].sort((a, b) => RANK[a.tier] - RANK[b.tier] || a.createdAt.localeCompare(b.createdAt));
   let running = 0;
@@ -46,21 +48,20 @@ export default function Plan() {
   const runningCosts = recurringBreakdown(wishes.map((w) => w.item)).perMonth;
   const gutter = layout.gutter(width);
 
-  function save(text: string) {
-    setAside(text);
-    void setSecret(KEY, text.trim() || null);
+  function save(cents: number | null) {
+    setAside(cents);
+    void setSecret(KEY, cents === null ? null : centsToRaw(cents));
   }
 
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
       <Atmosphere />
-      <ScrollView contentContainerStyle={{ paddingTop: insets.top + layout.contentTop, paddingBottom: insets.bottom + 40, paddingHorizontal: gutter, gap: 20, width: "100%", maxWidth: layout.list + 2 * gutter, alignSelf: "center" }}>
+      <KeyboardScroll contentContainerStyle={{ paddingTop: insets.top + layout.contentTop, paddingBottom: insets.bottom + space[40], paddingHorizontal: gutter, gap: space[20], width: "100%", maxWidth: layout.list + 2 * gutter, alignSelf: "center" }}>
         <View style={{ gap: layout.stack.tight }}>
           <Eyebrow>The plan</Eyebrow>
           <Text accessibilityRole="header" style={[t.title1, { color: p.ink }]}>When you can have it all</Text>
         </View>
-        <GlassField label="You put aside each month" value={aside} onChangeText={save} keyboardType="decimal-pad" inputMode="decimal" placeholder="$3,000" inputStyle={[type.title2, { fontVariant: ["tabular-nums"] }]} />
-        {aside.trim() && monthly === null ? <Text style={[type.footnote, { color: p.danger }]}>Enter an amount, like 3000.</Text> : null}
+        <MoneyField label="You put aside each month" cents={aside} onChangeCents={save} placeholder="$3,000" returnKeyType="done" inputStyle={[type.title2, { fontVariant: ["tabular-nums"] }]} />
 
         <View>
           {rows.map(({ w, when }) => (
@@ -100,7 +101,7 @@ export default function Plan() {
           <Eyebrow>Everything upfront</Eyebrow>
           <Money cents={running} size="title" align="right" />
         </View>
-      </ScrollView>
+      </KeyboardScroll>
       <IconButton icon="back" label="Back" onPress={() => (router.canGoBack() ? router.back() : router.replace("/wishes"))} style={{ position: "absolute", top: insets.top + (layout.headerBar - layout.control.icon) / 2, left: gutter }} />
       <Grain />
     </View>
