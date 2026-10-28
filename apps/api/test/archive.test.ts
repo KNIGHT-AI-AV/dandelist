@@ -86,21 +86,27 @@ describe("archive store", () => {
     expect(hit?.photos.map((p) => p.hero)).toEqual([true, false]);
   });
 
-  it("adds an agent's finds to a known subject at once", async () => {
+  it("puts an agent's finds live only when a second person's agent offers the same photos", async () => {
     await loadSeed(db, await seed([{ id: "kyoto", domain: "Travel", category: "City breaks", subcategory: "Japan", name: "Kyoto", kind: "place", priceModel: "trip", tier: 1 }]));
     const archive = pgArchive(db);
-    expect(await archive.lookup("Kyoto", "place")).toBeNull();
     expect(await archive.contribute("Two weeks in Kyoto", "place", [photo(10), photo(11), photo(12, { license: "All rights reserved" })], "user-a")).toBe(2);
-    expect((await archive.lookup("Kyoto in autumn", "place"))?.photos).toHaveLength(2);
+    expect(await archive.lookup("Kyoto", "place")).toBeNull();
+    await archive.contribute("Kyoto", "place", [photo(10), photo(11)], "user-a");
+    expect(await archive.lookup("Kyoto", "place")).toBeNull();
+    await archive.contribute("Kyoto temples at dusk", "place", [photo(10), photo(11)], "user-b");
+    expect(await archive.lookup("Kyoto", "place")).toBeNull();
+    await archive.contribute("Kyoto in autumn", "place", [photo(10), photo(11)], "user-b");
+    expect((await archive.lookup("Kyoto", "place"))?.photos).toHaveLength(2);
+    expect(await archive.contribute("Kyoto", "place", [photo(13)], "anonymous")).toBe(0);
   });
 
-  it("keeps something new pending until a second person's agent finds it too", async () => {
+  it("keeps something new waiting for review, however many people offer it", async () => {
     const archive = pgArchive(db);
     await archive.contribute("Faroe Islands", "place", [photo(20), photo(21)], "user-a");
+    await archive.contribute("Faroe Islands", "place", [photo(20), photo(21)], "user-b");
+    await archive.contribute("Faroe Islands", "place", [photo(20)], "user-c");
     expect(await archive.lookup("Faroe Islands", "place")).toBeNull();
-    await archive.contribute("Faroe Islands", "place", [photo(22)], "user-a");
-    expect(await archive.lookup("Faroe Islands", "place")).toBeNull();
-    await archive.contribute("Faroe Islands", "place", [photo(23)], "user-b");
-    expect((await archive.lookup("Faroe Islands", "place"))?.photos.length).toBe(4);
+    const { rows } = await db.query<{ status: string }>("select status from archive_entities where id = 'faroe-islands'");
+    expect(rows[0]?.status).toBe("pending");
   });
 });

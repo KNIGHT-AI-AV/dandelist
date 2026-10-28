@@ -1,7 +1,7 @@
 -- The shared archive (owner, 2026-10-27): the things people want, with real photos and typical prices, so a wish
 -- for something common gets premium photos at once instead of a fresh hunt. Seeded from the master list
 -- (data/archive-seed.json, loaded at boot), then grown by the agents: freely licensed photos they find for a
--- subject are offered back and kept only when they pass src/archive/guard.ts.
+-- subject are offered back, and go live only when two different people's agents offered the same photo.
 
 create table if not exists archive_entities (
   -- kebab-case, e.g. 'porsche-911-carrera-992'
@@ -18,7 +18,7 @@ create table if not exists archive_entities (
   running jsonb,
   tier smallint not null default 3 check (tier between 1 and 3),
   regions text[] not null default '{US,EU}',
-  -- 'seed' for the master list, 'agent' for one the agents proposed (kept 'pending' until a second person asks)
+  -- 'seed' for the master list, 'agent' for one the agents proposed (kept 'pending' until someone reviews it)
   origin text not null default 'seed' check (origin in ('seed', 'agent')),
   status text not null default 'live' check (status in ('live', 'pending', 'retired')),
   created_at timestamptz not null default now(),
@@ -39,8 +39,10 @@ create table if not exists archive_photos (
   license text not null,
   hero boolean not null default false,
   status text not null default 'approved' check (status in ('approved', 'pending', 'rejected')),
-  -- 'seed' or the user id whose agent found it
+  -- 'seed' or the user id whose agent first offered it
   contributed_by text not null default 'seed',
+  -- every user whose agent offered this photo; two different people approve it
+  vouchers text[] not null default '{}',
   created_at timestamptz not null default now()
 );
 create index if not exists archive_photos_entity on archive_photos (entity_id, status);

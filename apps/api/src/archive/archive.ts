@@ -3,8 +3,9 @@ import type { MediaImage, MediaKind } from "../agent/media";
 
 /**
  * The shared archive (owner, 2026-10-27). Before the agent hunts photos for a wish, it asks the archive: a match
- * with approved photos skips the hunt. After a hunt, freely licensed photos it found are offered back, so the next
- * person who wants the same thing gets them at once. Seeded from the master list (src/archive/seed.ts).
+ * with approved photos skips the hunt. After a hunt, freely licensed photos it found are offered back; one goes live
+ * when two different people's agents offered it, and new subjects wait for review. Seeded from the master list
+ * (src/archive/seed.ts).
  */
 
 export interface ArchiveEntity {
@@ -35,7 +36,7 @@ export interface ArchiveHit {
 export interface Archive {
   /** The entity a subject names, with its approved photos (hero first), or null. */
   lookup(subject: string, kind: MediaKind): Promise<ArchiveHit | null>;
-  /** Offers photos the agent found for a subject; only those that pass the guard are kept. */
+  /** Offers photos the agent found for a subject; returns how many were recorded (pending until vouched for). */
   contribute(subject: string, kind: MediaKind, photos: ArchivePhoto[], by: string): Promise<number>;
 }
 
@@ -71,7 +72,7 @@ const SERVES: Record<MediaKind, string[]> = {
  * The entity a subject names. Every word of one of its names must appear in the subject, and that name must cover
  * at least two thirds of the subject's own words, so "Porsche 911 GT3 RS Weissach" never borrows a GT3's photos.
  */
-export function matchEntity(subject: string, kind: MediaKind, entities: ArchiveEntity[]): ArchiveEntity | null {
+export function matchEntity(subject: string, kind: MediaKind, entities: ArchiveEntity[], minCover = 0.65): ArchiveEntity | null {
   const said = new Set(words(subject));
   if (!said.size) return null;
   const allowed = SERVES[kind];
@@ -82,7 +83,7 @@ export function matchEntity(subject: string, kind: MediaKind, entities: ArchiveE
       const w = [...new Set(words(name.replace(/\([^)]*\)/g, " ")))];
       if (!w.length || !w.every((x) => said.has(x))) continue;
       const cover = w.length / said.size;
-      if (cover < 0.65) continue;
+      if (cover < minCover) continue;
       if (!best || cover > best.cover || (cover === best.cover && (w.length > best.len || (w.length === best.len && e.tier < best.e.tier)))) best = { e, cover, len: w.length };
     }
   }
@@ -140,12 +141,14 @@ export function pgArchive(db: Db, now: () => Date = () => new Date()): Archive {
       return photos.length >= 2 ? { entity: e, photos } : null;
     },
     async contribute(subject, kind, photos, by) {
+      // Only a signed-in person's agent may offer photos, and only real API-licensed 4K ones.
       const ok = photos.filter(admissible);
-      if (!ok.length) return 0;
-      let e = matchEntity(subject, kind, await entities());
-      let status: "approved" | "pending" = "approved";
+      if (!ok.length || !by || by === "anonymous" || by === "seed") return 0;
+      // Offers attach to a known entity only when the subject names nothing else ("Porsche 911 Carrera", not
+      // "Porsche 911 Carrera plus anything"), so extra words can't steer what a search finds onto a known page.
+      let e = matchEntity(subject, kind, await entities(), 1);
       if (!e) {
-        // Something new: it waits as a pending entity until a second person's agent finds it too.
+        // Something new waits, with its photos, until someone reviews it; it is never promoted automatically.
         const id = slug(subject);
         if (!id || kind === "other") return 0;
         await db.query(
@@ -153,20 +156,25 @@ export function pgArchive(db: Db, now: () => Date = () => new Date()): Archive {
            values ($1, 'proposed', 'proposed', 'proposed', $2, $3, 'one-off', 3, 'agent', 'pending') on conflict (id) do nothing`,
           [id, subject.slice(0, 120), kind],
         );
-        const others = await db.query<{ n: number }>("select count(distinct contributed_by)::int as n from archive_photos where entity_id = $1 and contributed_by <> $2", [id, by]);
-        if ((others.rows[0]?.n ?? 0) >= 1) {
-          await db.query("update archive_entities set status = 'live', updated_at = now() where id = $1 and status = 'pending'", [id]);
-          await db.query("update archive_photos set status = 'approved' where entity_id = $1 and status = 'pending'", [id]);
-          cache = null;
-        } else status = "pending";
         e = { id, name: subject, aliases: [], kind, tier: 3, subcategory: "proposed" };
       }
+      // A photo goes live only once two different people's agents offered it for the same thing, so one account
+      // can't put pictures in front of everyone. Rejected photos stay rejected; seed photos are never touched.
       let kept = 0;
       for (const p of ok.slice(0, 6)) {
         const r = await db.query(
-          `insert into archive_photos (entity_id, url, width, height, source, source_page, photographer, license, status, contributed_by)
-           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) on conflict (url) do nothing returning id`,
-          [e.id, p.url, p.width, p.height, p.source, p.sourcePage, p.photographer, p.license, status, by],
+          `insert into archive_photos (entity_id, url, width, height, source, source_page, photographer, license, status, contributed_by, vouchers)
+           values ($1, $2, $3, $4, $5, $6, $7, $8, 'pending', $9, array[$9])
+           on conflict (url) do update set
+             vouchers = array(select distinct v from unnest(archive_photos.vouchers || excluded.vouchers) v),
+             status = case
+               when archive_photos.status = 'pending' and archive_photos.entity_id = excluded.entity_id
+                 and cardinality(array(select distinct v from unnest(archive_photos.vouchers || excluded.vouchers) v)) >= 2
+                 and exists (select 1 from archive_entities a where a.id = excluded.entity_id and a.status = 'live')
+               then 'approved' else archive_photos.status end
+           where archive_photos.contributed_by <> 'seed'
+           returning id`,
+          [e.id, p.url, p.width, p.height, p.source, p.sourcePage, p.photographer, p.license, by],
         );
         kept += r.rows.length;
       }
