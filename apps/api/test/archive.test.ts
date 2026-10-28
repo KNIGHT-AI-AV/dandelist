@@ -56,6 +56,10 @@ describe("archive matching", () => {
     expect(exactEntity("Lisbon red", "place", ENTITIES)).toBeNull();
     expect(exactEntity("A month in Lisbon", "place", ENTITIES)).toBeNull();
     expect(exactEntity("Lisbon", "vehicle", ENTITIES)).toBeNull();
+    expect(exactEntity("Lisbon (anything)", "place", ENTITIES)).toBeNull();
+    expect(exactEntity(`Lisbon ${String.fromCodePoint(0x1f525)}`, "place", ENTITIES)).toBeNull();
+    expect(exactEntity("Porsche 911 Carrera (992)", "vehicle", ENTITIES)).toBeNull();
+    expect(exactEntity("porsche  911-carrera", "vehicle", ENTITIES)?.id).toBe("porsche-911-carrera-992");
   });
 
   it("admits only API-licensed real photos of 3000 px or more", () => {
@@ -114,7 +118,7 @@ describe("archive store", () => {
     await archive.contribute("Faroe Islands", "place", [photo(20), photo(21)], "user-b");
     await archive.contribute("Faroe Islands", "place", [photo(20)], "user-c");
     expect(await archive.lookup("Faroe Islands", "place")).toBeNull();
-    const { rows } = await db.query<{ status: string }>("select status from archive_entities where id = 'agent-faroe-islands'");
+    const { rows } = await db.query<{ status: string }>("select status from archive_entities where origin = 'agent' and name = 'Faroe Islands'");
     expect(rows[0]?.status).toBe("pending");
   });
 
@@ -124,6 +128,6 @@ describe("archive store", () => {
     await archive.contribute("Lisbon", "vehicle", [photo(30)], "user-a");
     await archive.contribute("Lisbon", "vehicle", [photo(30)], "user-b");
     const { rows } = await db.query<{ entity_id: string }>("select entity_id from archive_photos where url = $1", [photo(30).url]);
-    expect(rows[0]?.entity_id).toBe("agent-lisbon");
+    expect(rows[0]?.entity_id).toMatch(/^agent-lisbon-[0-9a-f]{10}$/);
   });
 });

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { Db } from "../db";
 import type { MediaImage, MediaKind } from "../agent/media";
 
@@ -95,20 +96,24 @@ const plain = (s: string) =>
     .toLowerCase()
     .normalize("NFKD")
     .replace(/[\u0300-\u036f]/g, "")
-    .replace(/\([^)]*\)/g, " ")
-    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/[\s'&.+-]+/g, " ")
     .trim();
+
+/** A subject is only ever an exact name when it holds letters, digits, spaces and simple punctuation: nothing a
+ * search would quietly drop (brackets, symbols, emoji). */
+const SIMPLE = /^[\p{L}\p{N}\s'&.+-]+$/u;
 
 /**
  * The entity whose name or alias is the subject word for word (nothing dropped, not even filler), used for offers:
  * the photos were found by searching the subject as typed, so only a subject that is exactly a known name may add
- * to that entity.
+ * to that entity. Parenthesised notes are dropped from entity names only ("Porsche 911 Carrera (992)").
  */
 export function exactEntity(subject: string, kind: MediaKind, entities: ArchiveEntity[]): ArchiveEntity | null {
+  if (!SIMPLE.test(subject)) return null;
   const key = plain(subject);
   const allowed = SERVES[kind];
   if (!key) return null;
-  return entities.find((e) => (!allowed.length || allowed.includes(e.kind)) && [e.name, ...e.aliases].some((n) => plain(n) === key)) ?? null;
+  return entities.find((e) => (!allowed.length || allowed.includes(e.kind)) && [e.name, ...e.aliases].some((n) => plain(n.replace(/\([^)]*\)/g, " ")) === key)) ?? null;
 }
 
 /** Licences an API reported that allow use in the app without asking: CC0, public domain, CC BY, CC BY-SA, Unsplash, Pexels. */
@@ -171,15 +176,17 @@ export function pgArchive(db: Db, now: () => Date = () => new Date()): Archive {
       if (!e) {
         // Something new waits, with its photos, until someone reviews it; it is never promoted automatically. Its id
         // is in its own namespace, so it can never land on a seed entity.
-        const id = slug(subject) && `agent-${slug(subject)}`;
-        if (!id || kind === "other") return 0;
+        const key = plain(subject);
+        if (!SIMPLE.test(subject) || !key || kind === "other") return 0;
+        const id = `agent-${key.replace(/ /g, "-").slice(0, 60)}-${createHash("sha256").update(key).digest("hex").slice(0, 10)}`;
         await db.query(
           `insert into archive_entities (id, domain, category, subcategory, name, kind, price_model, tier, origin, status)
            values ($1, 'proposed', 'proposed', 'proposed', $2, $3, 'one-off', 3, 'agent', 'pending') on conflict (id) do nothing`,
           [id, subject.slice(0, 120), kind],
         );
-        const own = await db.query<{ origin: string }>("select origin from archive_entities where id = $1", [id]);
-        if (own.rows[0]?.origin !== "agent") return 0;
+        const own = await db.query<{ origin: string; status: string; name: string }>("select origin, status, name from archive_entities where id = $1", [id]);
+        const row = own.rows[0];
+        if (!row || row.origin !== "agent" || row.status !== "pending" || plain(row.name) !== key) return 0;
         e = { id, name: subject, aliases: [], kind, tier: 3, subcategory: "proposed" };
       }
       // A photo goes live only once two different people's agents offered it for the same thing, so one account
