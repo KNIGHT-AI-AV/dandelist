@@ -1,6 +1,6 @@
 import { PGlite } from "@electric-sql/pglite";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { unknownNumbers } from "../src/agent/agent";
+import { cleanThought, unknownNumbers } from "../src/agent/agent";
 import { assertPublicUrl, htmlToText, pageNamesItem, pageShowsPrice, privateIp, sellerOwnsHost, structuredPrices } from "../src/agent/tools";
 
 // Shop hostnames resolve to a public documentation address, so no test touches real DNS.
@@ -118,7 +118,8 @@ const fakeMeta = (async (_url: string, init: RequestInit) => {
     ]);
   }
   if (toolNames.includes("get_page") && !body.previous_response_id) {
-    return reply([{ type: "web_search_call", action: { query: "Peloton Bike+ price" } }, { type: "function_call", call_id: "gp_1", name: "get_page", arguments: JSON.stringify({ url: SHOP }) }]);
+    const thought = "Peloton's own store sets the list price,   so I'll read it there first: https://evil.example/x";
+    return reply([{ type: "web_search_call", action: { query: "Peloton Bike+ price" } }, { type: "function_call", call_id: "gp_1", name: "get_page", arguments: JSON.stringify({ thought, url: SHOP }) }]);
   }
   if (toolNames.includes("get_page")) return reply([message("Found it.")]);
   return reply([message(explainReplies.shift() ?? "The Bike+ Basics costs $2,495 upfront and $5,135 over 5 years.")]);
@@ -215,7 +216,20 @@ describe("wish agent", () => {
     expect(run.result.note).toBe(""); // its $3,423 isn't a number the cost engine produced
     const kinds = run.steps.map((s: { type: string }) => s.type);
     expect(kinds).toEqual(expect.arrayContaining(["search", "open", "check", "price", "explain"]));
+    // The agent's reason for opening the page arrives just before the page, as one clean line with no link.
+    const thoughtAt = run.steps.findIndex((s: { event?: { kind: string } }) => s.event?.kind === "thought");
+    expect(run.steps[thoughtAt]).toMatchObject({ type: "note", text: "Peloton's own store sets the list price, so I'll read it there first:" });
+    expect(run.steps[thoughtAt + 1]).toMatchObject({ type: "open" });
     expect(run.costUsd).toBeGreaterThan(0);
+  });
+
+  it("keeps thoughts to one short plain line", () => {
+    expect(cleanThought(42)).toBeNull();
+    expect(cleanThought("ok")).toBeNull();
+    expect(cleanThought("Checking\nthe   maker's page")).toBe("Checking the maker's page");
+    const long = cleanThought("word ".repeat(60))!;
+    expect(long.length).toBeLessThanOrEqual(160);
+    expect(long.endsWith("…")).toBe(true);
   });
 
   it("falls back to its own sentence when the model invents a number", async () => {

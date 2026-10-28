@@ -13,7 +13,9 @@ export type AgentEvent =
   /** Found a 3D model that truly matches. */
   | { kind: "model3d"; name: string; author: string }
   /** Image work with Meta's models: a SAM 3.1 cutout, a Muse Image upscale or a generated fallback picture. */
-  | { kind: "imagework"; how: "cutout" | "upscaled" | "generated"; label: string; ok: boolean };
+  | { kind: "imagework"; how: "cutout" | "upscaled" | "generated"; label: string; ok: boolean }
+  /** The agent's own one-line reason for its next tool call, cleaned to plain text (agent.ts cleanThought). */
+  | { kind: "thought"; text: string };
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
@@ -31,6 +33,8 @@ export function describeEvent(e: AgentEvent): string {
       if (e.how === "cutout") return e.ok ? `Cut ${e.label} out of its photo with SAM 3.1` : `Couldn't cut ${e.label} out of its photo`;
       if (e.how === "upscaled") return e.ok ? `Sharpened a small photo of ${e.label} with Muse Image` : `Couldn't sharpen the photo of ${e.label}`;
       return e.ok ? `Made a picture of ${e.label} with Muse Image` : `Couldn't make a picture of ${e.label}`;
+    case "thought":
+      return e.text;
   }
 }
 
