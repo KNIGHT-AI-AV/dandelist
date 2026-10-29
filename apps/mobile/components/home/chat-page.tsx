@@ -268,15 +268,19 @@ export function ChatPage() {
         early.current.push(msg);
         return;
       }
-      send({ type: "message", text: msg }, msg);
+      // Shown the moment it's sent, even while the Dandy is still answering or hunting (owner, 2026-10-29: "add more
+      // while hunting"). Turns run one after another in the order they were sent.
+      pinned.current = true;
+      push({ id: nextId(), kind: "you", text: msg });
+      send({ type: "message", text: msg });
     },
-    [ready, send],
+    [ready, send, push],
   );
 
-  // What the composer sends arrives here, from the list or from this page. A swipe holds the composer only once it
-  // turns into real work (five swipes refine the search).
+  // What the composer sends arrives here, from the list or from this page. The composer never waits: a message sent
+  // during a reply joins the queue.
   const stepRunning = feed.some((f) => f.kind === "step" && f.state === "running");
-  useChatInbox(submit, busy && (!quiet || stepRunning));
+  useChatInbox(submit, false);
 
   // ---- conversations
 
