@@ -12,6 +12,7 @@ import { fetchFacts, fetchHome, fetchIdentities, fetchStats, newFacts, saveHome,
 import { THEMES, layout, radius, space, type, usePalette, useTheme } from "../../lib/theme";
 import { DandyAvatar } from "../dandy-avatar";
 import { Chip, Glass, QuietButton } from "../lux";
+import { AgentKeys } from "../settings/agent-keys";
 import { DandyEditor } from "../settings/dandy-editor";
 import { DeleteAccount } from "../settings/delete-account";
 import { FactsCard } from "../settings/facts";
@@ -170,6 +171,10 @@ export function SettingsPage() {
 
         <Section title="Sign-in accounts">
           <LinkedAccounts identities={identities} options={options} email={email} onChange={setIdentities} notice={notice} />
+        </Section>
+
+        <Section title="Agents" hint="Let an AI agent, like Claude, run your list through Dandelist's MCP server. A key reaches your account only, and you can revoke it any time.">
+          <AgentKeys />
         </Section>
 
         <Section title="Account">

@@ -49,7 +49,8 @@ export function requireAuth(deps: Pick<AuthDeps, "db" | "jwtSecret" | "now">): M
     } catch {
       return c.json({ error: "Sign in again to continue." }, 401);
     }
-    const open = await deps.db.query("select 1 from sessions where id = $1 and user_id = $2 and revoked_at is null", [claims.sessionId, claims.userId]);
+    // An expired session is closed too, so nothing minted for it (an agent key's calls) outlives it.
+    const open = await deps.db.query("select 1 from sessions where id = $1 and user_id = $2 and revoked_at is null and expires_at > $3", [claims.sessionId, claims.userId, deps.now().toISOString()]);
     if (!open.rows.length) return c.json({ error: "Sign in again to continue." }, 401);
     c.set("userId", claims.userId);
     c.set("sessionId", claims.sessionId);

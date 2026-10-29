@@ -8,6 +8,7 @@ import { guestRoutes } from "./guest";
 import { poolSource } from "./pool";
 import { previewRoutes } from "./preview";
 import { isStoredKey } from "./media-store";
+import { agentKeyRoutes, mcpRoutes } from "./mcp";
 import { meRoutes } from "./me";
 import { wishRoutes } from "./wishes";
 
@@ -51,6 +52,9 @@ export function createApp(deps: AppDeps) {
   app.route("/preview", previewRoutes({ ...deps, pool }));
   app.route("/guest", guestRoutes({ ...deps, pool }));
   app.route("/", dreamRoutes(deps));
+  // Agents: keys a person makes in Settings, and the MCP server those keys open, one account per key.
+  app.route("/me/agent-keys", agentKeyRoutes(deps));
+  app.route("/mcp", mcpRoutes({ ...deps, call: (path, init) => app.request(path, init) }));
   app.route("/me", meRoutes(deps));
 
   app.use("/me", requireAuth(deps));
