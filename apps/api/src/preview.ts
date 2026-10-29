@@ -8,7 +8,7 @@ import { unknownNumbers } from "./agent/agent";
 import { getPage, pageShowsPrice, publicFetch, type Fetcher } from "./agent/tools";
 import type { AgentDeps } from "./agent/routes";
 import { fromCatalogue, resolvePicks, type PoolItem } from "./pool";
-import { SpendLimitError, assertBudget, recordSpend } from "./spend";
+import { SpendLimitError, assertBudget, heldForScope, recordSpend, withBudgetScope } from "./spend";
 
 /**
  * The pre-login "your agent at work" step. Nothing here is scripted: each row is sent when the server has done that
@@ -149,18 +149,20 @@ export function previewRoutes(deps: AgentDeps & { webFetch?: Fetcher; pool?: () 
       let note = fallbackNote(facts);
       if (deps.meta) {
         try {
-          await assertBudget(db, deps.spendCaps ?? { dailyUsd: 10, totalUsd: 120 }, now);
-          const dayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).toISOString();
-          const spent = (await db.query<{ s: string | null }>("select coalesce(sum(cost_usd), 0) as s from spend_ledger where kind = 'preview' and created_at >= $1", [dayStart])).rows[0];
-          if (Number(spent?.s ?? 0) >= PREVIEW_DAILY_USD) throw new SpendLimitError("daily");
           // Give the note writer the unit to copy; the streamed result still uses the numeric share.
           const noteFacts = { ...facts, largest: { ...facts.largest, share_percent: `${facts.largest.share_percent}%` } };
           const client = new MetaClient({ ...deps.meta, onUsage: (usage, cost) => recordSpend(db, null, "preview", usage, cost, deps.now()) });
-          const res = await client.responses({
+          const res = await withBudgetScope("preview", async () => {
+            await assertBudget(db, deps.spendCaps ?? { dailyUsd: 10, totalUsd: 120 }, now);
+            const dayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).toISOString();
+            const spent = (await db.query<{ s: string | null }>("select coalesce(sum(cost_usd), 0) as s from spend_ledger where kind = 'preview' and created_at >= $1", [dayStart])).rows[0];
+            const usd = Number(spent?.s ?? 0);
+            if (usd >= PREVIEW_DAILY_USD || usd + heldForScope("preview") > PREVIEW_DAILY_USD) throw new SpendLimitError("daily");
+          }, () => client.responses({
             instructions:
               "You are Dandelist's agent. In two short sentences, under 40 words, say something useful about this wish list: what stands out, the largest share, and what it costs to keep each month if anything. Use only numbers that appear in FACTS, written exactly as given, including the % sign on percentages. No dates, no saving or budgeting advice, no financial advice, no hype, no questions.",
             input: `FACTS: ${JSON.stringify(noteFacts)}`,
-          });
+          }));
           const text = res.text.trim();
           if (text && !unknownNumbers(text, noteFacts).length) note = text;
         } catch (e) {
