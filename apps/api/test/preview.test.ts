@@ -3,7 +3,7 @@ import { entry, firstPick, pairs } from "@dandelist/catalogue";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../src/app";
 import { migrate, type Db } from "../src/db";
-import { PREVIEWS_PER_IP_PER_HOUR, fallbackNote, ipOf, planFacts, reachBy } from "../src/preview";
+import { NOT_RECORDED, PREVIEWS_PER_IP_PER_HOUR, fallbackNote, ipOf, planFacts, reachBy } from "../src/preview";
 import { unknownNumbers } from "../src/agent/agent";
 
 const clock = new Date("2026-10-27T12:00:00Z");
@@ -67,6 +67,14 @@ describe("pre-login preview", () => {
     // $142,850 at $3,000 a month is 48 months from Oct 2026.
     expect(f.everything_by).toBe(new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric", timeZone: "UTC" }).format(reachBy(14_285_000, 300_000, clock)));
     expect(fallbackNote(f)).toContain("95%");
+  });
+
+  it("calls running costs nobody recorded not recorded, and the fallback note never adds them (Codex R13)", () => {
+    const leica = { ...entry("leica-q3")!, recurring: [] };
+    const f = planFacts([leica], 300_000, clock);
+    expect(f.running_costs_per_month_once_owned).toBe(NOT_RECORDED);
+    expect(f.picks[0]!.running_per_month).toBe(NOT_RECORDED);
+    expect(fallbackNote(f)).not.toContain("a month to keep");
   });
 
   it("streams real rows, a live check, a note and the result without a Meta key", async () => {

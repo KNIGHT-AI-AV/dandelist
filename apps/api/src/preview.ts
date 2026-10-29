@@ -53,6 +53,9 @@ export function reachBy(cents: number, monthlyCents: number, now: Date): Date {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + Math.ceil(cents / monthlyCents), 1));
 }
 
+/** Running costs nobody recorded are not "none" (Codex R13); the note writer and the fallback note both read this. */
+export const NOT_RECORDED = "not recorded";
+
 export function planFacts(picks: ListItem[], monthlyCents: number, now: Date) {
   const items = picks.map(toItem);
   const upfront = upfrontCashCents(items);
@@ -61,9 +64,9 @@ export function planFacts(picks: ListItem[], monthlyCents: number, now: Date) {
   const share = Math.round((biggest.upfrontCents / upfront) * 100);
   const rest = upfront - biggest.upfrontCents;
   return {
-    picks: picks.map((p) => ({ name: p.name, upfront: formatCents(p.upfrontCents), running_per_month: p.recurring.length ? formatCents(recurringBreakdown([toItem(p)]).perMonth) : "none" })),
+    picks: picks.map((p) => ({ name: p.name, upfront: formatCents(p.upfrontCents), running_per_month: p.recurring.length ? formatCents(recurringBreakdown([toItem(p)]).perMonth) : NOT_RECORDED })),
     everything_upfront: formatCents(upfront),
-    running_costs_per_month_once_owned: running ? formatCents(Math.round(running)) : "none",
+    running_costs_per_month_once_owned: running ? formatCents(Math.round(running)) : NOT_RECORDED,
     set_aside_per_month: formatCents(monthlyCents),
     everything_by: month.format(reachBy(upfront, monthlyCents, now)),
     largest: { name: biggest.name, share_percent: share, rest_by_if_bought_last: picks.length > 1 && rest > 0 ? month.format(reachBy(rest, monthlyCents, now)) : null },
@@ -72,7 +75,7 @@ export function planFacts(picks: ListItem[], monthlyCents: number, now: Date) {
 
 /** The note when the model can't write one: what the list comes to, never a date or a budget (owner, 2026-10-28). */
 export function fallbackNote(f: ReturnType<typeof planFacts>): string {
-  const keep = f.running_costs_per_month_once_owned !== "none" ? `, plus ${f.running_costs_per_month_once_owned} a month to keep` : "";
+  const keep = f.running_costs_per_month_once_owned !== NOT_RECORDED ? `, plus ${f.running_costs_per_month_once_owned} a month to keep` : "";
   if (f.picks.length > 1 && f.largest.share_percent >= 40) return `The ${f.largest.name} is ${f.largest.share_percent}% of this list, which comes to ${f.everything_upfront}${keep}.`;
   return `Everything on this list comes to ${f.everything_upfront}${keep}.`;
 }
