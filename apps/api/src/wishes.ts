@@ -1,7 +1,8 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import { mediaSchema } from "./agent/media";
-import { requireAuth, type AuthDeps, type AuthVars } from "./auth";
+import { requireAuth, type AuthVars } from "./auth";
+import { describeRoutes, type DescribeDeps } from "./describe";
 
 /** A wish's source and image links are opened and shown by the app, so only http(s) addresses are stored. */
 export function webLinksOnly(details: Record<string, unknown>): boolean {
@@ -78,11 +79,15 @@ export function toWish(r: Row) {
   };
 }
 
-/** Every query is scoped to the signed-in user, so one person can never read or change another's wishes. */
-export function wishRoutes(deps: AuthDeps) {
+/**
+ * Every query is scoped to the signed-in user, so one person can never read or change another's wishes. Search by
+ * meaning (POST /describe and POST /search) lives in describe.ts and is mounted here, behind the same sign-in.
+ */
+export function wishRoutes(deps: DescribeDeps) {
   const app = new Hono<{ Variables: AuthVars }>();
   const { db } = deps;
   app.use("*", requireAuth(deps));
+  app.route("/", describeRoutes(deps));
 
   app.get("/", async (c) => {
     const { rows } = await db.query<Row>(`select ${COLUMNS} from wishes where user_id = $1 order by created_at desc`, [c.get("userId")]);

@@ -1,6 +1,7 @@
-import { LegalPage } from "../components/legal";
-import { PRIVACY, PRIVACY_UPDATED } from "../lib/legal";
+import { Redirect, useLocalSearchParams } from "expo-router";
 
+/** /privacy still works: it opens the combined page at the privacy policy, or at a section of it (?section=deletion). */
 export default function Privacy() {
-  return <LegalPage eyebrow="Dandelist" title="Privacy" updated={PRIVACY_UPDATED} sections={PRIVACY} />;
+  const { section } = useLocalSearchParams<{ section?: string }>();
+  return <Redirect href={{ pathname: "/legal", params: { section: typeof section === "string" && section ? section : "privacy" } }} />;
 }

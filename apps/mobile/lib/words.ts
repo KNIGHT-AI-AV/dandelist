@@ -1,7 +1,13 @@
 import type { Wish } from "./wishes";
 
 export const KIND_LABEL = { buy: "Buy", own: "Own", do: "Do", visit: "Visit" } as const;
-export const TIER_LABEL = { must: "Must", nice: "Nice", dream: "Dream" } as const;
+/**
+ * How much a wish is wanted, on a scale that reads in order (owner, recording 03: "Must/Nice/Dream is unclear"):
+ * first the things they must have, then what they would love, then what can wait for someday.
+ */
+export const TIER_LABEL = { must: "Must have", nice: "Would love", dream: "Someday" } as const;
+/** 1 is wanted most. */
+export const TIER_RANK = { must: 1, nice: 2, dream: 3 } as const;
 
 /** A name as it reads mid-sentence: "A month in Lisbon" becomes "a month in Lisbon"; proper names are left alone. */
 export const midSentence = (name: string) => name.replace(/^(A|An|The) /, (article) => article.toLowerCase());

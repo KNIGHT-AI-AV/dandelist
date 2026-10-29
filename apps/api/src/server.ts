@@ -14,6 +14,7 @@ if (applied.length) console.log(`migrations applied: ${applied.join(", ")}`);
 for (const [name, id, secret] of [
   ["Google", env.GOOGLE_CLIENT_ID, env.GOOGLE_CLIENT_SECRET],
   ["GitHub", env.GITHUB_CLIENT_ID, env.GITHUB_CLIENT_SECRET],
+  ["Facebook", env.FACEBOOK_APP_ID, env.FACEBOOK_APP_SECRET],
 ] as const) {
   if (!!id !== !!secret) console.warn(`${name} sign-in needs both its client id and its client secret; it stays off`);
 }
@@ -43,6 +44,7 @@ const app = createApp({
     google: env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET ? { clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET } : undefined,
     github: env.GITHUB_CLIENT_ID && env.GITHUB_CLIENT_SECRET ? { clientId: env.GITHUB_CLIENT_ID, clientSecret: env.GITHUB_CLIENT_SECRET } : undefined,
     apple: { servicesId: env.APPLE_SERVICES_ID, bundleId: env.APPLE_BUNDLE_ID || undefined },
+    facebook: env.FACEBOOK_APP_ID && env.FACEBOOK_APP_SECRET ? { appId: env.FACEBOOK_APP_ID, appSecret: env.FACEBOOK_APP_SECRET } : undefined,
   },
 });
 

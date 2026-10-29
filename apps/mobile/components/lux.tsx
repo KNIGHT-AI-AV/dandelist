@@ -4,7 +4,7 @@ import { Image, type ImageContentPosition } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Animated, Easing, Image as RNImage, Platform, Pressable, StyleSheet, Text, TextInput, View, useWindowDimensions, type StyleProp, type TextInputProps, type TextStyle, type ViewStyle } from "react-native";
-import { formatCents } from "../lib/money";
+import { useMoney } from "../lib/currency";
 import { ease, haptic, native, usePress, useReducedMotion } from "../lib/motion";
 import { layout, radius, type, usePalette, useTheme, useType, type ThemeId } from "../lib/theme";
 import { Odometer, type OdometerProps } from "./odometer";
@@ -48,9 +48,12 @@ type MoneySize = "hero" | "title" | "card" | "ledger" | "ledger15";
  * the digits, rolling as an odometer. Title: the statement's headline figure. Card: Bodoni Title, tabular, 22/24,
  * full-size `$`. Ledger: DM Mono 13/18 or 15/20. DM Mono never goes above 20 px.
  */
-export function Money({ cents, size = "card", color, style, format = formatCents, align, ...roll }: { cents: number; size?: MoneySize; color?: string; style?: StyleProp<TextStyle>; format?: (c: number) => string; align?: "left" | "right" } & Pick<OdometerProps, "mode" | "rollOnMount" | "onLand" | "pulse" | "announce" | "live">) {
+export function Money({ cents, size = "card", color, style, format: given, align, ...roll }: { cents: number; size?: MoneySize; color?: string; style?: StyleProp<TextStyle>; format?: (c: number) => string; align?: "left" | "right" } & Pick<OdometerProps, "mode" | "rollOnMount" | "onLand" | "pulse" | "announce" | "live">) {
   const p = usePalette();
   const t = useType();
+  // Every figure follows the chosen currency unless a screen passes its own format.
+  const money = useMoney();
+  const format = given ?? money.format;
   if (size === "hero") {
     const s = t.hero.fontSize ?? 56;
     return <Odometer cents={cents} format={format} size={s} family="bodoni" smallPrefix tracking={-0.02 * s} color={color} align={align} style={style as StyleProp<ViewStyle>} {...roll} />;
@@ -157,7 +160,9 @@ export function Photo({ uri, style, contentPosition }: { uri?: string | null; ki
   const p = usePalette();
   const [failed, setFailed] = useState(false);
   return (
-    <View style={[StyleSheet.absoluteFill, style]}>
+    // Photographs never take the pointer: on the web a drag over an <img> starts the browser's own image drag, which
+    // cancels whatever swipe was under way (a card removal, a page turn). Presses go to the parent control.
+    <View pointerEvents="none" style={[StyleSheet.absoluteFill, style]}>
       <LinearGradient colors={[p.surface, p.bg]} start={{ x: 0.2, y: 0 }} end={{ x: 0.8, y: 1 }} style={StyleSheet.absoluteFill} />
       {uri && !failed ? <Image source={{ uri }} style={StyleSheet.absoluteFill} contentFit="cover" contentPosition={contentPosition ?? "center"} transition={{ duration: 300, effect: "cross-dissolve" }} onError={() => setFailed(true)} accessibilityIgnoresInvertColors /> : null}
     </View>

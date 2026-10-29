@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AccessibilityInfo, Animated, Text, View } from "react-native";
+import { endTask, startTask } from "../../lib/activity";
 import { getRun, interpretWish, startResearch, type PriceOption, type Run } from "../../lib/agent";
 import { useAuth } from "../../lib/auth";
 import { formatCents } from "../../lib/money";
@@ -58,6 +59,12 @@ export function Recheck({ wish }: { wish: Wish }) {
   }, []);
   const working = phase === "reading" || phase === "running";
   const clock = useClock(working ? since : null);
+  // The list's Dandy area shows the check as one of its live tasks while it runs.
+  useEffect(() => {
+    if (!working) return;
+    const id = startTask(`Checking the price of ${wish.name}`);
+    return () => endTask(id);
+  }, [working, wish.name]);
 
   const fail = (e: unknown) => {
     if (!alive.current) return;
@@ -160,7 +167,7 @@ export function Recheck({ wish }: { wish: Wish }) {
   } else if (phase === "done") {
     body = (
       <View style={{ alignItems: "flex-start", gap: layout.stack.tight }}>
-        <Text style={[type.callout, { color: p.ink2 }]}>The agent couldn't find a price it could stand behind for this one.</Text>
+        <Text style={[type.callout, { color: p.ink2 }]}>No price we could stand behind turned up this time.</Text>
         <QuietButton label="Try again" onPress={start} />
       </View>
     );

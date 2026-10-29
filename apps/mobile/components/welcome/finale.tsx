@@ -1,5 +1,5 @@
 import { heroFor, heroOf } from "@dandelist/catalogue";
-import { formatCents } from "@dandelist/cost";
+import { formatCents } from "../../lib/money";
 import { useEffect, useRef, useState } from "react";
 import { Animated, Keyboard, Linking, PanResponder, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions, type TextInput } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";

@@ -6,17 +6,69 @@ import { providerName, type ProviderId, type SignInOption } from "../lib/auth";
 import { radius, type, usePalette } from "../lib/theme";
 import { Eyebrow, Glass, Hairline } from "./lux";
 
-/** Google, GitHub and Apple sign-in buttons for the sign-in screen, set in the lux kit: glass, hairlines, Inter. */
+/**
+ * Google, GitHub, Facebook and Apple sign-in buttons for the sign-in screen and the welcome save sheet, set in the lux
+ * kit: glass, hairlines, Inter. Facebook is the exception: its own blue button, as Facebook's brand rules ask.
+ */
 
 const MARK: Record<ProviderId, number> = {
   apple: require("../assets/brands/apple.svg"),
   google: require("../assets/brands/google.svg"),
   github: require("../assets/brands/github.svg"),
+  facebook: require("../assets/brands/facebook.svg"),
 };
 
 const HEIGHT = 56;
 /** The Apple button's busy spinner sits on a white veil, so it is drawn in black on every theme. */
 const APPLE_INK = "#000000";
+/** Facebook's brand blue, with white type and the white "f" mark (Facebook brand resources). */
+export const FACEBOOK_BLUE = "#1877F2";
+
+/**
+ * A provider's mark on its own small disc, the same in every theme: the light Apple and GitHub marks on near-black,
+ * Google's colours on white, Facebook's white mark on its blue. For lists such as settings' sign-in accounts.
+ */
+export function ProviderMark({ id, size = 32 }: { id: ProviderId; size?: number }) {
+  const disc = id === "google" ? "#FFFFFF" : id === "facebook" ? FACEBOOK_BLUE : "#17140F";
+  const mark = Math.round(size * (id === "facebook" ? 0.62 : 0.5));
+  return (
+    <View accessible={false} style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: disc, alignItems: "center", justifyContent: "center", borderWidth: StyleSheet.hairlineWidth, borderColor: "rgba(0, 0, 0, 0.12)" }}>
+      <Image source={MARK[id]} style={{ width: mark, height: mark }} contentFit="contain" accessible={false} />
+    </View>
+  );
+}
+
+/** "Continue with Facebook": Facebook's blue, white type and its white "f" mark, the one place Facebook is named. */
+function FacebookButton({ busy, disabled, onPress }: { busy: boolean; disabled: boolean; onPress(): void }) {
+  const p = usePalette();
+  const [focused, setFocused] = useState(false);
+  const label = "Continue with Facebook";
+  const inactive = disabled || busy;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled: inactive, busy }}
+      onPress={inactive ? undefined : onPress}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
+      style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [
+        { borderRadius: radius.control, borderCurve: "continuous", opacity: disabled && !busy ? 0.45 : pressed ? 0.85 : hovered ? 0.93 : 1, transform: [{ scale: pressed ? 0.985 : 1 }] },
+        Platform.OS === "web" ? ({ outlineWidth: 0, cursor: inactive ? "default" : "pointer" } as object) : null,
+      ]}
+    >
+      {focused ? (
+        <View pointerEvents="none" style={{ position: "absolute", top: -4, left: -4, right: -4, bottom: -4, borderRadius: 20, borderCurve: "continuous", borderWidth: 1, borderColor: p.accent }} />
+      ) : null}
+      <View style={{ height: HEIGHT, borderRadius: radius.control, borderCurve: "continuous", justifyContent: "center", backgroundColor: FACEBOOK_BLUE }}>
+        <View style={{ position: "absolute", left: 20, top: 0, bottom: 0, justifyContent: "center" }}>
+          <Image source={MARK.facebook} style={{ width: 22, height: 22 }} contentFit="contain" accessible={false} />
+        </View>
+        {busy ? <ActivityIndicator color="#FFFFFF" accessibilityLabel="Signing in with Facebook" /> : <Text style={[type.button, { textAlign: "center", color: "#FFFFFF" }]}>{label}</Text>}
+      </View>
+    </Pressable>
+  );
+}
 
 /** "Continue with ..." on frosted glass with the provider's mark. Champagne appears only as the focus ring. */
 function ProviderButton({ id, busy, disabled, onPress }: { id: ProviderId; busy: boolean; disabled: boolean; onPress(): void }) {
@@ -88,6 +140,8 @@ export function SignInOptions({ options, pending, disabled, onChoose }: { option
       {options.map((o) =>
         o.native && o.id === "apple" ? (
           <AppleSheetButton key={o.id} busy={pending === o.id} disabled={disabled || (pending !== null && pending !== o.id)} onPress={() => onChoose(o)} />
+        ) : o.id === "facebook" ? (
+          <FacebookButton key={o.id} busy={pending === o.id} disabled={disabled || (pending !== null && pending !== o.id)} onPress={() => onChoose(o)} />
         ) : (
           <ProviderButton key={o.id} id={o.id} busy={pending === o.id} disabled={disabled || (pending !== null && pending !== o.id)} onPress={() => onChoose(o)} />
         ),
