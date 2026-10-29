@@ -6,7 +6,8 @@ import { z } from "zod";
 import { requireAuth, type AuthDeps, type AuthVars } from "../auth";
 import type { MediaStore } from "../media-store";
 import { SpendLimitError, TOOL_MODEL_PREFIX, assertBudget, assertUserBudget, callsToday, recordSpend, recordToolSpend, spentToday, userCapUsd, isJudge, withHold, type SpendCaps } from "../spend";
-import { answerSchema, clarify, draftSchema, interpret, research, type Meta, type Step } from "./agent";
+import { answerSchema, clarify, draftSchema, interpret, type Draft, type Meta, type Step } from "./agent";
+import { HUNT_STOP_MS, huntWish, type HuntResult } from "./find";
 import { SAM_MODEL } from "./cutout";
 import type { MediaOptions } from "./hunt";
 import { SHOPPING_ACTOR, SHOPPING_MAX_RESULTS, SHOPPING_PRICE_PER_RESULT_USD, shoppingSearch } from "./shopping";
@@ -14,6 +15,7 @@ import type { Fetcher } from "./tools";
 import { pgArchive, type Archive } from "../archive/archive";
 import { MAX_CLIP_BYTES, TRANSCRIBES_PER_USER_PER_DAY, WISH_KEYWORDS, cleanTranscript, clipProblem, readWav } from "./transcribe";
 import { personaSchema, voiceLine } from "./persona";
+import { stoppable } from "../sse";
 
 export const RUNS_PER_USER_PER_DAY = 20;
 /** Every judge shares one account, so it gets more runs; its share of the daily spend cap still bounds it. */
@@ -40,7 +42,24 @@ export interface AgentDeps extends AuthDeps {
 const IMAGE_MODEL = "muse-image-1.0";
 
 const interpretBody = z.object({ text: z.string().trim().min(2).max(1000) });
-const runBody = z.object({ draft: draftSchema, answers: z.array(answerSchema).max(3).default([]), persona: personaSchema });
+/**
+ * A run hunts one wish. Send the person's words (`text`) to start at once, or a `draft` read before; to hunt again with
+ * changed answers, send the run's draft and `answers` by question id (or the question's words), free text included.
+ */
+const runBody = z
+  .object({
+    draft: draftSchema.optional(),
+    text: z.string().trim().min(2).max(1000).optional(),
+    answers: z.array(answerSchema).max(6).default([]),
+    persona: personaSchema,
+  })
+  .refine((b) => !!b.draft || !!b.text, { message: "Describe the wish." });
+
+/** A run started from words alone holds this until the draft is read, a few seconds in. */
+const pendingDraft = (text: string): Draft => ({ title: text.slice(0, 120), kind: "buy", summary: text.slice(0, 400), specifics: [], region: "US", currency: "USD", unknowns: [] });
+
+/** What a run's result holds: the options, and while it runs the fast card marked provisional. */
+const resultOf = (r: HuntResult) => ({ options: r.options, explanation: r.explanation, note: r.note, horizonYears: r.horizonYears, questions: r.questions, provisional: r.provisional });
 
 type RunRow = {
   id: string;
@@ -81,10 +100,11 @@ export function agentRoutes(deps: AgentDeps) {
   app.use("*", requireAuth(deps));
 
   /** A Meta client that checks the spend caps before each call and records what each call cost. */
-  const metaFor = (userId: string, kind: string, onCost?: (usd: number) => Promise<void>): Meta => {
+  const metaFor = (userId: string, kind: string, onCost?: (usd: number) => Promise<void>, stop?: AbortSignal): Meta => {
     const cfg = deps.meta!;
     const client = new MetaClient({
       ...cfg,
+      ...(stop ? { fetch: stoppable(cfg.fetch ?? fetch, stop) } : {}),
       onUsage: async (usage, cost) => {
         await recordSpend(db, userId, kind, usage, cost, deps.now());
         await onCost?.(cost);
@@ -182,14 +202,28 @@ export function agentRoutes(deps: AgentDeps) {
     }
   });
 
+  /**
+   * POST /agent/runs {text} or {draft, answers?}, then poll GET /agent/runs/:id (the chat and the add-a-wish screen).
+   * While `status` is "running": `steps[]` grows, each with a short `line` for one working row; `draft` is the read
+   * wish (with `questions`, each with the answer it `picked`) a few seconds in; `result` appears with the fast card as
+   * `options[0]` and `provisional: true`, usually in 10 to 15 s. At "done" (by 60 s) `result` is final: the best option
+   * first, `questions` with what each hunt used. To change an answer, post the run's `draft` with
+   * `answers: [{question: <question id>, answer: <a choice or their own words>}]`.
+   */
   app.post("/runs", async (c) => {
     const body = runBody.safeParse(await c.req.json().catch(() => null));
     if (!body.success) return c.json({ error: "Check the wish and try again." }, 400);
     const userId = c.get("userId");
     const now = deps.now();
-    const { draft, answers } = body.data;
+    const { draft, text, answers } = body.data;
     const key = createHash("sha256")
-      .update(JSON.stringify([draft.title.toLowerCase(), draft.kind, draft.region, draft.currency, [...draft.specifics].sort((a, b) => a.name.localeCompare(b.name)), answers]))
+      .update(
+        JSON.stringify(
+          draft
+            ? [draft.title.toLowerCase(), draft.kind, draft.region, draft.currency, [...draft.specifics].sort((a, b) => a.name.localeCompare(b.name)), answers]
+            : ["text", text!.toLowerCase().replace(/\s+/g, " ").trim(), answers],
+        ),
+      )
       .digest("hex");
 
     const cached = await db.query<RunRow>(
@@ -214,7 +248,7 @@ export function agentRoutes(deps: AgentDeps) {
        select $1, $2, $3::jsonb, $4::jsonb, $5, $5
        where (select count(*) from agent_runs where user_id = $1 and created_at > $6) < $7
        returning ${RUN_COLUMNS}`,
-      [userId, key, JSON.stringify(draft), JSON.stringify(answers), now.toISOString(), since, runCap],
+      [userId, key, JSON.stringify(draft ?? pendingDraft(text!)), JSON.stringify(answers), now.toISOString(), since, runCap],
     );
     if (!rows[0]) return c.json({ error: `You can research up to ${runCap} wishes a day.` }, 429);
     const run = rows[0]!;
@@ -223,13 +257,44 @@ export function agentRoutes(deps: AgentDeps) {
     const addCost = async (usd: number) => void (await db.query("update agent_runs set cost_usd = cost_usd + $1 where id = $2", [usd.toFixed(6), run.id]));
     const onStep = async (step: Step) =>
       void (await db.query("update agent_runs set steps = steps || $1::jsonb, updated_at = $2 where id = $3", [JSON.stringify([step]), touch(), run.id]));
-    // The agent keeps working after this response; the app polls GET /agent/runs/:id for its trail.
-    const shopping = shoppingFor(userId, draft.region, draft.currency, addCost);
-    void research(metaFor(userId, "research", addCost), { draft, answers, onStep, fetcher: deps.webFetch, now: deps.now, shopping, media: mediaOptions(), archive, contributor: userId, voice: voiceLine(body.data.persona) })
-      .then((result) => db.query("update agent_runs set status = 'done', result = $1::jsonb, updated_at = $2 where id = $3", [JSON.stringify(result), touch(), run.id]))
-      .catch((e) => {
-        console.error("research failed", run.id, e instanceof MetaApiError ? `${e.status} ${e.body.slice(0, 200)}` : e);
-        return db.query("update agent_runs set status = 'error', error = $1, updated_at = $2 where id = $3", [friendly(e), touch(), run.id]);
+    // The agent keeps working after this response; the app polls GET /agent/runs/:id for its trail. The fast card
+    // lands in the run's result while it still runs (provisional: true), and the run ends with its best by 60 s.
+    const startedAt = Date.now();
+    const stop = new AbortController();
+    const shopping = shoppingFor(userId, draft?.region ?? "US", draft?.currency ?? "USD", addCost);
+    const fast: { result: ReturnType<typeof resultOf> | null } = { result: null };
+    const hunt = huntWish(metaFor(userId, "research", addCost, stop.signal), {
+      text,
+      draft,
+      answers,
+      startedAt,
+      onStep,
+      fetcher: deps.webFetch,
+      now: deps.now,
+      shopping,
+      media: mediaOptions(),
+      archive,
+      contributor: userId,
+      voice: voiceLine(body.data.persona),
+      onDraft: async (d) => void (await db.query("update agent_runs set draft = $1::jsonb, updated_at = $2 where id = $3", [JSON.stringify(d), touch(), run.id])),
+      onProvisional: async (r) => {
+        fast.result = resultOf(r);
+        await db.query("update agent_runs set result = $1::jsonb, updated_at = $2 where id = $3 and status = 'running'", [JSON.stringify(fast.result), touch(), run.id]);
+      },
+    });
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const late = new Promise<"late">((resolve) => (timer = setTimeout(() => resolve("late"), HUNT_STOP_MS)));
+    void Promise.race([hunt.then((r) => ({ r }), (e: unknown) => ({ e })), late])
+      .then(async (outcome) => {
+        clearTimeout(timer);
+        stop.abort(); // anything still running stops spending
+        const done = (result: unknown) => db.query("update agent_runs set status = 'done', result = $1::jsonb, updated_at = $2 where id = $3", [JSON.stringify(result), touch(), run.id]);
+        if (outcome !== "late" && "r" in outcome) return done(resultOf(outcome.r));
+        // Out of time, or the research failed: the fast card, if there was one, is the answer.
+        if (fast.result) return done({ ...fast.result, provisional: false });
+        const e: unknown = outcome === "late" ? null : "e" in outcome ? outcome.e : null;
+        if (e) console.error("research failed", run.id, e instanceof MetaApiError ? `${e.status} ${e.body.slice(0, 200)}` : e);
+        return db.query("update agent_runs set status = 'error', error = $1, updated_at = $2 where id = $3", [e ? friendly(e) : "That took too long. Try again.", touch(), run.id]);
       })
       .catch((e) => console.error("could not record research outcome", run.id, e));
 

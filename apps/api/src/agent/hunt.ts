@@ -13,7 +13,6 @@ import {
   premiumPrompt,
   probeImage,
   qualityBar,
-  sketchfabSearch,
   toMediaImage,
   toModel3d,
   type CommonsPhoto,
@@ -28,6 +27,7 @@ import {
   type ProbedImage,
 } from "./media";
 import type { ShoppingOffer } from "./shopping";
+import { within } from "./time";
 import { getPage, readCapped, safeGet, type Fetcher, type PageResult } from "./tools";
 
 /** What the pictures should show, from the research model's final answer. */
@@ -150,10 +150,38 @@ export async function upscaleImage(meta: Meta, src: FoundImage, fetcher: Fetcher
 
 const byResolution = (a: MediaImage, b: MediaImage) => longEdge(b) - longEdge(a) || Number(!!b.clean) - Number(!!a.clean);
 
+/** Pictures that are never the thing itself: logos, icons, badges and the like. */
+const NOT_A_PHOTO = /logo|icon|sprite|avatar|favicon|placeholder|blank|pixel|badge|flag|banner|\.svg(\?|$)|\.gif(\?|$)/i;
+/** Share pictures a whole site uses for every page; on a page that isn't one product they say nothing about it. */
+const SITE_WIDE = /(^|[/_.-])(default|share|sharing|social|opengraph|og|og-?image|fallback|brand|site|home|homepage|facebook|twitter|meta)([/_.-]|$)/i;
+const pathOf = (raw: string) => {
+  try {
+    return decodeURIComponent(new URL(raw).pathname);
+  } catch {
+    return raw;
+  }
+};
+
 /**
- * Gives every option its media: real photos first (its own page, the shopping listing, the other options' pages;
- * Wikimedia Commons for places, trips and cars), then a SAM cutout of the best product photo, then, only when no
+ * Whether a page's own share picture may stand for an option when no photo could be checked: only on a page whose
+ * title names the subject, and never a logo or a site-wide share card.
+ */
+export function shareImageFits(page: PageResult | undefined, subject: string, url: string | undefined): boolean {
+  if (!url || !page?.ok) return false;
+  const words = [...new Set(subject.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 2))];
+  const named = words.length > 0 && words.filter((w) => page.title.toLowerCase().includes(w)).length >= Math.min(2, words.length);
+  return named && !NOT_A_PHOTO.test(pathOf(url)) && !SITE_WIDE.test(pathOf(url));
+}
+
+/**
+ * Gives every option its media: real photos first, then a SAM cutout of the best product photo, then, only when no
  * real photo reaches the quality bar, an upscale or one generated picture. Mutates the options in place.
+ *
+ * Where a photo may come from depends on what the options are (2026-10-29, after a villa card showed another
+ * agency's house and a chef card another site's logo): a product or a car is the same thing on every option's page,
+ * so pages about it, the other options' pages and shop listings all lend photos; a home, a trip or a service is a
+ * different thing on each page, so an option only ever shows its own page's pictures, the archive's or Commons'.
+ * No 3D models are searched any more (owner, 2026-10-29); a saved card that has one still carries it.
  */
 export async function huntMedia(
   meta: Meta,
@@ -184,16 +212,11 @@ export async function huntMedia(
   const fromArchive = archived ? archived.photos.map(archiveImage) : [];
   const commons = !archived && (kind === "place" || kind === "experience" || kind === "vehicle") ? await commonsPhotos(hint.subject, fetcher).catch(() => []) : [];
 
-  if ((kind === "vehicle" || kind === "product") && !models.size) {
-    try {
-      const found = await sketchfabSearch(hint.subject, fetcher);
-      for (const m of found) models.set(m.uid, m);
-      await ctx.onStep(eventStep({ kind: "search3d", query: hint.subject, found: found.length }, at()));
-    } catch {
-      /* no 3D this time */
-    }
-  }
+  // No new 3D models are looked for (owner, 2026-10-29: "It doesn't need to be a 3-D model"); only a caller that
+  // already holds candidates can still have one matched.
   const candidates3d = kind === "vehicle" ? [...models.values()] : kind === "product" ? [...models.values()].filter((m) => m.likes >= LIKED) : [];
+  const left = () => (ctx.deadline ?? Number.POSITIVE_INFINITY) - Date.now();
+  const sameThing = kind === "product" || kind === "vehicle";
 
   let picked: { photos: CommonsPhoto[]; model3d?: Model3d } = { photos: [] };
   if (commons.length || candidates3d.length) {
@@ -245,28 +268,35 @@ export async function huntMedia(
   const aboutSubject = (title: string) => words.length > 0 && words.filter((w) => title.toLowerCase().includes(w)).length >= Math.min(2, words.length);
   const optionUrls = new Set([...optionPages.values()].map((p) => p.url));
   const isRelated = (p: PageResult) => p.ok && !optionUrls.has(p.url) && aboutSubject(p.title);
-  // When the research never opened one, look the maker's page up: one small web-search call.
-  if ((kind === "product" || kind === "vehicle") && ![...opened, ...optionPages.values()].some((p) => p.ok && aboutSubject(p.title))) {
+  // When the research never opened one, look the maker's page up: one small web-search call, when there is time.
+  if (sameThing && left() > 15_000 && ![...opened, ...optionPages.values()].some((p) => p.ok && aboutSubject(p.title))) {
     try {
-      for (const url of await findMakerPages(meta, hint, (q) => ctx.onStep({ type: "search", query: q, at: at() }))) opened = [...opened, await getPage(url, fetcher)];
+      const urls = await findMakerPages(meta, hint, (q) => ctx.onStep({ type: "search", query: q, at: at() }));
+      opened = [...opened, ...(await Promise.all(urls.map((url) => getPage(url, fetcher))))];
     } catch (e) {
       console.error("maker page search failed", (e as Error).message);
     }
   }
-  const related = opened.filter((p, i) => isRelated(p) && opened.findIndex((q) => q.url === p.url) === i);
+  const related = sameThing ? opened.filter((p, i) => isRelated(p) && opened.findIndex((q) => q.url === p.url) === i) : [];
   const siteName = (p: PageResult) => p.title.split(/\s[|–—-]\s/).slice(1).pop()?.trim() || hostOf(p.url);
+  const isPhoto = (url: string) => !NOT_A_PHOTO.test(pathOf(url)) && (sameThing || !SITE_WIDE.test(pathOf(url)));
+  const homePage = (p: PageResult) => pathOf(p.url).replace(/\/+$/, "") === "";
 
-  for (const option of options) {
+  // Each option at once; the probes are shared, so the same picture is only ever fetched once.
+  await Promise.all(options.map(async (option) => {
     const page = optionPages.get(option);
     const candidates: { url: string; source: string; credit?: string }[] = [];
-    if (page?.ok) candidates.push(...page.images.map((url) => ({ url, source: hostOf(page.url), credit: option.seller })));
-    for (const p of related) candidates.push(...p.images.slice(0, 6).map((url) => ({ url, source: hostOf(p.url), credit: siteName(p) })));
+    // A home, a trip or a service shows only its own page's pictures, and never a home page's share card.
+    if (page?.ok && (sameThing || !homePage(page))) candidates.push(...page.images.filter(isPhoto).map((url) => ({ url, source: hostOf(page.url), credit: option.seller })));
     const listing = option.listing ? offers.find((o) => o.merchant === option.listing!.merchant && o.title === option.listing!.title) : undefined;
     if (listing?.image) candidates.push({ url: listing.image, source: "Google Shopping", credit: listing.merchant });
-    for (const [other, p] of optionPages) if (other !== option && p.ok) candidates.push(...p.images.slice(0, 4).map((url) => ({ url, source: hostOf(p.url), credit: other.seller })));
-    for (const o of offers.slice(0, 3)) if (o.image) candidates.push({ url: o.image, source: "Google Shopping", credit: o.merchant });
+    if (sameThing) {
+      for (const p of related) candidates.push(...p.images.slice(0, 6).filter(isPhoto).map((url) => ({ url, source: hostOf(p.url), credit: siteName(p) })));
+      for (const [other, p] of optionPages) if (other !== option && p.ok) candidates.push(...p.images.slice(0, 4).filter(isPhoto).map((url) => ({ url, source: hostOf(p.url), credit: other.seller })));
+      for (const o of offers.slice(0, 3)) if (o.image) candidates.push({ url: o.image, source: "Google Shopping", credit: o.merchant });
+    }
 
-    const real = (kind === "place" && photos.length >= 5) || fromArchive.length >= 3 ? [] : await huntImages(candidates, probe, 16);
+    const real = (kind === "place" && photos.length >= 5) || fromArchive.length >= 3 ? [] : ((await within(huntImages(candidates, probe, 16), left() - 300)) ?? []);
     const pageImages = real.map(toMediaImage);
     let images: MediaImage[] = fromArchive.length
       ? [...fromArchive, ...pageImages]
@@ -312,9 +342,12 @@ export async function huntMedia(
 
     const media: Media = { kind, images, ...(picked.model3d ? { model3d: picked.model3d } : {}), ...(cutout ? { cutout } : {}) };
     option.media = media;
+    // The card's photo is a real photograph that passed the hunt; failing that, only the option's own page's share
+    // picture when the page names the subject, and never a logo, a site-wide card or another listing's photo.
     const firstReal = images.find((i) => !i.generated);
     if (firstReal) option.imageUrl = firstReal.url;
+    else if (!(shareImageFits(page, hint.subject, option.imageUrl) && (sameThing || !homePage(page!)))) delete option.imageUrl;
     const bestReal = firstReal ? { best: { width: firstReal.width ?? 0, height: firstReal.height ?? 0, source: firstReal.source } } : {};
     await ctx.onStep(eventStep({ kind: "photos", label: option.label, count: images.length, ...bestReal }, at()));
-  }
+  }));
 }
