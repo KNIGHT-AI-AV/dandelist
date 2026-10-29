@@ -20,6 +20,7 @@ export function ProfileCard() {
   const press = usePress(0.97);
   const [busy, setBusy] = useState<"upload" | "remove" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
 
   const change = async () => {
     if (busy) return;
@@ -27,6 +28,7 @@ export function ProfileCard() {
     try {
       const image = await pickAvatarImage();
       if (!image) return;
+      setPreview(image.preview ?? null);
       setBusy("upload");
       await uploadAvatar(image);
       haptic.success();
@@ -34,6 +36,7 @@ export function ProfileCard() {
       haptic.error();
       setError(e instanceof Error ? e.message : "Couldn't save that photo. Try another.");
     } finally {
+      setPreview(null);
       setBusy(null);
     }
   };
@@ -54,7 +57,7 @@ export function ProfileCard() {
     <View style={{ alignItems: "center", gap: layout.stack.base }}>
       <Pressable accessibilityRole="button" accessibilityLabel={profile?.avatarKey ? "Change your photo" : "Add a photo"} onPress={change} onPressIn={press.onPressIn} onPressOut={press.onPressOut}>
         <Animated.View style={{ transform: [{ scale: press.scale }] }}>
-          <ProfileAvatar size={AVATAR} />
+          <ProfileAvatar size={AVATAR} preview={preview} />
           {busy === "upload" ? (
             <View style={[StyleSheet.absoluteFill, { borderRadius: AVATAR / 2, alignItems: "center", justifyContent: "center", backgroundColor: `rgba(${p.bgRgb}, 0.55)` }]}>
               <ActivityIndicator color={p.ink} accessibilityLabel="Saving your photo" />

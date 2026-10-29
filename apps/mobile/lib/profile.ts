@@ -41,7 +41,7 @@ export type Api = (path: string, init?: RequestInit) => Promise<Response>;
 /** The API's limits, mirrored so the app can say so before uploading. */
 export const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
 export const NAME_MAX = 60;
-/** Pictures are cropped square and scaled to this on the web before upload; phones crop in the picker. */
+/** Pictures are cropped square and scaled to this before upload: a canvas on the web, Skia on a phone. */
 const AVATAR_EDGE = 640;
 
 /** Where a picture is served, from its media key. */
@@ -135,7 +135,8 @@ export function useProfile(): ProfileStore {
   const uploadAvatar = useCallback(
     async (image: PickedImage) => {
       if (image.size > MAX_AVATAR_BYTES) throw new Error("Choose a photo under 2 MB.");
-      const res = await api("/me/avatar", { method: "POST", headers: { "Content-Type": image.type }, body: image.body }).catch(() => null);
+      // Phones send raw bytes, which React Native's fetch takes as an ArrayBufferView; the web sends a Blob.
+      const res = await api("/me/avatar", { method: "POST", headers: { "Content-Type": image.type }, body: image.body as BodyInit }).catch(() => null);
       keep((await read<{ profile: Profile }>(res, "Couldn't save that photo.")).profile);
     },
     [api, keep],
@@ -153,9 +154,11 @@ export function useProfile(): ProfileStore {
 
 export type AvatarType = "image/jpeg" | "image/png" | "image/webp";
 export interface PickedImage {
-  body: Blob;
+  body: Blob | Uint8Array;
   type: AvatarType;
   size: number;
+  /** A local picture of the choice, shown in the disc while it uploads. */
+  preview?: string;
 }
 
 const TYPES: AvatarType[] = ["image/jpeg", "image/png", "image/webp"];
@@ -216,10 +219,10 @@ export async function pickAvatarImage(): Promise<PickedImage | null> {
     const file = await chooseFile(TYPES.join(","));
     if (!file) return null;
     const square = await squareJpeg(file).catch(() => null);
-    if (square) return { body: square, type: "image/jpeg", size: square.size };
+    if (square) return { body: square, type: "image/jpeg", size: square.size, preview: URL.createObjectURL(square) };
     const type = typeOf(file.type, file.name);
     if (!type) throw new Error("Choose a JPEG, PNG or WebP photo.");
-    return { body: file, type, size: file.size };
+    return { body: file, type, size: file.size, preview: URL.createObjectURL(file) };
   }
   // Loaded only when asked for: a build made before the photo picker was added has no native module for it, and
   // importing it up front would stop the whole app from starting there.
@@ -229,13 +232,19 @@ export async function pickAvatarImage(): Promise<PickedImage | null> {
   } catch {
     throw new Error("Choosing a photo needs the newest Dandelist. Update the app, or add your photo on the web.");
   }
-  const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], allowsEditing: true, aspect: [1, 1], quality: 0.8 });
+  // The plain photo picker (one tap, no crop screen), asking for a JPEG copy because iPhones shoot HEIC. The middle
+  // square is cut and scaled down here, as on the web, so any photo the phone can show goes up small and square.
+  const result = await ImagePicker.launchImageLibraryAsync({
+    mediaTypes: ["images"],
+    quality: 1,
+    preferredAssetRepresentationMode: ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
+  });
   const asset = result.canceled ? null : result.assets?.[0];
   if (!asset) return null;
-  const type = typeOf(asset.mimeType, asset.uri);
-  if (!type) throw new Error("Choose a JPEG, PNG or WebP photo.");
-  const body = await (await fetch(asset.uri)).blob();
-  return { body, type, size: body.size || asset.fileSize || 0 };
+  const { squareJpeg: squareOnPhone } = await import("./avatar-image");
+  const bytes = await squareOnPhone(asset.uri, AVATAR_EDGE).catch(() => null);
+  if (!bytes) throw new Error("That photo couldn't be read. Try another one.");
+  return { body: bytes, type: "image/jpeg", size: bytes.length, preview: asset.uri };
 }
 
 // ------------------------------------------------------------------ the rest of settings

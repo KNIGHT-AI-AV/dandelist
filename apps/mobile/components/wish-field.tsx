@@ -57,12 +57,14 @@ export const WishField = forwardRef<TextInput, { value: string; onChangeText(t: 
           submitBehavior="blurAndSubmit"
           onSubmitEditing={onSubmit}
           onKeyPress={onKeyPress}
-          // Phones report the text's own height; the web reports the box's scroll height, which already holds the padding.
-          onContentSizeChange={(e) => setHeight(Math.min(FIELD_MAX, Math.max(FIELD_MIN, e.nativeEvent.contentSize.height + (Platform.OS === "web" ? 0 : 2 * layout.stack.tight))))}
-          scrollEnabled={height >= FIELD_MAX}
+          // The web sizes the box from its scroll height. Phones size a multiline field themselves between the min and the
+          // max: feeding contentSize back into a fixed height made iOS grow the box 16 pt a frame and snap back, so the
+          // whole step jumped (owner's clip, build 14).
+          onContentSizeChange={Platform.OS === "web" ? (e) => setHeight(Math.min(FIELD_MAX, Math.max(FIELD_MIN, e.nativeEvent.contentSize.height))) : undefined}
+          scrollEnabled={Platform.OS === "web" ? height >= FIELD_MAX : true}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
-          style={[type.title3, { fontFamily: fonts.titleItalic, color: p.ink, height, paddingVertical: layout.stack.tight, paddingRight: inset, textAlignVertical: "top" }, NO_OUTLINE]}
+          style={[type.title3, { fontFamily: fonts.titleItalic, color: p.ink, paddingVertical: layout.stack.tight, paddingRight: inset, textAlignVertical: "top" }, Platform.OS === "web" ? { height } : { minHeight: FIELD_MIN, maxHeight: FIELD_MAX }, NO_OUTLINE]}
         />
         <View style={{ height: 1, backgroundColor: p.line }}>
           <Animated.View

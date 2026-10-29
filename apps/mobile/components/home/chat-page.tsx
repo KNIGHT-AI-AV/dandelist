@@ -4,6 +4,7 @@ import { Animated, AppState, Keyboard, Platform, Pressable, Text, View, useWindo
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Greeting } from "../chat/greeting";
 import { HistorySheet } from "../chat/history-sheet";
+import { HuntCard } from "../chat/hunt-card";
 import { useHistory } from "../chat/use-history";
 import { StreamText, WorkLog, Working, type StepLine } from "../chat/working";
 import { DandyAvatar } from "../dandy-avatar";
@@ -66,6 +67,13 @@ function HeaderButton({ label, icon, onPress, hint }: { label: string; icon?: "p
 }
 
 /** Steps that follow one another fold into one work log; everything else is its own row. */
+/** What the chat says when something breaks: plain words, never a platform error ("fetch failed: Unexpected..."). */
+function friendly(e: unknown, fallback: string): string {
+  const m = e instanceof Error ? e.message : "";
+  if (!m || /fetch failed|network|connection|UnexpectedException|timed out|\.swift|\.kt:/i.test(m)) return m ? "I lost the connection for a moment. Send that again." : fallback;
+  return m;
+}
+
 function rowsOf(feed: FeedItem[]): Row[] {
   const rows: Row[] = [];
   for (const item of feed) {
@@ -222,7 +230,7 @@ export function ChatPage() {
     } catch (e) {
       if (gen.current === mine && !ctrl.signal.aborted) {
         haptic.error();
-        push({ id: nextId(), kind: "agent", text: (e as Error).message || "I couldn't answer just now. Try again.", fresh: true });
+        push({ id: nextId(), kind: "agent", text: friendly(e, "I couldn't answer just now. Try again."), fresh: true });
       }
     } finally {
       if (late) clearTimeout(late);
@@ -311,7 +319,7 @@ export function ChatPage() {
         setSession(s.id);
       } catch (e) {
         if (gen.current !== mine) return;
-        if (!opts.quiet) push({ id: nextId(), kind: "agent", text: (e as Error).message, fresh: true });
+        if (!opts.quiet) push({ id: nextId(), kind: "agent", text: friendly(e, "I couldn't open that conversation. Try again."), fresh: true });
       } finally {
         if (gen.current === mine) setOpening(false);
         lastActive.current = Date.now();
@@ -420,12 +428,8 @@ export function ChatPage() {
       case "wish_ready":
         return <WishReady w={w} already={owned.has(w.wish.name.trim().toLowerCase())} onAdd={async () => void (await add(wishFrom(w.wish)))} />;
       case "item":
-        return (
-          <Glass style={{ padding: 18, gap: 14, borderRadius: radius.lg }}>
-            <Text style={[type.title3, { fontFamily: fonts.displayItalic, color: p.ink }]}>{w.text}</Text>
-            <PrimaryButton label="Find the real price" onPress={() => router.push({ pathname: "/wishes/new", params: { text: w.text } })} />
-          </Glass>
-        );
+        // Hunted at once, in place: no button between the wish and its card.
+        return <HuntCard id={w.id} text={w.text} already={owned.has(w.text.trim().toLowerCase())} />;
       case "region_picker":
         // Only when the Dandy asks: where they live otherwise comes from Settings.
         return <RegionPicker current={life?.home ?? w.current} onPick={(place) => send({ type: "region", home: place }, `I'll live in ${place.label}.`)} />;

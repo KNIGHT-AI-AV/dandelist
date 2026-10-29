@@ -9,7 +9,7 @@ import { getSecret, setSecret } from "./storage";
  */
 
 export type { PersonaId };
-export type ShapeId = "circle" | "square" | "diamond" | "capsule" | "leaf";
+export type ShapeId = "circle" | "square" | "diamond" | "capsule" | "triangle";
 
 export interface Persona {
   id: PersonaId;
@@ -25,7 +25,8 @@ export const PERSONAS: Persona[] = [
   { id: "mogul", name: "The Mogul", line: "Bold, quick, thinks in moves." },
 ];
 
-export const SHAPES: ShapeId[] = ["circle", "square", "diamond", "capsule", "leaf"];
+// The last one is a triangle (owner, 2026-10-29: "The last shape should definitely be a triangle"); it replaced a leaf.
+export const SHAPES: ShapeId[] = ["circle", "square", "diamond", "capsule", "triangle"];
 
 /** Ten colours from the house palette: the themes' own accents and grounds, nothing off-brand. */
 export const DANDY_COLORS: { id: string; name: string; hex: string; light: boolean }[] = [
@@ -70,6 +71,9 @@ export async function loadDandy(): Promise<Dandy> {
     const raw = await getSecret(KEY);
     const d = raw ? (JSON.parse(raw) as Partial<Dandy>) : null;
     cached = d?.name ? { ...DEFAULT_DANDY, ...d } : DEFAULT_DANDY;
+    // A Dandy saved as the old leaf becomes the triangle that took its place; anything unknown, the default.
+    if ((cached.shape as string) === "leaf") cached = { ...cached, shape: "triangle" };
+    if (!SHAPES.includes(cached.shape)) cached = { ...cached, shape: DEFAULT_DANDY.shape };
   } catch {
     cached = DEFAULT_DANDY;
   }
