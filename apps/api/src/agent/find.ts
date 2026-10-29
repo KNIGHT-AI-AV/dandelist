@@ -101,6 +101,12 @@ export function mergeFast(draft: Draft, researched: ResearchResult | null, fast:
   return { options: options.slice(0, 4), explanation, note: researched?.note ?? "", horizonYears: researched?.horizonYears ?? HORIZON_YEARS };
 }
 
+/** A questions call that failed leaves the card without questions; the hunt itself goes on. */
+function questionsFailed(e: unknown): WishQuestion[] {
+  console.warn("questions failed", (e as Error).message);
+  return [];
+}
+
 /** Puts a found photo on an option that has none. */
 function withPhoto(o: PriceOption, found: FoundPhoto) {
   o.imageUrl = found.image.url;
@@ -115,6 +121,10 @@ export async function huntWish(meta: Meta, ctx: HuntContext): Promise<HuntResult
   const known = ctx.draft ? withAnswers(ctx.draft, given) : null;
   const reading: Promise<{ draft: Draft; extra: Answer[] }> = known ? Promise.resolve(known) : interpret(meta, ctx.text ?? "").then((d) => withAnswers(d, given));
   reading.catch(() => undefined);
+  // The questions start at once from the person's own words, beside reading the wish, so they are usually in hand
+  // before the research starts and it prices their picks; nothing ever waits for them. A re-hunt brings its own.
+  const fromWords = !known && !!ctx.text?.trim();
+  const asking: Promise<WishQuestion[]> | null = fromWords ? pickQuestions(meta, { text: ctx.text, homeCurrency: home }, ctx.now()).catch(questionsFailed) : null;
 
   // The fast find starts on the person's own words at once; the draft joins it when it lands.
   const words = ctx.text?.trim() || (known ? `${known.draft.title}. ${known.draft.summary}` : "");
@@ -130,22 +140,23 @@ export async function huntWish(meta: Meta, ctx: HuntContext): Promise<HuntResult
     return null;
   });
 
+  // Answers the person already gave count against the questions as soon as they land.
+  const held: { questions: WishQuestion[] | null } = { questions: null };
+  const fromStart = asking?.then((qs) => (held.questions = applyAnswers(qs, given).questions));
+
   const read = await reading; // a wish that can't be read fails here, as it always has
   const extra = read.extra;
   let draft = read.draft;
+  // Questions already in hand go on the draft before the research reads it, so the hunt prices their picks.
+  if (held.questions?.length) draft = { ...draft, questions: held.questions };
   await ctx.onDraft?.(draft);
 
   // The questions are their own small call beside the research, so nothing waits on them; a re-hunt brings its own.
   const asked: Promise<WishQuestion[]> = known
     ? Promise.resolve(draft.questions ?? [])
-    : pickQuestions(meta, draft)
-        .then((qs) => applyAnswers(qs, given).questions)
-        .catch((e) => {
-          console.warn("questions failed", (e as Error).message);
-          return [];
-        });
+    : (fromStart ?? pickQuestions(meta, { draft, homeCurrency: home }, ctx.now()).then((qs) => applyAnswers(qs, given).questions)).catch(questionsFailed);
   const settledQuestions = asked.then(async (qs) => {
-    if (!known && qs.length) {
+    if (!known && qs.length && draft.questions !== qs) {
       draft = { ...draft, questions: qs };
       await ctx.onDraft?.(draft);
     }
