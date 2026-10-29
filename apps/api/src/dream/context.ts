@@ -44,7 +44,7 @@ export interface ApifyConfig {
 
 export interface DreamCtx {
   db: Db;
-  /** Muse Spark, with the spend caps and the per-turn ceiling checked before every call. */
+  /** The model, with the spend caps and the per-turn ceiling checked before every call. */
   meta: Meta;
   web: Fetcher;
   /** Fetch for fixed, trusted APIs (ECB rates, Wikimedia Commons). */
@@ -60,6 +60,8 @@ export interface DreamCtx {
   step: (id: string, state: "running" | "done", text: string) => Promise<void>;
   /** The Dandy's voice line (agent/persona.ts), or empty. */
   voice?: string;
+  /** The Dandy's name as its owner typed it, passed to the model as data so it can introduce itself. */
+  name?: string;
 }
 
 /** Strict JSON schema helpers in the shape Meta's Responses API takes. */
