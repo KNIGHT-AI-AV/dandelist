@@ -160,7 +160,9 @@ export function Photo({ uri, style, contentPosition }: { uri?: string | null; ki
   const p = usePalette();
   const [failed, setFailed] = useState(false);
   return (
-    <View style={[StyleSheet.absoluteFill, style]}>
+    // Photographs never take the pointer: on the web a drag over an <img> starts the browser's own image drag, which
+    // cancels whatever swipe was under way (a card removal, a page turn). Presses go to the parent control.
+    <View pointerEvents="none" style={[StyleSheet.absoluteFill, style]}>
       <LinearGradient colors={[p.surface, p.bg]} start={{ x: 0.2, y: 0 }} end={{ x: 0.8, y: 1 }} style={StyleSheet.absoluteFill} />
       {uri && !failed ? <Image source={{ uri }} style={StyleSheet.absoluteFill} contentFit="cover" contentPosition={contentPosition ?? "center"} transition={{ duration: 300, effect: "cross-dissolve" }} onError={() => setFailed(true)} accessibilityIgnoresInvertColors /> : null}
     </View>

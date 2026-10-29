@@ -2,6 +2,7 @@ import { recurringBreakdown } from "@dandelist/cost";
 import { useEffect, useMemo, useRef } from "react";
 import { Animated, PanResponder, Platform, Pressable, Text, View, type AccessibilityActionEvent } from "react-native";
 import { useMoney } from "../../lib/currency";
+import { noteDrag } from "../../lib/drag-guard";
 import { ease, haptic, native, spring, usePress, useReducedMotion } from "../../lib/motion";
 import { layout, space, type, usePalette } from "../../lib/theme";
 import type { Wish } from "../../lib/wishes";
@@ -13,6 +14,7 @@ import { cardRanges, listHeight, type CardGeometry } from "./card-metrics";
 /** A swipe past this share of the width removes the card; a flick this fast (px/ms) does too. */
 const REMOVE_AT = 0.35;
 const REMOVE_FLICK = 0.6;
+const NO_SELECT = Platform.OS === "web" ? ({ userSelect: "none" } as object) : null;
 /** The words over the photograph sit in this much of the card's foot. */
 const FOOT = 150;
 
@@ -84,9 +86,13 @@ function Card({ w, index, g, scrollY, listTop, focus, width, fresh, onOpen, onQu
   const pan = useMemo(
     () =>
       PanResponder.create({
-        onMoveShouldSetPanResponder: (_e, gs) => Math.abs(gs.dx) > 10 && Math.abs(gs.dx) > Math.abs(gs.dy) * 1.6,
-        onPanResponderGrant: () => (crossed.current = false),
+        onMoveShouldSetPanResponder: (_e, gs) => Math.abs(gs.dx) > 8 && Math.abs(gs.dx) > Math.abs(gs.dy) * 1.6,
+        onPanResponderGrant: () => {
+          crossed.current = false;
+          noteDrag();
+        },
         onPanResponderMove: (_e, gs) => {
+          noteDrag();
           x.setValue(gs.dx);
           const past = Math.abs(gs.dx) > width * REMOVE_AT;
           if (past !== crossed.current) {
@@ -95,6 +101,7 @@ function Card({ w, index, g, scrollY, listTop, focus, width, fresh, onOpen, onQu
           }
         },
         onPanResponderRelease: (_e, gs) => {
+          noteDrag();
           const flicked = Math.abs(gs.vx) > REMOVE_FLICK && Math.sign(gs.vx) === Math.sign(gs.dx);
           if (Math.abs(gs.dx) > width * REMOVE_AT || flicked) {
             Animated.timing(x, { toValue: Math.sign(gs.dx || gs.vx) * width * 1.1, duration: 200, easing: ease.out, useNativeDriver: native }).start(() => latest.current.onRemove(latest.current.w));
@@ -121,7 +128,8 @@ function Card({ w, index, g, scrollY, listTop, focus, width, fresh, onOpen, onQu
   const reveal = (side: 1 | -1) => x.interpolate({ inputRange: side > 0 ? [0, 60] : [-60, 0], outputRange: side > 0 ? [0, 1] : [1, 0], extrapolate: "clamp" });
 
   return (
-    <Animated.View style={{ position: "absolute", top: index * pitch, left: 0, right: 0, height: tall, opacity: enter, transform: [{ translateY: shift }, { translateY: push }] }}>
+    // On the web a slow drag would start selecting the card's words, and a selection ends the gesture; cards don't select.
+    <Animated.View style={[{ position: "absolute", top: index * pitch, left: 0, right: 0, height: tall, opacity: enter, transform: [{ translateY: shift }, { translateY: push }] }, NO_SELECT]}>
       {/* Under the card: the word that says what letting go will do, on the side the card is leaving. */}
       <Animated.View pointerEvents="none" style={{ position: "absolute", left: 0, right: 0, top: 0, height: tall, backgroundColor: p.surface, transform: [{ translateY: shape.top }, { scaleY: shape.s }] }} />
       <Animated.View pointerEvents="none" style={{ position: "absolute", left: 0, right: 0, top: 0, height: g.rest, flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: layout.cardPad, transform: [{ translateY: shape.middle }] }}>

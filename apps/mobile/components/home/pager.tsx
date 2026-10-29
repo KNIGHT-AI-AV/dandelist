@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Animated, Keyboard, PanResponder, Platform, StyleSheet, View, useWindowDimensions } from "react-native";
+import { noteDrag } from "../../lib/drag-guard";
 import { haptic, native, useReducedMotion } from "../../lib/motion";
 import { PAGES, PAGE_COUNT, landing, mod, nearest, type PageId } from "../../lib/pager";
 
@@ -114,9 +115,16 @@ export function PagerView({ pages }: { pages: Record<PageId, ReactNode> }) {
         onPanResponderGrant: () => {
           base.current = grabber.grab();
           Keyboard.dismiss();
+          noteDrag();
         },
-        onPanResponderMove: (_e, g) => pos.setValue(base.current - g.dx / width),
-        onPanResponderRelease: (_e, g) => grabber.release(landing(base.current, -g.dx / width, -g.vx / width), (-g.vx / width) * 1000),
+        onPanResponderMove: (_e, g) => {
+          noteDrag();
+          pos.setValue(base.current - g.dx / width);
+        },
+        onPanResponderRelease: (_e, g) => {
+          noteDrag();
+          grabber.release(landing(base.current, -g.dx / width, -g.vx / width), (-g.vx / width) * 1000);
+        },
         onPanResponderTerminate: (_e, g) => grabber.release(landing(base.current, -g.dx / width, 0), 0),
         onPanResponderTerminationRequest: () => false,
       }),
@@ -173,7 +181,8 @@ export function PagerView({ pages }: { pages: Record<PageId, ReactNode> }) {
   );
 
   return (
-    <View ref={box} style={[StyleSheet.absoluteFill, Platform.OS === "web" ? ({ overflow: "hidden", touchAction: "pan-y" } as object) : { overflow: "hidden" }]} {...pan.panHandlers}>
+    // On the web a drag that starts selecting text ends the gesture, so the ring doesn't select (fields still do).
+    <View ref={box} style={[StyleSheet.absoluteFill, Platform.OS === "web" ? ({ overflow: "hidden", touchAction: "pan-y", userSelect: "none" } as object) : { overflow: "hidden" }]} {...pan.panHandlers}>
       {layers.map((l) => {
         const front = l.id === page;
         return (

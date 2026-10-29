@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { LinearGradient } from "expo-linear-gradient";
 import { Animated, Pressable, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { transcribeWish } from "../../lib/agent";
@@ -59,8 +60,12 @@ export function TopBar() {
   const { go } = usePager();
   const press = usePress(0.94);
   const gutter = layout.gutter(width);
+  const p = usePalette();
+  const edge = insets.top + layout.headerBar;
   return (
     <View pointerEvents="box-none" style={{ position: "absolute", top: 0, left: 0, right: 0, paddingTop: insets.top, paddingHorizontal: gutter }}>
+      {/* A scroll edge, not a bar: the page colour fades out under the wordmark, so content passing beneath stays legible. */}
+      <LinearGradient pointerEvents="none" colors={[`rgba(${p.bgRgb}, 0.94)`, `rgba(${p.bgRgb}, 0.7)`, `rgba(${p.bgRgb}, 0)`]} locations={[0, 0.6, 1]} style={{ position: "absolute", top: 0, left: 0, right: 0, height: edge + 28 }} />
       <View pointerEvents="box-none" style={{ height: layout.headerBar, flexDirection: "row", alignItems: "center", justifyContent: "space-between", width: "100%", maxWidth: layout.list, alignSelf: "center" }}>
         <Pressable accessibilityRole="button" accessibilityLabel="The list" onPress={() => go("list")} hitSlop={8}>
           <Wordmark />
