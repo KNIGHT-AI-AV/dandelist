@@ -297,6 +297,36 @@ const pageKey = (raw: string) => {
   }
 };
 
+/**
+ * The returned page a reworded link plainly means: same site, no query of its own, and most of its path's words shared
+ * (at least 60 percent of all the words in both). Null when none is that close.
+ */
+export function closestPage(url: string, candidates: string[]): string | null {
+  let u: URL;
+  try {
+    u = new URL(url);
+  } catch {
+    return null;
+  }
+  if ([...u.searchParams.keys()].some((k) => !TRACKING.test(k))) return null;
+  const words = (path: string) => new Set(decodeURIComponent(path).toLowerCase().split(/[^a-z0-9]+/).filter(Boolean));
+  const mine = words(u.pathname);
+  let best: { url: string; score: number } | null = null;
+  for (const c of candidates) {
+    let cu: URL;
+    try {
+      cu = new URL(c);
+    } catch {
+      continue;
+    }
+    const theirs = words(cu.pathname);
+    const shared = [...mine].filter((w) => theirs.has(w)).length;
+    const score = shared / new Set([...mine, ...theirs]).size;
+    if (score >= 0.6 && (!best || score > best.score)) best = { url: c, score };
+  }
+  return best?.url ?? null;
+}
+
 /** The page turned our server away (or never answered), as against a page that is gone. */
 const refused = (page: ProductPage) => !page.ok && (page.status === 0 || [401, 403, 405, 406, 429, 451, 503].includes(page.status));
 
@@ -424,11 +454,14 @@ export async function quickFind(meta: Meta, input: QuickInput, ctx: QuickContext
   const said = resultTexts(res.raw);
   const returned = new Map(results.map((r) => [pageKey(r.url), r]));
   for (const c of res.citations) if (!returned.has(pageKey(c.url))) returned.set(pageKey(c.url), { url: c.url, title: c.title ?? "" });
-  // A bare site the model names ("https://oldcarsdata.com") stands for the page the search returned on that site.
+  // A bare site the model names ("https://oldcarsdata.com") stands for the page the search returned on that site, and
+  // a page it rewords ("db11-for-sale-in-tacoma-wa" for "db11-tacoma-wa") for the returned page it plainly means.
   const onSite = (url: string) => {
     if (returned.has(pageKey(url))) return url;
     const bare = pathOf(url).replace(/\/+$/, "") === "";
-    return (bare && [...returned.values()].find((r) => hostOf(r.url) === hostOf(url))?.url) || url;
+    const sameSite = [...returned.values()].filter((r) => hostOf(r.url) === hostOf(url));
+    if (bare) return sameSite[0]?.url ?? url;
+    return closestPage(url, sameSite.map((r) => r.url)) ?? url;
   };
   const picked = readCandidates(res.text)
     .map((c) => ({ ...c, url: onSite(c.url) }))
@@ -486,9 +519,15 @@ export async function quickFind(meta: Meta, input: QuickInput, ctx: QuickContext
   // the figure is a whole price, and another site the search returned gives a figure within 2x in the same currency.
   if (!chosen) {
     const usable = (c: Candidate) => c.amount > 0 && !c.part && /^[A-Z]{3}$/.test(c.currency) && c.resultTitle !== undefined && !PART_PRICE.test(c.resultTitle) && !otherCurrency(c.resultTitle, c.currency);
-    const backed = (c: Candidate) => picked.some((o) => o !== c && usable(o) && o.currency === c.currency && hostOf(o.url) !== hostOf(c.url) && o.amount <= c.amount * 2 && o.amount * 2 >= c.amount);
+    const near = (a: Candidate, b: Candidate) => a.currency === b.currency && a.amount <= b.amount * 2 && a.amount * 2 >= b.amount;
+    const figures = picked.filter(usable);
+    const sites = new Set(figures.map((c) => hostOf(c.url)));
+    // One site: its figure stands alone when its own figures agree and it reads as a wish's price (100 or more: a
+    // lower figure is a fee, a deposit or a misread). Several sites: a figure stands only when another site agrees.
+    const trusted = (c: Candidate) =>
+      sites.size === 1 ? c.amount >= 100 && figures.every((o) => near(o, c)) : figures.some((o) => hostOf(o.url) !== hostOf(c.url) && near(o, c));
     for (const { c, page } of pages) {
-      if (!refused(page) || !usable(c) || !titleNames(c.resultTitle!, words, loose) || !backed(c)) continue;
+      if (!refused(page) || !usable(c) || !titleNames(c.resultTitle!, words, loose) || !trusted(c)) continue;
       chosen = { c, price: { amount: c.amount, currency: c.currency, how: "answer" } };
       break;
     }

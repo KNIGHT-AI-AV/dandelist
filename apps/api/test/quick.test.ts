@@ -514,7 +514,9 @@ describe("price units and evidence (Codex R14)", () => {
     expect(priceMentions("Lisbon from USD 1,299 per person", 1299).some(wholeMention)).toBe(false);
   });
 
-  it("needs a second site that agrees before the search's own figure stands", async () => {
+  it("lets one site's whole figure stand alone, but needs sites that disagree to be outvoted", async () => {
+    // A lone dealer price stands; a lone $9 for a car is a fee or a misread.
+    expect(await find(["https://seller.example/db11 | $106,961 | USD"], [{ url: "https://seller.example/db11", title: DB11 }])).toMatchObject({ upfrontCents: 10_696_100, status: "estimate" });
     expect(await find(["https://seller.example/db11 | $9 | USD"], [{ url: "https://seller.example/db11", title: DB11 }])).toBeNull();
     const two = [{ url: "https://seller.example/db11", title: DB11 }, { url: "https://other.example/db11", title: DB11 }];
     expect(await find(["https://seller.example/db11 | $9 | USD", "https://other.example/db11 | $128,000 | USD"], two)).toBeNull();
@@ -524,9 +526,12 @@ describe("price units and evidence (Codex R14)", () => {
   });
 
   it("does not count one site twice, nor a variant the search never returned", async () => {
-    const samePage = [{ url: "https://seller.example/db11", title: DB11 }, { url: "https://seller.example/db11?view=print", title: DB11 }];
-    expect(await find(["https://seller.example/db11 | $110,500 | USD", "https://seller.example/db11?view=print | $110,500 | USD"], samePage)).toBeNull();
-    expect(await find(["https://seller.example/car?model=vantage | $119,000 | USD", "https://other.example/db11 | $121,000 | USD"], [{ url: "https://seller.example/car", title: DB11 }, { url: "https://other.example/db11", title: DB11 }])).toBeNull();
+    // One site's two figures are still one site: outvoted by nothing, and no help against another site that disagrees.
+    const samePage = [{ url: "https://seller.example/db11", title: DB11 }, { url: "https://seller.example/db11?view=print", title: DB11 }, { url: "https://other.example/db11", title: DB11 }];
+    expect(await find(["https://seller.example/db11 | $110,500 | USD", "https://seller.example/db11?view=print | $110,500 | USD", "https://other.example/db11 | $9,500 | USD"], samePage)).toBeNull();
+    // The variant never borrows the DB11 page's title; the card comes from the page the search really returned.
+    const variant = await find(["https://seller.example/car?model=vantage | $119,000 | USD", "https://other.example/db11 | $121,000 | USD"], [{ url: "https://seller.example/car", title: DB11 }, { url: "https://other.example/db11", title: DB11 }]);
+    expect(variant).toMatchObject({ url: "https://other.example/db11", upfrontCents: 12_100_000 });
   });
 
   it("keeps currencies straight: a figure the page states in another currency, or a lone figure in a second currency, never stands", async () => {
@@ -541,5 +546,15 @@ describe("price units and evidence (Codex R14)", () => {
   it("treats a page that is gone as no evidence, unlike one that turned the server away", async () => {
     const gone = [{ url: "https://gone.example/db11", title: DB11 }, { url: "https://lost.example/db11", title: DB11 }];
     expect(await find(["https://gone.example/db11 | $110,500 | USD", "https://lost.example/db11 | $112,000 | USD"], gone)).toBeNull();
+  });
+});
+
+describe("a link the model rewords", () => {
+  it("maps back to the returned page it plainly means, never across a query variant", async () => {
+    const { closestPage } = await import("../src/agent/quick");
+    const returned = ["https://www.edmunds.com/used-aston-martin-db11-tacoma-wa/", "https://www.edmunds.com/used-aston-martin-db11-chino-ca/"];
+    expect(closestPage("https://www.edmunds.com/used-aston-martin-db11-for-sale-in-tacoma-wa", returned)).toBe(returned[0]);
+    expect(closestPage("https://www.edmunds.com/new-cars", returned)).toBeNull();
+    expect(closestPage("https://www.edmunds.com/used-aston-martin-db11-tacoma-wa?trim=amr", returned)).toBeNull();
   });
 });
