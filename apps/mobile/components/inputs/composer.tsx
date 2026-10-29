@@ -2,28 +2,11 @@ import { forwardRef, useImperativeHandle, useLayoutEffect, useRef, type ReactNod
 import { Animated, Platform, Pressable, StyleSheet, TextInput, View } from "react-native";
 import { ease, haptic, spring, usePress, useReducedMotion } from "../../lib/motion";
 import { layout, space, type, usePalette } from "../../lib/theme";
-import { Glass } from "../lux";
+import { Glass, Icon } from "../lux";
 import { caretColors, useToggle, webInput } from "./field";
 import { COMPOSER_INSET, COMPOSER_LINES, COMPOSER_PAD_Y, COMPOSER_SHRINK_MS, ICON, TARGET } from "./tokens";
 
 const AnimatedInput = Animated.createAnimatedComponent(TextInput);
-
-/** The chevron's side as a share of the glyph, so the head spans about 60% of it. */
-const HEAD = 0.42;
-
-/** An up arrow drawn in the lux icon strokes (no text glyphs). */
-function Arrow({ color }: { color: string }) {
-  const s = ICON.size;
-  const w = ICON.stroke;
-  const c = s * HEAD;
-  return (
-    <View style={{ width: s, height: s }} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-      <View style={{ position: "absolute", left: (s - w) / 2, top: w, width: w, height: s - 2 * w, borderRadius: w / 2, backgroundColor: color }} />
-      {/* A square with two borders, turned 45°, is the arrowhead; its corner sits on the stem's top. */}
-      <View style={{ position: "absolute", left: (s - c) / 2, top: w + c * Math.SQRT1_2 - c / 2, width: c, height: c, borderTopWidth: w, borderLeftWidth: w, borderColor: color, transform: [{ rotate: "45deg" }] }} />
-    </View>
-  );
-}
 
 /** The 44 pt send button: an outline while there's nothing to send, ink-filled when there is (150 ms in, 100 ms out). */
 function SendButton({ enabled, onPress }: { enabled: boolean; onPress(): void }) {
@@ -38,10 +21,10 @@ function SendButton({ enabled, onPress }: { enabled: boolean; onPress(): void })
         <View style={[StyleSheet.absoluteFill, round, { borderWidth: 1, borderColor: p.line }]} />
         <Animated.View style={[StyleSheet.absoluteFill, round, { backgroundColor: p.ink, opacity: on }]} />
         <View style={[StyleSheet.absoluteFill, centre]}>
-          <Arrow color={p.ink3} />
+          <Icon name="send" size={ICON.size} color={p.ink3} />
         </View>
         <Animated.View style={[StyleSheet.absoluteFill, centre, { opacity: on }]}>
-          <Arrow color={p.onAccent} />
+          <Icon name="send" size={ICON.size} color={p.onAccent} />
         </Animated.View>
       </Animated.View>
     </Pressable>

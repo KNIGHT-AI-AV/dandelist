@@ -69,11 +69,7 @@ export function Row({
         </Text>
       ) : null}
       {accessory}
-      {onPress && !accessory ? (
-        <View style={{ transform: [{ scaleX: -1 }] }}>
-          <Icon name="back" size={14} color={p.ink3} />
-        </View>
-      ) : null}
+      {onPress && !accessory ? <Icon name="forward" size={14} color={p.ink3} /> : null}
     </View>
   );
   return (

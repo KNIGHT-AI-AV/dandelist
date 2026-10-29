@@ -1,17 +1,21 @@
 import type { Widget } from "@dandelist/catalogue/dream";
-import { Redirect } from "expo-router";
-import { useEffect, useRef, useState } from "react";
-import { ScrollView, Text, View } from "react-native";
+import { Redirect, useLocalSearchParams } from "expo-router";
+import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
+import Svg, { Circle, Line, Rect } from "react-native-svg";
+import { SearchField } from "../components/details/search-field";
 import { HomeBuilder } from "../components/dream/builders";
 import { PaletteButton } from "../components/home/chrome";
 import { Composer } from "../components/inputs";
-import { Chip, Icon, IconButton, Money, PrimaryButton, QuietButton, Wordmark } from "../components/lux";
+import { Chip, Glass, Icon, IconButton, Money, PrimaryButton, QuietButton, Wordmark, type IconName } from "../components/lux";
 import { MediaHero, type Media } from "../components/media";
 import { dollars } from "../components/odometer";
 import { GlassReveal } from "../components/reveal";
 import type { Stage } from "../components/reveal-clock";
+import { Card, Row } from "../components/settings/kit";
+import { MicButton, type VoiceWish } from "../components/voice/say-wish";
 import type { Mode } from "../lib/odometer-plan";
-import { layout, type, usePalette } from "../lib/theme";
+import { layout, radius, ThemeScope, type, usePalette, type ThemeId } from "../lib/theme";
 
 /** The odometer QA cases from the UI audit (§2.11), one tap each. */
 function OdometerBench() {
@@ -97,16 +101,32 @@ function GlassBench() {
   );
 }
 
-/** Every icon, button and the wordmark side by side, at their real sizes, for the icon audit (owner, 2026-10-29). */
-function IconBench() {
+const ICONS: IconName[] = ["palette", "back", "forward", "close", "plus", "check", "send", "mic", "search", "heart"];
+
+/** A microphone at rest, so the composer shows it the way it does before anything is typed. */
+const QUIET_VOICE: VoiceWish = { supported: true, phase: "idle", levels: [], elapsedMs: 0, toggle: () => {}, cancel: () => {} };
+
+/** One icon as a screen sets it, with what it is and its size under it. */
+function Mark({ caption, children }: { caption: string; children: ReactNode }) {
+  const p = usePalette();
+  return (
+    <View style={{ alignItems: "center", gap: 6, minWidth: 64 }}>
+      <View style={{ minHeight: 58, alignItems: "center", justifyContent: "center" }}>{children}</View>
+      <Text style={[type.figure, { color: p.ink3 }]}>{caption}</Text>
+    </View>
+  );
+}
+
+/** Every icon where the screens use it, at their sizes and colours, built from the real controls where they're shared. */
+function RealSize({ id }: { id: ThemeId }) {
   const p = usePalette();
   const box = { borderWidth: 1, borderColor: `rgba(${p.inkRgb},0.25)` };
-  const label = (s: string) => <Text style={[type.figure, { color: p.ink3 }]}>{s}</Text>;
+  const disc = { width: 58, height: 58, borderRadius: 29, alignItems: "center", justifyContent: "center", borderWidth: StyleSheet.hairlineWidth } as const;
   return (
-    <View testID="icon-bench" style={{ gap: 20, paddingHorizontal: 16 }}>
-      <Text style={[type.label, { color: p.ink2 }]}>Icons and buttons</Text>
+    <View testID={`icons-real-${id}`} style={{ backgroundColor: p.bg, padding: 16, gap: 18 }}>
+      <Text style={[type.label, { color: p.ink2 }]}>{`${id} · real size`}</Text>
       {/* The top bar's right side as it is laid out: palette, then the profile photo. */}
-      <View testID="bench-header" style={{ height: layout.headerBar, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+      <View testID={`bench-header-${id}`} style={{ height: layout.headerBar, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
         <Wordmark />
         <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
           <View style={box}>
@@ -117,21 +137,116 @@ function IconBench() {
           </View>
         </View>
       </View>
-      <View testID="bench-icons" style={{ flexDirection: "row", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
-        {(["back", "close", "plus", "check"] as const).map((n) => (
-          <View key={n} style={{ alignItems: "center", gap: 4 }}>
-            <View style={box}>
-              <Icon name={n} size={34} />
-            </View>
-            {label(n)}
+      <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "flex-start", columnGap: 10, rowGap: 14 }}>
+        <Mark caption="back 17">
+          <IconButton icon="back" label="Back" onPress={() => {}} />
+        </Mark>
+        <Mark caption="close 17">
+          <IconButton icon="close" label="Close" onPress={() => {}} />
+        </Mark>
+        <Mark caption="pass 24">
+          <View style={[disc, { backgroundColor: p.glassTint, borderColor: p.hair }]}>
+            <Icon name="close" size={24} color={p.ink} />
           </View>
+        </Mark>
+        <Mark caption="yes 24">
+          <View style={[disc, { backgroundColor: p.accent, borderColor: p.accent }]}>
+            <Icon name="heart" size={24} color={p.onAccent} />
+          </View>
+        </Mark>
+      </View>
+      <Composer value="A Leica Q3" onChangeText={() => {}} onSend={() => {}} placeholder="Tell Dandy what you want..." label="Message Dandy" />
+      <Composer value="" onChangeText={() => {}} onSend={() => {}} placeholder="Tell Dandy what you want..." label="Message Dandy" idleAction={<MicButton voice={QUIET_VOICE} compact />} />
+      <SearchField value="Leica" onChangeText={() => {}} placeholder="Search your wishes" />
+      <Card>
+        <Row label="Currency" value="USD" onPress={() => {}} first />
+      </Card>
+      <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "flex-start", columnGap: 10, rowGap: 14 }}>
+        <Mark caption="plus 11">
+          <Glass style={{ height: 36, paddingHorizontal: 14, borderRadius: radius.pill, flexDirection: "row", alignItems: "center", gap: 6 }}>
+            <Icon name="plus" size={11} color={p.ink} />
+            <Text style={[type.footnote, { color: p.ink }]}>New chat</Text>
+          </Glass>
+        </Mark>
+        <Mark caption="plus 14">
+          <Icon name="plus" size={14} color={p.accentText} />
+        </Mark>
+        <Mark caption="del 12">
+          <View style={{ width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center", backgroundColor: `rgba(${p.inkRgb}, ${p.scheme === "dark" ? 0.07 : 0.05})` }}>
+            <Icon name="close" size={12} color={p.ink2} />
+          </View>
+        </Mark>
+        <Mark caption="remove 15">
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            <Icon name="close" size={15} color={p.danger} />
+            <Text style={[type.label, { color: p.danger }]}>Remove</Text>
+          </View>
+        </Mark>
+        {[12, 13, 14].map((s) => (
+          <Mark key={s} caption={`check ${s}`}>
+            <Icon name="check" size={s} color={p.accentText} />
+          </Mark>
         ))}
-        <IconButton icon="back" label="Back" onPress={() => {}} />
-        <IconButton icon="close" label="Close" onPress={() => {}} />
       </View>
-      <View testID="bench-composer">
-        <Composer value="A Leica Q3" onChangeText={() => {}} onSend={() => {}} placeholder="Tell Dandy what you want..." label="Message Dandy" />
+    </View>
+  );
+}
+
+/** One icon at 96 pt over its 24 grid: 2-unit lines, the 20-unit live area and the 10-unit keyline circle. */
+function OnGrid({ name }: { name: IconName }) {
+  const p = usePalette();
+  const faint = `rgba(${p.inkRgb}, 0.1)`;
+  return (
+    <View style={{ alignItems: "center", gap: 4 }}>
+      <View style={{ width: 96, height: 96 }}>
+        <Svg width={96} height={96} viewBox="0 0 24 24" style={StyleSheet.absoluteFill}>
+          {Array.from({ length: 13 }, (_, i) => i * 2).map((v) => (
+            <Fragment key={v}>
+              <Line x1={v} y1={0} x2={v} y2={24} stroke={faint} strokeWidth={v % 12 === 0 ? 0.1 : 0.05} />
+              <Line x1={0} y1={v} x2={24} y2={v} stroke={faint} strokeWidth={v % 12 === 0 ? 0.1 : 0.05} />
+            </Fragment>
+          ))}
+          <Rect x={2} y={2} width={20} height={20} fill="none" stroke={p.accent} strokeOpacity={0.35} strokeWidth={0.06} />
+          <Circle cx={12} cy={12} r={10} fill="none" stroke={p.accent} strokeOpacity={0.35} strokeWidth={0.06} />
+        </Svg>
+        <View style={StyleSheet.absoluteFill}>
+          <Icon name={name} size={96} color={name === "palette" ? p.accentText : p.ink} />
+        </View>
       </View>
+      <Text style={[type.figure, { color: p.ink3 }]}>{name}</Text>
+    </View>
+  );
+}
+
+function AtNinetySix({ id }: { id: ThemeId }) {
+  const p = usePalette();
+  return (
+    <View testID={`icons-96-${id}`} style={{ backgroundColor: p.bg, padding: 16, gap: 14 }}>
+      <Text style={[type.label, { color: p.ink2 }]}>{`${id} · 96 pt on the 24 grid`}</Text>
+      <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", rowGap: 16 }}>
+        {ICONS.map((n) => (
+          <OnGrid key={n} name={n} />
+        ))}
+      </View>
+    </View>
+  );
+}
+
+/** The icon audit (owner, 2026-10-29): every icon at its real size and at 96 pt, in a dark and a light theme. */
+function IconBench() {
+  const p = usePalette();
+  const box = { borderWidth: 1, borderColor: `rgba(${p.inkRgb},0.25)` };
+  return (
+    <View testID="icon-bench" style={{ gap: 20, paddingHorizontal: 16 }}>
+      <Text style={[type.label, { color: p.ink2 }]}>Icons and buttons</Text>
+      {(["emerald", "ivory"] as const).map((id) => (
+        <ThemeScope key={id} id={id}>
+          <View style={{ gap: 12 }}>
+            <RealSize id={id} />
+            <AtNinetySix id={id} />
+          </View>
+        </ThemeScope>
+      ))}
       <View testID="bench-buttons" style={{ gap: 12 }}>
         <PrimaryButton label="Add to my list" onPress={() => {}} />
         <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
@@ -182,23 +297,31 @@ function BuilderBench() {
 
 export default function Lab() {
   const p = usePalette();
+  // /lab?only=icons shows the icon bench alone, without the photographs and the 3D viewer.
+  const { only } = useLocalSearchParams<{ only?: string }>();
   if (!__DEV__) return <Redirect href="/" />;
   return (
     <ScrollView style={{ flex: 1, backgroundColor: p.bg }} contentContainerStyle={{ gap: 24, paddingVertical: 40, maxWidth: 520, width: "100%", alignSelf: "center" }}>
-      <BuilderBench />
-      <IconBench />
-      <OdometerBench />
-      <GlassBench />
-      {[
-        ["Vehicle · 3D", car],
-        ["Place · slideshow", lisbon],
-        ["Product · turnable cutout", camera],
-      ].map(([label, media]) => (
-        <View key={label as string} style={{ gap: 8 }}>
-          <Text style={[type.label, { color: p.ink2, paddingHorizontal: 16 }]}>{label as string}</Text>
-          <MediaHero media={media as Media} style={{ height: 420, borderRadius: 26, overflow: "hidden", marginHorizontal: 12 }} />
-        </View>
-      ))}
+      {only === "icons" ? (
+        <IconBench />
+      ) : (
+        <>
+          <BuilderBench />
+          <IconBench />
+          <OdometerBench />
+          <GlassBench />
+          {[
+            ["Vehicle · 3D", car],
+            ["Place · slideshow", lisbon],
+            ["Product · turnable cutout", camera],
+          ].map(([label, media]) => (
+            <View key={label as string} style={{ gap: 8 }}>
+              <Text style={[type.label, { color: p.ink2, paddingHorizontal: 16 }]}>{label as string}</Text>
+              <MediaHero media={media as Media} style={{ height: 420, borderRadius: 26, overflow: "hidden", marginHorizontal: 12 }} />
+            </View>
+          ))}
+        </>
+      )}
     </ScrollView>
   );
 }

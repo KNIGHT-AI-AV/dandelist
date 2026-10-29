@@ -61,5 +61,5 @@ export const COMPOSER_INSET = (layout.control.primary - TARGET) / 2;
 /** Shrinking back after a send is an exit: 150 ms on ease.out (growth uses spring.snap). */
 export const COMPOSER_SHRINK_MS = 150;
 
-/** The lux icon grid: 17 pt glyphs drawn in 1.5 pt strokes. */
-export const ICON = { size: 17, stroke: 1.5 };
+/** The send arrow: the lux line icon at 22 pt, about the size of the drawn arrow it replaces. */
+export const ICON = { size: 22 };

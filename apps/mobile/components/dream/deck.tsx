@@ -5,7 +5,7 @@ import { ease, haptic, native, spring, useReducedMotion } from "../../lib/motion
 import { moneyIn } from "../../lib/dream";
 import { fonts, radius, usePalette, type } from "../../lib/theme";
 import { hostOf } from "../../lib/welcome";
-import { Eyebrow, Shade } from "../lux";
+import { Eyebrow, Icon, Shade } from "../lux";
 import { Slideshow } from "../media";
 import { GlassReveal } from "../reveal";
 
@@ -126,9 +126,9 @@ export function SwipeDeck({ cards, onSwipe, onPick, onSearchNow, onEnough }: { c
         </Animated.View>
       </View>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 18 }}>
-        <RoundButton label="Pass" glyph="✕" onPress={() => commit("no")} />
+        <RoundButton label="Pass" icon="close" onPress={() => commit("no")} />
         <Eyebrow>{`${index + 1} of ${cards.length}`}</Eyebrow>
-        <RoundButton label="Yes" glyph="♥" accent onPress={() => commit("yes")} />
+        <RoundButton label="Yes" icon="heart" accent onPress={() => commit("yes")} />
       </View>
       <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "center", columnGap: 22, rowGap: 8 }}>
         <Pressable accessibilityRole="button" onPress={() => top && onPick(top)} hitSlop={10}>
@@ -145,7 +145,8 @@ export function SwipeDeck({ cards, onSwipe, onPick, onSearchNow, onEnough }: { c
   );
 }
 
-function RoundButton({ label, glyph, accent = false, onPress }: { label: string; glyph: string; accent?: boolean; onPress(): void }) {
+/** Pass and Yes under the deck: 58 pt discs holding lux line icons at 24 pt (the text glyphs before them were 23). */
+function RoundButton({ label, icon, accent = false, onPress }: { label: string; icon: "close" | "heart"; accent?: boolean; onPress(): void }) {
   const p = usePalette();
   const s = useRef(new Animated.Value(1)).current;
   return (
@@ -157,7 +158,7 @@ function RoundButton({ label, glyph, accent = false, onPress }: { label: string;
       onPress={onPress}
     >
       <Animated.View style={{ width: 58, height: 58, borderRadius: 29, alignItems: "center", justifyContent: "center", backgroundColor: accent ? p.accent : p.glassTint, borderWidth: StyleSheet.hairlineWidth, borderColor: accent ? p.accent : p.hair, transform: [{ scale: s }] }}>
-        <Text style={{ fontSize: type.title3.fontSize, color: accent ? p.onAccent : p.ink }}>{glyph}</Text>
+        <Icon name={icon} size={24} color={accent ? p.onAccent : p.ink} />
       </Animated.View>
     </Pressable>
   );

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Animated, Pressable, Text, View } from "react-native";
 import { ease, haptic, native, spring, step, useReducedMotion, usePress } from "../../lib/motion";
 import { layout, type, usePalette } from "../../lib/theme";
-import { AgentDot, Eyebrow, Glass } from "../lux";
+import { AgentDot, Eyebrow, Glass, Icon } from "../lux";
 import { BARS } from "./recorder-types";
 import { useRecorder } from "./use-recorder";
 
@@ -53,17 +53,8 @@ export function useVoiceWish({ transcribe, onHeard, onError }: { transcribe(wav:
 export type VoiceWish = ReturnType<typeof useVoiceWish>;
 
 const SIZE = layout.control.icon;
-
-/** The microphone drawn in hairlines like the kit's other icons: a capsule, its cradle and a stem. */
-function MicGlyph({ color }: { color: string }) {
-  return (
-    <View style={{ width: 16, height: 20, alignItems: "center" }} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-      <View style={{ width: 8, height: 12, borderRadius: 4, borderWidth: 1.5, borderColor: color }} />
-      <View style={{ position: "absolute", top: 6, width: 14, height: 9, borderWidth: 1.5, borderTopWidth: 0, borderColor: color, borderBottomLeftRadius: 7, borderBottomRightRadius: 7 }} />
-      <View style={{ position: "absolute", top: 15, width: 1.5, height: 4, backgroundColor: color }} />
-    </View>
-  );
-}
+/** The microphone: the lux line icon at the composer's send-arrow size, so the two trade places evenly. */
+const MIC = 22;
 
 /**
  * The one voice control. Idle it is a glass circle; listening it fills with the accent, shows a stop square and
@@ -118,7 +109,7 @@ export function MicButton({ voice, compact = false }: { voice: VoiceWish; compac
           </View>
         ) : (
           <Glass style={{ width: SIZE, height: SIZE, borderRadius: SIZE / 2, alignItems: "center", justifyContent: "center" }}>
-            {voice.phase === "hearing" ? <AgentDot busy size={8} /> : <MicGlyph color={p.ink} />}
+            {voice.phase === "hearing" ? <AgentDot busy size={8} /> : <Icon name="mic" size={MIC} color={p.ink} />}
           </Glass>
         )}
       </Animated.View>

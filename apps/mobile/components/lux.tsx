@@ -4,6 +4,7 @@ import { Image, type ImageContentPosition } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Animated, Easing, Image as RNImage, Platform, Pressable, StyleSheet, Text, TextInput, View, useWindowDimensions, type StyleProp, type TextInputProps, type TextStyle, type ViewStyle } from "react-native";
+import Svg, { Circle, Path } from "react-native-svg";
 import { useMoney } from "../lib/currency";
 import { ease, haptic, native, usePress, useReducedMotion } from "../lib/motion";
 import { layout, radius, type, usePalette, useTheme, useType, type ThemeId } from "../lib/theme";
@@ -169,48 +170,56 @@ export function Photo({ uri, style, contentPosition }: { uri?: string | null; ki
   );
 }
 
-/** Drawn icons (no text glyphs): 1.5 px strokes, 17 px. */
-export function Icon({ name, color, size = 17 }: { name: "back" | "close" | "plus" | "check" | "palette"; color?: string; size?: number }) {
+export type IconName = "back" | "forward" | "close" | "plus" | "check" | "send" | "mic" | "search" | "heart" | "palette";
+
+/** `d` is stroked; `dots` are small solid circles, [cx, cy, r]. */
+type Glyph = { d: string; dots?: readonly (readonly [number, number, number])[] };
+
+/**
+ * The line icons (owner, 2026-10-29: "actually do line art design"), drawn for this app on a 24 grid: one 1.5
+ * stroke with round caps and joins, nothing filled but the palette's wells of paint. Each sits optically centred in
+ * the box, so a chevron leans a half unit towards its point and the check rides a quarter unit high.
+ */
+const GLYPHS: Record<IconName, Glyph> = {
+  back: { d: "M14.75 4.75 L8.25 12 L14.75 19.25" },
+  forward: { d: "M9.25 4.75 L15.75 12 L9.25 19.25" },
+  close: { d: "M6 6 L18 18 M18 6 L6 18" },
+  plus: { d: "M12 4.5 V19.5 M4.5 12 H19.5" },
+  check: { d: "M4.5 12.25 L9.5 17.25 L19.5 6.25" },
+  // The composer's send: a stem and an open head.
+  send: { d: "M12 19.5 V4.5 M6.5 10 L12 4.5 L17.5 10" },
+  // A capsule in its cradle on a short stem.
+  mic: { d: "M9 6.25 A3 3 0 0 1 15 6.25 V11.25 A3 3 0 0 1 9 11.25 Z M6 11.25 A6 6 0 0 0 18 11.25 M12 17.25 V20.75" },
+  search: { d: "M17.75 10.75 A7 7 0 1 1 3.75 10.75 A7 7 0 1 1 17.75 10.75 Z M15.7 15.7 L20.25 20.25" },
+  heart: { d: "M12 19.75 C12 19.75 3.75 15 3.75 9.5 C3.75 6.9 5.8 5 8.2 5 C9.85 5 11.25 5.95 12 7.35 C12.75 5.95 14.15 5 15.8 5 C18.2 5 20.25 6.9 20.25 9.5 C20.25 15 12 19.75 12 19.75 Z" },
+  // An artist's palette: a tilted oval board with a thumb notch swept out of its lower right (a 5.4 radius cut whose
+  // lips are rounded at 2.2 and 1.8), the thumb hole above the notch, and three wells of paint an equal step apart
+  // along the far rim.
+  palette: {
+    d: "M14.57 19.45 A9.35 7.85 -18 1 1 21.16 9.73 A2.2 2.2 0 0 1 19.65 12.31 A5.4 5.4 0 0 0 15.81 17.68 A1.8 1.8 0 0 1 14.57 19.45 Z M16.46 11.29 A1.55 1.55 0 1 1 13.36 11.29 A1.55 1.55 0 1 1 16.46 11.29 Z",
+    dots: [
+      [7.38, 15.48, 1.25],
+      [6.44, 11.29, 1.25],
+      [9.59, 8.07, 1.25],
+    ],
+  },
+};
+
+/**
+ * One line icon, `size` points square. The stroke is 1.5 on the 24 grid and scales with the icon, but never drops
+ * under 1 pt, so the 11 to 14 pt marks keep their weight. Decorative: the control around it carries the label.
+ */
+export function Icon({ name, color, size = 17 }: { name: IconName; color?: string; size?: number }) {
   const p = usePalette();
   const c = color ?? p.ink;
-  const s = size;
-  const bar = (len: number, rot: string, extra: ViewStyle = {}) => <View style={[{ position: "absolute", width: len, height: 1.5, borderRadius: 1, backgroundColor: c, transform: [{ rotate: rot }] }, extra]} />;
-  // A ring or a filled dot of diameter d with its centre at (x, y), as fractions of the box.
-  const ring = (d: number, x: number, y: number) => <View style={{ position: "absolute", width: d * s, height: d * s, borderRadius: (d * s) / 2, borderWidth: 1.5, borderColor: c, left: x * s - (d * s) / 2, top: y * s - (d * s) / 2 }} />;
-  const dot = (d: number, x: number, y: number) => <View style={{ position: "absolute", width: d * s, height: d * s, borderRadius: (d * s) / 2, backgroundColor: c, left: x * s - (d * s) / 2, top: y * s - (d * s) / 2 }} />;
+  const g = GLYPHS[name];
+  const stroke = Math.max(1.5, 24 / size);
   return (
-    <View style={{ width: s, height: s, alignItems: "center", justifyContent: "center" }} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-      {name === "palette" ? (
-        // A painter's palette in the same strokes: the round board, its thumb hole and three wells of paint.
-        <>
-          {ring(1, 0.5, 0.5)}
-          {ring(0.26, 0.66, 0.66)}
-          {dot(0.14, 0.3, 0.42)}
-          {dot(0.14, 0.42, 0.26)}
-          {dot(0.14, 0.62, 0.3)}
-        </>
-      ) : name === "back" ? (
-        // Each stroke's midpoint on the box's centre line, so the chevron sits centred in its circle.
-        <>
-          {bar(s * 0.5, "-45deg", { top: s * 0.33, left: s * 0.25 })}
-          {bar(s * 0.5, "45deg", { top: s * 0.62, left: s * 0.25 })}
-        </>
-      ) : name === "close" ? (
-        <>
-          {bar(s * 0.8, "45deg")}
-          {bar(s * 0.8, "-45deg")}
-        </>
-      ) : name === "plus" ? (
-        <>
-          {bar(s * 0.8, "0deg")}
-          {bar(s * 0.8, "90deg")}
-        </>
-      ) : (
-        <>
-          {bar(s * 0.32, "45deg", { left: s * 0.14, top: s * 0.58 })}
-          {bar(s * 0.62, "-50deg", { left: s * 0.3, top: s * 0.45 })}
-        </>
-      )}
+    <View pointerEvents="none" aria-hidden accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={{ width: size, height: size }}>
+      <Svg width={size} height={size} viewBox="0 0 24 24">
+        <Path d={g.d} fill="none" stroke={c} strokeWidth={stroke} strokeLinecap="round" strokeLinejoin="round" />
+        {g.dots?.map(([cx, cy, r]) => <Circle key={`${cx} ${cy}`} cx={cx} cy={cy} r={r} fill={c} />)}
+      </Svg>
     </View>
   );
 }
