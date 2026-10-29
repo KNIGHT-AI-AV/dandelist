@@ -28,7 +28,7 @@ const hunt = async (c: Case) => {
   const subject: PhotoSubject = { title: c.title, kind: c.kind, place: c.place };
   switch (variant) {
     // The first card's hunt, with each model planning and checking at low effort.
-    case "v6-spark":
+    case "v7-spark":
       return findPhoto(meta, subject, { fetcher: publicFetch, by: Date.now() + 40_000 });
     case "v3-wonder":
       return findPhoto(meta, subject, { fetcher: publicFetch, model: "muse-wonder-1.0", by: Date.now() + 40_000 });

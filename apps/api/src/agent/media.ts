@@ -396,13 +396,17 @@ export async function commonsPhotos(subject: string, fetcher: Fetcher, opts: { m
   // The exact phrase first, then each of its words somewhere in the title: a phrase like "hot air balloons over
   // Goreme" is in no file's title (measured 2026-10-29: six wishes, nothing from Commons), while matching the words
   // anywhere in a description brought warehouses for a private chef.
-  const words = term.split(" ").filter((w) => w.length > 1).map((w) => `intitle:${w}`).join(" ");
+  // Past three words, the first three alone too: "Audemars Piguet Royal" finds Royal Oaks where the full reference
+  // and dial colour found none.
+  const words = term.split(" ").filter((w) => w.length > 1);
+  const inTitle = (ws: string[]) => ws.map((w) => `intitle:${w}`).join(" ");
   const searches = [
     `intitle:"${term}" incategory:Featured_pictures_on_Wikimedia_Commons|Quality_images filetype:bitmap`,
     `"${term}" incategory:Featured_pictures_on_Wikimedia_Commons|Quality_images filetype:bitmap`,
     `intitle:"${term}" filetype:bitmap`,
-    `${words} incategory:Featured_pictures_on_Wikimedia_Commons|Quality_images filetype:bitmap`,
-    `${words} filetype:bitmap`,
+    `${inTitle(words)} incategory:Featured_pictures_on_Wikimedia_Commons|Quality_images filetype:bitmap`,
+    `${inTitle(words)} filetype:bitmap`,
+    ...(words.length > 3 ? [`${inTitle(words.slice(0, 3))} filetype:bitmap`] : []),
   ];
   for (const gsrsearch of searches) {
     if (found.size >= (opts.limit ?? 24)) break;
