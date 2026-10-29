@@ -80,7 +80,15 @@ half4 main(float2 p) {
   return half4(c);
 }`;
 
-const effect = Skia.RuntimeEffect.Make(SKSL);
+// Make throws on an SkSL error instead of returning null, and this runs as the launch screen loads; caught, the reveal
+// falls back to the plain image below rather than crashing the app.
+const effect = (() => {
+  try {
+    return Skia.RuntimeEffect.Make(SKSL);
+  } catch {
+    return null;
+  }
+})();
 const MODE: Record<Treatment, number> = { swirl: 0, film: 1, frost: 2, pane: 3 };
 
 export function GlassReveal({ uri, standby, stage, treatment = "pane", finish = false, focus, style, children }: { uri?: string | null; standby: number; stage: Stage; treatment?: Treatment; /** Where the subject sits (0–1), so a tight crop keeps it whole. */ focus?: { x: number; y: number }; /** Generated imagery never shows bare: it keeps a fine layer of glass and grain. */ finish?: boolean; style?: StyleProp<ViewStyle>; children?: ReactNode }) {
