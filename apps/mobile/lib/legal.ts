@@ -12,7 +12,7 @@ export const PRIVACY: LegalSection[] = [
   {
     heading: "What Dandelist is",
     body: [
-      "Dandelist is a free, open-source app from Knight AI+AV. You list the things you want, an AI agent looks up their real prices, and the app shows what they cost and when you could have them.",
+      "Dandelist is a free, open-source app from Knight AI+AV. You list the things you want, an AI agent looks up their real prices, and the app shows what they cost and what it takes to keep them.",
     ],
   },
   {
