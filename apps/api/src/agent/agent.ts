@@ -478,6 +478,20 @@ export async function research(meta: Meta, ctx: ResearchContext): Promise<Resear
   const readPage = async (url: string): Promise<PageResult> =>
     (await within(getPage(url, fetcher), Math.min(9_000, left() - 1_000))) ?? { ok: false, url, status: 0, title: "", text: "", structuredPrices: [], images: [], error: "The page took too long" };
 
+  /**
+   * A follow-up call. Meta sometimes can't yet see a response it made a moment ago ("referenced response not found
+   * or expired", seen on the live server 2026-10-29), so that one error gets a single retry a second later.
+   */
+  const chain = async (body: Parameters<Meta["responses"]>[0]) => {
+    try {
+      return await meta.responses(body);
+    } catch (e) {
+      if (!/referenced response not found/i.test(e instanceof Error ? e.message : "")) throw e;
+      await new Promise((r) => setTimeout(r, 1_000));
+      return meta.responses(body);
+    }
+  };
+
   let res = await meta.responses({ instructions: researchInstructions(ctx.now(), !!ctx.shopping, ctx.voice), input: brief(ctx.draft, ctx.answers, home), tools });
   await logSearches(res);
   let calls = 0;
@@ -524,7 +538,10 @@ export async function research(meta: Meta, ctx: ResearchContext): Promise<Resear
   };
 
   // Tool rounds, each round's calls side by side, until the agent stops, the budget is spent, or only the time the
-  // final answer, the checks and the photos need is left.
+  // final answer, the checks and the photos need is left. A round's model call must also finish by then: one that
+  // would run later is dropped, and the tool results it carried go to the final answer instead (on the live server
+  // every research ran out of time this way, 2026-10-29).
+  let carried: { type: string; call_id: string; output: string }[] | null = null;
   while (res.functionCalls.length && calls < MAX_TOOL_CALLS && left() > WRAP_UP_MS) {
     const room = MAX_TOOL_CALLS - calls;
     const outputs = await Promise.all(
@@ -534,14 +551,19 @@ export async function research(meta: Meta, ctx: ResearchContext): Promise<Resear
         output: i < room ? await runTool(fc.name, fc.arguments) : "Tool budget reached. Answer with what you have.",
       })),
     );
-    res = await meta.responses({ previous_response_id: res.id, input: outputs, tools });
+    const next = Number.isFinite(deadline) ? await within(chain({ previous_response_id: res.id, input: outputs, tools }), left() - WRAP_UP_MS) : await chain({ previous_response_id: res.id, input: outputs, tools });
+    if (!next) {
+      carried = outputs;
+      break;
+    }
+    res = next;
     await logSearches(res);
   }
 
   const stop = left() > WRAP_UP_MS ? "Tool budget reached. Answer with what you have." : "Out of time. Answer with what you have.";
-  const pending = res.functionCalls.map((fc) => ({ type: "function_call_output", call_id: fc.callId, output: stop }));
+  const pending = carried ?? res.functionCalls.map((fc) => ({ type: "function_call_output", call_id: fc.callId, output: stop }));
   // The answer has to land with time to check it; one that would come too late is no answer.
-  const answering = meta.responses({
+  const answering = chain({
     previous_response_id: res.id,
     input: [
       ...pending,

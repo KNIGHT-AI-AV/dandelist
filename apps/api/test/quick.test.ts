@@ -441,4 +441,38 @@ describe("the research's deadline", () => {
     expect(JSON.stringify(calls[1]!.input)).toContain("Out of time. Answer with what you have.");
     expect(out.options[0]).toMatchObject({ url: ROLEX, status: "verified", upfrontCents: 1_025_000 });
   });
+
+  const ROUND = { thought: "Reading Rolex's own page first.", url: ROLEX };
+  const OPTIONS = JSON.stringify({ options: [{ label: "Submariner Date", seller: "Rolex", url: ROLEX, currency: "USD", price: 10250, recurring: [], evidence: "$10,250", confidence: "high", parts: [] }], note: "" });
+
+  it("drops a round that would end past the wrap-up point, and answers with the pages it read", async () => {
+    const calls: Body[] = [];
+    const meta = metaOf((b) => {
+      calls.push(b);
+      if (b.text?.format?.name === "price_options") return result(OPTIONS);
+      if (b.previous_response_id) return new Promise(() => undefined); // this round's call would come back too late
+      if (String(b.instructions ?? "").startsWith("You are Dandelist's price researcher")) return result("", { functionCalls: [{ callId: "g1", name: "get_page", arguments: JSON.stringify(ROUND) }] });
+      return result("Pick the Rolex.");
+    });
+    const out = await research(meta, { draft: DRAFT, answers: [], onStep: () => undefined, now: () => clock, fetcher: fakeWeb, deadline: Date.now() + WRAP_UP_MS + 400 });
+    const answer = calls.find((c) => c.text?.format?.name === "price_options")!;
+    // The page the round read went to the answer, not an "out of time" stub.
+    expect(JSON.stringify(answer.input)).toContain("$10,250");
+    expect(JSON.stringify(answer.input)).not.toContain("Out of time");
+    expect(out.options[0]).toMatchObject({ url: ROLEX, status: "verified", upfrontCents: 1_025_000 });
+  });
+
+  it("asks once more when Meta can't yet see the response it just made", async () => {
+    let refused = 0;
+    const meta = metaOf((b) => {
+      if (b.text?.format?.name === "price_options") return result(OPTIONS);
+      if (b.previous_response_id && !refused++) throw new Error('Meta Model API returned 400: {"error":{"message":"referenced response not found or expired"}}');
+      if (b.previous_response_id) return result("Done.");
+      if (String(b.instructions ?? "").startsWith("You are Dandelist's price researcher")) return result("", { functionCalls: [{ callId: "g1", name: "get_page", arguments: JSON.stringify(ROUND) }] });
+      return result("Pick the Rolex.");
+    });
+    const out = await research(meta, { draft: DRAFT, answers: [], onStep: () => undefined, now: () => clock, fetcher: fakeWeb, deadline: Date.now() + 60_000 });
+    expect(refused).toBeGreaterThan(1);
+    expect(out.options[0]).toMatchObject({ url: ROLEX });
+  });
 });
