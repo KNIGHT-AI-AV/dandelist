@@ -24,9 +24,12 @@ export function Atmosphere() {
   const sweep = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     if (reduced) return;
+    // The light crosses and comes back, easing at each end. The ease lives in the timing: the native driver drops
+    // `easing` inside interpolate(), so on a phone the light ran linearly and turned around abruptly.
+    const sway = (toValue: number) => Animated.timing(sweep, { toValue, duration: 14_000, easing: Easing.inOut(Easing.sin), useNativeDriver: native });
     const loops = [
       Animated.loop(Animated.timing(drift, { toValue: 1, duration: 36_000, easing: Easing.linear, useNativeDriver: native })),
-      Animated.loop(Animated.timing(sweep, { toValue: 1, duration: 28_000, easing: Easing.linear, useNativeDriver: native })),
+      Animated.loop(Animated.sequence([sway(1), sway(0)])),
     ];
     loops.forEach((l) => l.start());
     return () => loops.forEach((l) => l.stop());
@@ -36,7 +39,7 @@ export function Atmosphere() {
   const dx = drift.interpolate({ inputRange: quarters, outputRange: [0, 14, 0, -14, 0] });
   const dy = drift.interpolate({ inputRange: quarters, outputRange: [10, 0, -10, 0, 10] });
   const size = Math.max(width, height) * 0.9;
-  const along = (from: number, to: number) => sweep.interpolate({ inputRange: [0, 0.5, 1], outputRange: [from, to, from], easing: Easing.inOut(Easing.sin) });
+  const along = (from: number, to: number) => sweep.interpolate({ inputRange: [0, 1], outputRange: [from, to] });
   const glow = Math.max(width, height) * 1.25;
   return (
     <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: p.bg, overflow: "hidden" }]} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
