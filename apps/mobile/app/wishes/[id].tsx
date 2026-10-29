@@ -1,10 +1,11 @@
 import { Redirect, router, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { Animated, Linking, PanResponder, Pressable, StyleSheet, Text, View, useWindowDimensions, type NativeScrollEvent, type NativeSyntheticEvent, type ViewStyle } from "react-native";
+import { Animated, Linking, PanResponder, Pressable, StyleSheet, Text, View, useWindowDimensions, type NativeScrollEvent, type NativeSyntheticEvent, type ScrollView, type ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Atmosphere } from "../../components/atmosphere";
 import { HeroGallery } from "../../components/detail/gallery";
 import { CONTROL_TOP, HERO_SHADE, PARALLAX } from "../../components/detail/metrics";
+import { WishNote } from "../../components/detail/note";
 import { Recheck } from "../../components/detail/recheck";
 import { RetakePhoto } from "../../components/detail/retake";
 import { Swap } from "../../components/detail/swap";
@@ -32,8 +33,8 @@ const RISE_DELAY_MS = 60;
 const EXIT_MS = 200;
 /** Pull-to-dismiss: claims a mostly vertical drag past 8 pt; a quarter-screen drag or a flick dismisses. */
 const PULL = { claim: 8, steep: 1.5, dismiss: 0.25, range: 240, scale: 0.9, follow: 0.6 };
-/** Title, price, source, remove: the regions that stagger in, top to bottom. */
-const SECTIONS = 4;
+/** Title, price, why it matters, source, remove: the regions that stagger in, top to bottom. */
+const SECTIONS = 5;
 
 /**
  * A wish in full. Opened from the list, its photograph grows out of the card it was (UI audit P1-17): the list
@@ -85,6 +86,7 @@ export default function WishDetail() {
     }),
   ).current;
   const hero = useRef<View>(null);
+  const scroller = useRef<ScrollView>(null);
   // The wish as last seen, so the page stays whole while it fades out after a remove.
   const kept = useRef<Wish | undefined>(undefined);
 
@@ -210,8 +212,11 @@ export default function WishDetail() {
     <View style={{ flex: 1 }}>
       <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: p.bg, opacity: page }]} />
       <Animated.ScrollView
+        ref={scroller}
         onScroll={onScroll}
         scrollEventThrottle={16}
+        keyboardShouldPersistTaps="handled"
+        automaticallyAdjustKeyboardInsets
         contentContainerStyle={{ paddingBottom: insets.bottom + layout.stack.sectionLg }}
         style={{ scrollbarWidth: "thin", scrollbarColor: `rgba(${p.inkRgb},0.2) transparent` } as object}
       >
@@ -273,8 +278,13 @@ export default function WishDetail() {
             {a?.explanation ? <Take>{a.explanation}</Take> : null}
           </Animated.View>
 
+          {/* Why it matters to them, in their own words (saved as they type). */}
+          <Animated.View style={enter(2)}>
+            <WishNote key={w.id} wish={w} onReveal={(dy) => scroller.current?.scrollTo({ y: Math.max(0, scrollTop.current + dy), animated: true })} />
+          </Animated.View>
+
           {/* Source: who sells it, how the price was found, and the check. */}
-          <Animated.View style={[{ gap: layout.stack.base }, enter(2)]}>
+          <Animated.View style={[{ gap: layout.stack.base }, enter(3)]}>
             <View style={{ gap: layout.stack.tight }}>
               <Eyebrow>Source</Eyebrow>
               <Text style={[type.title3, { color: p.ink }]}>{a ? a.seller : agentLine(w)}</Text>
@@ -301,7 +311,7 @@ export default function WishDetail() {
           </Animated.View>
 
           {/* Remove: two taps, the second labelled. */}
-          <Animated.View style={[{ alignItems: "flex-start" }, enter(3)]}>
+          <Animated.View style={[{ alignItems: "flex-start" }, enter(4)]}>
             {/* The reason sits a tight step above the button; an empty slot adds no gap. */}
             <Swap id={error ?? ""}>{error ? <View style={{ paddingBottom: layout.stack.tight }}><ErrorLine>{error}</ErrorLine></View> : null}</Swap>
             <Swap id={confirm ? "confirm" : "remove"}>

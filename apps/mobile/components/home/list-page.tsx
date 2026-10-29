@@ -21,6 +21,7 @@ import { ActionSheet, SheetRow } from "../list/action-sheet";
 import { delayFor } from "../list/choreo";
 import { Presence, Rise } from "../list/presence";
 import { ListSkeleton } from "../list/skeleton";
+import { TodayCards } from "../list/today-cards";
 import { TierControl } from "../list/tier-control";
 import { WishFace } from "../list/wish-card";
 import { Backdrop, Chip, Eyebrow, Glass, Hairline, Money, PrimaryButton, Shade } from "../lux";
@@ -208,6 +209,8 @@ export function ListPage() {
           <Rise delay={delayFor(1)}>
             <DandyArea onOpen={() => pager.go("chat")} />
           </Rise>
+          {/* Today's pick, and the ask about notifications, at the head of the list. */}
+          <TodayCards />
         </View>
 
         <View onLayout={(e) => setListTop(e.nativeEvent.layout.y)} style={{ marginTop: layout.stack.base, width: column, alignSelf: "center" }}>

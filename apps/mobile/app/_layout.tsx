@@ -8,6 +8,7 @@ import { DarkTheme, DefaultTheme, Stack, ThemeProvider as NavigationTheme } from
 import { StatusBar } from "expo-status-bar";
 import { View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { Reminders } from "../components/home/reminders";
 import { AuthProvider } from "../lib/auth";
 import { CurrencyProvider } from "../lib/currency";
 import { ThemeProvider, usePalette } from "../lib/theme";
@@ -49,6 +50,8 @@ function Root() {
         <CurrencyProvider>
           <WishProvider>
             <StatusBar style={p.scheme === "dark" ? "light" : "dark"} />
+            {/* The phone's own notifications, planned on every open (off for now: lib/notifications.ts). */}
+            <Reminders />
             {/* Navigation paints its own background between screens; without this it is React Navigation's light grey
                 (#F2F2F2), which Taste Engine found on the live site. */}
             <NavigationTheme value={{ ...(p.scheme === "dark" ? DarkTheme : DefaultTheme), colors: { ...(p.scheme === "dark" ? DarkTheme : DefaultTheme).colors, background: p.bg, card: p.bg, text: p.ink, border: p.hair, primary: p.accent } }}>
