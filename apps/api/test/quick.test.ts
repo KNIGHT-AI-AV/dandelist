@@ -579,6 +579,9 @@ describe("a price keeps what it pays for through every fallback (Codex R14, 09:0
     expect(priceBasis(spec(450, { unitText: "month", billingDuration: "P1M" }))).toBe("payment");
     expect(priceBasis(spec(44, { unitText: "month" }))).toBe("payment");
     expect(priceBasis(spec(100, { priceComponentType: "https://schema.org/Downpayment" }))).toBe("payment");
+    // A charge on top of the thing: delivery, or a fee component.
+    expect(priceBasis({ "@type": "DeliveryChargeSpecification", price: 25, priceCurrency: "USD" })).toBe("charge");
+    expect(priceBasis(spec(49, { priceComponentType: "https://schema.org/ActivationFee" }))).toBe("charge");
     expect(priceBasis(MEMBER)).toBe("member");
     expect(priceBasis(WAS)).toBe("former");
     expect(priceBasis(LIST)).toBe("list");
@@ -597,6 +600,12 @@ describe("a price keeps what it pays for through every fallback (Codex R14, 09:0
       { amount: 1800, currency: "USD", basis: "member" },
     ]);
     expect(listingData(page({ "@type": "Offer", priceSpecification: [MONTHLY, spec(110_500)] })).data.price).toBe(110_500);
+    const delivery = { "@type": "DeliveryChargeSpecification", price: 25, priceCurrency: "USD" };
+    expect(structuredPrices(page({ "@type": "Offer", priceSpecification: [delivery, spec(2400)] }))).toEqual([
+      { amount: 2400, currency: "USD" },
+      { amount: 25, currency: "USD", basis: "charge" },
+    ]);
+    expect(listingData(page({ "@type": "Offer", priceSpecification: [delivery, spec(2400)] })).data.price).toBe(2400);
     expect(listingData(page({ "@type": "Offer", priceSpecification: [LIST, spec(2400)] })).data.price).toBe(2400);
     expect(listingData(page({ "@type": "Offer", priceSpecification: LIST })).data).toMatchObject({ price: 2600, currency: "USD" });
     expect(listingData(page({ "@type": "Offer", priceSpecification: MONTHLY })).data.price).toBeUndefined();
@@ -607,6 +616,9 @@ describe("a price keeps what it pays for through every fallback (Codex R14, 09:0
     expect(await find([`${SHOP} | 0 | USD`], atShop, camera, page)).toBeNull();
     expect(await find([`${SHOP} | 150 | USD`], atShop, camera, page)).toBeNull();
     expect(await find([`${SHOP} | 150/mo | USD`], atShop, camera, page)).toBeNull();
+    // Nor a delivery charge the product data states beside no other price.
+    const deliveryOnly = { [SHOP]: product({ "@type": "Offer", priceSpecification: { "@type": "DeliveryChargeSpecification", price: 25, priceCurrency: "USD" } }, "Alder X Camera. Delivery USD 25.") };
+    expect(await find([`${SHOP} | 0 | USD`], atShop, camera, deliveryOnly)).toBeNull();
   });
 
   it("takes the price everyone pays, however the member and former prices are ordered", async () => {
