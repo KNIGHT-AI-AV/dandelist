@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Run once in AWS CloudShell, signed in as an account admin, with deploy-policy.json beside this file.
-# Creates the three roles Dandelist's deploy user may hand to AWS services but can never create or edit,
+# Creates the four roles Dandelist's deploy user may hand to AWS services but can never create or edit,
 # and applies the deploy user's policy as a new default version. Safe to re-run.
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -38,6 +38,16 @@ aws iam put-role-policy --role-name dandelist-codebuild --policy-name dandelist-
     { \"Effect\": \"Allow\", \"Action\": [\"logs:CreateLogGroup\", \"logs:CreateLogStream\", \"logs:PutLogEvents\"], \"Resource\": \"arn:aws:logs:us-east-1:$ACCT:log-group:/aws/codebuild/dandelist-*\" },
     { \"Effect\": \"Allow\", \"Action\": \"ecr:GetAuthorizationToken\", \"Resource\": \"*\" },
     { \"Effect\": \"Allow\", \"Action\": [\"ecr:BatchCheckLayerAvailability\", \"ecr:BatchGetImage\", \"ecr:GetDownloadUrlForLayer\", \"ecr:InitiateLayerUpload\", \"ecr:UploadLayerPart\", \"ecr:CompleteLayerUpload\", \"ecr:PutImage\"], \"Resource\": \"arn:aws:ecr:us-east-1:$ACCT:repository/dandelist-api\" }
+  ]
+}"
+
+# iPhone builds on CodeBuild's Mac: logs, and the one signing secret (certificate, profile, App Store Connect key).
+role dandelist-ios-build codebuild.amazonaws.com
+aws iam put-role-policy --role-name dandelist-ios-build --policy-name dandelist-ios-build --policy-document "{
+  \"Version\": \"2012-10-17\",
+  \"Statement\": [
+    { \"Effect\": \"Allow\", \"Action\": [\"logs:CreateLogGroup\", \"logs:CreateLogStream\", \"logs:PutLogEvents\"], \"Resource\": \"arn:aws:logs:us-east-1:$ACCT:log-group:/aws/codebuild/dandelist-*\" },
+    { \"Effect\": \"Allow\", \"Action\": \"secretsmanager:GetSecretValue\", \"Resource\": \"arn:aws:secretsmanager:us-east-1:$ACCT:secret:dandelist-ios/*\" }
   ]
 }"
 

@@ -9,7 +9,10 @@
     "migrate": "tsx migrate.ts",
     "deploy": "tsx deploy.ts",
     "smoke": "tsx smoke.ts",
-    "catalogue": "tsx catalogue.ts"
+    "catalogue": "tsx catalogue.ts",
+    "ios:secrets": "tsx ios-build.ts secrets",
+    "ios:build": "tsx ios-build.ts build",
+    "ios:release": "tsx ios-build.ts release"
   },
   "dependencies": {
     "@aws-sdk/client-apprunner": "^3.1150.0",

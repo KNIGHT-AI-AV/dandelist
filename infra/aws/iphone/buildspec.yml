@@ -1,0 +1,14 @@
+# The iPhone build on CodeBuild's Mac (reserved fleet dandelist-mac, image macos-arm-base:15 with Xcode 26).
+# infra/aws/ios-build.ts sets up the fleet and project and starts it; build.sh does the work.
+version: 0.2
+
+env:
+  secrets-manager:
+    SIGNING: dandelist-ios/signing
+  variables:
+    EXPO_PUBLIC_API_URL: https://api.dandelist.knightaiav.com
+
+phases:
+  build:
+    commands:
+      - bash infra/aws/iphone/build.sh
