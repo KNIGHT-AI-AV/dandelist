@@ -66,15 +66,34 @@ export function Money({ cents, size = "card", color, style, format: given, align
 /** Frosted glass panel with a hairline border. Kept for floating controls: pills, sheets, back and close buttons. */
 export function Glass({ children, style, intensity = 40, tint }: { children?: ReactNode; style?: StyleProp<ViewStyle>; intensity?: number; tint?: string }) {
   const p = usePalette();
+  // The blur and the tint take the panel's own corners. On the web the blur is a backdrop-filter, which the panel's
+  // rounded overflow doesn't clip, so a round glass button sat in a square of blur.
+  const corners = cornersOf(style);
   return (
     // zIndex 0 makes the panel its own stack, so the blur (at -1) always sits behind the content, including on web,
     // where absolutely positioned layers otherwise paint over inputs and text.
     <View style={[{ borderRadius: radius.md, borderCurve: "continuous", overflow: "hidden", borderWidth: StyleSheet.hairlineWidth, borderColor: p.hair, zIndex: 0 }, style]}>
-      <BlurView intensity={intensity} tint={p.scheme} style={[StyleSheet.absoluteFill, { zIndex: -1 }]} />
-      <View style={[StyleSheet.absoluteFill, { backgroundColor: tint ?? p.glassTint, zIndex: -1 }]} />
+      <BlurView intensity={intensity} tint={p.scheme} style={[StyleSheet.absoluteFill, corners, { zIndex: -1 }]} />
+      <View style={[StyleSheet.absoluteFill, corners, { backgroundColor: tint ?? p.glassTint, zIndex: -1 }]} />
       {children}
     </View>
   );
+}
+
+/**
+ * A Glass panel's corners as its style sets them: `borderRadius` (radius.md when unset), overridden by any single
+ * corner, so the save sheet, rounded only at the top, keeps its square bottom.
+ */
+function cornersOf(style: StyleProp<ViewStyle>): ViewStyle {
+  const s = StyleSheet.flatten(style);
+  const r = s?.borderRadius ?? radius.md;
+  return {
+    borderTopLeftRadius: s?.borderTopLeftRadius ?? r,
+    borderTopRightRadius: s?.borderTopRightRadius ?? r,
+    borderBottomRightRadius: s?.borderBottomRightRadius ?? r,
+    borderBottomLeftRadius: s?.borderBottomLeftRadius ?? r,
+    borderCurve: s?.borderCurve ?? "continuous",
+  };
 }
 
 /**
@@ -206,14 +225,16 @@ const GLYPHS: Record<IconName, Glyph> = {
 };
 
 /**
- * One line icon, `size` points square. The stroke is 1.5 on the 24 grid and scales with the icon, but never drops
- * under 1 pt, so the 11 to 14 pt marks keep their weight. Decorative: the control around it carries the label.
+ * One line icon, `size` points square. The stroke is 1.5 on the 24 grid and scales with the icon, but never draws
+ * under 1.35 pt: small marks read thinner than they draw, so, as type does, they get relatively heavier as they
+ * shrink. Back and close at 17 pt and the 12 to 14 pt checks draw at 1.35; from 22 pt up nothing changes.
+ * Decorative: the control around it carries the label.
  */
 export function Icon({ name, color, size = 17 }: { name: IconName; color?: string; size?: number }) {
   const p = usePalette();
   const c = color ?? p.ink;
   const g = GLYPHS[name];
-  const stroke = Math.max(1.5, 24 / size);
+  const stroke = Math.max(1.5, (1.35 * 24) / size);
   return (
     <View pointerEvents="none" aria-hidden accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={{ width: size, height: size }}>
       <Svg width={size} height={size} viewBox="0 0 24 24">
