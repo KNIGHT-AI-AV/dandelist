@@ -19,6 +19,7 @@ import type { Step as AgentStep } from "../lib/agent";
 import { ease, native, spring, useReducedMotion } from "../lib/motion";
 import { startIncome } from "../lib/comfort";
 import { ANSWERED_ROUNDS, chosen as chosenBy, groupsFor, nextPair, votingDone, type Vote } from "../lib/pairs";
+import { recurringBreakdown } from "@dandelist/cost";
 import { thoughtOf } from "../lib/reveal";
 import { play, preloadSounds } from "../lib/sound";
 import { layout, type, usePalette, useTheme } from "../lib/theme";
@@ -323,7 +324,7 @@ export default function Welcome() {
       body = <WhenStep value={state.when} onPick={(when) => { patch((s) => ({ ...s, when })); setDone(2 + ANSWERED_ROUNDS); setTimeout(() => go({ kind: "comfort" }), 220); }} />;
       break;
     case "comfort":
-      body = <Comfort incomeCents={state.incomeCents ?? startIncome(total)} totalCents={Math.max(total, 1)} onChange={(c) => patch((s) => ({ ...s, incomeCents: c }))} onDone={() => { setDone(3 + ANSWERED_ROUNDS); go({ kind: "agent" }); }} />;
+      body = <Comfort incomeCents={state.incomeCents ?? startIncome(total)} totalCents={Math.max(total, 1)} keepPerYearCents={recurringBreakdown(listed(state)).perYear} onChange={(c) => patch((s) => ({ ...s, incomeCents: c }))} onDone={() => { setDone(3 + ANSWERED_ROUNDS); go({ kind: "agent" }); }} />;
       break;
     case "agent":
       body = (

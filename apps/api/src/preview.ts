@@ -146,7 +146,7 @@ export function previewRoutes(deps: AgentDeps & { webFetch?: Fetcher; pool?: () 
 
         const facts = planFacts(picks, monthlyCents, now);
         const labels = [...new Set(picks.flatMap((p) => p.recurring.map((r) => r.label?.toLowerCase()).filter(Boolean)))];
-        await send({ type: "row", id: "running", state: "done", text: labels.length ? `Added running costs: ${labels.slice(0, 3).join(", ")}.` : "No running costs on these picks." });
+        await send({ type: "row", id: "running", state: "done", text: labels.length ? `Added running costs: ${labels.slice(0, 3).join(", ")}.` : "No running costs recorded for these picks." });
         await send({ type: "row", id: "total", state: "done", text: `Added it all up: ${facts.everything_upfront}.` });
 
         let note = fallbackNote(facts);
