@@ -20,6 +20,7 @@ import { ease, native, spring, useReducedMotion } from "../lib/motion";
 import { startIncome } from "../lib/comfort";
 import { ANSWERED_ROUNDS, chosen as chosenBy, groupsFor, nextPair, votingDone, type Vote } from "../lib/pairs";
 import { thoughtOf } from "../lib/reveal";
+import { play, preloadSounds } from "../lib/sound";
 import { layout, type, usePalette, useTheme } from "../lib/theme";
 import { emptyWelcome, fetchPool, listTotal, listed, loadWelcome, markTitleSeen, saveWelcome, seenTitle, streamGuestWish, type FirstWish, type PoolItem, type WelcomeState } from "../lib/welcome";
 import { dollars } from "../components/odometer";
@@ -271,6 +272,12 @@ export default function Welcome() {
   useEffect(() => {
     Animated.spring(behind, { toValue: sheet && !reduced ? 0.96 : 1, ...spring.settle, useNativeDriver: native }).start();
   }, [sheet, reduced, behind]);
+
+  // Air opens as the finished list is revealed; it loads while the agent works on the list.
+  useEffect(() => {
+    if (step?.kind === "agent") preloadSounds("swell");
+    if (step?.kind === "reveal") play("swell");
+  }, [step?.kind]);
 
   if (!step) return <View style={{ flex: 1, backgroundColor: p.bg }} />;
 

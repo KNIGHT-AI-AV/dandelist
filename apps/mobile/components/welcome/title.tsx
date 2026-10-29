@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { Animated, Easing, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions, type GestureResponderEvent } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ease, native, useReducedMotion } from "../../lib/motion";
+import { play, preloadSounds } from "../../lib/sound";
 import { fonts, layout, type, usePalette } from "../../lib/theme";
 import { recurringBreakdown } from "@dandelist/cost";
 import { comfortableIncome } from "../../lib/comfort";
@@ -74,8 +75,17 @@ export function TitleSequence({ hero, short, onDone }: { hero: Entry; short: boo
     Animated.timing(out, { toValue: 1, duration: DISSOLVE_MS, easing: ease.inOut, useNativeDriver: native }).start(() => onDone());
   };
 
+  useEffect(() => preloadSounds("title"), []);
+
   useEffect(() => {
     if (!ready) return;
+    // The felt chord sounds as the name resolves (at once on a return visit, which starts there).
+    let sounded = false;
+    const chord = t.addListener(({ value }) => {
+      if (sounded || value < SHORT_FROM) return;
+      sounded = true;
+      play("title");
+    });
     const total = short ? SHORT_MS : reduced ? 400 : TITLE_MS * PACE;
     const anim = Animated.timing(t, { toValue: TITLE_MS, duration: total, easing: Easing.linear, useNativeDriver: false });
     anim.start(({ finished: ok }) => ok && setTimeout(() => finish(), short || reduced ? 150 : 500));
@@ -84,6 +94,7 @@ export function TitleSequence({ hero, short, onDone }: { hero: Entry; short: boo
     timers.push(setTimeout(() => setSkippable(true), 600));
     return () => {
       anim.stop();
+      t.removeListener(chord);
       timers.forEach(clearTimeout);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

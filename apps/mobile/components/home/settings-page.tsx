@@ -1,12 +1,13 @@
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { ScrollView, Text, View, useWindowDimensions } from "react-native";
+import { ScrollView, Switch, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { linkErrorMessage, useAuth, useSignInOptions, type LinkedIdentity } from "../../lib/auth";
 import { CURRENCIES, useMoney } from "../../lib/currency";
 import { personaOf, useDandy } from "../../lib/dandy";
 import { symbolOf } from "../../lib/fx";
 import { haptic } from "../../lib/motion";
+import { useSoundsOn } from "../../lib/sound";
 import { fetchFacts, fetchHome, fetchIdentities, fetchStats, newFacts, saveHome, useProfile, type Facts, type Home, type Stats } from "../../lib/profile";
 import { THEMES, layout, radius, space, type, usePalette, useTheme } from "../../lib/theme";
 import { DandyAvatar } from "../dandy-avatar";
@@ -40,6 +41,7 @@ export function SettingsPage() {
   const here = page === "settings";
   const dandy = useDandy();
   const theme = useTheme();
+  const [soundsOn, setSoundsOn] = useSoundsOn();
   const money = useMoney();
   const options = useSignInOptions();
   const { profile } = useProfile();
@@ -159,6 +161,10 @@ export function SettingsPage() {
         <Section title="Look">
           <Card>
             <Row first label="Theme" value={THEMES[theme.id].name} onPress={() => router.push("/theme")} />
+            <Row
+              label="Sounds"
+              accessory={<Switch accessibilityLabel="Sounds" value={soundsOn} onValueChange={setSoundsOn} trackColor={{ false: p.track, true: p.accent }} ios_backgroundColor={p.track} />}
+            />
           </Card>
         </Section>
 

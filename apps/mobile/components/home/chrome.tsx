@@ -1,5 +1,7 @@
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
+import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
+import { router } from "expo-router";
 import { Animated, Pressable, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { transcribeWish } from "../../lib/agent";
@@ -50,9 +52,41 @@ function Dots() {
   );
 }
 
+const PALETTE = require("../../assets/icons/palette.png");
+/** Narrower than this, the bar keeps the wordmark, dots and photo only; the theme stays a row in settings. */
+const PALETTE_FROM = 360;
+/** The space between the palette's touch area and the photo's, so one thumb never lands on both. */
+const PALETTE_GAP = 12;
+
 /**
- * The bar over every page: the wordmark (back to the list), the dots, and the profile picture (to settings). It
- * stays put while the pages slide under it.
+ * Colours one tap away (owner, 2026-10-29: "Put a color palette near the profile picture ... far enough away that
+ * someone does not accidentally hit both ... no border or bubble"). A bare glyph in the theme's accent inside its
+ * own 44 pt target; a press dims it, and a second tap while the chooser opens does nothing.
+ */
+function PaletteButton() {
+  const p = usePalette();
+  const opening = useRef(false);
+  const open = () => {
+    if (opening.current) return;
+    opening.current = true;
+    router.push("/theme");
+    setTimeout(() => (opening.current = false), 800);
+  };
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Change theme"
+      onPress={open}
+      style={({ pressed }) => ({ width: layout.control.icon, height: layout.control.icon, alignItems: "center", justifyContent: "center", opacity: pressed ? 0.55 : 1 })}
+    >
+      <Image source={PALETTE} style={{ width: 22, height: 22 }} contentFit="contain" tintColor={p.accentText} />
+    </Pressable>
+  );
+}
+
+/**
+ * The bar over every page: the wordmark (back to the list), the dots, the palette (to the themes) and the profile
+ * picture (to settings). It stays put while the pages slide under it.
  */
 export function TopBar() {
   const insets = useSafeAreaInsets();
@@ -71,11 +105,14 @@ export function TopBar() {
           <Wordmark />
         </Pressable>
         <Dots />
-        <Pressable accessibilityRole="button" accessibilityLabel="Settings" onPress={() => go("settings")} onPressIn={press.onPressIn} onPressOut={press.onPressOut} style={{ width: layout.control.chip, height: layout.control.chip, alignItems: "flex-end", justifyContent: "center" }}>
-          <Animated.View style={{ transform: [{ scale: press.scale }] }}>
-            <ProfileAvatar size={34} />
-          </Animated.View>
-        </Pressable>
+        <View pointerEvents="box-none" style={{ flexDirection: "row", alignItems: "center", gap: PALETTE_GAP }}>
+          {width >= PALETTE_FROM ? <PaletteButton /> : null}
+          <Pressable accessibilityRole="button" accessibilityLabel="Settings" onPress={() => go("settings")} onPressIn={press.onPressIn} onPressOut={press.onPressOut} style={{ width: layout.control.chip, height: layout.control.chip, alignItems: "flex-end", justifyContent: "center" }}>
+            <Animated.View style={{ transform: [{ scale: press.scale }] }}>
+              <ProfileAvatar size={34} />
+            </Animated.View>
+          </Pressable>
+        </View>
       </View>
     </View>
   );
