@@ -21,6 +21,7 @@ import { ListeningPanel, MicButton, useVoiceWish } from "../../components/voice/
 import { KeyboardDock, KeyboardScroll, dockRoom } from "../../components/inputs";
 import { Rise } from "../../components/welcome/kit";
 import { haptic } from "../../lib/motion";
+import { play } from "../../lib/sound";
 import { clarityOf, deckFor, thoughtOf } from "../../lib/reveal";
 
 /** The research hero's height, and its shape as the aspect the shuffle picks catalogue crops for. */
@@ -109,7 +110,9 @@ export default function NewWish() {
   // The first card landing is the moment that matters: one success tick, paired with the photo coming into focus.
   const landed = !!run?.result?.options.length;
   useEffect(() => {
-    if (landed) haptic.success();
+    if (!landed) return;
+    haptic.success();
+    play("land");
   }, [landed]);
 
   // Poll the research run until the agent finishes.

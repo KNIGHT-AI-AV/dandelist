@@ -5,6 +5,7 @@ import { useAuth } from "../../lib/auth";
 import { useDandy } from "../../lib/dandy";
 import { haptic } from "../../lib/motion";
 import { stepLine } from "../../lib/recheck";
+import { play } from "../../lib/sound";
 import { answersFrom, refineChanged, withGiven } from "../../lib/refine";
 import { fonts, radius, type, usePalette } from "../../lib/theme";
 import { useWishes, type NewWish } from "../../lib/wishes";
@@ -104,7 +105,10 @@ export function HuntCard({ id, text, already }: { id: string; text: string; alre
         const cur = hunts.get(id) ?? h;
         if (cur.run?.id !== run.id) return; // a newer hunt replaced this one
         keep({ ...cur, run: next });
-        if (!cur.run?.result?.options.length && next.result?.options.length) haptic.success();
+        if (!cur.run?.result?.options.length && next.result?.options.length) {
+          haptic.success();
+          play("land");
+        }
       } catch {
         // A missed poll is retried on the next tick.
         keep({ ...(hunts.get(id) ?? h) });

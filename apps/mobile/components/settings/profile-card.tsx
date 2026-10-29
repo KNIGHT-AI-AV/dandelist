@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Animated, Pressable, StyleSheet, Text, View } from "react-native";
 import { useAuth } from "../../lib/auth";
 import { haptic, usePress } from "../../lib/motion";
@@ -21,9 +21,12 @@ export function ProfileCard() {
   const [busy, setBusy] = useState<"upload" | "remove" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
+  // Held from the tap until the save ends, so a second tap while the picker opens never opens another.
+  const picking = useRef(false);
 
   const change = async () => {
-    if (busy) return;
+    if (busy || picking.current) return;
+    picking.current = true;
     setError(null);
     try {
       const image = await pickAvatarImage();
@@ -36,6 +39,7 @@ export function ProfileCard() {
       haptic.error();
       setError(e instanceof Error ? e.message : "Couldn't save that photo. Try another.");
     } finally {
+      picking.current = false;
       setPreview(null);
       setBusy(null);
     }

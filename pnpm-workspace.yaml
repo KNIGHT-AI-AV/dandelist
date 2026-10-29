@@ -13,8 +13,12 @@ blockExoticSubdeps: true
 trustPolicy: no-downgrade
 
 # Checked 2026-10-26: types-only (41 .d.ts files, no install scripts), published 2024-11-13, required by @types/node.
+# Checked 2026-10-29: expo-asset 57.0.19 is Expo's own asset loader, already in the tree through expo ~57.0.19. It was
+# published 2026-10-06 by an Expo maintainer without the provenance earlier releases carried, and has no install
+# scripts. expo-audio (the app's sounds) needs it as a peer. The owner approved this one exception on 2026-10-29.
 trustPolicyExclude:
   - "undici-types@6.21.0"
+  - "expo-asset@57.0.19"
 
 # Only these dependencies may run install scripts.
 # Skia (checked 2026-10-27): scripts/install-libs.js only copies its prebuilt binaries from its own

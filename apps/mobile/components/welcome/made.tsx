@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Animated, Text, View, useWindowDimensions } from "react-native";
 import { useDandy } from "../../lib/dandy";
 import { ease, native, useReducedMotion } from "../../lib/motion";
+import { play, preloadSounds } from "../../lib/sound";
 import { fonts, layout, radius, type, usePalette, useType } from "../../lib/theme";
 import type { FirstWish } from "../../lib/welcome";
 import { Working } from "../chat/working";
@@ -45,6 +46,13 @@ export function MadeStep({ wish, pricing, line, onContinue }: { wish: FirstWish;
     loop.start();
     return () => loop.stop();
   }, [reduced, option, breathe]);
+
+  // Three soft felt notes as it lands, once: a better card replacing it later stays quiet.
+  useEffect(() => preloadSounds("land"), []);
+  const landed = !!option;
+  useEffect(() => {
+    if (landed) play("land");
+  }, [landed]);
 
   // The real card fades up, slowly, when it lands.
   useEffect(() => {
