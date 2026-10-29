@@ -7,7 +7,7 @@ import { fxRoutes } from "./fx";
 import { guestRoutes } from "./guest";
 import { poolSource } from "./pool";
 import { previewRoutes } from "./preview";
-import { MEDIA_KEY } from "./media-store";
+import { isStoredKey } from "./media-store";
 import { meRoutes } from "./me";
 import { wishRoutes } from "./wishes";
 
@@ -30,7 +30,7 @@ export function createApp(deps: AppDeps) {
   app.get("/media/:key", async (c) => {
     const key = c.req.param("key");
     const store = deps.media?.store;
-    if (!store || !MEDIA_KEY.test(key)) return c.json({ error: "Not found." }, 404);
+    if (!store || !isStoredKey(key)) return c.json({ error: "Not found." }, 404);
     const obj = await store.get(key);
     if (!obj) return c.json({ error: "Not found." }, 404);
     return c.body(obj.bytes as never, 200, {
@@ -64,11 +64,8 @@ export function createApp(deps: AppDeps) {
   app.delete("/me", async (c) => {
     const avatar = (await db.query<{ avatar_key: string | null }>("select avatar_key from users where id = $1", [c.get("userId")])).rows[0]?.avatar_key;
     await db.query("delete from users where id = $1", [c.get("userId")]);
-    // Their profile photo goes too, unless someone else uses the very same picture (keys are the bytes' sha256).
-    if (avatar && deps.media?.store?.delete) {
-      const shared = (await db.query<{ n: number }>("select count(*)::int as n from users where avatar_key = $1", [avatar])).rows[0];
-      if (!Number(shared?.n ?? 0)) await deps.media.store.delete(avatar).catch((e: unknown) => console.warn("could not delete a profile photo", e instanceof Error ? e.message : e));
-    }
+    // Their profile photo goes too. Avatar keys belong to one person, and the store deletes nothing else.
+    if (avatar && deps.media?.store) await deps.media.store.delete(avatar).catch((e: unknown) => console.warn("could not delete a profile photo", e instanceof Error ? e.message : e));
     return c.body(null, 204);
   });
 

@@ -7,7 +7,7 @@ import { USER_DAILY_USD, type AgentDeps } from "./agent/routes";
 import { requireAuth, type AuthVars } from "./auth";
 import type { Db } from "./db";
 import { readLife } from "./dream/life";
-import { keyFor, type MediaStore, type MediaType } from "./media-store";
+import { avatarKeyFor, type MediaType } from "./media-store";
 import { PROVIDERS, listIdentities, type Provider } from "./oauth";
 import { RateLimiter } from "./ratelimit";
 import { SpendLimitError, assertBudget, assertUserBudget, recordSpend, userCapUsd, withHold } from "./spend";
@@ -157,15 +157,10 @@ export function meRoutes(deps: AgentDeps) {
   };
   const gone = { error: "Sign in again to continue." };
 
-  /**
-   * Removes a picture nobody uses any more from the media store, when the store can delete. Keys are the sha256 of
-   * the bytes, so two people with the same photo share one; it goes only once neither has it.
-   */
+  /** Removes a replaced or removed profile photo. Avatar keys belong to one person, so nobody else loses theirs. */
   const forget = async (key: string | null | undefined) => {
-    const store = deps.media?.store as (MediaStore & { delete?: (key: string) => Promise<void> }) | undefined;
-    if (!key || !store?.delete) return;
-    const users = (await db.query<{ n: number }>("select count(*)::int as n from users where avatar_key = $1", [key])).rows[0];
-    if (Number(users?.n ?? 0) > 0) return;
+    const store = deps.media?.store;
+    if (!key || !store) return;
     await store.delete(key).catch((e: unknown) => console.warn("could not delete an old profile photo", e instanceof Error ? e.message : e));
   };
 
@@ -197,10 +192,11 @@ export function meRoutes(deps: AgentDeps) {
     if (type !== declared) return c.json({ error: "That file isn't a JPEG, PNG or WebP photo." }, 415);
     const userId = c.get("userId");
     if (!avatarsPerUser.take(userId, deps.now().getTime())) return c.json({ error: "That's a lot of new photos. Try again in an hour." }, 429);
-    await store.put(bytes, type);
+    const key = avatarKeyFor(userId, bytes, type);
+    await store.putAvatar(key, bytes, type);
     const old = (await db.query<{ avatar_key: string | null }>("select avatar_key from users where id = $1", [userId])).rows[0]?.avatar_key;
-    await db.query("update users set avatar_key = $2 where id = $1", [userId, keyFor(bytes, type)]);
-    if (old && old !== keyFor(bytes, type)) await forget(old);
+    await db.query("update users set avatar_key = $2 where id = $1", [userId, key]);
+    if (old && old !== key) await forget(old);
     const profile = await profileOf(userId);
     return profile ? c.json({ profile }) : c.json(gone, 401);
   });

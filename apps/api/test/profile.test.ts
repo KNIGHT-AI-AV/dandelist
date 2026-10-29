@@ -112,7 +112,7 @@ describe("profile picture", () => {
       const res = await upload(token, new Uint8Array(bytes), type);
       expect(res.status).toBe(200);
       const { profile } = (await res.json()) as Json;
-      expect(profile.avatarKey).toMatch(new RegExp(`^[a-f0-9]{64}\\.${ext}$`));
+      expect(profile.avatarKey).toMatch(new RegExp(`^av-[a-f0-9]{64}\\.${ext}$`));
       expect(profile.avatarUrl).toBe(`https://api.test/media/${profile.avatarKey}`);
       const served = await app.request(`/media/${profile.avatarKey}`);
       expect(served.status).toBe(200);
@@ -138,28 +138,42 @@ describe("profile picture", () => {
     expect((await db.query("select avatar_key from users")).rows).toEqual([{ avatar_key: null }]);
   });
 
-  it("deletes a replaced or removed picture from a store that can, unless someone else still uses it", async () => {
+  it("keeps each person's pictures to themselves, and removing one never touches anyone else's or the agent's", async () => {
     const deleted: string[] = [];
     const base = memoryMediaStore("https://api.test");
-    store = Object.assign(base, { delete: async (key: string) => void (deleted.push(key), base.objects.delete(key)) });
+    const remove = base.delete;
+    store = Object.assign(base, { delete: async (key: string) => void (deleted.push(key), await remove(key)) });
     app = makeApp();
     const ada = await signIn("ada@example.com");
     const bob = await signIn("bob@example.com");
     const first = new Uint8Array(pngHeader(10, 10));
     const second = new Uint8Array(jpegHeader(20, 20));
     const keyOf = async (res: Response) => ((await res.json()) as Json).profile.avatarKey as string;
+    // The same bytes as a picture the agent made for someone's wish.
+    const agentUrl = await base.put(first, "image/png");
+    const agentKey = agentUrl.split("/").pop()!;
 
     const a1 = await keyOf(await upload(ada.token, first, "image/png"));
-    // Bob happens to upload the very same file: one object, two people.
-    expect(await keyOf(await upload(bob.token, first, "image/png"))).toBe(a1);
+    const b1 = await keyOf(await upload(bob.token, first, "image/png"));
+    expect(a1).toMatch(/^av-/);
+    expect(b1).not.toBe(a1);
+    expect(a1).not.toBe(agentKey);
     await upload(ada.token, second, "image/jpeg");
-    expect(deleted).toEqual([]);
-    await call("DELETE", "/me/avatar", bob.token);
     expect(deleted).toEqual([a1]);
-    const a2 = ((await (await call("GET", "/me/profile", ada.token)).json()) as Json).profile.avatarKey;
-    await call("DELETE", "/me/avatar", ada.token);
-    expect(deleted).toEqual([a1, a2]);
-    expect(store.objects.size).toBe(0);
+    await call("DELETE", "/me/avatar", bob.token);
+    expect(deleted).toEqual([a1, b1]);
+    // Deleting the account takes Ada's current photo; the agent's picture stays.
+    await call("DELETE", "/me", ada.token);
+    expect(deleted).toHaveLength(3);
+    expect([...store.objects.keys()]).toEqual([agentKey]);
+    expect((await app.request(`/media/${agentKey}`)).status).toBe(200);
+  });
+
+  it("refuses to delete anything but a profile photo", async () => {
+    const base = memoryMediaStore("https://api.test");
+    const key = (await base.put(new Uint8Array(pngHeader(3, 3)), "image/png")).split("/").pop()!;
+    await base.delete(key);
+    expect(base.objects.has(key)).toBe(true);
   });
 
   it("says so when the server has nowhere to keep pictures", async () => {

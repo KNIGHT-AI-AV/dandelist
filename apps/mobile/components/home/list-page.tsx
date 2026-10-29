@@ -9,6 +9,7 @@ import { useMoney } from "../../lib/currency";
 import { useDandy } from "../../lib/dandy";
 import { ease, haptic, native, useReducedMotion } from "../../lib/motion";
 import { recheckWish } from "../../lib/rechecks";
+import { useSuggestions } from "../../lib/suggestions";
 import { fonts, layout, radius, space, type, usePalette, useType } from "../../lib/theme";
 import { loadWelcome, saveWelcome, toWishes } from "../../lib/welcome";
 import { useWishes, type Wish } from "../../lib/wishes";
@@ -60,8 +61,6 @@ function useAfter(ms: number) {
 }
 
 const errorText = (e: unknown, fallback: string) => (e instanceof Error ? e.message : fallback);
-/** Until the Dandy's own suggestions arrive (lib/suggestions), these start a thought. */
-const STARTERS = ["A weekend in Positano", "A Rolex Daytona", "A house with a view of the sea"];
 
 /**
  * The field at the bottom has focus on the list: the list steps back and the Dandy comes forward with a few ideas,
@@ -107,6 +106,8 @@ export function ListPage() {
   const pager = usePager();
   const money = useMoney();
   const label = useCardLabel();
+  // The same three ideas the chat offers, made from their list and where they live.
+  const suggestions = useSuggestions();
   const { wishes, status, error, reload, add, setTier } = useWishes();
   useAdoptWelcome(auth.status === "signedIn" && status === "ready", add);
   const p = usePalette();
@@ -232,7 +233,7 @@ export function ListPage() {
         </View>
       </Animated.ScrollView>
 
-      <FocusVeil on={home.focused} ideas={STARTERS} onIdea={(i) => home.ask(i)} />
+      <FocusVeil on={home.focused} ideas={suggestions.items} onIdea={(i) => home.ask(i)} />
 
       {quick && quickWish ? (
         <ActionSheet
