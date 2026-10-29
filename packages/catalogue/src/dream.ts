@@ -56,7 +56,10 @@ export type Widget =
   | {
       kind: "car_builder";
       id: string;
-      steps: { id: string; title: string; choices: { id: string; label: string; priceCents?: number; imageUrl?: string; detail?: string }[]; selected?: string }[];
+      steps: { id: string; title: string; choices: { id: string; label: string; priceCents?: number; imageUrl?: string; detail?: string; custom?: boolean }[]; selected?: string }[];
+      /** Selected parts whose price is known, never a complete quote when unpriced is nonempty. */
+      knownSubtotalCents?: number;
+      unpriced?: string[];
       /** Currency of every `priceCents` above (the life context's currency). */
       currency?: string;
     }

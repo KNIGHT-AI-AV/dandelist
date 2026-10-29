@@ -52,6 +52,8 @@ export interface CarChoiceState {
   /** In the build's source currency, as the configurator states it. */
   price?: number;
   verified: boolean;
+  /** A person's own words, retained without inventing a price. */
+  custom?: boolean;
 }
 
 export interface CarBuildState {

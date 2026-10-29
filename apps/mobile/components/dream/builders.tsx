@@ -4,6 +4,7 @@ import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-
 import { haptic } from "../../lib/motion";
 import { moneyIn } from "../../lib/dream";
 import { MAX_OWN, OWN, addOwn } from "../../lib/own";
+import { carSelectionSummary, carSelectionValues, commitCarDrafts, initialCarSelection, removeCarOwn } from "../../lib/car-selection";
 import { fonts, layout, radius, usePalette, type } from "../../lib/theme";
 import { Field } from "../inputs";
 import { TARGET } from "../inputs/tokens";
@@ -174,15 +175,25 @@ export function CarBuilder({ w, onApply }: { w: CarWidget; onApply(values: Recor
   const p = usePalette();
   const money = moneyIn(w.currency);
   const multi = (id: string) => id === "options";
-  const [picked, setPicked] = useState<Record<string, string[]>>(() => Object.fromEntries(w.steps.filter((s) => s.selected).map((s) => [s.id, s.selected!.split(",")])));
+  const [selection, setSelection] = useState(() => initialCarSelection(w));
+  const [drafts, setDrafts] = useState<Record<string, string | null>>({});
   const choose = (step: string, id: string) => {
     haptic.select();
-    setPicked((x) => {
-      const now = x[step] ?? [];
-      return { ...x, [step]: multi(step) ? (now.includes(id) ? now.filter((c) => c !== id) : [...now, id]) : [id] };
+    setSelection((x) => {
+      const now = x.picked[step] ?? [];
+      const picked = { ...x.picked, [step]: multi(step) ? (now.includes(id) ? now.filter((c) => c !== id) : [...now, id]) : [id] };
+      if (step === "model" && (x.own.model?.length || now[0] !== id)) for (const s of w.steps) if (s.id !== "model") picked[s.id] = [];
+      return { picked, own: multi(step) ? x.own : { ...x.own, [step]: [] } };
     });
+    if (!multi(step)) setDrafts((x) => ({ ...x, [step]: null }));
   };
-  const values = () => Object.fromEntries(Object.entries(picked).map(([k, v]) => [k, multi(k) ? v : v[0]]));
+  const pending = commitCarDrafts(w, selection, drafts);
+  const summary = carSelectionSummary(w, pending);
+  const apply = (action: "done" | "search") => {
+    setSelection(pending);
+    setDrafts({});
+    onApply({ ...carSelectionValues(pending), [action]: true });
+  };
   return (
     <Glass style={{ padding: 18, gap: 20, borderRadius: radius.lg }}>
       <Eyebrow color={p.accentText}>Build your car</Eyebrow>
@@ -190,8 +201,8 @@ export function CarBuilder({ w, onApply }: { w: CarWidget; onApply(values: Recor
         <View key={step.id} style={{ gap: 10 }}>
           <Text style={[type.title3, { color: p.ink }]}>{step.title}</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
-            {step.choices.map((c) => {
-              const on = (picked[step.id] ?? []).includes(c.id);
+            {step.choices.filter((c) => !c.custom).map((c) => {
+              const on = (selection.picked[step.id] ?? []).includes(c.id);
               return (
                 <Pressable key={c.id} accessibilityRole={multi(step.id) ? "checkbox" : "radio"} accessibilityState={multi(step.id) ? { checked: on } : { selected: on }} onPress={() => choose(step.id, c.id)}>
                   <View style={{ width: 168, borderRadius: radius.md, overflow: "hidden", borderWidth: on ? 2 : StyleSheet.hairlineWidth, borderColor: on ? p.accent : p.hair, backgroundColor: p.surface }}>
@@ -210,9 +221,26 @@ export function CarBuilder({ w, onApply }: { w: CarWidget; onApply(values: Recor
               );
             })}
           </ScrollView>
+          <OwnRow
+            label={`Your own ${step.title.toLowerCase()}`}
+            own={selection.own[step.id] ?? []}
+            draft={drafts[step.id] ?? null}
+            onDraft={(value) => setDrafts((x) => ({ ...x, [step.id]: value }))}
+            onCommit={() => {
+              setSelection((x) => commitCarDrafts(w, x, { [step.id]: drafts[step.id] ?? null }));
+              setDrafts((x) => ({ ...x, [step.id]: null }));
+            }}
+            onRemove={(label) => setSelection((x) => removeCarOwn(w, x, step.id, label))}
+          />
         </View>
       ))}
-      <SearchBar primary="Price this build" onPrimary={() => onApply({ ...values(), done: true })} onJustSearch={() => onApply({ ...values(), search: true })} />
+      {summary.unpriced.length ? (
+        <View style={{ gap: 6 }}>
+          <Text style={[type.label, { color: p.ink }]}>{`Priced parts: ${money(summary.subtotal)}`}</Text>
+          <Text style={[type.footnote, { color: p.ink2 }]}>{`Not priced: ${summary.unpriced.join("; ")}. This is not a complete price. Your choices stay in the build.`}</Text>
+        </View>
+      ) : null}
+      <SearchBar primary="Price this build" onPrimary={() => apply("done")} onJustSearch={() => apply("search")} />
     </Glass>
   );
 }

@@ -4,7 +4,7 @@ import { fxRate, pageShowsPrice } from "../agent/tools";
 import { json, strictObject, type DreamCtx } from "./context";
 import { rateMoney } from "./keep";
 import { FEATURE_PATTERNS, featurePattern, readListing } from "./pages";
-import type { CarBuildState, CarChoiceState, HomeCriteria } from "./types";
+import type { CarBuildState, CarChoiceState, CarCriteria, HomeCriteria } from "./types";
 
 /**
  * The interactive tools the concierge opens: the home builder (styles with real reference photos, features prefilled
@@ -199,7 +199,7 @@ export async function carBuilder(ctx: DreamCtx, id: string, make: string, model:
     { id: "colour", title: "Colour", multi: false, choices: cfg.colours.map(toChoice), selected: [] },
     { id: "interior", title: "Interior", multi: false, choices: cfg.interiors.map(toChoice), selected: [] },
     { id: "options", title: "Options", multi: true, choices: cfg.options.map(toChoice), selected: [] },
-  ].filter((s) => s.choices.length);
+  ];
   const wantColour = /\b(black|white|silver|grey|gray|blue|red|green|yellow|brown|beige|gold|orange)\b/i.exec(notes)?.[1]?.toLowerCase();
   const colourStep = steps.find((s) => s.id === "colour");
   if (wantColour && colourStep) {
@@ -222,18 +222,22 @@ export async function carBuilder(ctx: DreamCtx, id: string, make: string, model:
 }
 
 export function carWidget(b: CarBuildState, currency: string): Extract<Widget, { kind: "car_builder" }> {
+  const summary = buildTotal(b);
   return {
     kind: "car_builder",
     id: b.id,
     currency,
+    knownSubtotalCents: Math.round(summary.total * b.rate * 100),
+    unpriced: summary.unpriced,
     steps: b.steps.map((s) => ({
       id: s.id,
       title: s.title,
       choices: s.choices.map((ch) => ({
         id: ch.id,
         label: ch.label,
+        ...(ch.custom ? { custom: true, detail: "Not priced" } : {}),
         ...(ch.price !== undefined && s.id !== "model" ? { priceCents: Math.round(ch.price * b.rate * 100) } : {}),
-        ...(s.id === "model" && b.imageUrl ? { imageUrl: b.imageUrl } : {}),
+        ...(s.id === "model" && !ch.custom && b.imageUrl ? { imageUrl: b.imageUrl } : {}),
         ...(ch.price !== undefined && s.id !== "model"
           ? { detail: ch.price === 0 ? "Included" : ch.verified ? `${rateMoney(ch.price, b.sourceCurrency)} on the maker's page` : "Estimate: not confirmed on the maker's page" }
           : {}),
@@ -245,30 +249,74 @@ export function carWidget(b: CarBuildState, currency: string): Extract<Widget, {
 
 /** Applies the builder's answers: one choice id per step, or several (an array or comma list) for options. */
 export function applyCarValues(b: CarBuildState, values: Record<string, unknown>): void {
+  const oldModel = b.steps.find((s) => s.id === "model")?.selected[0];
   const src = (values.selections && typeof values.selections === "object" ? values.selections : values) as Record<string, unknown>;
+  const own = values.own && typeof values.own === "object" && !Array.isArray(values.own) ? values.own as Record<string, unknown> : {};
   for (const s of b.steps) {
     const v = src[s.id];
-    if (v === undefined) continue;
-    const ids = (Array.isArray(v) ? v.map(String) : String(v).split(",")).map((x) => x.trim()).filter((x) => s.choices.some((ch) => ch.id === x));
-    s.selected = s.multi ? ids : ids.slice(0, 1);
+    const typed = own[s.id];
+    if (v === undefined && typed === undefined) continue;
+    const ids = v === undefined ? s.selected : (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : typeof v === "string" ? v.split(",") : []).map((x) => x.trim()).filter((x) => s.choices.some((ch) => ch.id === x));
+    const customIds: string[] = [];
+    for (const input of (Array.isArray(typed) ? typed : typeof typed === "string" ? [typed] : []).slice(0, 6)) {
+      if (typeof input !== "string") continue;
+      // A UTF-16 slice can split an emoji; JSONB cannot store an unpaired surrogate.
+      const label = input.replace(/[\u0000-\u001f\u007f]/g, " ").trim().replace(/\s+/g, " ").slice(0, 40).replace(/\p{Cs}/gu, "\uFFFD");
+      if (!label) continue;
+      let ch = s.choices.find((c) => c.label.toLowerCase() === label.toLowerCase() || c.id.toLowerCase() === label.toLowerCase());
+      if (!ch) {
+        const key = Array.from(label.toLowerCase(), (c) => c.codePointAt(0)!.toString(16)).join("-");
+        ch = { id: `own:${key}`, label, verified: false, custom: true };
+        s.choices.push(ch);
+      }
+      customIds.push(ch.id);
+    }
+    // Own entries are explicit additions for options and replace a single-choice section.
+    const knownIds = ids.filter((id) => typed === undefined || !s.choices.find((c) => c.id === id)?.custom);
+    const selected = [...new Set(s.multi ? [...knownIds, ...customIds] : customIds.length ? customIds : knownIds)];
+    s.selected = s.multi ? selected : selected.slice(0, 1);
+    s.choices = s.choices.filter((c) => !c.custom || s.selected.includes(c.id));
+  }
+  const model = b.steps.find((s) => s.id === "model");
+  if (model?.selected[0] !== oldModel) {
+    for (const s of b.steps.filter((step) => step.id !== "model")) s.selected = s.selected.filter((id) => s.choices.find((c) => c.id === id)?.custom);
   }
 }
 
 /** The build's total in the source currency, and whether every priced part was confirmed on the maker's page. */
-export function buildTotal(b: CarBuildState): { total: number; verified: boolean; parts: string[] } {
+export function buildTotal(b: CarBuildState): { total: number; verified: boolean; parts: string[]; unpriced: string[] } {
   let total = 0;
   let verified = true;
   const parts: string[] = [];
+  const unpriced: string[] = [];
+  const changedModel = b.steps.some((s) => s.id === "model" && s.selected.some((id) => s.choices.find((c) => c.id === id)?.custom));
   for (const s of b.steps) {
     for (const id of s.selected) {
       const ch = s.choices.find((c) => c.id === id);
       if (!ch) continue;
       parts.push(ch.label);
-      if (ch.price !== undefined) total += ch.price;
+      if (ch.custom || (s.id !== "model" && (changedModel || ch.price === undefined))) {
+        unpriced.push(`${s.title}: ${ch.label}`);
+        verified = false;
+      } else if (ch.price !== undefined) total += ch.price;
       if (!ch.verified) verified = false;
     }
   }
-  return { total, verified, parts };
+  return { total, verified, parts, unpriced };
 }
 
-export const buildReady = (b: CarBuildState) => ["trim"].every((id) => !b.steps.some((s) => s.id === id) || b.steps.find((s) => s.id === id)!.selected.length > 0);
+export const buildReady = (b: CarBuildState) => ["model", "trim"].every((id) => !b.steps.some((s) => s.id === id) || b.steps.find((s) => s.id === id)!.selected.length > 0);
+
+/** Keep every selected preference in the hunt, including unpriced interiors and options. */
+export function carBuildCriteria(b: CarBuildState, currency: string): CarCriteria {
+  const choice = (step: string) => {
+    const s = b.steps.find((x) => x.id === step);
+    return s?.choices.find((c) => c.id === s.selected[0]);
+  };
+  const model = choice("model");
+  const notes = b.steps.flatMap((s) => s.selected.flatMap((id) => {
+    const c = s.choices.find((ch) => ch.id === id);
+    return c ? [`${s.title}: ${c.label}`] : [];
+  })).join("; ");
+  return { kind: "car", make: model?.custom ? "" : b.make, model: model?.custom ? model.label : b.model, trim: choice("trim")?.label ?? "", colour: choice("colour")?.label ?? "", condition: "any", maxPrice: null, currency, notes };
+}
