@@ -9,7 +9,7 @@ import { MAX_CLIP_BYTES, WISH_KEYWORDS, cleanTranscript, clipProblem, readWav } 
 import { pgArchive } from "./archive/archive";
 import type { PoolItem } from "./pool";
 import { ipOf } from "./preview";
-import { SpendLimitError, assertBudget, recordSpend, recordToolSpend, withHold } from "./spend";
+import { SpendLimitError, assertBudget, heldForScope, recordSpend, recordToolSpend, withBudgetScope } from "./spend";
 
 /**
  * Before sign-in (owner, 2026-10-28): the first thing someone wants is priced for real while they play this or
@@ -61,11 +61,12 @@ export function guestRoutes(deps: AgentDeps & { pool: () => Promise<PoolItem[]> 
     await assertBudget(db, caps, now);
     const dayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).toISOString();
     const spent = (await db.query<{ s: string | null }>("select coalesce(sum(cost_usd), 0) as s from spend_ledger where user_id is null and kind like 'guest%' and created_at >= $1", [dayStart])).rows[0];
-    if (Number(spent?.s ?? 0) >= GUEST_DAILY_USD) throw new SpendLimitError("daily");
+    const usd = Number(spent?.s ?? 0);
+    if (usd >= GUEST_DAILY_USD || usd + heldForScope("guest") > GUEST_DAILY_USD) throw new SpendLimitError("daily");
   };
   const guestMeta = (): Meta => {
     const client = new MetaClient({ ...deps.meta!, onUsage: (usage, cost) => recordSpend(db, null, "guest", usage, cost, deps.now()) });
-    return { responses: (body) => withHold(guard, () => client.responses(body)) };
+    return { responses: (body) => withBudgetScope("guest", guard, () => client.responses(body)) };
   };
   const busy = (why: "hour" | "day") => (why === "hour" ? "That's a lot for one hour. Try again soon, or sign in." : "The agent is resting until tomorrow. Sign in to keep going.");
 
@@ -116,8 +117,11 @@ export function guestRoutes(deps: AgentDeps & { pool: () => Promise<PoolItem[]> 
     const allowed = voice(ipOf((n) => c.req.header(n)), deps.now());
     if (allowed !== "ok") return c.json({ error: busy(allowed) }, 429);
     try {
-      const heard = await withHold(guard, () => new MetaClient(deps.meta!).transcribe(new Blob([bytes], { type: "audio/wav" }), { keywords: WISH_KEYWORDS }));
-      await recordToolSpend(db, null, "guest-transcribe", TRANSCRIBE_MODEL, heard.costUsd, deps.now());
+      const heard = await withBudgetScope("guest", guard, async () => {
+        const heard = await new MetaClient(deps.meta!).transcribe(new Blob([bytes], { type: "audio/wav" }), { keywords: WISH_KEYWORDS });
+        await recordToolSpend(db, null, "guest-transcribe", TRANSCRIBE_MODEL, heard.costUsd, deps.now());
+        return heard;
+      });
       const text = cleanTranscript(heard.text);
       if (!text) return c.json({ error: "Didn't catch that. Try again a little closer." }, 422);
       return c.json({ text });
