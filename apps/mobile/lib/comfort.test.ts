@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { INCOME_MAX, INCOME_MIN, INCOME_STEPS, comfortableIncome, fractionOf, incomeAt, incomeSteps, stageOf, startIncome } from "./comfort";
+import { INCOME_MAX, INCOME_MIN, INCOME_STEPS, comfortableIncome, fractionOf, fullRange, incomeAt, incomeSteps, stageOf, startIncome } from "./comfort";
 import { formatIn } from "./fx";
 
 describe("the comfort fader", () => {
@@ -21,15 +21,16 @@ describe("the comfort fader", () => {
   it("goes from devastated to monocled as a year's income outgrows the list", () => {
     const list = 16_000_000; // $160,000
     expect(stageOf(1_000_000, list).index).toBe(0);
-    expect(stageOf(5_000_000, list).index).toBe(1);
-    expect(stageOf(25_000_000, list)).toEqual({ index: 2, line: "You could comfortably afford this" });
-    expect(stageOf(100_000_000, list).index).toBe(3);
-    expect(stageOf(1_000_000_000, list).index).toBe(4);
+    expect(stageOf(3_000_000, list).index).toBe(1);
+    expect(stageOf(6_000_000, list).index).toBe(2);
+    expect(stageOf(25_000_000, list)).toEqual({ index: 3, line: "You could comfortably afford this" });
+    expect(stageOf(100_000_000, list).index).toBe(4);
+    expect(stageOf(1_000_000_000, list).index).toBe(5);
   });
 
   it("starts where the list reads comfortable", () => {
     const list = 16_000_000;
-    expect(stageOf(startIncome(list), list).index).toBe(2);
+    expect(stageOf(startIncome(list), list).index).toBe(3);
     expect(startIncome(0)).toBe(INCOME_MIN);
   });
 
@@ -47,10 +48,22 @@ describe("the comfort fader", () => {
     const list = 123_456_700; // $1,234,567
     const income = comfortableIncome(list);
     expect(income).toBe(75_000_000); // $750,000
-    expect(stageOf(income, list).index).toBe(2);
+    expect(stageOf(income, list).index).toBe(3);
     // A boat whose crew costs $1.2M a year needs more than its price suggests.
     const keep = 120_000_000;
     expect(comfortableIncome(10_000_000, keep)).toBe(800_000_000);
-    expect(stageOf(comfortableIncome(10_000_000, keep), 10_000_000, keep).index).toBe(2);
+    expect(stageOf(comfortableIncome(10_000_000, keep), 10_000_000, keep).index).toBe(3);
+  });
+
+  it("always runs from horrid at the far left to ritzy at the far right, whatever the list", () => {
+    // A Peloton with its membership (the owner's money page), a $160,000 list, and an $80 million estate.
+    for (const [total, keep, rate, unit] of [[260_000, 47_400, 0.9, 1], [16_000_000, 0, 1, 1], [8_000_000_000, 120_000_000, 152, 100]] as const) {
+      const steps = incomeSteps(rate, unit, fullRange(total, keep));
+      expect(stageOf(steps[0]!, total, keep).index).toBe(0);
+      expect(stageOf(steps.at(-1)!, total, keep).index).toBe(5);
+      expect(steps[0]!).toBeLessThanOrEqual(INCOME_MIN / rate * unit + 1);
+      expect(steps.at(-1)!).toBeGreaterThanOrEqual(INCOME_MAX / rate * unit - 1);
+      for (const s of steps) expect(incomeAt(fractionOf(s, steps), steps)).toBe(s);
+    }
   });
 });

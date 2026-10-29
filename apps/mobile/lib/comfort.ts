@@ -1,8 +1,9 @@
 /**
- * "What would it take?" (owner, 2026-10-28: "this is not a savings app... it's a wish list"). A fader from $10,000 to
- * $100 million a year; for each income, a face and a line say how comfortably that income carries everything on
- * the list. Nothing here is a budget or a date: the ratio of a year's income to the list's total picks one of five
- * stages, from devastated to monocled.
+ * "What would it take?" (owner, 2026-10-28: "this is not a savings app... it's a wish list"). A fader of incomes a
+ * year; for each, a face and a line say how comfortably that income carries everything on the list. Nothing here is a
+ * budget or a date: the ratio of a year's income to the list's total picks one of six stages (owner, 2026-10-29:
+ * "horrid, upset, normal, smile, big smile, ritzy rich"). The fader runs from $10,000 to $100 million, and further
+ * either way when a list needs it, so the far left is always horrid and the far right always ritzy.
  */
 export const INCOME_MIN = 1_000_000; // $10,000
 export const INCOME_MAX = 10_000_000_000; // $100,000,000
@@ -15,10 +16,12 @@ const LADDER = [1, 1.5, 2, 2.5, 3, 4, 5, 7.5];
  * of that currency per dollar. Away from dollars the cents are fractional on purpose: converting back lands exactly
  * on the round figure.
  */
-export function incomeSteps(rate = 1, unit = 1): number[] {
+export function incomeSteps(rate = 1, unit = 1, range?: { low: number; high: number }): number[] {
   const out: number[] = [];
-  const top = INCOME_MAX * unit;
-  for (let decade = INCOME_MIN * unit; decade < top; decade *= 10) for (const m of LADDER) out.push(Math.round(decade * m) / rate);
+  // Whole decades of the shown currency, wide enough for the range (in US cents) when one is given.
+  const low = Math.min(INCOME_MIN * unit, range ? 10 ** Math.floor(Math.log10(range.low * rate)) : Infinity);
+  const top = Math.max(INCOME_MAX * unit, range ? 10 ** Math.ceil(Math.log10(range.high * rate)) : 0);
+  for (let decade = low; decade < top; decade *= 10) for (const m of LADDER) out.push(Math.round(decade * m) / rate);
   out.push(top / rate);
   return rate === 1 ? out.map(Math.round) : out;
 }
@@ -42,16 +45,24 @@ export function incomeAt(fraction: number, steps: readonly number[] = INCOME_STE
 }
 
 export interface Stage {
-  /** 0 to 4: devastated, uneasy, content, overjoyed, monocled. */
+  /** 0 to 5: horrid, upset, normal, smile, big smile, ritzy rich. */
   index: number;
   line: string;
 }
 
 /** A year's income over the list's total: below these, the stage before. */
-const BOUNDS = [0.15, 0.6, 2.5, 15];
-const LINES = ["Out of reach for now", "A stretch, but you'd get there", "You could comfortably afford this", "You could very much afford this", "You wouldn't notice the bill"];
+const BOUNDS = [0.1, 0.3, 0.6, 2.5, 15];
+const LINES = [
+  "Out of reach for now",
+  "A real stretch",
+  "Doable, if you're careful",
+  "You could comfortably afford this",
+  "You could very much afford this",
+  "You wouldn't notice the bill",
+];
+export const STAGES = LINES.length;
 /** The stage that reads "comfortably". */
-export const COMFORTABLE = 2;
+export const COMFORTABLE = 3;
 /** Keeping it all is comfortable when it takes no more than this share of a year's income. */
 export const KEEP_SHARE = 0.15;
 
@@ -79,6 +90,15 @@ export function comfortableIncome(totalCents: number, keepPerYearCents = 0): num
   const exact = loadOf(totalCents, keepPerYearCents) * BOUNDS[COMFORTABLE - 1]!;
   const magnitude = 10 ** Math.max(0, Math.floor(Math.log10(exact)) - 1);
   return Math.ceil(exact / magnitude - 1e-9) * magnitude;
+}
+
+/**
+ * The incomes the fader must reach for a list (US cents): low enough that the far left reads horrid, high enough that
+ * the far right reads ritzy, never narrower than $10,000 to $100 million.
+ */
+export function fullRange(totalCents: number, keepPerYearCents = 0): { low: number; high: number } {
+  const load = loadOf(totalCents, keepPerYearCents);
+  return { low: Math.min(INCOME_MIN, load * BOUNDS[0]! * 0.5), high: Math.max(INCOME_MAX, load * BOUNDS[BOUNDS.length - 1]! * 1.5) };
 }
 
 /** A sensible starting income for a list: where it reads "comfortably", so the first face is a smile. */

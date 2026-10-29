@@ -1,7 +1,7 @@
 import { Image } from "expo-image";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Animated, PanResponder, Platform, Text, View, useWindowDimensions } from "react-native";
-import { fractionOf, incomeAt, incomeSteps, stageOf } from "../../lib/comfort";
+import { fractionOf, fullRange, incomeAt, incomeSteps, stageOf } from "../../lib/comfort";
 import { CURRENCIES, useMoney } from "../../lib/currency";
 import { symbolOf } from "../../lib/fx";
 import { ease, haptic, native, spring, useReducedMotion } from "../../lib/motion";
@@ -11,10 +11,14 @@ import { Chip, Eyebrow, PrimaryButton } from "../lux";
 import { Odometer } from "../odometer";
 import { Rise } from "./kit";
 
-/** Five white line drawings (Desktop\Dandelist Design\faces, made with image_gen), tinted to the theme's ink. */
+/**
+ * Six white line drawings (Desktop\Dandelist Design\faces, made with image_gen), tinted to the theme's ink, in the
+ * owner's order: horrid, upset, normal, smile, big smile, ritzy rich.
+ */
 const FACES = [
   require("../../assets/faces/1-devastated.png"),
   require("../../assets/faces/2-uneasy.png"),
+  require("../../assets/faces/2b-normal.png"),
   require("../../assets/faces/3-content.png"),
   require("../../assets/faces/4-overjoyed.png"),
   require("../../assets/faces/5-pompous.png"),
@@ -85,7 +89,8 @@ export function IncomeFader({ incomeCents, totalCents, keepPerYearCents = 0, onC
   const p = usePalette();
   const money = useMoney();
   const reduced = useReducedMotion();
-  const steps = useMemo(() => incomeSteps(money.rate, money.unit), [money.rate, money.unit]);
+  // The far left always reads horrid and the far right ritzy, however small or large the list.
+  const steps = useMemo(() => incomeSteps(money.rate, money.unit, fullRange(totalCents, keepPerYearCents)), [money.rate, money.unit, totalCents, keepPerYearCents]);
   const track = useRef<View>(null);
   const box = useRef({ x: 0, w: 1 });
   const hold = useRef(new Animated.Value(0)).current;
