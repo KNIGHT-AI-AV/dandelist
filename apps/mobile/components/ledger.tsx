@@ -35,7 +35,7 @@ export function Ledger({ steps, startedAt, working }: { steps: Step[]; startedAt
   const p = usePalette();
   const t0 = new Date(startedAt).getTime();
   return (
-    <View accessibilityRole="list" accessibilityLabel="What the agent did">
+    <View accessibilityRole="list" accessibilityLabel="How the price was found">
       {steps.map((s, i) => {
         const d = describe(s);
         return (
