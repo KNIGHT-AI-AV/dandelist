@@ -9,7 +9,6 @@ import { useMoney } from "../../lib/currency";
 import { useDandy } from "../../lib/dandy";
 import { ease, haptic, native, useReducedMotion } from "../../lib/motion";
 import { recheckWish } from "../../lib/rechecks";
-import { UNDO_MS } from "../../lib/removal";
 import { fonts, layout, radius, space, type, usePalette, useType } from "../../lib/theme";
 import { loadWelcome, saveWelcome, toWishes } from "../../lib/welcome";
 import { useWishes, type Wish } from "../../lib/wishes";
@@ -21,8 +20,6 @@ import { delayFor } from "../list/choreo";
 import { Presence, Rise } from "../list/presence";
 import { ListSkeleton } from "../list/skeleton";
 import { TierControl } from "../list/tier-control";
-import { Toast, type Note } from "../list/undo-toast";
-import { useRemovals } from "../list/use-removals";
 import { WishFace } from "../list/wish-card";
 import { Backdrop, Chip, Eyebrow, Glass, Hairline, Money, PrimaryButton, Shade } from "../lux";
 import { useHome } from "./bridge";
@@ -31,6 +28,7 @@ import { useTopRoom } from "./chrome";
 import { DandyArea } from "./dandy-area";
 import { GrowingCards, useCardLabel } from "./growing-cards";
 import { usePager } from "./pager";
+import { useHomeRemovals } from "./removals";
 
 /**
  * After any sign-in (code, Apple, Google, GitHub, Facebook), the list someone kept on the welcome screen becomes
@@ -109,7 +107,7 @@ export function ListPage() {
   const pager = usePager();
   const money = useMoney();
   const label = useCardLabel();
-  const { wishes, status, error, reload, add, remove, setTier } = useWishes();
+  const { wishes, status, error, reload, add, setTier } = useWishes();
   useAdoptWelcome(auth.status === "signedIn" && status === "ready", add);
   const p = usePalette();
   const t = useType();
@@ -119,17 +117,8 @@ export function ListPage() {
   const late = useAfter(200);
   const gutter = layout.gutter(width);
 
-  // Notes in the toast that aren't undo: a failed delete, tier change or refresh.
-  const [errorNote, setErrorNote] = useState<Note | null>(null);
-  const showError = useCallback((text: string) => setErrorNote({ key: `error:${Date.now()}`, text }), []);
-  useEffect(() => {
-    if (!errorNote) return;
-    const timer = setTimeout(() => setErrorNote(null), UNDO_MS);
-    return () => clearTimeout(timer);
-  }, [errorNote]);
-  const removals = useRemovals(remove, showError);
-  const [claim, setClaim] = useState(0);
-  const pendingId = removals.pending?.id;
+  // One undo window for every page (a wish removed on Details leaves here too), with its toast at the host.
+  const { pendingId, remove: removeWish, showError } = useHomeRemovals();
   const visible = useMemo(() => wishes.filter((w) => w.id !== pendingId), [wishes, pendingId]);
 
   // Quick actions: which card, where it sits, and what to do once the sheet has left.
@@ -167,10 +156,6 @@ export function ListPage() {
     setQuick({ wish: w, at });
     setQuickOpen(true);
   };
-  const removeWish = (w: Wish, focusUndo: boolean) => {
-    removals.remove(w);
-    if (focusUndo) setClaim((c) => c + 1);
-  };
 
   const items = visible.map((w) => w.item);
   const total = upfrontCashCents(items);
@@ -178,8 +163,6 @@ export function ListPage() {
   const income = comfortableIncome(total, keepPerYear);
   const count = `${visible.length} ${visible.length === 1 ? "wish" : "wishes"}`;
   const loading = (status === "loading" || status === "idle") && wishes.length === 0;
-  const pendingNote = removals.pending;
-  const note: Note | null = pendingNote ? { key: pendingNote.id, text: `Removed ${pendingNote.name}`, action: { label: "Undo", onPress: () => removals.undo(pendingNote.id) } } : errorNote;
 
   // The cards run edge to edge on a phone, and in a centred column on anything wider.
   const column = Math.min(width, layout.list + 2 * gutter);
@@ -250,7 +233,6 @@ export function ListPage() {
       </Animated.ScrollView>
 
       <FocusVeil on={home.focused} ideas={STARTERS} onIdea={(i) => home.ask(i)} />
-      <Toast note={note} bottom={bottomRoom - space[12]} side={gutter} claim={claim} onHold={removals.hold} onRelease={removals.release} />
 
       {quick && quickWish ? (
         <ActionSheet
@@ -279,10 +261,7 @@ export function ListPage() {
             <SheetRow
               label="Remove"
               danger
-              onPress={() => {
-                removeWish(quickWish, false);
-                closeQuick(() => setClaim((c) => c + 1));
-              }}
+              onPress={() => closeQuick(() => removeWish(quickWish, true))}
             />
           </Rise>
         </ActionSheet>

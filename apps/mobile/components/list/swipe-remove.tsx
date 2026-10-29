@@ -1,4 +1,5 @@
 import { Children, cloneElement, isValidElement, useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from "react";
+import { noteDrag } from "../../lib/drag-guard";
 import { Animated, PanResponder, Text, View, type AccessibilityActionEvent, type AccessibilityActionInfo, type StyleProp, type ViewStyle } from "react-native";
 import { Icon } from "../lux";
 import { ease, haptic, native, useReducedMotion } from "../../lib/motion";
@@ -93,12 +94,14 @@ export function SwipeToRemove({ onRemove, label = "Remove", children, style }: {
     return PanResponder.create({
       onMoveShouldSetPanResponder: (_e, g) => !gone.current && Math.abs(g.dx) > SLOP && Math.abs(g.dx) > Math.abs(g.dy) * SIDEWAYS,
       onPanResponderGrant: () => {
+        noteDrag();
         clearTimeout(returnTimer.current);
         x.stopAnimation();
         base = pos.current;
         armed.current = false;
       },
       onPanResponderMove: (_e, g) => {
+        noteDrag();
         const at = base + g.dx;
         pos.current = at;
         x.setValue(at);
@@ -110,6 +113,7 @@ export function SwipeToRemove({ onRemove, label = "Remove", children, style }: {
         }
       },
       onPanResponderRelease: (_e, g) => {
+        noteDrag();
         const at = base + g.dx;
         const w = width.current;
         const dir: 1 | -1 = at >= 0 ? 1 : -1;

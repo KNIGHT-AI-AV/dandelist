@@ -1,6 +1,6 @@
 import { upfrontCashCents } from "@dandelist/cost";
 import { router } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { ScrollView, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { DetailRow } from "../details/detail-row";
@@ -9,11 +9,9 @@ import { TierPips } from "../details/tier-pips";
 import { useDescriptions } from "../details/use-descriptions";
 import { useWishSearch } from "../details/use-wish-search";
 import { Presence, Swap } from "../list/presence";
-import { Toast, type Note } from "../list/undo-toast";
-import { useRemovals } from "../list/use-removals";
+import { useHomeRemovals } from "./removals";
 import { AgentDot, Eyebrow, Hairline, Money } from "../lux";
 import { useMoney } from "../../lib/currency";
-import { UNDO_MS } from "../../lib/removal";
 import { layout, space, type, usePalette } from "../../lib/theme";
 import { useWishes, type Wish, type WishTier } from "../../lib/wishes";
 import { TIER_LABEL, TIER_RANK } from "../../lib/words";
@@ -57,25 +55,10 @@ export function DetailsPage() {
   const { wishes, status, remove } = useWishes();
   useDescriptions();
 
-  const [errorNote, setErrorNote] = useState<Note | null>(null);
-  const showError = useCallback((text: string) => setErrorNote({ key: `error:${Date.now()}`, text }), []);
-  useEffect(() => {
-    if (!errorNote) return;
-    const timer = setTimeout(() => setErrorNote(null), UNDO_MS);
-    return () => clearTimeout(timer);
-  }, [errorNote]);
-  const removals = useRemovals(remove, showError);
-  const [claim, setClaim] = useState(0);
-  const pendingId = removals.pending?.id;
-  const begin = removals.remove;
-  const removeWish = useCallback(
-    (w: Wish) => {
-      begin(w);
-      // Undo takes the focus the removed row had (on the web, or with a screen reader on).
-      setClaim((c) => c + 1);
-    },
-    [begin],
-  );
+  // One undo window for every page: a wish removed here leaves the list at once too. Undo takes the focus the
+  // removed row had (on the web, or with a screen reader on).
+  const { pendingId, remove: begin } = useHomeRemovals();
+  const removeWish = useCallback((w: Wish) => begin(w, true), [begin]);
   const openWish = useCallback((w: Wish) => router.push(`/wishes/${w.id}`), []);
 
   const [query, setQuery] = useState("");
@@ -97,8 +80,6 @@ export function DetailsPage() {
   const found = search.ids.filter((id) => id !== pendingId);
   const total = upfrontCashCents(visible.map((w) => w.item));
 
-  const pending = removals.pending;
-  const note: Note | null = pending ? { key: pending.id, text: `Removed ${pending.name}`, action: { label: "Undo", onPress: () => removals.undo(pending.id) } } : errorNote;
 
   // Each row brings the rule above it, so a row that leaves takes its own rule along.
   const row = (w: Wish) => (
@@ -176,7 +157,6 @@ export function DetailsPage() {
         )}
       </ScrollView>
 
-      <Toast note={note} bottom={insets.bottom + space[16]} side={gutter} claim={claim} onHold={removals.hold} onRelease={removals.release} />
     </View>
   );
 }

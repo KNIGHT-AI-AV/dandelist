@@ -9,6 +9,7 @@ import { DetailsPage } from "../../components/home/details-page";
 import { ListPage } from "../../components/home/list-page";
 import { MoneyPage } from "../../components/home/money-page";
 import { PagerProvider, PagerView } from "../../components/home/pager";
+import { RemovalsProvider } from "../../components/home/removals";
 import { SettingsPage } from "../../components/home/settings-page";
 import { Grain } from "../../components/lux";
 import { useAuth } from "../../lib/auth";
@@ -32,9 +33,11 @@ export default function Home() {
       <Atmosphere />
       <PagerProvider initial={initial}>
         <HomeProvider>
-          <PagerView pages={pages} />
-          <TopBar />
-          <Dock />
+          <RemovalsProvider>
+            <PagerView pages={pages} />
+            <TopBar />
+            <Dock />
+          </RemovalsProvider>
         </HomeProvider>
       </PagerProvider>
       <Grain />
