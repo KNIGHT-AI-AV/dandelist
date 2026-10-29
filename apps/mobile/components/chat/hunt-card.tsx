@@ -159,8 +159,9 @@ export function HuntCard({ id, text, already }: { id: string; text: string; alre
     }
   };
 
-  // Still hunting (or reading the wish): the wish in the Dandy's voice, and one line of what it's doing.
-  if (!done && !h.error) {
+  // Still hunting with nothing to show yet: the wish, and one line of what the Dandy is doing. A first card the
+  // server marks provisional shows as soon as it exists, with the line kept underneath until the hunt settles.
+  if (!option && !done && !h.error) {
     return (
       <Glass style={{ padding: 18, gap: 12, borderRadius: radius.lg }}>
         <Text style={[type.title3, { fontFamily: fonts.displayItalic, color: p.ink }]} numberOfLines={2}>
@@ -193,6 +194,7 @@ export function HuntCard({ id, text, already }: { id: string; text: string; alre
           {option.statusLabel}
         </Text>
         {h.error ? <ErrorLine>{h.error}</ErrorLine> : null}
+        {!done ? <Working dandy={dandy} label="Checking more sellers" /> : null}
         <PrimaryButton label={saved || already ? "On your list" : "Add to my list"} busy={saving} disabled={saved || already} onPress={() => void save()} />
         {h.questions.length ? <QuietButton label={refining ? "Done refining" : "Refine it"} onPress={() => setRefining((r) => !r)} style={{ alignSelf: "flex-start" }} /> : null}
         {refining
