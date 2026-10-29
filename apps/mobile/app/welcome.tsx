@@ -10,13 +10,13 @@ import { Ask } from "../components/welcome/ask";
 import { VotePair, WhenStep } from "../components/welcome/choose";
 import { Comfort } from "../components/welcome/comfort";
 import { CodeSheet, RevealCard } from "../components/welcome/finale";
-import { Intro } from "../components/welcome/intro";
+import { MadeStep } from "../components/welcome/made";
 import { AgentTicker, LifePill, Segments } from "../components/welcome/kit";
 import { ThemeChooser } from "../components/welcome/theme";
 import { TitleSequence } from "../components/welcome/title";
 import { useAuth, useSignInOptions, type ProviderId, type SignInOption } from "../lib/auth";
 import type { Step as AgentStep } from "../lib/agent";
-import { ease, native, spring, step as stepMotion, useReducedMotion } from "../lib/motion";
+import { ease, native, spring, useReducedMotion } from "../lib/motion";
 import { startIncome } from "../lib/comfort";
 import { ANSWERED_ROUNDS, chosen as chosenBy, groupsFor, nextPair, votingDone, type Vote } from "../lib/pairs";
 import { thoughtOf } from "../lib/reveal";
@@ -53,7 +53,7 @@ function WelcomeSocial() {
   );
 }
 
-type Step = { kind: "title" } | { kind: "intro" } | { kind: "ask" } | { kind: "vote"; pair: [PoolItem, PoolItem] } | { kind: "when" } | { kind: "comfort" } | { kind: "agent" } | { kind: "reveal" } | { kind: "theme" };
+type Step = { kind: "title" } | { kind: "ask" } | { kind: "made" } | { kind: "vote"; pair: [PoolItem, PoolItem] } | { kind: "when" } | { kind: "comfort" } | { kind: "agent" } | { kind: "reveal" } | { kind: "theme" };
 type Pricing = "idle" | "pricing" | "priced" | "failed";
 
 /** Ask, three answered rounds, when, what it would take, the agent: the segments under the header. */
@@ -61,20 +61,23 @@ const SEGMENTS = 2 + ANSWERED_ROUNDS + 2;
 const HERO = entry("porsche-911") as Entry;
 /** How long the "found it" line stays above the meter once the first wish is priced. */
 const FOUND_HOLD_MS = 4200;
+/** Step changes are slow crossfades (owner, 2026-10-29: "more cinematic and slower", "smoother and slower"). */
+const FADE_OUT_MS = 520;
+const FADE_IN_MS = 1100;
 
 /** An idea chip from a pool item: travel reads as a stay ("A week in Dublin"), everything else by its name. */
 const ideaOf = (e: PoolItem) => (e.kind === "visit" && !/\b(week|weeks|month|trip|tour|route|safari|cruise|days?|nights?|in)\b/i.test(e.name) ? `A week in ${e.name}` : e.name);
 
 /**
- * The pre-login experience (owner's walkthrough, 2026-10-28). A slow, centred title that dissolves from a touch;
- * interactive cards that show what Dandelist does, with Log in beneath; the first wish, typed, said or tapped, which
- * the agent prices for real while the person plays this or that from the pool (the first pair is a cover, later
+ * The pre-login experience (owner's walkthroughs, 2026-10-28 and 10-29). A slow, centred title that dissolves from a
+ * touch, then straight into the first wish, typed, said or tapped; their own card is made in front of them (the agent
+ * prices it for real and the photo fades up), then this or that from the pool (the first pair is a cover, later
  * pairs lean toward what they asked for); when they want it all; what it would take, as a fader of incomes with a
  * face for how it would feel; meeting their Dandy while it prices the whole list; the deck. Only then do they save it,
  * which is the sign-up. Back goes one step at a time and undoes that step's picks.
  *
- * Steps fly instead of teleporting (UI audit P1-16): the old step leaves left in 150 ms, the new one arrives from
- * the right in 320 ms, and going back mirrors it. The header, the segments and the list meter stay put.
+ * Steps crossfade in place, slowly (owner, 10-29: "fade ... rather than a sliding card system"): the old step fades out
+ * in 520 ms and the next fades up in 1.1 s. The header, the segments and the list meter stay put.
  */
 export default function Welcome() {
   const p = usePalette();
@@ -144,20 +147,14 @@ export default function Welcome() {
     if (moving.current) return;
     moving.current = true;
     if (!back && step && step.kind !== "title" && step.kind !== "theme") history.current.push({ step, items: latest.current.items, answered: answered.current, rounds: rounds.current, done });
-    const d = back ? -1 : 1;
+    // Every step fades out and the next fades up in place, slowly: no sliding cards.
     const enter = () => {
       setStep(next);
       stage.setValue(0);
-      shift.setValue(reduced ? 0 : stepMotion.inX * d);
-      Animated.parallel([
-        Animated.timing(stage, { toValue: 1, duration: reduced ? 160 : stepMotion.inMs, easing: ease.out, useNativeDriver: native }),
-        Animated.timing(shift, { toValue: 0, duration: reduced ? 0 : stepMotion.inMs, easing: ease.out, useNativeDriver: native }),
-      ]).start(() => (moving.current = false));
+      shift.setValue(0);
+      Animated.timing(stage, { toValue: 1, duration: reduced ? 160 : FADE_IN_MS, easing: ease.cinema, useNativeDriver: native }).start(() => (moving.current = false));
     };
-    Animated.parallel([
-      Animated.timing(stage, { toValue: 0, duration: reduced ? 100 : stepMotion.outMs, easing: ease.out, useNativeDriver: native }),
-      Animated.timing(shift, { toValue: reduced ? 0 : stepMotion.outX * d, duration: reduced ? 0 : stepMotion.outMs, easing: ease.out, useNativeDriver: native }),
-    ]).start(enter);
+    Animated.timing(stage, { toValue: 0, duration: reduced ? 100 : FADE_OUT_MS, easing: ease.inOut, useNativeDriver: native }).start(enter);
   };
 
   /** The chosen price flies along a short arc into the list meter, then the meter rolls up. */
@@ -229,7 +226,7 @@ export default function Welcome() {
     answered.current = 0;
     patch((s) => ({ ...s, items: [] }));
     setDone(1);
-    go(nextVote(latest.current) ?? { kind: "when" });
+    go({ kind: "made" });
   };
 
   const vote = (pair: [PoolItem, PoolItem], picked: PoolItem[], from: View | null) => {
@@ -252,13 +249,13 @@ export default function Welcome() {
     rounds.current = prev.rounds;
     setDone(prev.done);
     patch((s) => ({ ...s, items: prev.items }));
-    if (prev.step.kind === "ask" || prev.step.kind === "intro") run.current?.abort();
+    if (prev.step.kind === "ask") run.current?.abort();
     go(prev.step, true);
   };
 
   /** Clears the list and goes back to the first wish, with what they asked for still in the field. */
   const restart = () => {
-    history.current = [{ step: { kind: "intro" }, items: [], answered: 0, rounds: 0, done: 0 }];
+    history.current = [];
     run.current?.abort();
     setPricing("idle");
     setResult(null);
@@ -276,8 +273,8 @@ export default function Welcome() {
   const total = listTotal(state);
   // The fader step carries its own total in the faces, and needs the room the meter would take on a phone.
   const metered = step.kind === "vote" || step.kind === "when" || step.kind === "agent";
-  const canGoBack = history.current.length > 0 && step.kind !== "intro" && step.kind !== "title" && step.kind !== "theme";
-  const segmented = metered || step.kind === "ask" || step.kind === "comfort";
+  const canGoBack = history.current.length > 0 && step.kind !== "title" && step.kind !== "theme";
+  const segmented = metered || step.kind === "ask" || step.kind === "made" || step.kind === "comfort";
   const framed = step.kind !== "title" && step.kind !== "theme";
   const gutter = layout.gutter(width);
   const headerColumn = width >= 760 && step.kind === "vote" ? 932 : layout.column;
@@ -297,13 +294,13 @@ export default function Welcome() {
   let body: React.ReactNode;
   switch (step.kind) {
     case "title":
-      body = <TitleSequence hero={HERO} short={short} onDone={() => { void markTitleSeen(); go({ kind: "intro" }); }} />;
-      break;
-    case "intro":
-      body = <Intro pool={pool} onStart={() => go({ kind: "ask" })} onLogIn={() => router.push("/sign-in")} />;
+      body = <TitleSequence hero={HERO} short={short} onDone={() => { void markTitleSeen(); go({ kind: "ask" }); }} />;
       break;
     case "ask":
       body = <Ask ideas={ideas} initial={state.wish?.text ?? ""} bottomInset={insets.bottom} onSubmit={startVoting} />;
+      break;
+    case "made":
+      body = state.wish ? <MadeStep wish={state.wish} pricing={pricing} line={thought?.text ?? ""} onContinue={() => go(nextVote(latest.current) ?? { kind: "when" })} /> : null;
       break;
     case "vote": {
       const [a, b] = step.pair;
@@ -354,7 +351,7 @@ export default function Welcome() {
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
       <Atmosphere />
-      <Animated.View style={{ flex: 1, opacity: stage, borderRadius: sheet ? 24 : 0, overflow: sheet ? "hidden" : "visible", transform: [{ translateX: shift }, { scale: behind }], paddingTop: framed ? insets.top + layout.contentTop : 0, paddingBottom: metered ? insets.bottom + pillSpace : step.kind === "intro" ? insets.bottom + layout.stack.base : 0 }}>
+      <Animated.View style={{ flex: 1, opacity: stage, borderRadius: sheet ? 24 : 0, overflow: sheet ? "hidden" : "visible", transform: [{ translateX: shift }, { scale: behind }], paddingTop: framed ? insets.top + layout.contentTop : 0, paddingBottom: metered ? insets.bottom + pillSpace : step.kind === "made" ? insets.bottom + layout.stack.base : 0 }}>
         {body}
       </Animated.View>
 
@@ -367,12 +364,9 @@ export default function Welcome() {
                 {canGoBack ? <IconButton icon="back" label="Back" onPress={goBack} /> : null}
                 <Wordmark />
               </View>
-              {/* The intro has its own Log in under the cards; everywhere else it waits up here. */}
-              {step.kind !== "intro" ? (
-                <Pressable accessibilityRole="link" onPress={() => router.push("/sign-in")} style={{ minHeight: 44, minWidth: 44, justifyContent: "center", alignItems: "flex-end" }}>
-                  <Text style={[type.label, { color: p.ink2 }]}>Log in</Text>
-                </Pressable>
-              ) : null}
+              <Pressable accessibilityRole="link" onPress={() => router.push("/sign-in")} style={{ minHeight: 44, minWidth: 44, justifyContent: "center", alignItems: "flex-end" }}>
+                <Text style={[type.label, { color: p.ink2 }]}>Log in</Text>
+              </Pressable>
             </View>
             {segmented ? <Segments count={SEGMENTS} done={done} style={{ marginTop: layout.segmentsTop - layout.headerBar }} /> : null}
           </View>

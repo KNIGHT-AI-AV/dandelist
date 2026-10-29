@@ -1,5 +1,6 @@
 import type { Entry } from "@dandelist/catalogue";
 import { heroFor } from "@dandelist/catalogue";
+import { Image as ExpoImage } from "expo-image";
 import { useEffect, useRef, useState } from "react";
 import { Animated, Easing, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions, type GestureResponderEvent } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -16,13 +17,15 @@ import type { Stage } from "../reveal-clock";
 export const BRAND = "Dandelist";
 /** Owner, 2026-10-28: the opening "happens too fast"; it should feel like an experience opening. About ten seconds. */
 const TITLE_MS = 10_000;
-/** The clock runs this much slower than the timeline, so every beat holds a little longer (about twelve seconds). */
-const PACE = 1.2;
+/** The clock runs this much slower than the timeline, so every beat holds longer (about fifteen seconds; owner, 10-29: "more cinematic and slower"). */
+const PACE = 1.5;
+/** The longest the title waits for its photo before it starts anyway. */
+const PRELOAD_MS = 3000;
 /** Return visits start at the wordmark and take this long. */
 const SHORT_MS = 1600;
 const SHORT_FROM = 6600;
 /** The dissolve that carries the title into the first screen, from wherever it was touched. */
-const DISSOLVE_MS = 900;
+const DISSOLVE_MS = 1400;
 /** The title's example plan: a stated monthly amount, so the date it shows is honest arithmetic. */
 /** Where each hero's subject sits in its photograph, so the crop keeps the subject whole. */
 const FOCUS: Record<string, { x: number; y: number }> = { "porsche-911": { x: 0.42, y: 0.5 } };
@@ -47,6 +50,20 @@ export function TitleSequence({ hero, short, onDone }: { hero: Entry; short: boo
   const [skippable, setSkippable] = useState(false);
   const [from, setFrom] = useState<{ x: number; y: number } | null>(null);
   const finished = useRef(false);
+  // The photo is fetched before anything moves, so it never swaps in mid-reveal (owner, 10-29: "The intro blinks").
+  const heroUri = heroFor(hero, width / height) ?? null;
+  const [ready, setReady] = useState(short || reduced || !heroUri);
+  useEffect(() => {
+    if (ready || !heroUri) return;
+    let live = true;
+    const go = () => live && setReady(true);
+    const cap = setTimeout(go, PRELOAD_MS);
+    ExpoImage.prefetch(heroUri).then(go, go);
+    return () => {
+      live = false;
+      clearTimeout(cap);
+    };
+  }, [ready, heroUri]);
 
   /** Dissolves from a point (the touch, or the centre when it ends by itself), then moves on. */
   const finish = (at?: { x: number; y: number }) => {
@@ -58,6 +75,7 @@ export function TitleSequence({ hero, short, onDone }: { hero: Entry; short: boo
   };
 
   useEffect(() => {
+    if (!ready) return;
     const total = short ? SHORT_MS : reduced ? 400 : TITLE_MS * PACE;
     const anim = Animated.timing(t, { toValue: TITLE_MS, duration: total, easing: Easing.linear, useNativeDriver: false });
     anim.start(({ finished: ok }) => ok && setTimeout(() => finish(), short || reduced ? 150 : 500));
@@ -69,7 +87,7 @@ export function TitleSequence({ hero, short, onDone }: { hero: Entry; short: boo
       timers.forEach(clearTimeout);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [ready]);
 
   // Escape skips on the web.
   useEffect(() => {
@@ -111,7 +129,7 @@ export function TitleSequence({ hero, short, onDone }: { hero: Entry; short: boo
         <Animated.View style={[StyleSheet.absoluteFill, { opacity: photo, transform: [{ scale: push }] }]}>
           {/* Studio-white heroes are dimmed so the page stays dark (filter works on iOS, Android and the web). */}
           <View style={[StyleSheet.absoluteFill, { filter: "brightness(0.62)" } as object]}>
-            <GlassReveal uri={heroFor(hero, width / height) ?? null} standby={require("../../assets/standby/drive.jpg")} stage={stage} treatment="film" focus={FOCUS[hero.id]} style={StyleSheet.absoluteFill} />
+            <GlassReveal uri={ready ? heroUri : null} standby={require("../../assets/standby/drive.jpg")} stage={stage} treatment="film" focus={FOCUS[hero.id]} style={StyleSheet.absoluteFill} />
           </View>
           <Shade look="title" />
         </Animated.View>
