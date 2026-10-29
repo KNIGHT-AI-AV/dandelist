@@ -166,17 +166,19 @@ export function toWishes(s: WelcomeState): NewWish[] {
   return out;
 }
 
+/** Available immediately, while the server refreshes the pool for this or that. */
+export const cataloguePool = (): PoolItem[] =>
+  catalogue.map((e): PoolItem => ({ id: e.id, name: e.name, kind: e.kind, category: e.category, group: e.category === "travel" ? "travel" : e.category === "live" ? "home" : "things", upfrontCents: e.upfrontCents, recurring: e.recurring, status: e.status, seller: e.seller, url: e.url, checkedAt: e.checkedAt, media: e.media, imageUrl: e.imageUrl }));
+
 /** The pool for this or that; the catalogue alone when the server can't be reached, so the flow never stalls. */
-export async function fetchPool(): Promise<PoolItem[]> {
-  const fallback = () =>
-    catalogue.map((e): PoolItem => ({ id: e.id, name: e.name, kind: e.kind, category: e.category, group: e.category === "travel" ? "travel" : e.category === "live" ? "home" : "things", upfrontCents: e.upfrontCents, recurring: e.recurring, status: e.status, seller: e.seller, url: e.url, checkedAt: e.checkedAt, media: e.media, imageUrl: e.imageUrl }));
+export async function fetchPool(signal?: AbortSignal): Promise<PoolItem[]> {
   try {
-    const res = await fetch(`${API_URL}/guest/pool`);
-    if (!res.ok) return fallback();
+    const res = await fetch(`${API_URL}/guest/pool`, { signal });
+    if (!res.ok) return cataloguePool();
     const body = (await res.json()) as { items?: PoolItem[] };
-    return body.items?.length ? body.items : fallback();
+    return body.items?.length ? body.items : cataloguePool();
   } catch {
-    return fallback();
+    return cataloguePool();
   }
 }
 

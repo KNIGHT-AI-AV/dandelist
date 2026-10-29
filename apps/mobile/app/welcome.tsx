@@ -23,7 +23,8 @@ import { recurringBreakdown } from "@dandelist/cost";
 import { thoughtOf } from "../lib/reveal";
 import { play, preloadSounds } from "../lib/sound";
 import { layout, type, usePalette, useTheme } from "../lib/theme";
-import { emptyWelcome, fetchPool, listTotal, listed, loadWelcome, markTitleSeen, saveWelcome, seenTitle, streamGuestWish, type FirstWish, type PoolItem, type WelcomeState } from "../lib/welcome";
+import { cataloguePool, emptyWelcome, fetchPool, listTotal, listed, loadWelcome, markTitleSeen, saveWelcome, seenTitle, streamGuestWish, type FirstWish, type PoolItem, type WelcomeState } from "../lib/welcome";
+import { startWelcome } from "../lib/welcome-start";
 import { dollars } from "../components/odometer";
 import { Atmosphere } from "../components/atmosphere";
 
@@ -90,7 +91,7 @@ export default function Welcome() {
   const theme = useTheme();
   const [step, setStep] = useState<Step | null>(null);
   const [short, setShort] = useState(false);
-  const [pool, setPool] = useState<PoolItem[]>([]);
+  const [pool, setPool] = useState<PoolItem[]>(cataloguePool);
   const [state, setState] = useState<WelcomeState>(emptyWelcome);
   const [done, setDone] = useState(0);
   const [result, setResult] = useState<Result | null>(null);
@@ -119,15 +120,22 @@ export default function Welcome() {
   const ideas = useMemo(() => [...pool].sort(() => Math.random() - 0.5).slice(0, 4).map(ideaOf), [pool]);
 
   useEffect(() => {
-    void (async () => {
-      const [seenBefore, saved, items] = await Promise.all([seenTitle(), loadWelcome(), fetchPool()]);
-      setShort(seenBefore);
-      setPool(items);
-      // A first wish that was still being priced when they left is asked again rather than half-shown.
-      if (saved) setState({ ...saved, wish: saved.wish?.option ? saved.wish : null });
-      setStep({ kind: "title" });
-    })();
-    return () => run.current?.abort();
+    const stop = startWelcome({
+      seenTitle,
+      loadWelcome,
+      fetchPool,
+      onLocal: (seenBefore, saved) => {
+        setShort(seenBefore);
+        // A first wish that was still being priced when they left is asked again rather than half-shown.
+        if (saved) setState({ ...saved, wish: saved.wish?.option ? saved.wish : null });
+        setStep({ kind: "title" });
+      },
+      onPool: setPool,
+    });
+    return () => {
+      stop();
+      run.current?.abort();
+    };
   }, []);
 
   // Signed in by any route (code, Apple, Google, GitHub): the list adopts what was kept (see useAdoptWelcome).
