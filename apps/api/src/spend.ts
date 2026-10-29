@@ -75,6 +75,22 @@ export async function withHold<T>(check: () => Promise<void>, run: () => Promise
   }
 }
 
+const heldByScope = new Map<string, number>();
+/** Anonymous features share a budget scope, separate from individual signed-in users. Per process, like held. */
+export const heldForScope = (scope: string) => heldByScope.get(scope) ?? 0;
+
+/** Reserve both the shared feature allowance and global allowance until the call's cost is recorded. */
+export async function withBudgetScope<T>(scope: string, check: () => Promise<void>, run: () => Promise<T>): Promise<T> {
+  heldByScope.set(scope, heldForScope(scope) + HOLD_USD);
+  try {
+    return await withHold(check, run);
+  } finally {
+    const remaining = Math.max(0, heldForScope(scope) - HOLD_USD);
+    if (remaining < Number.EPSILON) heldByScope.delete(scope);
+    else heldByScope.set(scope, remaining);
+  }
+}
+
 /** Refuses a Meta call when today's or the all-time spend has reached its cap, counting calls still in flight. */
 export async function assertBudget(db: Db, caps: SpendCaps, now: Date): Promise<void> {
   const { rows } = await db.query<{ today: string | null; total: string | null }>(

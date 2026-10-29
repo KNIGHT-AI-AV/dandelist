@@ -105,6 +105,20 @@ describe("the pool", () => {
 });
 
 describe("pricing the first wish before sign-in", () => {
+  it("reserves guest voice against the same daily allowance before contacting Meta", async () => {
+    await db.query("insert into spend_ledger (user_id, model, kind, cost_usd, created_at) values (null, 'muse-spark-1.3', 'guest', 2.95, $1)", [clock.toISOString()]);
+    const wav = new Uint8Array(44 + 32_000);
+    const view = new DataView(wav.buffer);
+    const text = (at: number, value: string) => wav.set(new TextEncoder().encode(value), at);
+    text(0, "RIFF"); view.setUint32(4, wav.length - 8, true); text(8, "WAVE");
+    text(12, "fmt "); view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true);
+    view.setUint32(24, 16_000, true); view.setUint32(28, 32_000, true); view.setUint16(32, 2, true); view.setUint16(34, 16, true);
+    text(36, "data"); view.setUint32(40, 32_000, true);
+    const res = await makeApp().request("/guest/transcribe", { method: "POST", headers: { "Content-Type": "audio/wav" }, body: wav });
+    expect(res.status).toBe(429);
+    expect(metaCalls).toHaveLength(0);
+  });
+
   it("streams what it is, the agent's trail and a checked price", async () => {
     const res = await makeApp().request("/guest/wish", { method: "POST", headers: { "Content-Type": "application/json", "x-forwarded-for": "203.0.113.5" }, body: JSON.stringify({ text: "a peloton bike" }) });
     expect(res.status).toBe(200);
@@ -131,6 +145,14 @@ describe("pricing the first wish before sign-in", () => {
     const res = await makeApp().request("/guest/wish", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: "a peloton bike" }) });
     expect(res.status).toBe(429);
     expect(metaCalls).toHaveLength(0);
+  });
+
+  it("reserves the next call against the guest allowance before calling Meta", async () => {
+    await db.query("insert into spend_ledger (user_id, model, kind, cost_usd, created_at) values (null, 'muse-spark-1.3', 'guest', 2.95, $1)", [clock.toISOString()]);
+    const res = await makeApp().request("/guest/wish", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: "a peloton bike" }) });
+    const evs = await events(res);
+    expect(metaCalls).toHaveLength(0);
+    expect(evs).toContainEqual(expect.objectContaining({ type: "error" }));
   });
 
   it("refuses an empty wish and a server without a key", async () => {

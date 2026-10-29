@@ -45,6 +45,18 @@ const post = (app: ReturnType<typeof makeApp>, body: unknown, ip = "203.0.113.9"
   app.request("/preview", { method: "POST", headers: { "Content-Type": "application/json", "x-forwarded-for": ip }, body: JSON.stringify(body) });
 
 describe("pre-login preview", () => {
+  it.each([
+    ["global", "test", 9.95],
+    ["preview", "preview", 0.95],
+  ])("reserves the note writer against the %s allowance before calling Meta", async (_scope, kind, usd) => {
+    await db.query("insert into spend_ledger (user_id, model, kind, cost_usd, created_at) values (null, 'muse-spark-1.3', $1, $2, $3)", [kind, usd, clock.toISOString()]);
+    const meta = vi.fn(async () => new Response(JSON.stringify({ id: "should-not-run", output: [] }), { status: 200 }));
+    const evs = await events(await post(makeApp(sellerPage("$1.00"), meta), { picks: ["leica-q3"], monthlyCents: 100_000 }));
+    expect(meta).not.toHaveBeenCalled();
+    expect(evs.some((e) => e.type === "result")).toBe(true);
+    expect(evs.some((e) => e.type === "note")).toBe(true);
+  });
+
   it("computes the plan from the catalogue and the cost engine", () => {
     const porsche = entry("porsche-911")!;
     const leica = entry("leica-q3")!;
