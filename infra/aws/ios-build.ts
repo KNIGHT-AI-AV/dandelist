@@ -3,9 +3,13 @@
  * don't want to live a life where we hit limits"). CodeBuild reserves an Apple M2 Mac (fleet dandelist-mac, macOS 15
  * with Xcode 26), builds GitHub main with infra/aws/iphone/build.sh and uploads to TestFlight.
  *
- *   pnpm --filter @dandelist/infra-aws run ios:secrets   once: the signing files from this PC go to Secrets Manager
- *   pnpm --filter @dandelist/infra-aws run ios:build     reserves the Mac if none is held, then builds and uploads
- *   pnpm --filter @dandelist/infra-aws run ios:release   gives the Mac back
+ *   pnpm --filter @dandelist/infra-aws run ios:secrets      once: the signing files from this PC go to Secrets Manager
+ *   pnpm --filter @dandelist/infra-aws run ios:build        reserves the Mac if none is held; once it is ready, starts a build
+ *   pnpm --filter @dandelist/infra-aws run ios:status <id>  that build's progress, then the end of its log
+ *   pnpm --filter @dandelist/infra-aws run ios:release      gives the Mac back
+ *
+ * Every call returns in seconds and nothing waits on this PC: run ios:build again while the Mac is still starting
+ * (about ten minutes the first time), then ios:status until the build is done (about half an hour).
  *
  * The Mac costs $0.02 a minute ($28.80 a day) from the moment it is reserved, and AWS bills every reservation for at
  * least 24 hours, so keep it for a day of builds and release it after. Push before building: CodeBuild clones GitHub.
@@ -41,7 +45,6 @@ const TAGS = [{ key: "project", value: "dandelist" }];
 
 const cb = new CodeBuildClient({ region, credentials });
 const sm = new SecretsManagerClient({ region, credentials });
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const mode = process.argv[2] ?? "build";
 
 /** The signing files on this PC (gitignored) and the App Store Connect key, as one JSON secret. Never printed. */
@@ -79,30 +82,25 @@ async function heldFleet() {
   return fleets.find((f) => f.name === FLEET);
 }
 
-/** The Mac fleet, reserved now if none is held, once it can take builds. */
-async function fleet(): Promise<string> {
-  let f = await heldFleet();
-  if (!f) {
-    f = (
-      await cb.send(
-        new CreateFleetCommand({ name: FLEET, baseCapacity: 1, environmentType: "MAC_ARM", computeType: "BUILD_GENERAL1_MEDIUM", overflowBehavior: "QUEUE", tags: TAGS }),
-      )
-    ).fleet!;
-    console.log(`reserved the Mac at ${new Date().toISOString()} (billed for at least 24 hours from now)`);
-  }
-  for (;;) {
-    const status = f.status?.statusCode;
-    if (status === "ACTIVE") return f.arn!;
-    if (status === "CREATE_FAILED" || status === "UPDATE_ROLLBACK_FAILED") throw new Error(`the Mac fleet is ${status}: ${f.status?.message ?? ""}`);
-    console.log(`  Mac: ${status?.toLowerCase() ?? "starting"}`);
-    await sleep(30_000);
-    f = (await cb.send(new BatchGetFleetsCommand({ names: [f.arn!] }))).fleets![0]!;
-  }
+/** The Mac fleet: the one held, else one reserved now. */
+async function mac() {
+  const held = await heldFleet();
+  if (held) return held;
+  const f = (
+    await cb.send(new CreateFleetCommand({ name: FLEET, baseCapacity: 1, environmentType: "MAC_ARM", computeType: "BUILD_GENERAL1_MEDIUM", overflowBehavior: "QUEUE", tags: TAGS }))
+  ).fleet!;
+  console.log(`reserved the Mac at ${new Date().toISOString()} (billed for at least 24 hours from now)`);
+  return f;
 }
 
+/** Starts a build of main once the Mac can take it; while the Mac is still starting, says so and returns. */
 async function build() {
+  const f = await mac();
+  const status = f.status?.statusCode;
+  if (status === "CREATE_FAILED" || status === "UPDATE_ROLLBACK_FAILED") throw new Error(`the Mac fleet is ${status}: ${f.status?.message ?? ""}`);
+  if (status !== "ACTIVE") return console.log(`the Mac is ${status?.toLowerCase() ?? "starting"}: run ios:build again in a few minutes`);
   const account = (await new STSClient({ region, credentials }).send(new GetCallerIdentityCommand({}))).Account!;
-  const fleetArn = await fleet();
+  const fleetArn = f.arn!;
   const project: CreateProjectCommandInput = {
     name: PROJECT,
     source: { type: "GITHUB", location: SOURCE, buildspec: "infra/aws/iphone/buildspec.yml", gitCloneDepth: 1 },
@@ -117,14 +115,16 @@ async function build() {
 
   // Only main, never another branch or a pull request: the build reads the signing secret, and the repo is public.
   const id = (await cb.send(new StartBuildCommand({ projectName: PROJECT, sourceVersion: "main" }))).build!.id!;
-  console.log(`building main on the Mac (${id.split(":")[1]})`);
-  let b;
-  for (;;) {
-    await sleep(30_000);
-    b = (await cb.send(new BatchGetBuildsCommand({ ids: [id] }))).builds![0]!;
-    if (b.buildStatus !== "IN_PROGRESS") break;
-    console.log(`  ${b.currentPhase?.toLowerCase()}`);
-  }
+  console.log(`building main on the Mac: ios:status ${id.split(":")[1]}`);
+}
+
+/** One build's progress, and the end of its log once it is done. */
+async function status(build: string | undefined) {
+  if (!build) throw new Error("ios:status needs the build id that ios:build printed");
+  const id = build.includes(":") ? build : `${PROJECT}:${build}`;
+  const b = (await cb.send(new BatchGetBuildsCommand({ ids: [id] }))).builds?.[0];
+  if (!b) throw new Error(`no build ${id}`);
+  if (b.buildStatus === "IN_PROGRESS") return console.log(`${b.currentPhase?.toLowerCase()} (started ${b.startTime?.toISOString()})`);
   const { groupName, streamName } = b.logs ?? {};
   const lines = groupName && streamName ? ((await new CloudWatchLogsClient({ region, credentials }).send(new GetLogEventsCommand({ logGroupName: groupName, logStreamName: streamName, startFromHead: false, limit: 60 }))).events ?? []) : [];
   console.log(lines.map((e) => e.message?.trimEnd()).join("\n"));
@@ -141,4 +141,5 @@ async function release() {
 
 if (mode === "secrets") await putSecrets();
 else if (mode === "release") await release();
+else if (mode === "status") await status(process.argv[3]);
 else await build();
