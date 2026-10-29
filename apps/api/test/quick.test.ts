@@ -203,6 +203,14 @@ describe("reading the fast find's answer and the pages", () => {
     expect(parseAmount("From $1,299 pp")).toBe(1299);
     expect(parseAmount("1 299")).toBe(1299);
     expect(parseAmount("44,50")).toBe(44.5);
+    // A villa shown as "$3M" is three million dollars, never three.
+    expect(parseAmount("$3M")).toBe(3_000_000);
+    expect(parseAmount("$2.5M")).toBe(2_500_000);
+    expect(parseAmount("€3 million")).toBe(3_000_000);
+    expect(parseAmount("£85k")).toBe(85_000);
+    expect(parseAmount("$1.2bn")).toBe(1_200_000_000);
+    expect(parseAmount("$450/mo")).toBe(450);
+    expect(parseAmount("$12,500 MSRP")).toBe(12500);
     expect(parseAmount("0")).toBe(0);
     expect(parseAmount("none")).toBe(0);
   });

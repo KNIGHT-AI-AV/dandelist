@@ -206,15 +206,18 @@ const photoShaped = (w: number, h: number) => Math.min(w, h) >= 300 && Math.max(
 
 /* ---------- prices ---------- */
 
-/** "$10,250", "10.250,00 €", "1 299" and "From $1,299 pp" as numbers. */
+/** "k", "m", "bn" and their words after a figure: "$2.5M" is 2,500,000, never 2.5. */
+const SCALE: Record<string, number> = { k: 1e3, thousand: 1e3, m: 1e6, mm: 1e6, mn: 1e6, million: 1e6, b: 1e9, bn: 1e9, billion: 1e9 };
+
+/** "$10,250", "10.250,00 €", "1 299", "From $1,299 pp" and "$2.5M" as numbers. */
 export function parseAmount(s: string): number {
-  const m = /\d[\d.,  ]*\d|\d/.exec(s);
+  const m = /(\d[\d.,  ]*\d|\d)(?:\s?(k|mm|mn|m|bn|b|thousand|million|billion)\b)?/i.exec(s);
   if (!m) return 0;
-  let t = m[0].replace(/[\s ]/g, "");
+  let t = m[1]!.replace(/\s/g, "");
   if (/^\d{1,3}(\.\d{3})+(,\d{1,2})?$/.test(t)) t = t.replace(/\./g, "").replace(",", ".");
   else if (/^\d+,\d{1,2}$/.test(t)) t = t.replace(",", ".");
   else t = t.replace(/,/g, "");
-  const n = Number(t);
+  const n = Number(t) * (m[2] ? SCALE[m[2].toLowerCase()]! : 1);
   return Number.isFinite(n) && n > 0 ? n : 0;
 }
 
