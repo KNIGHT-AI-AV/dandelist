@@ -8,9 +8,21 @@ export const MAX_TOOL_CALLS_PER_TURN = 10;
 export const MAX_META_CALLS_PER_TURN = 24;
 export const MAX_PAGE_READS_PER_TURN = 40;
 
+/**
+ * A turn wraps up once it has run this long: no new model call starts, so it answers with what it has. The route's
+ * own stop (dream/routes.ts) closes the stream well before App Runner cuts any request at 120 s.
+ */
+export const TURN_WRAP_MS = 75_000;
+
 export class TurnLimitError extends Error {
-  constructor(readonly what: "tools" | "meta" | "pages") {
-    super(what === "pages" ? "Read enough pages for one message." : "That's as much as one message can do. Say more to keep going.");
+  constructor(readonly what: "tools" | "meta" | "pages" | "time") {
+    super(
+      what === "pages"
+        ? "Read enough pages for one message."
+        : what === "time"
+          ? "That's as far as I could get in one go. Say more and I'll keep going."
+          : "That's as much as one message can do. Say more to keep going.",
+    );
   }
 }
 
@@ -18,12 +30,15 @@ export class TurnBudget {
   toolCalls = 0;
   metaCalls = 0;
   pageReads = 0;
+  /** Epoch ms after which no new model call starts. */
+  constructor(readonly wrapAt = Date.now() + TURN_WRAP_MS) {}
   tool() {
     if (this.toolCalls >= MAX_TOOL_CALLS_PER_TURN) throw new TurnLimitError("tools");
     this.toolCalls++;
   }
   meta() {
     if (this.metaCalls >= MAX_META_CALLS_PER_TURN) throw new TurnLimitError("meta");
+    if (Date.now() >= this.wrapAt) throw new TurnLimitError("time");
     this.metaCalls++;
   }
   /** Reserves up to `n` page reads and returns how many may go ahead. */

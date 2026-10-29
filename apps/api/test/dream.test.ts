@@ -4,7 +4,7 @@ import { createApp } from "../src/app";
 import { migrate, type Db } from "../src/db";
 import { userCapUsd } from "../src/spend";
 import { brief, fallbackReason, honest, keepNote, swipeSignal, tidy } from "../src/dream/agent";
-import { MAX_TOOL_CALLS_PER_TURN, searchResults } from "../src/dream/context";
+import { MAX_TOOL_CALLS_PER_TURN, TurnBudget, TurnLimitError, searchResults } from "../src/dream/context";
 import { looksLikeListing, namesCar, priceIn } from "../src/dream/hunt";
 import { carKeep, homeKeep, maintenancePercent, serviceLines, type Fx, type Rate } from "../src/dream/keep";
 import { featurePattern, listingData, listingLinks, statedFee, textFacts } from "../src/dream/pages";
@@ -812,5 +812,16 @@ describe("spend caps", () => {
     expect(await userCapUsd(d, await id("judge@dandelist.com"), 2, judge, caps)).toBe(6);
     expect(await userCapUsd(d, await id("ada@example.com"), 2, judge, caps)).toBe(2);
     expect(await userCapUsd(d, await id("bo@example.com"), 2, undefined, caps)).toBe(2);
+  });
+});
+
+describe("a turn's time", () => {
+  it("starts no new model call once a turn has run long enough, so it answers well inside App Runner's 120 s", () => {
+    const late = new TurnBudget(Date.now() - 1);
+    expect(() => late.meta()).toThrow(TurnLimitError);
+    expect(() => late.meta()).toThrow(/as far as I could get/);
+    const fresh = new TurnBudget();
+    fresh.meta();
+    expect(fresh.metaCalls).toBe(1);
   });
 });
