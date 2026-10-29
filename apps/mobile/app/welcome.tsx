@@ -17,7 +17,7 @@ import { TitleSequence } from "../components/welcome/title";
 import { useAuth, useSignInOptions, type ProviderId, type SignInOption } from "../lib/auth";
 import type { Step as AgentStep } from "../lib/agent";
 import { ease, native, spring, useReducedMotion } from "../lib/motion";
-import { startIncome } from "../lib/comfort";
+import { faderIncome } from "../lib/comfort";
 import { ANSWERED_ROUNDS, chosen as chosenBy, groupsFor, nextPair, votingDone, type Vote } from "../lib/pairs";
 import { recurringBreakdown } from "@dandelist/cost";
 import { thoughtOf } from "../lib/reveal";
@@ -291,6 +291,8 @@ export default function Welcome() {
   if (!step) return <View style={{ flex: 1, backgroundColor: p.bg }} />;
 
   const total = listTotal(state);
+  const items = listed(state);
+  const keepPerYear = recurringBreakdown(items).perYear;
   // The fader step carries its own total in the faces, and needs the room the meter would take on a phone.
   const metered = step.kind === "vote" || step.kind === "when" || step.kind === "agent";
   const canGoBack = history.current.length > 0 && step.kind !== "title" && step.kind !== "theme";
@@ -332,7 +334,7 @@ export default function Welcome() {
       body = <WhenStep value={state.when} onPick={(when) => { patch((s) => ({ ...s, when })); setDone(2 + ANSWERED_ROUNDS); setTimeout(() => go({ kind: "comfort" }), 220); }} />;
       break;
     case "comfort":
-      body = <Comfort incomeCents={state.incomeCents ?? startIncome(total)} totalCents={Math.max(total, 1)} keepPerYearCents={recurringBreakdown(listed(state)).perYear} onChange={(c) => patch((s) => ({ ...s, incomeCents: c }))} onDone={() => { setDone(3 + ANSWERED_ROUNDS); go({ kind: "agent" }); }} />;
+      body = <Comfort incomeCents={faderIncome({ totalCents: total, keepPerYearCents: keepPerYear, selectedIncomeCents: state.incomeCents, hasPricedItems: items.length > 0 })} totalCents={Math.max(total, 1)} keepPerYearCents={keepPerYear} onChange={(c) => patch((s) => ({ ...s, incomeCents: c }))} onDone={() => { setDone(3 + ANSWERED_ROUNDS); go({ kind: "agent" }); }} />;
       break;
     case "agent":
       body = (

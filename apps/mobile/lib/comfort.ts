@@ -92,6 +92,11 @@ export function comfortableIncome(totalCents: number, keepPerYearCents = 0): num
   return Math.ceil(exact / magnitude - 1e-9) * magnitude;
 }
 
+/** Match the list's estimate until someone chooses an income; an unpriced list keeps its existing fallback. */
+export function faderIncome({ totalCents, keepPerYearCents, selectedIncomeCents, hasPricedItems }: { totalCents: number; keepPerYearCents: number; selectedIncomeCents?: number; hasPricedItems: boolean }): number {
+  return selectedIncomeCents ?? (hasPricedItems ? comfortableIncome(totalCents, keepPerYearCents) : startIncome(totalCents));
+}
+
 /**
  * The incomes the fader must reach for a list (US cents): low enough that the far left reads horrid, high enough that
  * the far right reads ritzy, never narrower than $10,000 to $100 million.
