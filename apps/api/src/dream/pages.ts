@@ -1,4 +1,4 @@
-import { assertPublicUrl, htmlToText, publicFetch, structuredPrices, type Fetcher } from "../agent/tools";
+import { assertPublicUrl, htmlToText, priceBasis, publicFetch, structuredPrices, type Fetcher, type MarkupPrice } from "../agent/tools";
 
 /**
  * Reads one listing page (a home, a car, a provider) the way the price agent reads product pages: our server fetches
@@ -36,7 +36,7 @@ export interface ListingPage {
   title: string;
   text: string;
   /** Prices stated in markup (JSON-LD offers, product meta tags). */
-  prices: { amount: number; currency?: string }[];
+  prices: MarkupPrice[];
   images: string[];
   data: ListingData;
   /** Same-site links that look like single listings, for a results page the hunt can follow one level. */
@@ -102,10 +102,15 @@ function imageUrls(v: unknown, out: string[]) {
   }
 }
 
-/** schema.org data from every JSON-LD block, merged with the first value of each field winning. */
+/**
+ * schema.org data from every JSON-LD block, merged with the first value of each field winning. The price is the first
+ * one that is the thing's own price, never a monthly payment, a member's or a former price, and a list price only when
+ * the page states no other (priceBasis).
+ */
 export function listingData(html: string): { data: ListingData; images: string[] } {
   const data: ListingData = {};
   const images: string[] = [];
+  let listed: { price?: number; currency?: string } | undefined;
   const set = <K extends keyof ListingData>(k: K, v: ListingData[K] | undefined) => {
     if (v !== undefined && data[k] === undefined) data[k] = v;
   };
@@ -147,17 +152,20 @@ export function listingData(html: string): { data: ListingData; images: string[]
         set("year", num(o.vehicleModelDate ?? o.modelDate ?? o.productionDate));
         if (typeof o.color === "string") set("color", o.color);
       }
-      if ("price" in o && (t.some((x) => /Offer/i.test(x)) || t.some((x) => RESIDENCE.test(x)))) {
+      const priced = ("price" in o && (t.some((x) => /Offer/i.test(x)) || t.some((x) => RESIDENCE.test(x)))) || t.some((x) => /PriceSpecification/i.test(x));
+      const basis = priced ? priceBasis(o) : undefined;
+      const currency = typeof o.priceCurrency === "string" ? o.priceCurrency.toUpperCase() : undefined;
+      if (basis === "price") {
         set("price", num(o.price));
-        if (typeof o.priceCurrency === "string") set("currency", o.priceCurrency.toUpperCase());
-      }
-      if (t.some((x) => /PriceSpecification/i.test(x))) {
-        set("price", num(o.price));
-        if (typeof o.priceCurrency === "string") set("currency", o.priceCurrency.toUpperCase());
-      }
+        set("currency", currency);
+      } else if (basis === "list" && !listed?.price) listed = { price: num(o.price), currency };
       for (const v of Object.values(o)) walk(v, depth + 1);
     };
     walk(root, 0);
+  }
+  if (data.price === undefined && listed?.price) {
+    data.price = listed.price;
+    set("currency", listed.currency);
   }
   return { data, images };
 }

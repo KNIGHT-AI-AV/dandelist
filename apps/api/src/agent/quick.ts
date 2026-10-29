@@ -6,7 +6,7 @@ import { HORIZON_YEARS, cleanUrl, hostOf, type Draft, type Meta, type PriceOptio
 import { clip, withLine } from "./lines";
 import { commonsImage, commonsPhotos, probeImage, type MediaImage, type MediaKind } from "./media";
 import { within } from "./time";
-import { fxRate, htmlToText, pageShowsPrice, priceMentions, readCapped, safeGet, structuredPrices, type Fetcher } from "./tools";
+import { fxRate, htmlToText, pageShowsPrice, priceMentions, readCapped, safeGet, structuredPrices, type Fetcher, type MarkupPrice } from "./tools";
 
 /**
  * The fast first card (owner, 2026-10-29: "the first card needs to give you is the one that you actually just made").
@@ -65,7 +65,7 @@ export interface ProductPage {
   /** The price in the page's product data, with its currency when stated. */
   price?: number;
   currency?: string;
-  prices: { amount: number; currency?: string }[];
+  prices: MarkupPrice[];
   /** Pictures the page's product data names, absolute. */
   productImages: string[];
   /** The page's share picture (og:image, twitter:image), absolute. */
@@ -209,9 +209,12 @@ const photoShaped = (w: number, h: number) => Math.min(w, h) >= 300 && Math.max(
 /** "k", "m", "bn" and their words after a figure: "$2.5M" is 2,500,000, never 2.5. */
 const SCALE: Record<string, number> = { k: 1e3, thousand: 1e3, m: 1e6, mm: 1e6, mn: 1e6, million: 1e6, b: 1e9, bn: 1e9, billion: 1e9 };
 
+/** The first figure in a text, with any scale word after it. */
+const FIGURE = /(\d[\d.,  ]*\d|\d)(?:\s?(k|mm|mn|m|bn|b|thousand|million|billion)\b)?/i;
+
 /** "$10,250", "10.250,00 €", "1 299", "From $1,299 pp" and "$2.5M" as numbers. */
 export function parseAmount(s: string): number {
-  const m = /(\d[\d.,  ]*\d|\d)(?:\s?(k|mm|mn|m|bn|b|thousand|million|billion)\b)?/i.exec(s);
+  const m = FIGURE.exec(s);
   if (!m) return 0;
   let t = m[1]!.replace(/\s/g, "");
   if (/^\d{1,3}(\.\d{3})+(,\d{1,2})?$/.test(t)) t = t.replace(/\./g, "").replace(",", ".");
@@ -225,10 +228,12 @@ interface Candidate {
   url: string;
   amount: number;
   currency: string;
-  /** The model wrote the figure as part of the price: per month, night or person, a deposit, a lease. */
+  /** The model wrote the figure as part of the price: per month, night or person, a deposit, a lease, a fee. */
   part?: boolean;
   /** What the search result itself was titled, when the search returned it. */
   resultTitle?: string;
+  /** All the search result said of itself: its title and any snippet. */
+  resultText?: string;
 }
 
 /** The pages the model named, in its order, read from lines like "URL | $10,250 | USD". */
@@ -238,9 +243,12 @@ export function readCandidates(text: string): Candidate[] {
     const url = /https?:\/\/[^\s|<>"'`)\]]+/.exec(line)?.[0]?.replace(/[.,;]+$/, "");
     if (!url) continue;
     const rest = line.slice(line.indexOf(url) + url.length).split("|").map((s) => s.trim());
-    const amount = parseAmount(rest[1] ?? "");
+    const shown = rest[1] ?? "";
+    const amount = parseAmount(shown);
     const currency = /\b([A-Za-z]{3})\b/.exec(rest[2] ?? "")?.[1]?.toUpperCase() ?? "";
-    const part = PART_PRICE.test(rest[1] ?? "");
+    const figure = FIGURE.exec(shown);
+    const around = figure ? { before: shown.slice(0, figure.index), after: shown.slice(figure.index + figure[0].length) } : null;
+    const part = PART_PRICE.test(shown) || (!!around && (feeAt(around) || FEE_WORD_AFTER.test(around.after)));
     if (!out.some((c) => c.url === url)) out.push({ url, amount, currency, ...(part ? { part } : {}) });
   }
   return out;
@@ -260,9 +268,39 @@ export const PART_PRICE =
 const PART_AFTER =
   /^\s*(?:[A-Z]{3}|[€£$¥])?\s*(?:\/\s*(?:mo|month|m|night|nt|wk|week|day|hr|hour|yr|year|person|pp|pax|guest)\b|(?:per|a)\s+(?:month|night|week|day|hour|year|person|guest|head)\b|p\.?p\.?(?![a-z])|pppn\b|each\b|(?:monthly|nightly|weekly|daily|hourly)\b|deposit\b|down\b)/i;
 
-/** A mention of the price that reads as the whole price: no unit straight after it, nor a deposit or lease just before. */
+/**
+ * A charge on top of the thing, named right at its figure on the same line (Codex R14, 09:00 batch): "USD 250 shipping
+ * fee", "$95 booking fee", "Delivery: $250". On a page, a word after the figure counts only as "fee" or "charge", since
+ * shops follow their price with "Shipping calculated at checkout" or a "Shipping & Returns" heading. Shipping named
+ * any other way ("$2,495 + free shipping", "incl. delivery $2,495") leaves the figure the price.
+ */
+const FEE_AFTER =
+  /^[ \t]*(?:[A-Z]{3}|[€£$¥])?[ \t]*(?:(?:shipping|delivery|postage|handling|freight|booking|service|processing|admin|documentation|destination|cleaning|resort|registration|application|activation)[ \t]+)?(?:fees?|charge|surcharge)\b/i;
+const FEE_BEFORE = /(?<!\b(?:free|incl\.?|including|with)[ \t])\b(?:shipping|delivery|postage|handling|freight|surcharge|fees?)(?:[ \t]+(?:fee|charge|cost))?[ \t]*[:=]?[ \t]*(?:[A-Z]{3}|[€£$¥])?[ \t]*$/i;
+const feeAt = (m: { before: string; after: string }) => FEE_AFTER.test(m.after) || FEE_BEFORE.test(m.before);
+/** What the model writes after its figure is about that figure: "USD 250 shipping" is shipping, unless it says included or free. */
+const FEE_WORD_AFTER = /^[ \t]*(?:[A-Z]{3}|[€£$¥])?[ \t]*(?:shipping|delivery|postage|handling|freight)\b(?![ \t]+(?:included|incl|free)\b)/i;
+
+/** A mention of the price that reads as the whole price: no unit or fee straight after it, nor a deposit, lease or fee just before. */
 export const wholeMention = (m: { before: string; after: string }) =>
-  !PART_AFTER.test(m.after) && !/\b(?:deposit|down\s*payment|lease|financ\w*|monthly|per\s+month)\b[^0-9]{0,12}$/i.test(m.before);
+  !PART_AFTER.test(m.after) && !/\b(?:deposit|down\s*payment|lease|financ\w*|monthly|per\s+month)\b[^0-9]{0,12}$/i.test(m.before) && !feeAt(m);
+
+/** A price in the page's product data that is what someone pays for the thing: the price, or a list price beside it. */
+const payable = (p: MarkupPrice) => !p.basis || p.basis === "list";
+const near = (a: number, b: number) => Math.abs(a - b) < 0.005;
+
+/**
+ * Where this amount appears, it is only ever part of the price (Codex R14, 09:00 batch): the product data calls it a
+ * payment, a member's or a former price and never the price, or every place the text states it has a unit or a fee
+ * on it ("USD 450/mo"). The rejection belongs to this amount, never to the whole page, so a later, weaker source
+ * (a search result's figure) can't bring it back as the price.
+ */
+export function onlyPart(text: string, amount: number, prices: MarkupPrice[] = []): boolean {
+  const here = prices.filter((p) => near(p.amount, amount));
+  if (here.length) return !here.some(payable);
+  const mentions = priceMentions(text, amount);
+  return mentions.length > 0 && !mentions.some(wholeMention);
+}
 
 /** Currencies a text names outright; a bare "$" names none, since several currencies use it. */
 const CURRENCY_MARKS: [RegExp, string][] = [
@@ -299,7 +337,9 @@ const pageKey = (raw: string) => {
 
 /**
  * The returned page a reworded link plainly means: same site, no query of its own, and most of its path's words shared
- * (at least 60 percent of all the words in both). Null when none is that close.
+ * (at least 60 percent of all the words in both). Null when none is that close. Words with figures in them name a
+ * model year, a variant or a listing, so when each path has one the other lacks ("db11-2018" and "db11-2017"), they
+ * are two different things however much else they share (Codex R14, 09:00 batch).
  */
 export function closestPage(url: string, candidates: string[]): string | null {
   let u: URL;
@@ -320,6 +360,8 @@ export function closestPage(url: string, candidates: string[]): string | null {
       continue;
     }
     const theirs = words(cu.pathname);
+    const ownIds = (a: Set<string>, b: Set<string>) => [...a].some((w) => /\d/.test(w) && !b.has(w));
+    if (ownIds(mine, theirs) && ownIds(theirs, mine)) continue;
     const shared = [...mine].filter((w) => theirs.has(w)).length;
     const score = shared / new Set([...mine, ...theirs]).size;
     if (score >= 0.6 && (!best || score > best.score)) best = { url: c, score };
@@ -340,8 +382,9 @@ function priceOn(page: ProductPage, cand: Candidate): { amount: number; currency
   if (cand.part) return null; // the model read a monthly, nightly, per-person or deposit figure on this page
   if (new Set(page.prices.map((p) => p.amount)).size > 6) return null; // a results page, not one thing
   if (page.price && (page.currency ?? cand.currency)) return { amount: page.price, currency: (page.currency ?? cand.currency).toUpperCase(), how: "data" };
-  const stated = page.prices.find((p) => p.currency && /^[A-Za-z]{3}$/.test(p.currency));
-  const shownWhole = page.prices.some((p) => Math.abs(p.amount - cand.amount) < 0.005) || priceMentions(page.text, cand.amount).some(wholeMention);
+  const whole = page.prices.filter(payable);
+  const stated = whole.find((p) => p.currency && /^[A-Za-z]{3}$/.test(p.currency));
+  const shownWhole = !onlyPart(page.text, cand.amount, page.prices) && (whole.some((p) => near(p.amount, cand.amount)) || priceMentions(page.text, cand.amount).some(wholeMention));
   if (cand.amount > 0 && cand.currency && shownWhole) return { amount: cand.amount, currency: cand.currency, how: "page" };
   if (stated) return { amount: stated.amount, currency: stated.currency!.toUpperCase(), how: "data" };
   return null;
@@ -466,7 +509,10 @@ export async function quickFind(meta: Meta, input: QuickInput, ctx: QuickContext
   const picked = readCandidates(res.text)
     .map((c) => ({ ...c, url: onSite(c.url) }))
     .filter((c) => readable(c.url))
-    .map((c) => ({ ...c, resultTitle: returned.get(pageKey(c.url))?.title }));
+    .map((c): Candidate => {
+      const resultTitle = returned.get(pageKey(c.url))?.title;
+      return { ...c, resultTitle, resultText: said.get(pageKey(c.url)) ?? resultTitle };
+    });
   const seen = new Set(picked.map((c) => pageKey(c.url)));
   const ordered = [...picked.filter((c) => !returned.size || c.resultTitle !== undefined), ...picked.filter((c) => returned.size && c.resultTitle === undefined)];
   const draft = (await within(Promise.resolve(input.draft).catch(() => null), Math.max(0, left() - 6_000))) ?? null;
@@ -506,6 +552,8 @@ export async function quickFind(meta: Meta, input: QuickInput, ctx: QuickContext
     for (const { c, page } of pages) {
       const text = said.get(pageKey(c.url)) ?? c.resultTitle ?? "";
       if (c.part || (!page.ok && !refused(page)) || otherCurrency(text, c.currency)) continue;
+      // The page itself says this figure is a payment, a member's or a former price: the search can't make it the price.
+      if (page.ok && onlyPart(page.text, c.amount, page.prices)) continue;
       const named = page.ok ? namesWish(page, words, loose) : titleNames(text, words, loose);
       if (c.amount > 0 && c.currency && text && named && priceMentions(text, c.amount).some(wholeMention)) {
         chosen = { c, ...(page.ok ? { page } : {}), price: { amount: c.amount, currency: c.currency, how: "result" } };
@@ -516,9 +564,17 @@ export async function quickFind(meta: Meta, input: QuickInput, ctx: QuickContext
   // Shops and dealers turn our server away (every page refused it on the live server, 2026-10-29), and the search's
   // results carry no page text. The search itself read those pages, so its own figure stands as an estimate when the
   // search really returned the page, the result's title names the wish, the page refused us (rather than being gone),
-  // the figure is a whole price, and another site the search returned gives a figure within 2x in the same currency.
+  // the figure is a whole price (the result's own snippet never states it only as a monthly or other part payment), and
+  // another site the search returned gives a figure within 2x in the same currency.
   if (!chosen) {
-    const usable = (c: Candidate) => c.amount > 0 && !c.part && /^[A-Z]{3}$/.test(c.currency) && c.resultTitle !== undefined && !PART_PRICE.test(c.resultTitle) && !otherCurrency(c.resultTitle, c.currency);
+    const usable = (c: Candidate) =>
+      c.amount > 0 &&
+      !c.part &&
+      /^[A-Z]{3}$/.test(c.currency) &&
+      c.resultTitle !== undefined &&
+      !PART_PRICE.test(c.resultTitle) &&
+      !otherCurrency(c.resultTitle, c.currency) &&
+      !onlyPart(c.resultText ?? c.resultTitle, c.amount);
     const near = (a: Candidate, b: Candidate) => a.currency === b.currency && a.amount <= b.amount * 2 && a.amount * 2 >= b.amount;
     const figures = picked.filter(usable);
     const sites = new Set(figures.map((c) => hostOf(c.url)));
