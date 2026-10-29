@@ -21,10 +21,13 @@ const QUOTE_MS = 45_000;
 /** "Still the same price" stays this long, then gives way. */
 const SAME_MS = 9000;
 
+/** The list never says "life" (owner, recording 03), not even in someone else's words. */
+const SHOWN = QUOTES.filter((q) => !/\bli(fe|ves|ving)\b/i.test(q.text));
+
 const pickQuote = (not?: number) => {
-  if (QUOTES.length < 2) return 0;
-  let i = Math.floor(Math.random() * QUOTES.length);
-  if (i === not) i = (i + 1) % QUOTES.length;
+  if (SHOWN.length < 2) return 0;
+  let i = Math.floor(Math.random() * SHOWN.length);
+  if (i === not) i = (i + 1) % SHOWN.length;
   return i;
 };
 
@@ -113,7 +116,7 @@ export function DandyArea({ onOpen }: { onOpen(): void }) {
 
   const outcome = useMemo(() => [...checks].reverse().find((c) => c.outcome.kind !== "running"), [checks]);
   const task = tasks.length ? tasks[turn % tasks.length]! : null;
-  const q = QUOTES[quote];
+  const q = SHOWN[quote];
 
   let key: string;
   let body: ReactNode;
