@@ -4,9 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ledger } from "../../components/ledger";
-import { AgentDot, Backdrop, Chip, EdgeFade, ErrorLine, Eyebrow, Glass, Grain, Hairline, IconButton, Money, Photo, PrimaryButton, Protect, QuietButton, Shade } from "../../components/lux";
+import { AgentDot, Backdrop, Chip, EdgeFade, ErrorLine, Eyebrow, Glass, Grain, IconButton, Money, Photo, PrimaryButton, Protect, QuietButton, Shade } from "../../components/lux";
 import { Statement, Take } from "../../components/statement";
-import { getRun, interpretWish, startResearch, transcribeWish, type Answer, type Draft, type PriceOption, type Question, type Run, type Step } from "../../lib/agent";
+import { getRun, startHunt, transcribeWish, type Answer, type Draft, type PriceOption, type Run, type Step } from "../../lib/agent";
+import { answersFrom, refineChanged, withGiven } from "../../lib/refine";
+import { RefinePanel } from "../../components/refine";
 import { endTask, startTask } from "../../lib/activity";
 import { useAuth } from "../../lib/auth";
 import { fonts, layout, radius, space, type, usePalette, useType } from "../../lib/theme";
@@ -17,7 +19,6 @@ import { Carve, RevealPhoto, ThoughtLine } from "../../components/wish-reveal";
 import { FIELD_MIN, WISH_MAX, WishField } from "../../components/wish-field";
 import { ListeningPanel, MicButton, useVoiceWish } from "../../components/voice/say-wish";
 import { KeyboardDock, KeyboardScroll, dockRoom } from "../../components/inputs";
-import { useDandy } from "../../lib/dandy";
 import { Rise } from "../../components/welcome/kit";
 import { haptic } from "../../lib/motion";
 import { clarityOf, deckFor, thoughtOf } from "../../lib/reveal";
@@ -36,7 +37,7 @@ const TIERS: { value: WishTier; label: string }[] = [
   { value: "dream", label: "Dream" },
 ];
 
-type Stage = "describe" | "ask" | "research";
+type Stage = "describe" | "research";
 
 function useClock(since: number | null) {
   const [now, setNow] = useState(Date.now());
@@ -54,7 +55,6 @@ const asItem = (o: PriceOption): Item => ({ id: o.url, upfrontCents: o.upfrontCe
 
 export default function NewWish() {
   const { api } = useAuth();
-  const dandy = useDandy();
   const { wishes, add } = useWishes();
   const p = usePalette();
   const t = useType();
@@ -68,10 +68,14 @@ export default function NewWish() {
   const handed = useLocalSearchParams<{ text?: string }>().text;
   const [text, setText] = useState(typeof handed === "string" ? handed.slice(0, 300) : "");
   const [reading, setReading] = useState(false);
-  const [draft, setDraft] = useState<Draft | null>(null);
-  const [questions, setQuestions] = useState<Question[]>([]);
-  const [answers, setAnswers] = useState<Record<string, string>>({});
+  // The wish as read before, when hunting again with changed answers; a hunt from the words reads it on the server.
+  const [asked, setAsked] = useState<Draft | null>(null);
+  // Answers changed under "Refine it" and not hunted with yet, by question id.
+  const [edits, setEdits] = useState<Record<string, string>>({});
+  const [refining, setRefining] = useState(false);
   const [run, setRun] = useState<Run | null>(null);
+  const draft = run?.draft ?? asked;
+  const questions = run?.result?.questions?.length ? run.result.questions : (draft?.questions ?? []);
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [chosen, setChosen] = useState(0);
   const [tier, setTier] = useState<WishTier>("nice");
@@ -102,10 +106,11 @@ export default function NewWish() {
   }, [working, draft?.title]);
   const clock = useClock(working ? startedAt : null);
 
-  // The answer landing is the moment that matters: one success tick, paired with the photo coming into focus.
+  // The first card landing is the moment that matters: one success tick, paired with the photo coming into focus.
+  const landed = !!run?.result?.options.length;
   useEffect(() => {
-    if (run?.status === "done" && run.result?.options.length) haptic.success();
-  }, [run?.status, run?.result?.options.length]);
+    if (landed) haptic.success();
+  }, [landed]);
 
   // Poll the research run until the agent finishes.
   useEffect(() => {
@@ -129,16 +134,21 @@ export default function NewWish() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function read() {
-    if (text.trim().length < 2) return setError("Describe the wish in a few words.");
+  // The hunt starts from the words at once (owner, 2026-10-29: no button to find the price after sending, no questions
+  // first). The agent picks the likely answer to each question; "Refine it" changes them and hunts again.
+  async function hunt(wish: { text: string } | { draft: Draft; answers: Answer[] }) {
     setError(null);
     setReading(true);
     try {
-      const r = await interpretWish(api, text.trim());
-      setDraft(r.draft);
-      setQuestions(r.questions);
-      setAnswers({});
-      setStage("ask");
+      const next = await startHunt(api, wish);
+      setStartedAt(Date.now());
+      setAsked("draft" in wish ? wish.draft : null);
+      setRun(next);
+      setEdits({});
+      setRefining(false);
+      setChosen(0);
+      setShowTrail(false);
+      setStage("research");
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -146,20 +156,19 @@ export default function NewWish() {
     }
   }
 
-  async function research() {
-    if (!draft) return;
-    setError(null);
-    const given: Answer[] = questions.filter((q) => answers[q.question]).map((q) => ({ question: q.question, answer: answers[q.question]! }));
-    try {
-      setStartedAt(Date.now());
-      setRun(await startResearch(api, draft, given));
-      setChosen(0);
-      setShowTrail(false);
-      setStage("research");
-    } catch (e) {
-      setError((e as Error).message);
-    }
+  function read() {
+    if (text.trim().length < 2) return setError("Describe the wish in a few words.");
+    void hunt({ text: text.trim() });
   }
+
+  function huntAgain() {
+    if (!draft || !refineChanged(questions, edits)) return;
+    const answers = answersFrom(questions, edits);
+    void hunt({ draft: { ...draft, questions: withGiven(questions, answers) }, answers });
+  }
+
+  // A hunt from the words starts over from them; a hunt again keeps the wish as read and the answers given.
+  const retry = () => void (asked ? hunt({ draft: asked, answers: answersFrom(asked.questions ?? [], {}) }) : hunt({ text: text.trim() }));
 
   async function save() {
     const option = run?.result?.options[chosen];
@@ -200,7 +209,9 @@ export default function NewWish() {
   function startOver() {
     setStage("describe");
     setRun(null);
-    setDraft(null);
+    setAsked(null);
+    setEdits({});
+    setRefining(false);
     setError(null);
   }
 
@@ -211,8 +222,8 @@ export default function NewWish() {
   const latestImage = wishes.find((w) => w.details.agent?.imageUrl)?.details.agent?.imageUrl;
   const close = <IconButton icon="close" label="Close" onPress={() => (router.canGoBack() ? router.back() : router.replace("/wishes"))} style={{ position: "absolute", top: insets.top + (layout.headerBar - layout.control.icon) / 2, left: gutter, zIndex: 10 }} />;
 
-  // Concierge: describe the wish, then answer the agent's questions, over a blurred photograph.
-  if (stage === "describe" || stage === "ask") {
+  // Concierge: describe the wish over a blurred photograph; the hunt starts the moment it's sent.
+  if (stage === "describe") {
     return (
       <View style={{ flex: 1, backgroundColor: p.bg }}>
         <Atmosphere />
@@ -233,64 +244,33 @@ export default function NewWish() {
                 What do you <Text style={{ fontFamily: fonts.displayItalic, color: p.accentText }}>want</Text>?
               </Text>
             </View>
-            {stage === "describe" ? (
-              <>
-                <View>
-                  {voice.phase !== "idle" ? (
-                    <ListeningPanel voice={voice} height={FIELD_MIN + layout.stack.tight + 1} />
-                  ) : heard ? (
-                    <Rise key={heard}>{wishField}</Rise>
-                  ) : (
-                    wishField
-                  )}
-                  <View style={{ position: "absolute", top: 0, right: 0 }}>
-                    <MicButton voice={voice} />
-                  </View>
-                </View>
-                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: layout.stack.tight }}>
-                  {EXAMPLES.map((e) => (
-                    <Chip key={e} label={e} selected={text === e} onPress={reading ? undefined : () => { haptic.select(); setText(e); field.current?.focus(); }} />
-                  ))}
-                </View>
-                <ErrorLine>{error}</ErrorLine>
-                <QuietButton label="Enter it yourself" onPress={() => router.push("/wishes/manual")} style={{ alignSelf: "flex-start" }} />
-              </>
-            ) : draft ? (
-              <>
-                <Text style={[type.title3, { fontFamily: fonts.titleItalic, color: p.ink }]}>{text}</Text>
-                <Glass style={{ padding: layout.cardPad, gap: 12 }}>
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                    <AgentDot />
-                    <Text style={[type.footnote, { color: p.ink2 }]}>
-                      {questions.length ? `${dandy.name} · ${questions.length === 1 ? "one quick question" : `${questions.length} quick questions`}` : `${dandy.name} · that's clear enough to price`}
-                    </Text>
-                  </View>
-                  <Text style={[type.title2, { color: p.ink }]}>{draft.title}</Text>
-                  <Text style={[type.footnote, { color: p.ink2 }]}>{[KIND_LABEL[draft.kind], ...draft.specifics.map((s) => s.value)].join(" · ")}</Text>
-                  {questions.map((q) => (
-                    <View key={q.question} style={{ gap: 12 }}>
-                      <Hairline />
-                      <Text style={[type.callout, { color: p.ink }]}>{q.question}</Text>
-                      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-                        {q.choices.map((c) => (
-                          <Chip key={c} label={c} selected={answers[q.question] === c} onPress={() => { haptic.select(); setAnswers((a) => ({ ...a, [q.question]: a[q.question] === c ? "" : c })); }} />
-                        ))}
-                      </View>
-                    </View>
-                  ))}
-                </Glass>
-                <ErrorLine>{error}</ErrorLine>
-                <QuietButton label="Change the wish" onPress={startOver} style={{ alignSelf: "flex-start" }} />
-              </>
-            ) : null}
+            <View>
+              {voice.phase !== "idle" ? (
+                <ListeningPanel voice={voice} height={FIELD_MIN + layout.stack.tight + 1} />
+              ) : heard ? (
+                <Rise key={heard}>{wishField}</Rise>
+              ) : (
+                wishField
+              )}
+              <View style={{ position: "absolute", top: 0, right: 0 }}>
+                <MicButton voice={voice} />
+              </View>
+            </View>
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: layout.stack.tight }}>
+              {EXAMPLES.map((e) => (
+                <Chip key={e} label={e} selected={text === e} onPress={reading ? undefined : () => { haptic.select(); setText(e); field.current?.focus(); }} />
+              ))}
+            </View>
+            <ErrorLine>{error}</ErrorLine>
+            <QuietButton label="Enter it yourself" onPress={() => router.push("/wishes/manual")} style={{ alignSelf: "flex-start" }} />
         </KeyboardScroll>
         <KeyboardDock onHeight={setAskDock}>
           <PrimaryButton
-            label={stage === "describe" ? "Find the real price" : "Research the price"}
+            label="Hunt for it"
             busyLabel="Reading your wish..."
             busy={reading}
-            disabled={stage === "describe" && voice.phase !== "idle"}
-            onPress={stage === "describe" ? read : research}
+            disabled={voice.phase !== "idle"}
+            onPress={read}
           />
         </KeyboardDock>
         <Grain />
@@ -352,7 +332,7 @@ export default function NewWish() {
           {run?.status === "error" ? (
             <Glass style={{ padding: layout.cardPad, gap: 12 }}>
               <ErrorLine>{run.error}</ErrorLine>
-              <PrimaryButton label="Try again" onPress={research} />
+              <PrimaryButton label="Try again" onPress={retry} />
             </Glass>
           ) : null}
 
@@ -376,10 +356,18 @@ export default function NewWish() {
                   </ScrollView>
                 </Rise>
               ) : null}
-              <Rise delay={LAND_AT.take}>
-                <Take>{result.explanation}</Take>
-              </Rise>
+              {result.explanation ? (
+                <Rise delay={LAND_AT.take}>
+                  <Take>{result.explanation}</Take>
+                </Rise>
+              ) : null}
               {result.note ? <Text style={[type.footnote, { color: p.ink2 }]}>{result.note}</Text> : null}
+              {questions.length ? (
+                <View style={{ gap: 10 }}>
+                  <QuietButton label={refining ? "Done refining" : "Refine it"} onPress={() => setRefining((r) => !r)} style={{ alignSelf: "flex-start" }} />
+                  {refining ? <RefinePanel questions={questions} edits={edits} onEdit={(q, a) => setEdits((e) => ({ ...e, [q]: a }))} onHunt={huntAgain} /> : null}
+                </View>
+              ) : null}
               <Rise delay={LAND_AT.rest} style={{ gap: 8 }}>
                 <Eyebrow>How much you want it</Eyebrow>
                 <View style={{ flexDirection: "row", gap: 8 }}>

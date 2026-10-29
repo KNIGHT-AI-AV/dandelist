@@ -315,11 +315,14 @@ export async function subjectPhoto(draft: Draft, ctx: { archive?: Archive; api: 
       if (hit?.photos[0]) return archiveImage(hit.photos[0]);
     }
   }
-  if (draft.kind !== "visit") return null;
-  const place = placeOf(draft);
-  const key = squash(place);
-  if (!key) return null;
-  const found = (await within(commonsPhotos(place, ctx.api, { limit: 6 }), left())) ?? [];
+  // A trip shows its place. A car, or a thing to buy, shows a photograph whose own title names it in full: most cars,
+  // and many watches and cameras, have one on Commons. A home or a service is different on every listing, so never.
+  const kind = mediaKindOf(draft)[0];
+  if (draft.kind !== "visit" && kind !== "vehicle" && kind !== "product") return null;
+  const subject = draft.kind === "visit" ? placeOf(draft) : draft.title;
+  const key = squash(subject);
+  if (!key || (draft.kind !== "visit" && subjectWords(subject).length < 2)) return null;
+  const found = (await within(commonsPhotos(subject, ctx.api, { limit: 6 }), left())) ?? [];
   const hit = found.find((p) => squash(p.title).includes(key));
   return hit ? commonsImage(hit) : null;
 }
@@ -357,7 +360,8 @@ export async function quickFind(meta: Meta, input: QuickInput, ctx: QuickContext
       instructions: QUICK,
       input: [`Wish: ${input.words}`, input.details?.length ? `Details: ${input.details.join("; ")}` : "", `They pay in ${home}.`].filter(Boolean).join("\n"),
       tools: [{ type: "web_search" }],
-      max_tool_calls: 2,
+      // One search answers in about 7 s; a second doubled the wait on the live server (17 s, 2026-10-29).
+      max_tool_calls: 1,
       include: SEARCH_INCLUDE,
     }),
     left(),
@@ -370,7 +374,14 @@ export async function quickFind(meta: Meta, input: QuickInput, ctx: QuickContext
   const said = resultTexts(res.raw);
   const returned = new Map(results.map((r) => [pageKey(r.url), r]));
   for (const c of res.citations) if (!returned.has(pageKey(c.url))) returned.set(pageKey(c.url), { url: c.url, title: c.title ?? "" });
+  // A bare site the model names ("https://oldcarsdata.com") stands for the page the search returned on that site.
+  const onSite = (url: string) => {
+    if (returned.has(pageKey(url))) return url;
+    const bare = pathOf(url).replace(/\/+$/, "") === "";
+    return (bare && [...returned.values()].find((r) => hostOf(r.url) === hostOf(url))?.url) || url;
+  };
   const picked = readCandidates(res.text)
+    .map((c) => ({ ...c, url: onSite(c.url) }))
     .filter((c) => readable(c.url))
     .map((c) => ({ ...c, resultTitle: returned.get(pageKey(c.url))?.title }));
   const seen = new Set(picked.map((c) => pageKey(c.url)));
@@ -398,7 +409,7 @@ export async function quickFind(meta: Meta, input: QuickInput, ctx: QuickContext
     }),
   );
   const shown = pages.filter(({ page }) => page.ok && namesWish(page, words, loose));
-  let chosen: { c: Candidate; page?: ProductPage; price: { amount: number; currency: string; how: "data" | "page" | "result" } } | null = null;
+  let chosen: { c: Candidate; page?: ProductPage; price: { amount: number; currency: string; how: "data" | "page" | "result" | "answer" } } | null = null;
   for (const m of shown) {
     const price = priceOn(m.page, m.c);
     if (price) {
@@ -416,6 +427,21 @@ export async function quickFind(meta: Meta, input: QuickInput, ctx: QuickContext
         chosen = { c, ...(page.ok ? { page } : {}), price: { amount: c.amount, currency: c.currency, how: "result" } };
         break;
       }
+    }
+  }
+  // Shops and dealers turn our server away (every page refused it on the live server, 2026-10-29), and the search's
+  // results carry no page text. The search itself read those pages, so its own figure stands as an estimate when the
+  // search really returned the page, the result's title names the wish, the page wouldn't open for us, and the figure
+  // agrees with the search's other figures.
+  if (!chosen) {
+    const amounts = picked.filter((c) => c.amount > 0 && c.currency === picked[0]?.currency).map((c) => c.amount);
+    const typical = amounts.length >= 2 ? [...amounts].sort((a, b) => a - b)[Math.floor((amounts.length - 1) / 2)]! : null;
+    for (const { c, page } of pages) {
+      if (page.ok || !(c.amount > 0) || !/^[A-Z]{3}$/.test(c.currency) || c.resultTitle === undefined) continue;
+      if (!titleNames(c.resultTitle, words, loose)) continue;
+      if (typical && c.currency === picked[0]?.currency && (c.amount < typical / 2 || c.amount > typical * 2)) continue;
+      chosen = { c, price: { amount: c.amount, currency: c.currency, how: "answer" } };
+      break;
     }
   }
   if (!chosen) return null;
@@ -443,7 +469,8 @@ export async function quickFind(meta: Meta, input: QuickInput, ctx: QuickContext
   // The card's name is the page's own name for it, when that name says what was wished for; a business or area name
   // ("Cherry Hills Village" on a chef's page) gives way to the page's title, then to the wish's own title.
   const says = (s: string | undefined) => !!s && (!words.length || words.some((w) => squash(s).includes(squash(w))));
-  const titled = [chosen.page?.name, chosen.page ? bareName(chosen.page.title) : undefined, chosen.c.resultTitle ? bareName(chosen.c.resultTitle) : undefined].find(says);
+  // A figure the search found on its own is named for the wish: a result's title is often a site's headline.
+  const titled = chosen.price.how === "answer" ? undefined : [chosen.page?.name, chosen.page ? bareName(chosen.page.title) : undefined, chosen.c.resultTitle ? bareName(chosen.c.resultTitle) : undefined].find(says);
   const label = (titled || draft?.title || input.words).slice(0, 120);
   const option: PriceOption = {
     label,
@@ -453,9 +480,9 @@ export async function quickFind(meta: Meta, input: QuickInput, ctx: QuickContext
     recurring: [],
     source: { currency, price: chosen.price.amount, rate: fx.rate, rateDate: fx.date },
     status: checked ? "verified" : "estimate",
-    statusLabel: checked ? `Checked on ${host}` : chosen.price.how === "result" ? `Estimate: from search results for ${host}` : `Estimate: seen on ${host}`,
+    statusLabel: checked ? `Checked on ${host}` : chosen.price.how === "result" || chosen.price.how === "answer" ? `Estimate: from search results for ${host}` : `Estimate: seen on ${host}`,
     evidence: chosen.price.how === "data" ? "The price in the page's product data" : chosen.price.how === "page" ? "The price shown on the page" : "The price in the search result",
-    confidence: checked ? "high" : "medium",
+    confidence: checked ? "high" : chosen.price.how === "answer" ? "low" : "medium",
     ...(photo ? { imageUrl: photo.url, media: { kind: kinds[0]!, images: [photo] } } : {}),
     checkedAt: at(),
     totals: { monthlyCents: 0, horizonCents: upfrontCents, spreadMonthlyCents: equivalentMonthly(upfrontCents, HORIZON_YEARS) },

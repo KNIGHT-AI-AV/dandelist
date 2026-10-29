@@ -15,7 +15,7 @@ import {
   type WishQuestion,
 } from "./agent";
 import type { MediaImage } from "./media";
-import { QUICK_MS, quickFind, subjectPhoto } from "./quick";
+import { QUICK_MS, mediaKindOf, quickFind, subjectPhoto } from "./quick";
 import { within } from "./time";
 import { publicFetch } from "./tools";
 
@@ -86,13 +86,15 @@ export function mergeFast(draft: Draft, researched: ResearchResult | null, fast:
     } else if (options.length < 4 && !options.some((o) => samePage(o.url, fast.url))) options.push(fast);
   }
   const best = options[0];
+  // A car's photo is the model itself, the same from any seller.
+  const vehicle = draft.kind === "own" && mediaKindOf(draft)[0] === "vehicle";
   if (best && !best.imageUrl) {
     if (fast && best !== fast && fast.imageUrl && photoTravels(draft, fast)) {
       best.imageUrl = fast.imageUrl;
       if (fast.media) best.media = fast.media;
-    } else if (standIn && (draft.kind === "visit" || draft.kind === "buy" || draft.kind === "do")) {
+    } else if (standIn && (draft.kind === "visit" || draft.kind === "buy" || draft.kind === "do" || vehicle)) {
       best.imageUrl = standIn.url;
-      best.media = { kind: draft.kind === "visit" ? "place" : draft.kind === "do" ? "experience" : "product", images: [standIn] };
+      best.media = { kind: draft.kind === "visit" ? "place" : draft.kind === "do" ? "experience" : vehicle ? "vehicle" : "product", images: [standIn] };
     }
   }
   return { options: options.slice(0, 4), explanation, note: researched?.note ?? "", horizonYears: researched?.horizonYears ?? HORIZON_YEARS };

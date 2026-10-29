@@ -23,6 +23,9 @@ const LISBON = "https://www.trips.example/lisbon-week";
 const VILLA = "https://www.agency.example/property/villa-santa-lucija-75967";
 const CHEF = "https://www.chefs.example/private-chef-dinner";
 const PROVIDER = "https://www.cook.example/private-chef-services-denver";
+const OLDCARS = "https://oldcarsdata.com/aston-martin/db11/price-history";
+const KBB = "https://www.kbb.com/aston-martin/db11/2020/";
+const DEALER = "https://www.dealer.example/aston-martin-db11";
 
 const html = (head: string, body: string) => `<html><head>${head}</head><body>${body}</body></html>`;
 const ld = (data: unknown) => `<script type="application/ld+json">${JSON.stringify(data)}</script>`;
@@ -54,9 +57,18 @@ const fakeWeb = (async (input: string | URL) => {
   if (u === "https://img.chrono.example/sub-126610ln.jpg") return imageResponse(jpegHeader(1600, 1200), "image/jpeg");
   if (u === "https://www.watchshop.example/daytona.jpg") return imageResponse(jpegHeader(1600, 1200), "image/jpeg");
   if (u === "https://www.agency.example/photos/villa-santa-lucija-1.jpg") return imageResponse(jpegHeader(2048, 1365), "image/jpeg");
-  if (u === CHEF) return new Response("denied", { status: 403, headers: { "content-type": "text/html" } });
+  if (u === CHEF || u === OLDCARS || u === KBB || u === DEALER) return new Response("denied", { status: 403, headers: { "content-type": "text/html" } });
   if (u.endsWith("/static/logo.png")) return imageResponse(pngHeader(600, 200), "image/png");
   if (u.startsWith("https://api.frankfurter.dev/")) return Response.json({ date: "2026-10-28", rates: { USD: 1.08 } });
+  if (u.startsWith("https://commons.wikimedia.org/") && (new URL(u).searchParams.get("gsrsearch") ?? "").includes("Aston Martin DB11")) {
+    return Response.json({
+      query: {
+        pages: {
+          9: { pageid: 9, index: 1, title: "File:Aston Martin DB11 V12 IMG 0306.jpg", imageinfo: [{ width: 4000, height: 2667, mime: "image/jpeg", url: "https://upload.wikimedia.org/db11.jpg", thumburl: "https://upload.wikimedia.org/thumb/db11.jpg", extmetadata: { Artist: { value: "A. Photographer" }, LicenseShortName: { value: "CC BY-SA 4.0" } } }] },
+        },
+      },
+    });
+  }
   if (u.startsWith("https://commons.wikimedia.org/")) {
     return Response.json({
       query: {
@@ -124,7 +136,7 @@ describe("the fast card", () => {
     });
     // One model call with a bounded web search, and the person's words are what it searches.
     expect(calls).toHaveLength(1);
-    expect(calls[0]).toMatchObject({ tools: [{ type: "web_search" }], max_tool_calls: 2 });
+    expect(calls[0]).toMatchObject({ tools: [{ type: "web_search" }], max_tool_calls: 1 });
     expect(calls[0]!.input).toContain("Wish: A Rolex Submariner date in steel");
     // The working row gets a short line for every step.
     expect(steps.map((s) => s.line)).toEqual(["Hunting for A Rolex Submariner date in steel", "Searching for rolex submariner date price", "Reading rolex.com", "Found it on rolex.com"]);
@@ -193,6 +205,42 @@ describe("the fast card", () => {
     const meta = metaOf(() => searched([`${LISBON} | $2,190 | USD`], [{ url: LISBON, title: "A week in Lisbon | Trips" }]));
     const card = await quickFind(meta, { words: "a week in lisbon for two", draft: trip, homeCurrency: "USD" }, { ...ctx(), api: fakeWeb });
     expect(card).toMatchObject({ upfrontCents: 219_000, imageUrl: "https://upload.wikimedia.org/thumb/lisbon.jpg", media: { kind: "place", images: [{ source: "commons.wikimedia.org", license: "CC BY-SA 4.0" }] } });
+  });
+});
+
+describe("the fast card when every page turns the server away", () => {
+  const car: Draft = { title: "Aston Martin DB11", kind: "own", summary: "An Aston Martin DB11.", specifics: [], region: "US", currency: "USD", unknowns: [] };
+  const titles = [
+    { url: OLDCARS, title: "Aston Martin DB11 Price History" },
+    { url: KBB, title: "2020 Aston Martin DB11 Price, Value & Reviews | Kelley Blue Book" },
+    { url: DEALER, title: "Aston Martin DB11 for sale | Dealer" },
+  ];
+
+  it("stands on the search's own figure as an estimate, named for the wish, with a photo of the car itself", async () => {
+    // The model named the bare site; the search had returned that site's page about the car.
+    const meta = metaOf(() => searched(["https://oldcarsdata.com | $110,500 | USD", `${KBB} | $128,000 | USD`], titles));
+    const card = await quickFind(meta, { words: "aston martin db11", draft: car, homeCurrency: "USD" }, ctx());
+    expect(card).toMatchObject({
+      label: "Aston Martin DB11",
+      url: OLDCARS,
+      upfrontCents: 11_050_000,
+      status: "estimate",
+      statusLabel: "Estimate: from search results for oldcarsdata.com",
+      confidence: "low",
+      imageUrl: "https://upload.wikimedia.org/thumb/db11.jpg",
+      media: { kind: "vehicle", images: [{ source: "commons.wikimedia.org" }] },
+    });
+  });
+
+  it("passes over a figure far from the search's others", async () => {
+    const meta = metaOf(() => searched([`${OLDCARS} | $9 | USD`, `${KBB} | $128,000 | USD`, `${DEALER} | $119,000 | USD`], titles));
+    const card = await quickFind(meta, { words: "aston martin db11", draft: car, homeCurrency: "USD" }, ctx());
+    expect(card).toMatchObject({ url: KBB, upfrontCents: 12_800_000 });
+  });
+
+  it("never takes the search's figure for a page the search didn't return, or one about something else", async () => {
+    const meta = metaOf(() => searched([`https://www.elsewhere.example/db11 | $110,500 | USD`, `${DEALER} | $119,000 | USD`], [{ url: DEALER, title: "Vantage V8 for sale | Dealer" }]));
+    expect(await quickFind(meta, { words: "aston martin db11", draft: car, homeCurrency: "USD" }, ctx())).toBeNull();
   });
 });
 

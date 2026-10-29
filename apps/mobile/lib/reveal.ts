@@ -89,7 +89,8 @@ export function thoughtOf(steps: Step[]): { text: string; mine: boolean } | null
   const t = steps.findLastIndex((s) => s.type === "note" && s.event?.kind === "thought");
   if (t >= 0 && t >= steps.length - 1 - THOUGHT_HOLD) return { text: (steps[t] as Extract<Step, { type: "note" }>).text, mine: true };
   for (let i = steps.length - 1; i >= 0; i--) {
-    const line = lineFor(steps[i]!);
+    // The server writes each step's line now; older runs carry none, so the app's own wording stands in.
+    const line = steps[i]!.line || lineFor(steps[i]!);
     if (line) return { text: line, mine: false };
   }
   return null;
