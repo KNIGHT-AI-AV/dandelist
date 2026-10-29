@@ -1,4 +1,5 @@
 import { entry, heroFor } from "@dandelist/catalogue";
+import { recurringBreakdown } from "@dandelist/cost";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { useEffect, useRef, useState, type ReactNode } from "react";
@@ -6,7 +7,9 @@ import { Animated, PanResponder, Pressable, ScrollView, StyleSheet, Text, View, 
 import { haptic, native, spring, useReducedMotion } from "../../lib/motion";
 import { formatCents } from "../../lib/money";
 import { fonts, layout, radius, shadow, type, usePalette, useType } from "../../lib/theme";
-import { hostOf, monthYearLong, monthlyOf, reachBy, shortDate, type PoolItem } from "../../lib/welcome";
+import { comfortableIncome } from "../../lib/comfort";
+import { hostOf, monthlyOf, shortDate, type PoolItem } from "../../lib/welcome";
+import { IncomeFader } from "./comfort";
 import { AgentDot, Eyebrow, Glass, Icon, PrimaryButton, QuietButton } from "../lux";
 import { Odometer, dollars } from "../odometer";
 import { Rise } from "./kit";
@@ -15,7 +18,7 @@ import { Rise } from "./kit";
  * What Dandelist is, before anything is asked (owner, 2026-10-28: "tell the user what this app is, extremely
  * interactive, with the same design and the same card"). Four photo cards in a deck that swipes and snaps, each with
  * one thing to touch: the things people want (tap through them), the agent checking a real price, what it costs to
- * keep (month, year, five years), and the date it becomes (drag). Every number on these cards is the catalogue's
+ * keep (month, year, five years), and what it would take (drag a year's income; the face answers). Every number on these cards is the catalogue's
  * real, checked figure. Log in sits underneath; there is no register, because the list itself is the sign-up.
  */
 
@@ -147,58 +150,13 @@ function KeepCost() {
   );
 }
 
-const MIN = 25_000;
-const MAX = 2_000_000;
-const toCents = (f: number) => Math.round((MIN * Math.pow(MAX / MIN, f)) / 5000) * 5000;
-const toFraction = (c: number) => Math.log(c / MIN) / Math.log(MAX / MIN);
-
-/** Card 4: drag what you'd put aside each month; the date moves with the thumb. */
-function WhenItsYours({ item }: { item: Pick<PoolItem, "name" | "upfrontCents"> }) {
-  const p = usePalette();
-  const [w, setW] = useState(0);
-  const [cents, setCents] = useState(300_000);
-  const start = useRef(0);
-  const hold = useRef(new Animated.Value(0)).current;
-  const set = (x: number) => {
-    const c = toCents(Math.max(0, Math.min(1, x / (w || 1))));
-    if (c !== cents) setCents(c);
-  };
-  const pan = PanResponder.create({
-    // The deck scrolls sideways too; the thumb claims the gesture first and keeps it.
-    onStartShouldSetPanResponderCapture: () => true,
-    onMoveShouldSetPanResponderCapture: () => true,
-    onPanResponderTerminationRequest: () => false,
-    onPanResponderGrant: (e) => {
-      start.current = e.nativeEvent.locationX;
-      set(start.current);
-      Animated.spring(hold, { toValue: 1, ...spring.press, useNativeDriver: native }).start();
-    },
-    onPanResponderMove: (_e, g) => set(start.current + g.dx),
-    onPanResponderRelease: () => Animated.spring(hold, { toValue: 0, ...spring.press, useNativeDriver: native }).start(),
-  });
-  const f = toFraction(cents);
+/** Card 4: what it would take. Slide a year's income and the face says how comfortably it carries the wish. */
+function WhatItTakes({ item }: { item: Pick<PoolItem, "upfrontCents"> & Partial<Pick<PoolItem, "recurring">> }) {
+  const keepPerYear = recurringBreakdown([{ id: "card", upfrontCents: 0, recurring: item.recurring ?? [] }]).perYear;
+  const [income, setIncome] = useState(() => comfortableIncome(item.upfrontCents, keepPerYear));
   return (
-    <Glass intensity={50} style={{ borderRadius: radius.control, borderCurve: "continuous", padding: 14, gap: 12 }}>
-      <Text style={[type.title3, { color: p.ink }]}>
-        {"Yours by "}
-        <Text style={{ fontFamily: fonts.titleItalic, color: p.accentText }}>{monthYearLong(reachBy(item.upfrontCents, cents))}</Text>
-      </Text>
-      <View
-        onLayout={(e) => setW(e.nativeEvent.layout.width)}
-        {...pan.panHandlers}
-        accessibilityRole="adjustable"
-        accessibilityLabel="Put aside each month"
-        accessibilityValue={{ text: `${dollars(cents)} a month` }}
-        accessibilityActions={[{ name: "increment" }, { name: "decrement" }]}
-        onAccessibilityAction={(e) => setCents(toCents(Math.max(0, Math.min(1, f + (e.nativeEvent.actionName === "increment" ? 0.06 : -0.06)))))}
-        style={{ height: 36, justifyContent: "center" }}
-      >
-        <View style={{ height: 3, borderRadius: 1.5, backgroundColor: p.track }}>
-          <View style={{ height: 3, borderRadius: 1.5, width: `${f * 100}%`, backgroundColor: p.accent }} />
-        </View>
-        <Animated.View pointerEvents="none" style={{ position: "absolute", left: `${f * 100}%`, marginLeft: -12, width: 24, height: 24, borderRadius: 12, backgroundColor: p.ink, boxShadow: shadow.thumb, transform: [{ scale: hold.interpolate({ inputRange: [0, 1], outputRange: [1, 1.15] }) }] }} />
-      </View>
-      <Text style={[type.figure, { color: p.ink2 }]}>{`${dollars(cents)} a month for the ${item.name}, ${dollars(item.upfrontCents)}`}</Text>
+    <Glass intensity={50} style={{ borderRadius: radius.control, borderCurve: "continuous", padding: 14 }}>
+      <IncomeFader compact size={26} incomeCents={income} totalCents={item.upfrontCents} keepPerYearCents={keepPerYear} onChange={setIncome} />
     </Glass>
   );
 }
@@ -277,8 +235,8 @@ export function Intro({ pool, onStart, onLogIn }: { pool: PoolItem[]; onStart():
             <Card index={2} width={cardW} height={cardH} scrollX={scrollX} uri={photo(PELOTON)} title={<>And what it costs to {em("keep", p.accentText)}.</>} body="Memberships, insurance, upkeep and fuel, itemised, with the rate behind each one.">
               <KeepCost />
             </Card>
-            <Card index={3} width={cardW} height={cardH} scrollX={scrollX} uri={photo(pin)} title={<>Then {em("when", p.accentText)} it's yours.</>} body="Set what you could put aside each month. The date moves with you.">
-              <WhenItsYours item={pin} />
+            <Card index={3} width={cardW} height={cardH} scrollX={scrollX} uri={photo(pin)} title={<>And what it would {em("take", p.accentText)}.</>} body="Slide to a year's income and see how comfortably it carries what you want.">
+              <WhatItTakes item={pin} />
             </Card>
           </Animated.ScrollView>
         ) : null}

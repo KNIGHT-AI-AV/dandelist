@@ -1,13 +1,12 @@
 import { heroFor } from "@dandelist/catalogue";
 import { useEffect, useRef, useState } from "react";
 import { LinearGradient } from "expo-linear-gradient";
-import { Animated, PanResponder, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions, type LayoutChangeEvent } from "react-native";
+import { Animated, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions, type LayoutChangeEvent } from "react-native";
 import { ease, haptic, native, spring, usePress, useReducedMotion } from "../../lib/motion";
 import { formatCents } from "../../lib/money";
-import { fonts, layout, radius, shadow, type, usePalette, useType } from "../../lib/theme";
-import { hostOf, monthYearLong, monthlyOf, reachBy, shortDate, type PoolItem, type When } from "../../lib/welcome";
+import { fonts, layout, radius, type, usePalette, useType } from "../../lib/theme";
+import { hostOf, monthlyOf, shortDate, type PoolItem, type When } from "../../lib/welcome";
 import { Eyebrow, Glass, Money, PrimaryButton, QuietButton, Shade } from "../lux";
-import { dollars } from "../odometer";
 import { GlassReveal } from "../reveal";
 import { Chip, Rise } from "./kit";
 
@@ -194,129 +193,6 @@ export function WhenStep({ value, onPick }: { value: When | null | undefined; on
             </View>
           ))}
         </View>
-      </Rise>
-    </View>
-  );
-}
-
-const MIN = 5_000;
-const MAX = 1_000_000;
-const DETENTS = [10_000, 25_000, 50_000, 100_000, 250_000, 500_000];
-const toCents = (f: number) => Math.round((MIN * Math.pow(MAX / MIN, f)) / 1000) * 1000;
-const toFraction = (c: number) => Math.log(c / MIN) / Math.log(MAX / MIN);
-const THUMB = 28;
-
-/** "Yours by" and the month, which crossfades with a 4 px rise only when the month changes. */
-function YoursBy({ by }: { by: string }) {
-  const p = usePalette();
-  const reduced = useReducedMotion();
-  const [shown, setShown] = useState(by);
-  const v = useRef(new Animated.Value(1)).current;
-  useEffect(() => {
-    if (by === shown) return;
-    if (reduced) return setShown(by);
-    Animated.timing(v, { toValue: 0, duration: 75, easing: ease.out, useNativeDriver: native }).start(() => {
-      setShown(by);
-      Animated.timing(v, { toValue: 1, duration: 150, easing: ease.out, useNativeDriver: native }).start();
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [by]);
-  return (
-    <Text style={[type.title2, { color: p.ink }]} accessibilityLiveRegion="polite">
-      {"Yours by "}
-      <Animated.Text style={{ fontFamily: fonts.titleItalic, color: p.accentText, opacity: v, transform: [{ translateY: v.interpolate({ inputRange: [0, 1], outputRange: [4, 0] }) }] }}>{shown}</Animated.Text>
-    </Text>
-  );
-}
-
-/**
- * Step 5: what could you set aside each month? A log slider from $50 to $10,000. The amount follows the thumb
- * instantly and rolls on detents; the date it buys is the payoff, set large (UI audit P1-19). While the thumb is
- * held it grows and a glass lens above it shows the amount.
- */
-export function Aside({ value, totalCents, onChange, onDone }: { value: number; totalCents: number; onChange(c: number): void; onDone(): void }) {
-  const p = usePalette();
-  const t = useType();
-  const { width: winW } = useWindowDimensions();
-  const [w, setW] = useState(0);
-  const [held, setHeld] = useState(false);
-  const [snap, setSnap] = useState(false);
-  const last = useRef(value);
-  const startX = useRef(0);
-  const hold = useRef(new Animated.Value(0)).current;
-  const set = (x: number) => {
-    const f = Math.max(0, Math.min(1, x / (w || 1)));
-    let c = toCents(f);
-    const near = DETENTS.find((d) => Math.abs(toFraction(d) - f) < 0.012);
-    if (near) c = near;
-    const detent = DETENTS.includes(c) && c !== last.current;
-    if (detent) haptic.select();
-    setSnap(detent);
-    last.current = c;
-    onChange(c);
-  };
-  const grab = (on: boolean) => {
-    setHeld(on);
-    Animated.spring(hold, { toValue: on ? 1 : 0, ...spring.press, useNativeDriver: native }).start();
-  };
-  const pan = PanResponder.create({
-    onStartShouldSetPanResponder: () => true,
-    onMoveShouldSetPanResponder: () => true,
-    onPanResponderGrant: (e) => {
-      grab(true);
-      startX.current = e.nativeEvent.locationX;
-      set(startX.current);
-    },
-    onPanResponderMove: (_e, g) => set(startX.current + g.dx),
-    onPanResponderRelease: () => grab(false),
-    onPanResponderTerminate: () => grab(false),
-  });
-  const f = toFraction(value);
-  const by = monthYearLong(reachBy(totalCents, value));
-  const gutter = layout.gutter(winW);
-  const lens = `${dollars(value)}/mo`;
-  const lensW = Math.max(72, Math.ceil(lens.length * 7.4) + 20);
-  const lensX = Math.max(0, Math.min(w - lensW, f * w - lensW / 2));
-  return (
-    <View style={{ flex: 1, justifyContent: "center", paddingHorizontal: gutter, gap: layout.stack.section, maxWidth: layout.column + 2 * gutter, width: "100%", alignSelf: "center" }}>
-      <Rise style={{ gap: layout.stack.tight }}>
-        <Eyebrow>Each month</Eyebrow>
-        <Text accessibilityRole="header" style={[t.title1, { color: p.ink }]}>
-          {"What could you set aside each month?"}
-        </Text>
-        <Text style={[type.callout, { color: p.ink2, marginTop: 8 }]}>It turns the price into a date. It stays on this device until you save.</Text>
-      </Rise>
-      <Rise delay={50} style={{ gap: 20 }}>
-        <Money cents={value} size="hero" format={dollars} mode={held && !snap ? "instant" : "ui"} />
-        <View
-          onLayout={(e: LayoutChangeEvent) => setW(e.nativeEvent.layout.width)}
-          {...pan.panHandlers}
-          accessibilityRole="adjustable"
-          accessibilityLabel="Monthly amount"
-          accessibilityValue={{ text: formatCents(value) }}
-          accessibilityActions={[{ name: "increment" }, { name: "decrement" }]}
-          onAccessibilityAction={(e) => onChange(toCents(Math.max(0, Math.min(1, f + (e.nativeEvent.actionName === "increment" ? 0.05 : -0.05)))))}
-          style={{ height: 44, justifyContent: "center" }}
-        >
-          <View style={{ height: 3, borderRadius: 1.5, backgroundColor: p.track }}>
-            <View style={{ height: 3, borderRadius: 1.5, width: `${f * 100}%`, backgroundColor: p.accent }} />
-          </View>
-          {DETENTS.map((d) => (
-            <View key={d} pointerEvents="none" style={{ position: "absolute", left: `${toFraction(d) * 100}%`, width: 1, height: 9, backgroundColor: p.ink4 }} />
-          ))}
-          <Animated.View pointerEvents="none" style={{ position: "absolute", left: `${f * 100}%`, marginLeft: -THUMB / 2, width: THUMB, height: THUMB, borderRadius: THUMB / 2, backgroundColor: p.ink, boxShadow: shadow.thumb, transform: [{ scale: hold.interpolate({ inputRange: [0, 1], outputRange: [1, 1.12] }) }] }} />
-          {/* The lens: glass above the thumb that shows the amount while it's held. */}
-          <Animated.View pointerEvents="none" style={{ position: "absolute", left: lensX, bottom: 44, opacity: hold, transform: [{ translateY: hold.interpolate({ inputRange: [0, 1], outputRange: [6, 0] }) }] }}>
-            <Glass intensity={50} style={{ width: lensW, height: 32, borderRadius: radius.pill, alignItems: "center", justifyContent: "center" }}>
-              <Text style={[type.figure, { color: p.ink }]}>{lens}</Text>
-            </Glass>
-          </Animated.View>
-        </View>
-        <YoursBy by={by} />
-      </Rise>
-      <Rise delay={100} style={{ gap: 4 }}>
-        <PrimaryButton label="Show me my list" onPress={onDone} />
-        <QuietButton label="Use $500 for now" onPress={() => { onChange(50_000); onDone(); }} />
       </Rise>
     </View>
   );
