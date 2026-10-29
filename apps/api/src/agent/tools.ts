@@ -365,8 +365,8 @@ export function pageNamesItem(page: Pick<PageResult, "title" | "text">, label: s
 }
 
 /** True when the page shows this amount, written any common way: 2495, 2,495, 2,495.00, 2.495,00. */
-export function pageShowsPrice(page: Pick<PageResult, "text" | "structuredPrices">, amount: number): boolean {
-  if (page.structuredPrices.some((p) => Math.abs(p.amount - amount) < 0.005)) return true;
+/** Every place a text states this amount, however it is written there, with the words just before and after it. */
+export function priceMentions(text: string, amount: number, around = 24): { before: string; after: string }[] {
   const whole = Math.floor(amount);
   const cents = Math.round((amount - whole) * 100);
   const grouped = whole.toLocaleString("en-US");
@@ -376,6 +376,17 @@ export function pageShowsPrice(page: Pick<PageResult, "text" | "structuredPrices
   }
   const c = String(cents).padStart(2, "0");
   forms.add(`${grouped}.${c}`).add(`${whole}.${c}`).add(`${grouped.replace(/,/g, ".")},${c}`).add(`${whole},${c}`);
-  const text = page.text.replace(/ /g, " ");
-  return [...forms].some((f) => new RegExp(`(^|[^0-9.,])${f.replace(/[.]/g, "\\.")}(?![0-9]|[.,][0-9])`).test(text));
+  const flat = text.replace(/\u00a0/g, " ");
+  const out: { before: string; after: string }[] = [];
+  for (const f of forms) {
+    for (const m of flat.matchAll(new RegExp(`(^|[^0-9.,])${f.replace(/[.]/g, "\\.")}(?![0-9]|[.,][0-9])`, "g"))) {
+      const at = (m.index ?? 0) + m[1]!.length;
+      out.push({ before: flat.slice(Math.max(0, at - around), at), after: flat.slice(at + f.length, at + f.length + around) });
+    }
+  }
+  return out;
+}
+
+export function pageShowsPrice(page: Pick<PageResult, "text" | "structuredPrices">, amount: number): boolean {
+  return page.structuredPrices.some((p) => Math.abs(p.amount - amount) < 0.005) || priceMentions(page.text, amount).length > 0;
 }
