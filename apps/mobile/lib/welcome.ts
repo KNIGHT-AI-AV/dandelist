@@ -10,7 +10,9 @@ import type { NewWish, WishKind } from "./wishes";
 /**
  * The pre-login experience, rebuilt from the owner's walkthrough (2026-10-28): what Dandelist is, then the first
  * thing someone wants (typed, said or tapped), priced for real by the agent while they play this or that from the
- * pool, then when they want it all. Everything here stays on this device until they save it to an account.
+ * pool, then when they want it all. Everything here is kept on this device until they save it to an account; the
+ * first wish, the picks and a spoken clip go to the server only to be priced, previewed and written down, and the
+ * server stores none of them (the privacy page says so; keep the two in step).
  */
 
 export type PoolGroup = "travel" | "things" | "home";

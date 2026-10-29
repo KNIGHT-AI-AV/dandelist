@@ -7,7 +7,7 @@ import type { LegalSection } from "../components/legal";
  * https://dandelist.knightaiav.com/legal?section=deletion
  */
 
-export const PRIVACY_UPDATED = "Last updated October 28, 2026";
+export const PRIVACY_UPDATED = "Last updated October 29, 2026";
 export const PRIVACY: LegalSection[] = [
   {
     heading: "What Dandelist is",
@@ -21,13 +21,14 @@ export const PRIVACY: LegalSection[] = [
       "Your email address, so you can sign in. If you sign in with Apple, Google, GitHub or Facebook, we receive your email address and, when the service shares it, your name. From Facebook we ask only for your public profile and your email address.",
       "If you add them in Settings, a display name, a profile photo and where you would like to live. You can change or remove each of them at any time.",
       "The wishes you add: what you describe, the prices and sources the agent found, and the choices you make, such as your monthly amount, your timeline and your theme.",
-      "Before you create an account, your picks stay on your device. They are sent to us only when you save them to an account.",
+      "Before you create an account, your picks and your first wish are kept on your device, not in an account. To price that wish and preview your list, the app sends them to our server, which passes them to Meta's Model API. We don't store them; they join an account only when you save your list to one.",
     ],
   },
   {
     heading: "How the agent uses your words",
     body: [
       "To price a wish, we send what you typed, and the answers you give to its questions, to Meta's Model API, which runs the Muse Spark model. The agent then searches the web and reads sellers' pages to check prices.",
+      "If you say a wish instead of typing it, the recording goes to Meta's Model API to be written down. We don't store the recording.",
       "When you ask for facts about your list in Settings, we send your wishes and the place you would like to live, so the agent can write them.",
       "We don't send your email address or name to Meta. We use Meta's standard models, not the modes that let Meta train on your data.",
     ],
