@@ -4,16 +4,8 @@ import { usePress } from "../../lib/motion";
 import { layout, radius, space, type, usePalette } from "../../lib/theme";
 import { Glass, Icon } from "../lux";
 
-/** A drawn magnifier, like lux's icons: a 1.5 px ring and a short handle. */
-function SearchGlyph({ color, size = 16 }: { color: string; size?: number }) {
-  const ring = size * 0.66;
-  return (
-    <View style={{ width: size, height: size }} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-      <View style={{ position: "absolute", left: 0, top: 0, width: ring, height: ring, borderRadius: ring / 2, borderWidth: 1.5, borderColor: color }} />
-      <View style={{ position: "absolute", left: ring * 0.86, top: ring * 0.98, width: size * 0.36, height: 1.5, borderRadius: 1, backgroundColor: color, transform: [{ rotate: "45deg" }] }} />
-    </View>
-  );
-}
+/** The row's 16 pt slot for the magnifier, which is drawn at 18 so it keeps the size of the drawn glyph before it. */
+const SLOT = 16;
 
 /** The search bar on the Details page: glass, the control radius, a clear button once there is something to clear. */
 export function SearchField({ value, onChangeText, placeholder }: { value: string; onChangeText(v: string): void; placeholder: string }) {
@@ -24,7 +16,9 @@ export function SearchField({ value, onChangeText, placeholder }: { value: strin
   return (
     <Glass style={{ borderRadius: radius.control, borderWidth: 1, borderColor: focused ? p.ink2 : p.line }}>
       <View style={{ minHeight: layout.control.field, flexDirection: "row", alignItems: "center", paddingLeft: layout.stack.base, gap: space[12] }}>
-        <SearchGlyph color={p.ink3} />
+        <View style={{ width: SLOT, height: SLOT, alignItems: "center", justifyContent: "center" }}>
+          <Icon name="search" color={p.ink3} size={18} />
+        </View>
         <TextInput
           ref={input}
           value={value}
