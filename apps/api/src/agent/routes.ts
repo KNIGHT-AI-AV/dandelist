@@ -67,7 +67,11 @@ const photoBody = z.object({
   summary: z.string().trim().max(400).optional(),
   place: z.string().trim().max(120).optional(),
   exclude: z.array(z.string().max(2000)).max(20).default([]),
+  /** The page the wish was priced on: its own product photo is usually the very thing. */
+  page: z.string().url().max(2000).optional(),
 });
+/** A retake's model calls at most: two looks at the photo turned down, the plan, a web search, and two looks at each of up to 12 candidates. */
+const CALLS_PER_RETAKE = 28;
 
 /** A run started from words alone holds this until the draft is read, a few seconds in. */
 const pendingDraft = (text: string): Draft => ({ title: text.slice(0, 120), kind: "buy", summary: text.slice(0, 400), specifics: [], region: "US", currency: "USD", unknowns: [] });
@@ -192,11 +196,13 @@ export function agentRoutes(deps: AgentDeps) {
     if (!body.success) return c.json({ error: "Say which wish needs a photo." }, 400);
     const userId = c.get("userId");
     const used = await db.query<{ n: string | number }>("select count(*) as n from spend_ledger where user_id = $1 and kind = 'photo' and created_at > $2", [userId, new Date(deps.now().getTime() - CACHE_MS).toISOString()]);
-    // A retake is about three model calls: the plan, a web search and its answer.
-    if (Number(used.rows[0]?.n ?? 0) >= RETAKES_PER_USER_PER_DAY * 3) return c.json({ error: `That's today's ${RETAKES_PER_USER_PER_DAY} new photos.` }, 429);
+    if (Number(used.rows[0]?.n ?? 0) >= RETAKES_PER_USER_PER_DAY * CALLS_PER_RETAKE) return c.json({ error: `That's today's ${RETAKES_PER_USER_PER_DAY} new photos.` }, 429);
     try {
-      const { exclude, ...subject } = body.data;
-      const found = await findPhoto(metaFor(userId, "photo"), subject, { fetcher: deps.webFetch ?? publicFetch, exclude, deep: true, by: Date.now() + RETAKE_MS });
+      // A retake means the person turned the last photo down (owner, 2026-10-29: "human clicked retake so that means I
+      // stupidly picked this photo for 1 of 1000 reasons like not the right watch"): every new photo is held up against
+      // the one turned down, and the hunt looks wider.
+      const { exclude, page, ...subject } = body.data;
+      const found = await findPhoto(metaFor(userId, "photo"), subject, { fetcher: deps.webFetch ?? publicFetch, exclude, deep: true, pages: page ? [page] : [], by: Date.now() + RETAKE_MS });
       if (!found) return c.json({ error: "No better photo turned up this time. Try again in a moment." }, 404);
       return c.json({ photo: { imageUrl: found.image.url, media: { kind: found.kind, images: [found.image] }, how: found.how } });
     } catch (e) {

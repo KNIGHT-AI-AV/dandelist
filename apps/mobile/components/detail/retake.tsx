@@ -25,7 +25,7 @@ export function RetakePhoto({ wish }: { wish: Wish }) {
     setBusy(true);
     setError(null);
     try {
-      const found = await retakePhoto(api, { title: wish.name, kind: wish.kind }, shown);
+      const found = await retakePhoto(api, { title: wish.name, kind: wish.kind, ...(a?.url ? { page: a.url } : {}) }, shown);
       await setPhoto(wish.id, { imageUrl: found.imageUrl, media: withNewPhoto(a?.media, found) });
       haptic.success();
     } catch (e) {

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { safeGet, type Fetcher } from "./tools";
+import { readCapped, safeGet, type Fetcher } from "./tools";
 
 /**
  * Media hunting: real photos first, at the highest resolution we can find, with their source and credit. Products
@@ -153,11 +153,23 @@ export interface ProbedImage extends ImageInfo {
 const PROBE_BYTES = 256 * 1024;
 const PROBE_TIMEOUT_MS = 6000;
 
+/**
+ * Wikimedia's hosts answer a script that names itself, and turn away one dressed as a browser (measured 2026-10-29:
+ * Wikipedia and Commons originals "didn't open as an image" under the browser agent, among them a Leica Q3 lead photo).
+ */
+const wikimediaAgent = (raw: string): Record<string, string> => {
+  try {
+    return /(^|\.)wikimedia\.org$/.test(new URL(raw).hostname) ? { "User-Agent": COMMONS_UA } : {};
+  } catch {
+    return {};
+  }
+};
+
 /** Reads just enough of an image to learn its size. Public hosts only, like every other fetch the agent makes. */
 export async function probeImage(raw: string, fetcher: Fetcher): Promise<ProbedImage | null> {
   try {
     // Asking for JPEG or PNG first: CDNs like Shopify's otherwise answer a .jpg link with WebP, which can't be cut out.
-    const { res, url } = await safeGet(raw, fetcher, { Accept: "image/jpeg,image/png;q=0.9,image/*;q=0.5", Range: "bytes=0-131071" }, PROBE_TIMEOUT_MS);
+    const { res, url } = await safeGet(raw, fetcher, { Accept: "image/jpeg,image/png;q=0.9,image/*;q=0.5", Range: "bytes=0-131071", ...wikimediaAgent(raw) }, PROBE_TIMEOUT_MS);
     if (!(res.ok || res.status === 206) || !/^image\//i.test(res.headers.get("content-type") ?? "")) {
       await res.body?.cancel().catch(() => undefined);
       return null;
@@ -180,6 +192,51 @@ export async function probeImage(raw: string, fetcher: Fetcher): Promise<ProbedI
   } catch {
     return null;
   }
+}
+
+/** The most a photo may weigh when its bytes go to a vision check. */
+const CHECK_BYTES = 6 * 1024 * 1024;
+/** Wide enough to judge a dial or a trim by, a fraction of a 4K original's bytes. */
+const CHECK_WIDTH = 1280;
+
+/**
+ * A photo as data for a vision check. Our server reads it (public hosts only) and the model is sent the bytes,
+ * because the model's own fetcher is turned away where ours isn't (measured 2026-10-29: Wikimedia answered it "not
+ * fetchable", Cartier 403). A Wikimedia photo comes as its 1280 px rendering when there is one. Null when nothing
+ * comes back as an image under 6 MB.
+ */
+export async function photoData(raw: string, fetcher: Fetcher): Promise<string | null> {
+  const tries = [...new Set([wikimediaRendering(raw, CHECK_WIDTH), raw].filter((u): u is string => !!u))];
+  for (const url of tries) {
+    try {
+      const { res } = await safeGet(url, fetcher, { Accept: "image/jpeg,image/png;q=0.9,image/webp;q=0.8,image/*;q=0.5", ...wikimediaAgent(url) }, PROBE_TIMEOUT_MS);
+      const type = (res.headers.get("content-type") ?? "").split(";")[0]!.trim().toLowerCase();
+      if (!res.ok || !/^image\/(jpeg|png|webp|gif|avif)$/.test(type)) {
+        await res.body?.cancel().catch(() => undefined);
+        continue;
+      }
+      const { bytes, truncated } = await readCapped(res, CHECK_BYTES);
+      if (!truncated && bytes.length) return `data:${type};base64,${bytes.toString("base64")}`;
+    } catch {
+      // The next address, if any.
+    }
+  }
+  return null;
+}
+
+/** Wikimedia's own rendering of a photo `width` px wide, from its original or another rendering; null elsewhere. */
+export function wikimediaRendering(raw: string, width: number): string | null {
+  let u: URL;
+  try {
+    u = new URL(raw);
+  } catch {
+    return null;
+  }
+  if (!/^(upload|thumb)\.wikimedia\.org$/.test(u.hostname)) return null;
+  const rendered = /^(\/wikipedia\/[^/]+\/thumb\/[0-9a-f]\/[0-9a-f]{2}\/[^/]+)\/\d+px-([^/]+)$/.exec(u.pathname);
+  if (rendered) return `https://upload.wikimedia.org${rendered[1]}/${width}px-${rendered[2]}`;
+  const original = /^\/wikipedia\/([^/]+)\/([0-9a-f])\/([0-9a-f]{2})\/([^/]+\.(?:jpe?g|png))$/i.exec(u.pathname);
+  return original ? `https://upload.wikimedia.org/wikipedia/${original[1]}/thumb/${original[2]}/${original[3]}/${original[4]}/${width}px-${original[4]}` : null;
 }
 
 /* ---------- finding larger originals ---------- */
@@ -336,10 +393,16 @@ export async function commonsPhotos(subject: string, fetcher: Fetcher, opts: { m
   if (!term) return [];
   const minWidth = opts.minWidth ?? 1600;
   const found = new Map<string, CommonsPhoto>();
+  // The exact phrase first, then each of its words somewhere in the title: a phrase like "hot air balloons over
+  // Goreme" is in no file's title (measured 2026-10-29: six wishes, nothing from Commons), while matching the words
+  // anywhere in a description brought warehouses for a private chef.
+  const words = term.split(" ").filter((w) => w.length > 1).map((w) => `intitle:${w}`).join(" ");
   const searches = [
     `intitle:"${term}" incategory:Featured_pictures_on_Wikimedia_Commons|Quality_images filetype:bitmap`,
     `"${term}" incategory:Featured_pictures_on_Wikimedia_Commons|Quality_images filetype:bitmap`,
     `intitle:"${term}" filetype:bitmap`,
+    `${words} incategory:Featured_pictures_on_Wikimedia_Commons|Quality_images filetype:bitmap`,
+    `${words} filetype:bitmap`,
   ];
   for (const gsrsearch of searches) {
     if (found.size >= (opts.limit ?? 24)) break;

@@ -15,7 +15,7 @@ import {
   type WishQuestion,
 } from "./agent";
 import type { MediaImage } from "./media";
-import { findPhoto, subjectOf, type FoundPhoto } from "./photos";
+import { fallbackPlan, findPhoto, photoPlan, subjectOf, verifyPhoto, type FoundPhoto } from "./photos";
 import { QUICK_MS, mediaKindOf, quickFind, subjectPhoto } from "./quick";
 import { within } from "./time";
 import { publicFetch } from "./tools";
@@ -164,22 +164,41 @@ export async function huntWish(meta: Meta, ctx: HuntContext): Promise<HuntResult
   });
   settledQuestions.catch(() => undefined);
   const questionsBy = async (ms: number) => (await within(settledQuestions, ms)) ?? draft.questions ?? [];
-  // A photo of the wish itself, for a card the research finds without one: the archive's or a trip's place, and the
-  // photo search's checked pick (one small model call, no web search), so a card never goes without a photo.
+  // A photo of the wish itself. Only a photo the vision checks passed goes on a card (owner, 2026-10-29, shown a
+  // Sky-Dweller wearing an Oyster Perpetual: "That can not happen", "Not any photo will do!!"): the hunt's own pick,
+  // or any other photo once it has passed the same two checks. One plan serves the hunt and those checks; the page the
+  // fast card was priced on joins the hunt, since its own product photo is usually the very thing.
+  const subject = subjectOf(draft);
+  const planned = photoPlan(meta, subject).catch(() => fallbackPlan(subject));
   const standIn = subjectPhoto(draft, { archive: ctx.archive, api: fetcher, by: t0 + RESEARCH_MS }).catch(() => null);
-  const searched = findPhoto(meta, subjectOf(draft), { fetcher, by: t0 + RESEARCH_MS }).catch(() => null);
+  const searched = findPhoto(meta, subject, { fetcher, by: t0 + RESEARCH_MS, plan: planned, pages: quick.then((q) => (q?.url ? [q.url] : [])) }).catch(() => null);
+  const passed = new Map<string, Promise<boolean>>();
+  const stands = (url: string) => {
+    let p = passed.get(url);
+    if (!p) passed.set(url, (p = planned.then((plan) => verifyPhoto(meta, url, plan, { fetcher })).then((v) => v.ok, () => false)));
+    return p;
+  };
+  searched.then((f) => f && passed.set(f.image.url, Promise.resolve(true)));
 
   const card: { fast: PriceOption | null; settled: boolean; told: Promise<void> } = { fast: null, settled: false, told: Promise.resolve() };
   const early = quick.then((q) => {
     if (!q || card.settled) return;
     card.fast = q;
     card.told = (async () => {
-      if (!q.imageUrl) {
-        const [stand, found] = await Promise.all([within(standIn, 2_500), within(searched, 2_500)]);
-        if (stand) {
+      // The hunt's checked pick first; else the card's own photo (its page's, or a stand-in) once it passes the
+      // checks; else no photo yet, and the full card brings the hunt's.
+      const own = q.imageUrl;
+      const [found, ownOk] = await Promise.all([within(searched, 5_000), own ? within(stands(own), 5_000) : Promise.resolve(null)]);
+      if (found) withPhoto(q, found);
+      else if (!own || !ownOk) {
+        const stand = await within(standIn, 500);
+        if (stand && stand.url !== own && (await within(stands(stand.url), 4_000))) {
           q.imageUrl = stand.url;
           q.media = { kind: mediaKindOf(draft)[0]!, images: [stand] };
-        } else if (found) withPhoto(q, found);
+        } else {
+          delete q.imageUrl;
+          delete q.media;
+        }
       }
       const questions = await questionsBy(2_000);
       await ctx.onProvisional?.({ options: [q], explanation: "", note: "", horizonYears: HORIZON_YEARS, draft, questions, provisional: true });
@@ -204,5 +223,19 @@ export async function huntWish(meta: Meta, ctx: HuntContext): Promise<HuntResult
   if (failure) console.warn("research failed; the fast card stands", (failure as Error).message);
   const questions = await questionsBy(Math.max(0, t0 + HUNT_STOP_MS - 2_000 - Date.now()));
   const [photo, found] = await Promise.all([within(standIn, Math.max(0, t0 + HUNT_STOP_MS - 2_000 - Date.now())), within(searched, Math.max(0, t0 + HUNT_STOP_MS - 2_000 - Date.now()))]);
-  return { ...mergeFast(draft, researched, card.fast, photo, found), draft: { ...draft, questions }, questions, provisional: false };
+  const merged = mergeFast(draft, researched, card.fast, photo, found);
+  // The full card's photo passes the checks too: the hunt's pick for a thing or a trip (one model looks the same from
+  // any seller); a listing's own photo for a home or a service, when it passes; otherwise none.
+  const best = merged.options[0];
+  if (best) {
+    if (found && (!best.imageUrl || photoTravels(draft, best))) withPhoto(best, found);
+    else if (best.imageUrl && !(await within(stands(best.imageUrl), Math.max(0, t0 + HUNT_STOP_MS - 1_500 - Date.now())))) {
+      if (found) withPhoto(best, found);
+      else {
+        delete best.imageUrl;
+        delete best.media;
+      }
+    }
+  }
+  return { ...merged, draft: { ...draft, questions }, questions, provisional: false };
 }

@@ -9,6 +9,7 @@ import { closestPage, mediaKindOf, namesWish, parseAmount, photoCandidates, quic
 import { priceBasis, priceMentions, structuredPrices } from "../src/agent/tools";
 import { listingData } from "../src/dream/pages";
 import { imageResponse, jpegHeader, pngHeader } from "./images";
+import { visionReply } from "./vision";
 
 /**
  * The fast first card (owner, 2026-10-29): the person's own wish, priced from a real page with that page's own photo,
@@ -345,6 +346,8 @@ describe("the whole hunt", () => {
     const meta = metaOf(async (b) => {
       calls.push(b);
       const format = b.text?.format?.name;
+      const vision = visionReply(b);
+      if (vision !== null) return result(vision);
       if (format === "wish_draft") {
         await opts.reading;
         return result(JSON.stringify({ ...DRAFT, questions: undefined }));

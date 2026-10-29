@@ -223,7 +223,8 @@ export interface FoundPhoto {
  * A retake (owner, 2026-10-29): the AI looks for a better photo of this wish with its context (what it is, what kind,
  * where), never one already shown.
  */
-export async function retakePhoto(api: Api, wish: { title: string; kind: Draft["kind"]; summary?: string }, exclude: string[]) {
+/** A better photo, never one in `exclude`; the first of those is the one being turned down. `page` is where the wish was priced. */
+export async function retakePhoto(api: Api, wish: { title: string; kind: Draft["kind"]; summary?: string; page?: string }, exclude: string[]) {
   return (await read<{ photo: FoundPhoto }>(await api("/agent/photo", json({ ...wish, exclude: exclude.filter(Boolean).slice(0, 20) })).catch(() => null), "Couldn't find a new photo.")).photo;
 }
 

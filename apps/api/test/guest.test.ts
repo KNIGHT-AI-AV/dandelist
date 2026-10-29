@@ -8,6 +8,7 @@ import { imageResponse, jpegHeader } from "./images";
 import { migrate, type Db } from "../src/db";
 import { GUEST_WISHES_PER_IP_PER_HOUR } from "../src/guest";
 import { ARCHIVE_PREFIX, fromArchive } from "../src/pool";
+import { visionReply } from "./vision";
 
 const clock = new Date("2026-10-28T12:00:00Z");
 const SHOP = "https://www.onepeloton.com/bike-plus";
@@ -23,6 +24,8 @@ const fakeMeta = (async (_url: string, init: RequestInit) => {
   metaCalls.push(body);
   const format = body.text?.format?.name;
   const tools = (body.tools ?? []).map((t: { name?: string; type: string }) => t.name ?? t.type);
+  const vision = visionReply(body);
+  if (vision !== null) return reply([message(vision)]);
   // The fast find: one bounded web search that names the seller's page.
   if (String(body.instructions ?? "").startsWith("You find, fast")) {
     return reply([{ type: "web_search_call", action: { query: "peloton bike+ price" }, results: [{ url: SHOP, title: "Peloton Bike+" }] }, message(`${SHOP} | $2,495.00 | USD`)]);
