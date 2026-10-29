@@ -1,4 +1,5 @@
 import { PGlite } from "@electric-sql/pglite";
+import { gunzipSync, inflateSync } from "node:zlib";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Shop hostnames resolve to a public documentation address, so no test touches real DNS.
@@ -51,14 +52,14 @@ const fakeWeb = (async (url: string | URL) => {
     : new Response("<html><body>Nothing here</body></html>", { status: 200, headers: { "content-type": "text/html" } });
 }) as unknown as typeof fetch;
 
-function makeApp(withMeta = true) {
+function makeApp(withMeta = true, webOrigins: string[] = []) {
   return createApp({
     db,
     mailer: { sendCode: async () => {} },
     jwtSecret: "test-secret-that-is-at-least-32-chars-long",
     codePepper: "test-pepper-16-chars",
     now: () => clock,
-    webOrigins: [],
+    webOrigins,
     meta: withMeta ? { apiKey: "test", fetch: fakeMeta } : undefined,
     spendCaps: { dailyUsd: 10, totalUsd: 120 },
     webFetch: fakeWeb,
@@ -110,6 +111,61 @@ describe("the pool", () => {
     expect(items.some((i) => i.id === `${ARCHIVE_PREFIX}gym-membership` || i.id === `${ARCHIVE_PREFIX}no-photos`)).toBe(false);
   });
 
+  it("compresses the same catalogue and archive payload without changing CORS or cache headers", async () => {
+    await seedArchive();
+    const origin = "https://dandelist.example";
+    const app = makeApp(false, [origin]);
+    const plain = await app.request("/guest/pool", { headers: { Origin: origin, "Accept-Encoding": "identity" } });
+    const plainBytes = Buffer.from(await plain.arrayBuffer());
+    const encoded = await app.request("/guest/pool", { headers: { Origin: origin, "Accept-Encoding": "gzip" } });
+    const encodedBytes = Buffer.from(await encoded.arrayBuffer());
+
+    expect(plain.status).toBe(200);
+    expect(encoded.status).toBe(200);
+    expect(plain.headers.get("content-encoding")).toBeNull();
+    expect(encoded.headers.get("content-encoding")).toBe("gzip");
+    expect(gunzipSync(encodedBytes)).toEqual(plainBytes);
+    expect(encodedBytes.length).toBeLessThan(plainBytes.length);
+    expect(encoded.headers.get("content-length")).toBeNull();
+    for (const response of [plain, encoded]) {
+      expect(response.headers.get("content-type")).toMatch(/^application\/json/);
+      expect(response.headers.get("cache-control")).toBe("public, max-age=300");
+      expect(response.headers.get("access-control-allow-origin")).toBe(origin);
+      expect(response.headers.get("vary")?.toLowerCase().split(/\s*,\s*/)).toEqual(expect.arrayContaining(["origin", "accept-encoding"]));
+    }
+    expect(metaCalls).toHaveLength(0);
+    console.info("pool fixture transfer bytes", { identity: plainBytes.length, gzip: encodedBytes.length });
+  });
+
+  it("keeps identity responses readable and honors accepted or refused encodings", async () => {
+    const app = makeApp(false);
+    const plain = await app.request("/guest/pool");
+    const plainBytes = Buffer.from(await plain.arrayBuffer());
+    expect(plain.headers.get("content-encoding")).toBeNull();
+    for (const accept of ["identity", "br", "gzip;q=0, deflate;q=0"]) {
+      const response = await app.request("/guest/pool", { headers: { "Accept-Encoding": accept } });
+      expect(response.status).toBe(200);
+      expect(response.headers.get("content-encoding")).toBeNull();
+      expect(Buffer.from(await response.arrayBuffer())).toEqual(plainBytes);
+    }
+    const deflated = await app.request("/guest/pool", { headers: { "Accept-Encoding": "gzip;q=0, deflate" } });
+    expect(deflated.headers.get("content-encoding")).toBe("deflate");
+    expect(inflateSync(Buffer.from(await deflated.arrayBuffer()))).toEqual(plainBytes);
+    expect(metaCalls).toHaveLength(0);
+  });
+
+  it("does not compress a sibling guest JSON response", async () => {
+    const response = await makeApp(false).request("/guest/wish", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Accept-Encoding": "gzip" },
+      body: JSON.stringify({ text: "a camera" }),
+    });
+    expect(response.status).toBe(503);
+    expect(response.headers.get("content-encoding")).toBeNull();
+    expect(await response.json()).toEqual({ error: "The agent isn't set up on this server." });
+    expect(metaCalls).toHaveLength(0);
+  });
+
   it("keeps only shapes it can price honestly", () => {
     const row = { id: "x", name: "X", kind: "stay", price_model: "per-night", domain: "Travel & places", typical: { low: 300, currency: "USD", unit: "a night" }, photos: [{ url: "u", width: 1, height: 1, source: "commons", photographer: null, license: "CC0" }] };
     expect(fromArchive(row, clock.toISOString())).toBeNull();
@@ -133,8 +189,10 @@ describe("pricing the first wish before sign-in", () => {
   });
 
   it("streams what it is, the agent's trail, the fast card with its own photo, then the checked price", async () => {
-    const res = await makeApp().request("/guest/wish", { method: "POST", headers: { "Content-Type": "application/json", "x-forwarded-for": "203.0.113.5" }, body: JSON.stringify({ text: "a peloton bike" }) });
+    const res = await makeApp().request("/guest/wish", { method: "POST", headers: { "Content-Type": "application/json", "Accept-Encoding": "gzip", "x-forwarded-for": "203.0.113.5" }, body: JSON.stringify({ text: "a peloton bike" }) });
     expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("text/event-stream");
+    expect(res.headers.get("content-encoding")).toBeNull();
     const evs = await events(res);
     // The draft goes out as soon as it is read, then again with the questions and the answer the hunt assumed.
     const drafts = evs.filter((e) => e.type === "draft");

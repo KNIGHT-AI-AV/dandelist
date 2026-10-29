@@ -1,6 +1,7 @@
 import { MetaApiError, MetaClient, TRANSCRIBE_MODEL } from "@dandelist/meta";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
+import { compress } from "hono/compress";
 import { streamSSE } from "hono/streaming";
 import { z } from "zod";
 import { answerSchema, draftSchema, type Meta, type PriceOption } from "./agent/agent";
@@ -93,7 +94,9 @@ export function guestRoutes(deps: AgentDeps & { pool: () => Promise<PoolItem[]> 
   const busy = (why: "hour" | "day") => (why === "hour" ? "That's a lot for one hour. Try again soon, or sign in." : "The agent is resting until tomorrow. Sign in to keep going.");
 
   // The pool for this or that. Cached briefly at the edge; it changes when the archive gains a photo set.
-  app.get("/pool", async (c) => c.json({ items: await deps.pool() }, 200, { "Cache-Control": "public, max-age=300" }));
+  app.get("/pool", compress({ contentTypeFilter: /^application\/json(?:;|$)/i }), async (c) =>
+    c.json({ items: await deps.pool() }, 200, { "Cache-Control": "public, max-age=300" }),
+  );
 
   // The first wish, priced for real: what it is, the agent's live trail, the fast card, then the best one by 60 s.
   app.post("/wish", async (c) => {
