@@ -170,17 +170,30 @@ export function Photo({ uri, style, contentPosition }: { uri?: string | null; ki
 }
 
 /** Drawn icons (no text glyphs): 1.5 px strokes, 17 px. */
-export function Icon({ name, color, size = 17 }: { name: "back" | "close" | "plus" | "check"; color?: string; size?: number }) {
+export function Icon({ name, color, size = 17 }: { name: "back" | "close" | "plus" | "check" | "palette"; color?: string; size?: number }) {
   const p = usePalette();
   const c = color ?? p.ink;
-  const bar = (len: number, rot: string, extra: ViewStyle = {}) => <View style={[{ position: "absolute", width: len, height: 1.5, borderRadius: 1, backgroundColor: c, transform: [{ rotate: rot }] }, extra]} />;
   const s = size;
+  const bar = (len: number, rot: string, extra: ViewStyle = {}) => <View style={[{ position: "absolute", width: len, height: 1.5, borderRadius: 1, backgroundColor: c, transform: [{ rotate: rot }] }, extra]} />;
+  // A ring or a filled dot of diameter d with its centre at (x, y), as fractions of the box.
+  const ring = (d: number, x: number, y: number) => <View style={{ position: "absolute", width: d * s, height: d * s, borderRadius: (d * s) / 2, borderWidth: 1.5, borderColor: c, left: x * s - (d * s) / 2, top: y * s - (d * s) / 2 }} />;
+  const dot = (d: number, x: number, y: number) => <View style={{ position: "absolute", width: d * s, height: d * s, borderRadius: (d * s) / 2, backgroundColor: c, left: x * s - (d * s) / 2, top: y * s - (d * s) / 2 }} />;
   return (
     <View style={{ width: s, height: s, alignItems: "center", justifyContent: "center" }} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-      {name === "back" ? (
+      {name === "palette" ? (
+        // A painter's palette in the same strokes: the round board, its thumb hole and three wells of paint.
         <>
-          {bar(s * 0.5, "-45deg", { top: s * 0.33, left: s * 0.3 })}
-          {bar(s * 0.5, "45deg", { top: s * 0.62, left: s * 0.3 })}
+          {ring(1, 0.5, 0.5)}
+          {ring(0.26, 0.66, 0.66)}
+          {dot(0.14, 0.3, 0.42)}
+          {dot(0.14, 0.42, 0.26)}
+          {dot(0.14, 0.62, 0.3)}
+        </>
+      ) : name === "back" ? (
+        // Each stroke's midpoint on the box's centre line, so the chevron sits centred in its circle.
+        <>
+          {bar(s * 0.5, "-45deg", { top: s * 0.33, left: s * 0.25 })}
+          {bar(s * 0.5, "45deg", { top: s * 0.62, left: s * 0.25 })}
         </>
       ) : name === "close" ? (
         <>

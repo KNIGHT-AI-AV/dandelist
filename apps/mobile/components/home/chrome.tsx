@@ -1,5 +1,4 @@
 import { useMemo, useRef } from "react";
-import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import { Animated, Pressable, View, useWindowDimensions } from "react-native";
@@ -11,7 +10,7 @@ import { usePress } from "../../lib/motion";
 import { PAGES, PAGE_COUNT, type PageId } from "../../lib/pager";
 import { layout, usePalette } from "../../lib/theme";
 import { Composer, KeyboardDock } from "../inputs";
-import { Wordmark } from "../lux";
+import { Icon, Wordmark } from "../lux";
 import { ListeningStrip, MicButton, useVoiceWish } from "../voice/say-wish";
 import { useHome } from "./bridge";
 import { offsetNode, usePager } from "./pager";
@@ -52,7 +51,6 @@ function Dots() {
   );
 }
 
-const PALETTE = require("../../assets/icons/palette.png");
 /** Narrower than this, the bar keeps the wordmark, dots and photo only; the theme stays a row in settings. */
 const PALETTE_FROM = 360;
 /** The space between the palette's touch area and the photo's, so one thumb never lands on both. */
@@ -63,7 +61,7 @@ const PALETTE_GAP = 12;
  * someone does not accidentally hit both ... no border or bubble"). A bare glyph in the theme's accent inside its
  * own 44 pt target; a press dims it, and a second tap while the chooser opens does nothing.
  */
-function PaletteButton() {
+export function PaletteButton() {
   const p = usePalette();
   const opening = useRef(false);
   const open = () => {
@@ -79,7 +77,7 @@ function PaletteButton() {
       onPress={open}
       style={({ pressed }) => ({ width: layout.control.icon, height: layout.control.icon, alignItems: "center", justifyContent: "center", opacity: pressed ? 0.55 : 1 })}
     >
-      <Image source={PALETTE} style={{ width: 22, height: 22 }} contentFit="contain" tintColor={p.accentText} />
+      <Icon name="palette" size={22} color={p.accentText} />
     </Pressable>
   );
 }
