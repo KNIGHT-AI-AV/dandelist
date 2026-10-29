@@ -336,14 +336,23 @@ describe("reading the fast find's answer and the pages", () => {
 
 describe("the whole hunt", () => {
   const FINAL_OPTIONS = [{ label: "Submariner Date at Chrono", seller: "Chrono", url: CHRONO, currency: "EUR", price: 9500, recurring: [], evidence: "9.500 €", confidence: "high", parts: [] }];
-  /** A fake model for every call of a hunt; `slow` holds the research's final answer back until released. */
-  function huntMeta(opts: { slow?: Promise<void>; failResearch?: boolean; lines?: string[] } = {}) {
+  /**
+   * A fake model for every call of a hunt; `slow` holds the research's final answer back until released, `reading`
+   * holds the draft back and `asking` the questions.
+   */
+  function huntMeta(opts: { slow?: Promise<void>; failResearch?: boolean; lines?: string[]; reading?: Promise<void>; asking?: Promise<void> } = {}) {
     const calls: Body[] = [];
     const meta = metaOf(async (b) => {
       calls.push(b);
       const format = b.text?.format?.name;
-      if (format === "wish_draft") return result(JSON.stringify({ ...DRAFT, questions: undefined }));
-      if (format === "wish_questions") return result(JSON.stringify({ questions: DRAFT.questions }));
+      if (format === "wish_draft") {
+        await opts.reading;
+        return result(JSON.stringify({ ...DRAFT, questions: undefined }));
+      }
+      if (format === "wish_questions") {
+        await opts.asking;
+        return result(JSON.stringify({ questions: DRAFT.questions }));
+      }
       if (String(b.instructions ?? "").startsWith("You find, fast")) return searched(opts.lines ?? [`${ROLEX} | $10,250 | USD`], [{ url: ROLEX, title: "Submariner Date | Rolex" }, { url: CHRONO, title: "Rolex Submariner Date 126610LN" }]);
       if (String(b.instructions ?? "").startsWith("You are Dandelist's price researcher")) {
         if (opts.failResearch) throw new Error("research went down");
@@ -378,7 +387,7 @@ describe("the whole hunt", () => {
     // Both are checked on their own pages, so the research's cheaper find leads, and the fast card stays an option.
     expect(done.options.map((o) => o.url)).toEqual([CHRONO, ROLEX]);
     expect(done.options[0]).toMatchObject({ status: "verified", upfrontCents: 1_026_000 });
-    // Nothing waited on the questions: the research started from the draft alone, beside the questions' own call.
+    // The person answered nothing, so the brief carries no answers of theirs; the questions had their own call.
     const brief = calls.find((c) => String(c.instructions ?? "").startsWith("You are Dandelist's price researcher"))!;
     expect(brief.input).not.toContain("The person answered");
     expect(calls.some((c) => c.text?.format?.name === "wish_questions")).toBe(true);
@@ -386,10 +395,46 @@ describe("the whole hunt", () => {
     expect(brief.tools.map((t: { name?: string; type: string }) => t.name ?? t.type)).toEqual(["web_search", "get_page", "fx_rate"]);
   });
 
+  it("asks its questions from the person's words at once, so the research prices their picks when they're in hand", async () => {
+    // The wish takes a moment to read, as it does live (about 7 s); the questions answer first.
+    const { meta, calls } = huntMeta({ reading: new Promise((r) => setTimeout(r, 30)) });
+    const drafts: Draft[] = [];
+    const done = await huntWish(meta, { ...base(), text: "A Rolex Submariner date in steel", onDraft: (d) => void drafts.push(d) });
+    const asked = calls.find((c) => c.text?.format?.name === "wish_questions")!;
+    // Asked beside reading the wish, from the person's own words, not from a draft.
+    expect(calls.indexOf(asked)).toBeLessThan(calls.findIndex((c) => String(c.instructions ?? "").startsWith("You find, fast")));
+    expect(asked.input).toBe('Wish: "A Rolex Submariner date in steel"\nThey budget in USD.');
+    expect(asked.instructions).toContain("29 October 2026");
+    // In hand before the research started: its brief prices the agent's picks, and the draft went out once, with them.
+    const brief = calls.find((c) => String(c.instructions ?? "").startsWith("You are Dandelist's price researcher"))!;
+    expect(brief.input).toContain("They didn't say, so price the most likely: Which bracelet? Oyster");
+    expect(drafts).toHaveLength(1);
+    expect(drafts[0]).toMatchObject({ title: "Rolex Submariner Date", questions: [{ id: "bracelet", picked: "Oyster", answered: false }] });
+    expect(done.questions).toEqual([{ id: "bracelet", label: "Which bracelet?", options: ["Oyster", "Jubilee"], picked: "Oyster", answered: false }]);
+  });
+
+  it("never holds the research for slow questions, and still brings them to the card", async () => {
+    let answer!: () => void;
+    const { meta, calls } = huntMeta({ asking: new Promise<void>((r) => (answer = r)) });
+    const drafts: Draft[] = [];
+    const hunt = huntWish(meta, { ...base(), text: "A Rolex Submariner date in steel", onDraft: (d) => void drafts.push(d) });
+    const researching = () => calls.find((c) => String(c.instructions ?? "").startsWith("You are Dandelist's price researcher"));
+    await vi.waitFor(() => expect(researching()).toBeDefined());
+    expect(researching()!.input).not.toContain("They didn't say");
+    answer();
+    const done = await hunt;
+    expect(calls.filter((c) => c.text?.format?.name === "wish_questions")).toHaveLength(1);
+    expect(drafts[0]!.questions ?? []).toEqual([]);
+    expect(drafts.at(-1)).toMatchObject({ questions: [{ id: "bracelet", picked: "Oyster", answered: false }] });
+    expect(done.questions).toEqual([{ id: "bracelet", label: "Which bracelet?", options: ["Oyster", "Jubilee"], picked: "Oyster", answered: false }]);
+  });
+
   it("hunts again with the person's own answer, free text included, without reading the wish again", async () => {
     const { meta, calls } = huntMeta();
     const done = await huntWish(meta, { ...base(), text: "A Rolex Submariner date in steel", draft: DRAFT, answers: [{ question: "bracelet", answer: "Jubilee, two-tone" }] });
     expect(calls.some((c) => c.text?.format?.name === "wish_draft")).toBe(false);
+    // A hunt again keeps its questions: none are asked anew.
+    expect(calls.some((c) => c.text?.format?.name === "wish_questions")).toBe(false);
     expect(calls.find((c) => String(c.instructions ?? "").startsWith("You find, fast"))!.input).toContain("Details: Which bracelet? Jubilee, two-tone");
     expect(calls.find((c) => String(c.instructions ?? "").startsWith("You are Dandelist's price researcher"))!.input).toContain("The person answered: Which bracelet? Jubilee, two-tone");
     expect(done.questions).toEqual([{ id: "bracelet", label: "Which bracelet?", options: ["Oyster", "Jubilee"], picked: "Jubilee, two-tone", answered: true }]);
