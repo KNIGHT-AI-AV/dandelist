@@ -6,7 +6,7 @@ import { layout, type } from "../../lib/theme";
  * where one fits; the rest carry the reason for their number.
  */
 
-/** The HIG's minimum tap target, 44 pt (the same height as a chip). */
+/** The send button and the chips: 50 pt, past the HIG's 44 pt minimum tap target. */
 export const TARGET = layout.control.chip;
 
 /** Focus treatment: the border warms from `line` to `ink` in 150 ms and cools in 100 ms (exits run faster). */
@@ -56,8 +56,10 @@ export const HIDDEN_INPUT_OPACITY = 0.02;
 export const COMPOSER_LINES = 5;
 /** Vertical padding that centres one body line in a primary-height capsule. */
 export const COMPOSER_PAD_Y = (layout.control.primary - type.body.lineHeight) / 2;
-/** Inset of the 44 pt send button inside the 56 pt capsule. */
+/** Inset of the 50 pt send button inside the 56 pt capsule. */
 export const COMPOSER_INSET = (layout.control.primary - TARGET) / 2;
+/** Inset of the idle action, the 44 pt mic, so it sits centred where the send button will. */
+export const COMPOSER_IDLE_INSET = (layout.control.primary - layout.control.icon) / 2;
 /** Shrinking back after a send is an exit: 150 ms on ease.out (growth uses spring.snap). */
 export const COMPOSER_SHRINK_MS = 150;
 

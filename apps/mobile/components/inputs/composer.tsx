@@ -4,7 +4,7 @@ import { ease, haptic, spring, usePress, useReducedMotion } from "../../lib/moti
 import { layout, space, type, usePalette } from "../../lib/theme";
 import { Glass, Icon } from "../lux";
 import { caretColors, useToggle, webInput } from "./field";
-import { COMPOSER_INSET, COMPOSER_LINES, COMPOSER_PAD_Y, COMPOSER_SHRINK_MS, ICON, TARGET } from "./tokens";
+import { COMPOSER_IDLE_INSET, COMPOSER_INSET, COMPOSER_LINES, COMPOSER_PAD_Y, COMPOSER_SHRINK_MS, ICON, TARGET } from "./tokens";
 
 const AnimatedInput = Animated.createAnimatedComponent(TextInput);
 
@@ -138,7 +138,7 @@ export const Composer = forwardRef<TextInput, ComposerProps>(function Composer({
           ]}
         />
       )}
-      {idleAction && (cover || !value.trim()) ? <View style={{ margin: COMPOSER_INSET }}>{idleAction}</View> : <SendButton enabled={canSend} onPress={send} />}
+      {idleAction && (cover || !value.trim()) ? <View style={{ margin: COMPOSER_IDLE_INSET }}>{idleAction}</View> : <SendButton enabled={canSend} onPress={send} />}
     </Glass>
   );
 });
