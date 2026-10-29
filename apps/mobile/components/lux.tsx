@@ -441,11 +441,12 @@ export function Wordmark({ height = 24, word, dot, style }: { height?: number; w
   return (
     <View accessible accessibilityRole="image" accessibilityLabel="Dandelist" style={[{ width: Math.round(height * WORDMARK_ASPECT), height }, style]}>
       <Animated.View style={[StyleSheet.absoluteFill, word]}>
-        {/* Decorative inside the labelled wordmark (alt=""), so a screen reader hears "Dandelist" once. */}
-        <Image source={letters} alt="" style={StyleSheet.absoluteFill} contentFit="contain" tintColor={art ? undefined : p.ink} />
+        {/* Decorative inside the labelled wordmark, so a screen reader hears "Dandelist" once. expo-image's web build
+            writes the img's alt from accessibilityLabel only (its `alt` prop reaches the placeholder alone). */}
+        <Image source={letters} accessibilityLabel="" style={StyleSheet.absoluteFill} contentFit="contain" tintColor={art ? undefined : p.ink} />
       </Animated.View>
       <Animated.View style={[StyleSheet.absoluteFill, dot]}>
-        <Image source={clock} alt="" style={StyleSheet.absoluteFill} contentFit="contain" tintColor={art ? undefined : p.accent} />
+        <Image source={clock} accessibilityLabel="" style={StyleSheet.absoluteFill} contentFit="contain" tintColor={art ? undefined : p.accent} />
       </Animated.View>
     </View>
   );
