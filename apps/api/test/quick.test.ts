@@ -5,8 +5,9 @@ vi.mock("node:dns/promises", async (importOriginal) => ({ ...(await importOrigin
 import { WRAP_UP_MS, explainFacts, research, tidyQuestions, type Draft, type Meta, type PriceOption, type Step } from "../src/agent/agent";
 import { huntWish, mergeFast, type HuntResult } from "../src/agent/find";
 import { lineFor } from "../src/agent/lines";
-import { mediaKindOf, namesWish, parseAmount, photoCandidates, quickFind, readCandidates, wholeMention, wishWords, type ProductPage } from "../src/agent/quick";
-import { priceMentions } from "../src/agent/tools";
+import { closestPage, mediaKindOf, namesWish, parseAmount, photoCandidates, quickFind, readCandidates, wholeMention, wishWords, type ProductPage } from "../src/agent/quick";
+import { priceBasis, priceMentions, structuredPrices } from "../src/agent/tools";
+import { listingData } from "../src/dream/pages";
 import { imageResponse, jpegHeader, pngHeader } from "./images";
 
 /**
@@ -97,8 +98,10 @@ const result = (text: string, extra: Partial<{ raw: unknown; searchQueries: stri
   costUsd: 0.001,
   raw: extra.raw ?? {},
 });
+/** What the search itself returned for one page: its title, and sometimes a snippet. */
+type Returned = { url: string; title: string; snippet?: string };
 /** The search the fast find runs: the pages the model names, and what the search itself returned. */
-const searched = (lines: string[], returned: { url: string; title: string }[]) =>
+const searched = (lines: string[], returned: Returned[]) =>
   result(lines.join("\n"), { searchQueries: ["rolex submariner date price"], raw: { output: [{ type: "web_search_call", action: { query: "rolex submariner date price" }, results: returned }] } });
 
 const DRAFT: Draft = {
@@ -549,9 +552,122 @@ describe("price units and evidence (Codex R14)", () => {
   });
 });
 
+describe("a price keeps what it pays for through every fallback (Codex R14, 09:00 batch)", () => {
+  const camera: Draft = { title: "Alder X Camera", kind: "buy", summary: "An Alder X camera.", specifics: [], region: "US", currency: "USD", unknowns: [] };
+  const car: Draft = { title: "Aston Martin DB11", kind: "own", summary: "An Aston Martin DB11.", specifics: [], region: "US", currency: "USD", unknowns: [] };
+  const SHOP = "https://www.shop.example/alder-x";
+  const atShop = [{ url: SHOP, title: "Alder X Camera" }];
+  const product = (offers: unknown, body: string) => html(`<title>Alder X Camera</title>${ld({ "@type": "Product", name: "Alder X Camera", offers })}`, `<h1>Alder X Camera</h1><p>${body}</p>`);
+  /** A web where only these pages open; every other page turns the server away. */
+  const webOf = (pages: Record<string, string>) =>
+    (async (input: string | URL) => {
+      const page = pages[String(input)];
+      return page ? new Response(page, { status: 200, headers: { "content-type": "text/html" } }) : new Response("denied", { status: 403, headers: { "content-type": "text/html" } });
+    }) as unknown as typeof fetch;
+  const find = (lines: string[], returned: Returned[], draft: Draft, pages: Record<string, string> = {}) =>
+    quickFind(metaOf(() => searched(lines, returned)), { words: draft.title.toLowerCase(), draft, homeCurrency: "USD" }, { ...ctx(), fetcher: webOf(pages), api: fakeWeb });
+
+  const spec = (price: number, extra: Record<string, unknown> = {}) => ({ "@type": "UnitPriceSpecification", price, priceCurrency: "USD", ...extra });
+  const MONTHLY = spec(150, { billingDuration: 12, billingIncrement: 1, unitCode: "MON", unitText: "month" });
+  const MEMBER = spec(1800, { validForMemberTier: { "@type": "MemberProgramTier", "@id": "https://www.shop.example/members#gold" } });
+  const WAS = spec(3000, { priceType: "https://schema.org/StrikethroughPrice" });
+  const LIST = spec(2600, { priceType: "https://schema.org/ListPrice" });
+
+  it("reads what each price in the product data pays for", () => {
+    expect(priceBasis(spec(2400))).toBe("price");
+    expect(priceBasis(MONTHLY)).toBe("payment");
+    expect(priceBasis(spec(450, { unitText: "month", billingDuration: "P1M" }))).toBe("payment");
+    expect(priceBasis(spec(44, { unitText: "month" }))).toBe("payment");
+    expect(priceBasis(spec(100, { priceComponentType: "https://schema.org/Downpayment" }))).toBe("payment");
+    expect(priceBasis(MEMBER)).toBe("member");
+    expect(priceBasis(WAS)).toBe("former");
+    expect(priceBasis(LIST)).toBe("list");
+    // A full bottle priced with its comparison unit is still the bottle's price.
+    expect(priceBasis(spec(200, { referenceQuantity: { "@type": "QuantitativeValue", value: 200, unitCode: "ML", valueReference: { "@type": "QuantitativeValue", value: 100, unitCode: "ML" } } }))).toBe("price");
+    // An offer's own price is monthly when its specification says that same figure is monthly.
+    expect(priceBasis({ "@type": "Offer", price: 150, priceSpecification: MONTHLY })).toBe("payment");
+    expect(priceBasis({ "@type": "Offer", price: 2400, priceSpecification: MEMBER })).toBe("price");
+  });
+
+  it("lists the price everyone pays first, and gives a listing that price, a list price only when there is no other", () => {
+    const page = (offers: unknown) => ld({ "@type": "Car", name: "Aston Martin DB11", offers });
+    expect(structuredPrices(page({ "@type": "Offer", priceSpecification: [WAS, MEMBER, spec(2400)] }))).toEqual([
+      { amount: 2400, currency: "USD" },
+      { amount: 3000, currency: "USD", basis: "former" },
+      { amount: 1800, currency: "USD", basis: "member" },
+    ]);
+    expect(listingData(page({ "@type": "Offer", priceSpecification: [MONTHLY, spec(110_500)] })).data.price).toBe(110_500);
+    expect(listingData(page({ "@type": "Offer", priceSpecification: [LIST, spec(2400)] })).data.price).toBe(2400);
+    expect(listingData(page({ "@type": "Offer", priceSpecification: LIST })).data).toMatchObject({ price: 2600, currency: "USD" });
+    expect(listingData(page({ "@type": "Offer", priceSpecification: MONTHLY })).data.price).toBeUndefined();
+  });
+
+  it("never makes a monthly payment in the product data the price, whatever the model wrote", async () => {
+    const page = { [SHOP]: product({ "@type": "Offer", priceSpecification: MONTHLY }, "Alder X Camera. Pay USD 150 per month for 12 months.") };
+    expect(await find([`${SHOP} | 0 | USD`], atShop, camera, page)).toBeNull();
+    expect(await find([`${SHOP} | 150 | USD`], atShop, camera, page)).toBeNull();
+    expect(await find([`${SHOP} | 150/mo | USD`], atShop, camera, page)).toBeNull();
+  });
+
+  it("takes the price everyone pays, however the member and former prices are ordered", async () => {
+    const body = "Alder X Camera. Gold members USD 1,800. Was USD 3,000. Purchase price USD 2,400.";
+    for (const specs of [[MEMBER, spec(2400)], [spec(2400), MEMBER], [WAS, spec(2400)], [spec(2400), WAS], [WAS, MEMBER, spec(2400)]]) {
+      const card = await find([`${SHOP} | 0 | USD`], atShop, camera, { [SHOP]: product({ "@type": "Offer", priceSpecification: specs }, body) });
+      expect(card).toMatchObject({ upfrontCents: 240_000, status: "verified" });
+    }
+    // A member price the model reads off the page is still only the members' price.
+    const membersOnly = { [SHOP]: product({ "@type": "Offer", priceSpecification: MEMBER }, "Alder X Camera. Gold members USD 1,800.") };
+    expect(await find([`${SHOP} | $1,800 | USD`], atShop, camera, membersOnly)).toBeNull();
+  });
+
+  it("keeps an ordinary offer, a list price alone, and a cash price beside a monthly membership", async () => {
+    expect(await find([`${SHOP} | 0 | USD`], atShop, camera, { [SHOP]: product({ "@type": "Offer", price: 2400, priceCurrency: "USD" }, "Purchase price USD 2,400.") })).toMatchObject({ upfrontCents: 240_000, status: "verified" });
+    expect(await find([`${SHOP} | 0 | USD`], atShop, camera, { [SHOP]: product({ "@type": "Offer", price: 2400, priceCurrency: "USD", priceSpecification: MEMBER }, "Purchase price USD 2,400. Gold members USD 1,800.") })).toMatchObject({ upfrontCents: 240_000 });
+    expect(await find([`${SHOP} | 0 | USD`], atShop, camera, { [SHOP]: product({ "@type": "Offer", priceSpecification: LIST }, "List price USD 2,600.") })).toMatchObject({ upfrontCents: 260_000 });
+    const BIKE = "https://www.maker.example/bike";
+    const cash = html(
+      `<title>Peloton Bike+</title>${ld({ "@type": "Product", name: "Peloton Bike+", offers: [{ "@type": "Offer", name: "Bike", price: 2495, priceCurrency: "USD" }, { "@type": "Offer", name: "Membership", priceSpecification: spec(44, { unitText: "month" }) }] })}`,
+      "<p>Bike+ $2,495.00. Membership $44/mo.</p>",
+    );
+    expect(await find([`${BIKE} | $2,495 | USD`], [{ url: BIKE, title: "Peloton Bike+" }], { ...camera, title: "Peloton Bike+" }, { [BIKE]: cash })).toMatchObject({ upfrontCents: 249_500, status: "verified" });
+  });
+
+  it("never lets a search result's monthly figure come back as the price when the model leaves the unit out", async () => {
+    const DB11 = "https://seller.example/db11";
+    expect(await find([`${DB11} | $450 | USD`], [{ url: DB11, title: "Aston Martin DB11 for sale", snippet: "Lease this Aston Martin DB11 for USD 450/mo." }], car)).toBeNull();
+    // A snippet with a whole price still stands, and a rejected monthly figure leaves the next site's whole one.
+    expect(await find([`${DB11} | $110,500 | USD`], [{ url: DB11, title: "Aston Martin DB11 for sale", snippet: "Buy this car for USD 110,500." }], car)).toMatchObject({ upfrontCents: 11_050_000, status: "estimate" });
+    const two = [{ url: DB11, title: "Aston Martin DB11 for sale", snippet: "Lease it for USD 450/mo." }, { url: "https://other.example/db11", title: "Aston Martin DB11 for USD 110,500" }];
+    expect(await find([`${DB11} | $450 | USD`, "https://other.example/db11 | $110,500 | USD"], two, car)).toMatchObject({ url: "https://other.example/db11", upfrontCents: 11_050_000 });
+  });
+
+  it("takes a fee the model names for a fee, but not a price that only mentions shipping", async () => {
+    const CAM = "https://seller.example/alder-x";
+    expect(await find([`${CAM} | USD 250 shipping fee | USD`], [{ url: CAM, title: "Alder X Camera" }], camera)).toBeNull();
+    expect(readCandidates(`${CAM} | USD 250 shipping fee | USD`)[0]).toMatchObject({ amount: 250, part: true });
+    expect(readCandidates(`${CAM} | Shipping: $250 | USD`)[0]).toMatchObject({ amount: 250, part: true });
+    expect(readCandidates(`${CAM} | $95 booking fee | USD`)[0]).toMatchObject({ part: true });
+    expect(readCandidates(`${CAM} | $2,495 + free shipping | USD`)[0]!.part).toBeUndefined();
+    expect(readCandidates(`${CAM} | $2,495 delivery included | USD`)[0]!.part).toBeUndefined();
+    expect(priceMentions("Alder X Camera $2,400. Shipping $250.", 250).some(wholeMention)).toBe(false);
+    expect(priceMentions("Alder X Camera $2,400. Shipping $250.", 2400).every(wholeMention)).toBe(true);
+    expect(priceMentions("Free shipping $2,400 today", 2400).every(wholeMention)).toBe(true);
+  });
+
+  it("never moves a figure from one model year's page to another's", async () => {
+    const car2017: Draft = { ...car, title: "Aston Martin DB11 2017" };
+    const Y2018 = "https://seller.example/used-aston-martin-db11-2018-tacoma-wa";
+    const Y2017 = "https://seller.example/used-aston-martin-db11-2017-tacoma-wa";
+    expect(closestPage(Y2018, [Y2017])).toBeNull();
+    expect(await find([`${Y2018} | USD 88000 | USD`], [{ url: Y2017, title: "Aston Martin DB11 2017" }], car2017)).toBeNull();
+    // The 2017 page's own price still counts when that page opens.
+    const open2017 = { [Y2017]: html(`<title>Aston Martin DB11 2017</title>${ld({ "@type": "Product", name: "Aston Martin DB11 2017", offers: { "@type": "Offer", price: 110_500, priceCurrency: "USD" } })}`, "<p>Aston Martin DB11 2017 USD 110500</p>") };
+    expect(await find([`${Y2018} | USD 88000 | USD`], [{ url: Y2017, title: "Aston Martin DB11 2017" }], car2017, open2017)).toMatchObject({ url: Y2017, upfrontCents: 11_050_000, status: "verified" });
+  });
+});
+
 describe("a link the model rewords", () => {
   it("maps back to the returned page it plainly means, never across a query variant", async () => {
-    const { closestPage } = await import("../src/agent/quick");
     const returned = ["https://www.edmunds.com/used-aston-martin-db11-tacoma-wa/", "https://www.edmunds.com/used-aston-martin-db11-chino-ca/"];
     expect(closestPage("https://www.edmunds.com/used-aston-martin-db11-for-sale-in-tacoma-wa", returned)).toBe(returned[0]);
     expect(closestPage("https://www.edmunds.com/new-cars", returned)).toBeNull();

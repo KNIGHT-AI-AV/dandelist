@@ -21,7 +21,7 @@ export interface PageResult {
   title: string;
   text: string;
   /** Prices the page states in structured data (JSON-LD offers or product meta tags), as written. */
-  structuredPrices: { amount: number; currency?: string }[];
+  structuredPrices: MarkupPrice[];
   imageUrl?: string;
   /** Candidate product images the page offers, most trusted first (see pageImages). */
   images: string[];
@@ -103,12 +103,53 @@ function meta(html: string, prop: string): string | undefined {
   return tag ? /content=["']([^"']*)["']/i.exec(tag)?.[1] : undefined;
 }
 
-/** Offers from JSON-LD and product meta tags. Pages that state a price in markup are the easiest to verify. */
-export function structuredPrices(html: string): { amount: number; currency?: string }[] {
-  const out: { amount: number; currency?: string }[] = [];
-  const push = (amount: unknown, currency: unknown) => {
-    const n = typeof amount === "number" ? amount : Number(String(amount ?? "").replace(/[^0-9.]/g, ""));
-    if (Number.isFinite(n) && n > 0) out.push({ amount: n, currency: typeof currency === "string" ? currency : undefined });
+/** What a price in a page's product data pays for; see priceBasis. */
+export type PriceBasis = "price" | "list" | "payment" | "member" | "former";
+
+export interface MarkupPrice {
+  amount: number;
+  currency?: string;
+  /** What it pays for when that is not the thing itself, as priceBasis reads it. */
+  basis?: Exclude<PriceBasis, "price">;
+}
+
+const amountOf = (v: unknown) => {
+  const n = typeof v === "number" ? v : Number(String(v ?? "").replace(/[^0-9.]/g, ""));
+  return Number.isFinite(n) && n > 0 ? n : 0;
+};
+
+/** UN/CEFACT codes for spans of time (month, year, week, day, hour): a price per one of them is a payment. */
+const PER_TIME = /^(?:MON|ANN|WEE|DAY|HUR)$/i;
+const PER_WORD = /\b(?:months?|monthly|mo|years?|yearly|annual|annum|weeks?|weekly|days?|daily|nights?|nightly|hours?|hourly|person|guest|pp)\b/i;
+
+/**
+ * What a price in a page's product data pays for (Codex R14, 09:00 batch). A payment towards the thing: per month,
+ * year, night or person, an instalment, a deposit or a fee. A member-only price. A former, struck-through price. A
+ * list price or MSRP beside the price paid. Or the price itself. An Offer's own price that its price specification
+ * calls a payment is a payment too. A unit that measures the thing ("per 100 ml") leaves it the price.
+ */
+export function priceBasis(o: Record<string, unknown>): PriceBasis {
+  const str = (v: unknown) => (typeof v === "string" ? v : "");
+  if (o.validForMemberTier !== undefined) return "member";
+  if (/StrikethroughPrice$/i.test(str(o.priceType))) return "former";
+  if (o.billingDuration !== undefined || o.billingIncrement !== undefined || o.billingStart !== undefined || o.priceComponentType !== undefined) return "payment";
+  const ref = o.referenceQuantity && typeof o.referenceQuantity === "object" ? (o.referenceQuantity as Record<string, unknown>) : {};
+  if ([o.unitCode, ref.unitCode].some((c) => PER_TIME.test(str(c))) || [o.unitText, ref.unitText].some((t) => PER_WORD.test(str(t)))) return "payment";
+  if (/(?:ListPrice|MSRP|SRP)$/i.test(str(o.priceType))) return "list";
+  const specs = [o.priceSpecification].flat().filter((s): s is Record<string, unknown> => !!s && typeof s === "object");
+  const same = specs.filter((s) => amountOf(s.price) === amountOf(o.price));
+  return same.length && same.every((s) => priceBasis(s) === "payment") ? "payment" : "price";
+}
+
+/**
+ * Prices from JSON-LD and product meta tags, the price itself first, then list prices, then the rest, each with its
+ * basis. Pages that state a price in markup are the easiest to verify.
+ */
+export function structuredPrices(html: string): MarkupPrice[] {
+  const out: MarkupPrice[] = [];
+  const push = (amount: unknown, currency: unknown, basis: PriceBasis = "price") => {
+    const n = amountOf(amount);
+    if (n > 0) out.push({ amount: n, currency: typeof currency === "string" ? currency : undefined, ...(basis !== "price" ? { basis } : {}) });
   };
   for (const m of html.matchAll(/<script[^>]+application\/ld\+json[^>]*>([\s\S]*?)<\/script>/gi)) {
     let data: unknown;
@@ -121,14 +162,15 @@ export function structuredPrices(html: string): { amount: number; currency?: str
       if (!node || typeof node !== "object" || depth > 6) return;
       if (Array.isArray(node)) return node.forEach((n) => walk(n, depth + 1));
       const o = node as Record<string, unknown>;
-      if ("price" in o) push(o.price, o.priceCurrency);
+      if ("price" in o) push(o.price, o.priceCurrency, priceBasis(o));
       if ("lowPrice" in o) push(o.lowPrice, o.priceCurrency);
       for (const v of Object.values(o)) walk(v, depth + 1);
     };
     walk(data, 0);
   }
   push(meta(html, "product:price:amount") ?? meta(html, "og:price:amount"), meta(html, "product:price:currency") ?? meta(html, "og:price:currency"));
-  return out.slice(0, 20);
+  const rank = (p: MarkupPrice) => (!p.basis ? 0 : p.basis === "list" ? 1 : 2);
+  return out.sort((a, b) => rank(a) - rank(b)).slice(0, 20);
 }
 
 /**
@@ -364,7 +406,6 @@ export function pageNamesItem(page: Pick<PageResult, "title" | "text">, label: s
   return words.length === 0 || words.some((w) => haystack.includes(w));
 }
 
-/** True when the page shows this amount, written any common way: 2495, 2,495, 2,495.00, 2.495,00. */
 /** Every place a text states this amount, however it is written there, with the words just before and after it. */
 export function priceMentions(text: string, amount: number, around = 24): { before: string; after: string }[] {
   const whole = Math.floor(amount);
@@ -387,6 +428,7 @@ export function priceMentions(text: string, amount: number, around = 24): { befo
   return out;
 }
 
+/** True when the page shows this amount, written any common way: 2495, 2,495, 2,495.00, 2.495,00. */
 export function pageShowsPrice(page: Pick<PageResult, "text" | "structuredPrices">, amount: number): boolean {
   return page.structuredPrices.some((p) => Math.abs(p.amount - amount) < 0.005) || priceMentions(page.text, amount).length > 0;
 }
