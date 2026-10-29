@@ -506,9 +506,27 @@ describe("dream turn", () => {
 
   it("hands a single item to the item price research with the person's words", async () => {
     const t = await signIn("ada@example.com");
-    concierge = [[fc("price_item", { description: "a Leica Q3" })], [message("I'll find what it really costs.")]];
+    concierge = [[fc("price_item", { items: ["a Leica Q3"] })], [message("I'll find what it really costs.")]];
     const { events } = await turn(t, { type: "message", text: "a Leica Q3" });
+    expect(widgets(events, "item")).toHaveLength(1);
     expect(widgets(events, "item")[0]).toMatchObject({ kind: "item", text: "a Leica Q3" });
+  });
+
+  it("opens one hunt card for each thing a message names, at most six, and never the same thing twice", async () => {
+    const t = await signIn("ada@example.com");
+    concierge = [[fc("price_item", { items: ["a Leica Q3", "a Rolex Submariner", "a week in Lisbon", "a Leica Q3"] })], [message("I'm on all three.")]];
+    const { events } = await turn(t, { type: "message", text: "a Leica Q3, a Rolex Submariner and a week in Lisbon" });
+    const items = widgets(events, "item");
+    expect(items.map((w) => w.text)).toEqual(["a Leica Q3", "a Rolex Submariner", "a week in Lisbon"]);
+    expect(new Set(items.map((w) => w.id)).size).toBe(3);
+    concierge = [[fc("price_item", { items: ["a", "b", "c", "d", "e", "f", "g", "h"].map((x) => `thing ${x}`) })], [message("On it.")]];
+    expect(widgets((await turn(t, { type: "message", text: "eight things" })).events, "item")).toHaveLength(6);
+  });
+
+  it("still reads an older call that names one thing", async () => {
+    const t = await signIn("ada@example.com");
+    concierge = [[fc("price_item", { description: "a Leica Q3" })], [message("I'll find what it really costs.")]];
+    expect(widgets((await turn(t, { type: "message", text: "a Leica Q3" })).events, "item")).toMatchObject([{ text: "a Leica Q3" }]);
   });
 
   it("prices a service from regional rates and makes the accepted quote a wish", async () => {
