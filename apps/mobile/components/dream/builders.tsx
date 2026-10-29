@@ -1,9 +1,10 @@
 import type { LifeContext, Widget } from "@dandelist/catalogue/dream";
-import { useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useState, type ReactNode } from "react";
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { haptic } from "../../lib/motion";
 import { moneyIn } from "../../lib/dream";
-import { fonts, radius, usePalette, type } from "../../lib/theme";
+import { MAX_OWN, OWN, addOwn } from "../../lib/own";
+import { fonts, layout, radius, usePalette, type } from "../../lib/theme";
 import { Field } from "../inputs";
 import { TARGET } from "../inputs/tokens";
 import { Eyebrow, Glass, PrimaryButton, Shade } from "../lux";
@@ -31,9 +32,42 @@ function SearchBar({ primary, onPrimary, onJustSearch }: { primary: string; onPr
 }
 
 /**
+ * "Type your own" for a builder section (owner, 2026-10-29: every generated section gets one). Typed entries sit with
+ * the offered chips, picked; tapping one takes it out. `children` are the section's own chips, in the same row.
+ */
+function OwnRow({ label, own, draft, onDraft, onCommit, onRemove, children }: { label: string; own: string[]; draft: string | null; onDraft(v: string | null): void; onCommit(): void; onRemove(v: string): void; children?: ReactNode }) {
+  const p = usePalette();
+  return (
+    <>
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+        {children}
+        {own.map((o) => (
+          <Chip key={`own-${o}`} label={o} selected onPress={() => { haptic.select(); onRemove(o); }} />
+        ))}
+        {own.length < MAX_OWN ? <Chip label={OWN} selected={draft !== null} onPress={() => { haptic.select(); onDraft(draft === null ? "" : null); }} /> : null}
+      </View>
+      {draft !== null ? (
+        <TextInput
+          value={draft}
+          onChangeText={(v) => onDraft(v.slice(0, 40))}
+          placeholder="Your own answer"
+          placeholderTextColor={p.ink3}
+          accessibilityLabel={label}
+          autoFocus
+          returnKeyType="done"
+          onSubmitEditing={onCommit}
+          style={[type.body, { color: p.ink, borderBottomWidth: 1, borderBottomColor: p.line, paddingVertical: layout.stack.tight }]}
+        />
+      ) : null}
+    </>
+  );
+}
+
+/**
  * The home builder the agent opens from a description: pick the style from real photographs, toggle the features
- * it heard (and any it didn't), set the bedrooms and an optional budget. "Just search" skips straight to listings.
- * Where it searches comes from Settings (the person's home) or from the chat; there is no place pill here.
+ * it heard (and any it didn't), type any style or feature it didn't offer, set the bedrooms and an optional budget.
+ * "Just search" skips straight to listings. Where it searches comes from Settings (the person's home) or from the
+ * chat; there is no place pill here.
  */
 export function HomeBuilder({ w, onApply, onSearchNow }: { w: HomeWidget; onApply(values: Record<string, unknown>): void; onSearchNow(): void }) {
   const p = usePalette();
@@ -42,9 +76,35 @@ export function HomeBuilder({ w, onApply, onSearchNow }: { w: HomeWidget; onAppl
   const [features, setFeatures] = useState(() => Object.fromEntries(w.features.map((f) => [f.id, f.on])));
   const [rooms, setRooms] = useState<number | null>(w.bedrooms);
   const [budget, setBudget] = useState<number | null>(w.budgetCents);
+  // Typed styles and features, and each section's open field (null when closed). The server takes typed entries as
+  // they are: a typed style or feature goes into the search by its own words.
+  const [ownStyles, setOwnStyles] = useState<string[]>([]);
+  const [ownFeatures, setOwnFeatures] = useState<string[]>([]);
+  const [styleDraft, setStyleDraft] = useState<string | null>(null);
+  const [featureDraft, setFeatureDraft] = useState<string | null>(null);
   const toggleStyle = (id: string) => {
     haptic.select();
     setStyles((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
+  };
+  const commitStyle = () => {
+    const r = addOwn(styleDraft ?? "", w.styles, ownStyles);
+    if (r.pick) setStyles((s) => (s.includes(r.pick!) ? s : [...s, r.pick!]));
+    setOwnStyles(r.own);
+    setStyleDraft(null);
+  };
+  const commitFeature = () => {
+    const r = addOwn(featureDraft ?? "", w.features, ownFeatures);
+    if (r.pick) setFeatures((x) => ({ ...x, [r.pick!]: true }));
+    setOwnFeatures(r.own);
+    setFeatureDraft(null);
+  };
+  const apply = () => {
+    // Whatever is still in an open field counts, as if its return key had been pressed.
+    const s = addOwn(styleDraft ?? "", w.styles, ownStyles);
+    const f = addOwn(featureDraft ?? "", w.features, ownFeatures);
+    const styleIds = s.pick && !styles.includes(s.pick) ? [...styles, s.pick] : styles;
+    const featureIds = Object.keys(features).filter((k) => features[k] || k === f.pick);
+    onApply({ styles: [...styleIds, ...s.own], features: [...featureIds, ...f.own], bedrooms: rooms, budgetCents: budget });
   };
   return (
     <Glass style={{ padding: 18, gap: 18, borderRadius: radius.lg }}>
@@ -75,14 +135,15 @@ export function HomeBuilder({ w, onApply, onSearchNow }: { w: HomeWidget; onAppl
             );
           })}
         </ScrollView>
+        <OwnRow label="Which feels like home?" own={ownStyles} draft={styleDraft} onDraft={setStyleDraft} onCommit={commitStyle} onRemove={(o) => setOwnStyles((x) => x.filter((y) => y !== o))} />
       </View>
       <View style={{ gap: 10 }}>
         <Text style={[type.title3, { color: p.ink }]}>What it has</Text>
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+        <OwnRow label="What it has" own={ownFeatures} draft={featureDraft} onDraft={setFeatureDraft} onCommit={commitFeature} onRemove={(o) => setOwnFeatures((x) => x.filter((y) => y !== o))}>
           {w.features.map((f) => (
             <Chip key={f.id} label={f.label} selected={!!features[f.id]} onPress={() => { haptic.select(); setFeatures((x) => ({ ...x, [f.id]: !x[f.id] })); }} />
           ))}
-        </View>
+        </OwnRow>
       </View>
       <View style={{ gap: 10 }}>
         <Text style={[type.title3, { color: p.ink }]}>Bedrooms</Text>
@@ -100,7 +161,7 @@ export function HomeBuilder({ w, onApply, onSearchNow }: { w: HomeWidget; onAppl
           ))}
         </View>
       </View>
-      <SearchBar primary="Find homes" onPrimary={() => onApply({ styles, features: Object.keys(features).filter((k) => features[k]), bedrooms: rooms, budgetCents: budget })} onJustSearch={onSearchNow} />
+      <SearchBar primary="Find homes" onPrimary={apply} onJustSearch={onSearchNow} />
     </Glass>
   );
 }
