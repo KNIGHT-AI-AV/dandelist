@@ -132,6 +132,7 @@ export function SettingsPage() {
                 ))}
               </View>
               <Text style={[type.footnote, { color: p.ink3 }]}>{CURRENCIES.find((c) => c.code === money.code)?.name}</Text>
+              <Text style={[type.footnote, { color: p.ink3 }]}>{money.rateDescription}{money.code === "USD" ? "" : " For comparison; your payment provider may use a different rate."}</Text>
             </View>
           </Card>
         </Section>

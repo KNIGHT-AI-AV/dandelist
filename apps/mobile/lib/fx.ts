@@ -1,6 +1,6 @@
 /**
  * The five currencies Dandelist shows prices in (owner, recording 03: "5 top currencies starting with USD"). Wishes
- * are kept in US cents on the server; every figure on screen is converted at the day's reference rate. Pure, so it
+ * are kept in US cents on the server; displayed figures use the selected currency's available rate. Pure, so it
  * has tests.
  */
 export const CURRENCIES = [
@@ -21,8 +21,7 @@ export const unitOf = (code: CurrencyCode) => CURRENCIES.find((c) => c.code === 
 export type Rates = Record<CurrencyCode, number>;
 
 /**
- * Used only until the day's rates arrive (and when the network never answers): late-2026 ECB levels, close enough
- * for the first frame, never shown as a quote.
+ * Static estimates for a first frame or a never-online device. fx-rates keeps their fallback origin explicit.
  */
 export const FALLBACK_RATES: Rates = { USD: 1, EUR: 0.92, GBP: 0.78, JPY: 152, CNY: 7.2 };
 
@@ -93,20 +92,3 @@ export function setShownCurrency(code: CurrencyCode, rate: number): void {
  * useMoney(), which also re-renders when the choice changes.
  */
 export const formatShown = (usdCents: number) => formatIn(shown.code, shown.rate, usdCents);
-
-/** Reads a rates answer from the API, keeping only sane numbers and filling gaps from the fallback. */
-export function readRates(body: unknown): Rates | null {
-  const r = (body as { rates?: Record<string, unknown> } | null)?.rates;
-  if (!r || typeof r !== "object") return null;
-  const out = { ...FALLBACK_RATES };
-  let any = false;
-  for (const c of CURRENCIES) {
-    const v = r[c.code];
-    if (typeof v === "number" && Number.isFinite(v) && v > 0) {
-      out[c.code] = v;
-      any = true;
-    }
-  }
-  out.USD = 1;
-  return any ? out : null;
-}
