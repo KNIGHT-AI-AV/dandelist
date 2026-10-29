@@ -12,6 +12,7 @@
     "catalogue": "tsx catalogue.ts",
     "ios:secrets": "tsx ios-build.ts secrets",
     "ios:build": "tsx ios-build.ts build",
+    "ios:status": "tsx ios-build.ts status",
     "ios:release": "tsx ios-build.ts release"
   },
   "dependencies": {
