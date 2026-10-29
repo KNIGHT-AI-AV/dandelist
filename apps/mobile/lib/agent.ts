@@ -12,6 +12,20 @@ export interface Draft {
   region: string;
   currency: string;
   unknowns: string[];
+  /** The details that move the price, each with the answer the hunt used. */
+  questions?: WishQuestion[];
+}
+
+/**
+ * A detail that moves the price, with the answer the hunt used: the agent's likely pick, or the person's own
+ * (`answered`). Questions never hold a hunt up; the card lets the person change one, or type their own, and hunt again.
+ */
+export interface WishQuestion {
+  id: string;
+  label: string;
+  options: string[];
+  picked: string;
+  answered?: boolean;
 }
 
 export interface Question {
@@ -42,7 +56,7 @@ export type AgentEvent =
   /** The agent's own one-line reason for what it does next. */
   | { kind: "thought"; text: string };
 
-export type Step =
+export type Step = (
   | { type: "search"; query: string; at: string }
   | { type: "open"; url: string; title?: string; ok: boolean; imageUrl?: string; at: string }
   | { type: "fx"; from: string; to: string; rate?: number; at: string }
@@ -50,7 +64,11 @@ export type Step =
   | { type: "check"; url: string; verified: boolean; listed?: boolean; at: string }
   | { type: "price"; label: string; upfrontCents?: number; at: string }
   | { type: "explain"; at: string }
-  | { type: "note"; text: string; event?: AgentEvent; at: string };
+  | { type: "note"; text: string; event?: AgentEvent; at: string }
+) & {
+  /** One short line the server wrote for the app's single working row. */
+  line?: string;
+};
 
 export type MediaKind = "product" | "vehicle" | "place" | "experience" | "other";
 
@@ -149,8 +167,14 @@ export interface PriceOption {
 export interface Run {
   id: string;
   status: "running" | "done" | "error";
+  /** The wish as read, a few seconds in; its questions come with it or soon after. */
+  draft?: Draft | null;
   steps: Step[];
-  result: { options: PriceOption[]; explanation: string; note: string; horizonYears: number } | null;
+  /**
+   * While the run is still going, the fast card alone (`provisional`), usually 10 to 15 s in; at "done" the best
+   * option first, with each question and the answer this hunt used.
+   */
+  result: { options: PriceOption[]; explanation: string; note: string; horizonYears: number; questions?: WishQuestion[]; provisional?: boolean } | null;
   error: string | null;
   cached?: boolean;
   createdAt: string;
@@ -179,6 +203,14 @@ export async function transcribeWish(api: Api, wav: Uint8Array) {
 
 export async function startResearch(api: Api, draft: Draft, answers: Answer[]) {
   return (await read<{ run: Run }>(await api("/agent/runs", json({ draft, answers, persona: currentPersona() })).catch(() => null), "Couldn't start the research.")).run;
+}
+
+/**
+ * Hunts one wish straight from the person's words, with no separate read first; or again from a run's draft with
+ * changed answers, given by question id. Poll it with getRun.
+ */
+export async function startHunt(api: Api, wish: { text: string } | { draft: Draft; answers: Answer[] }) {
+  return (await read<{ run: Run }>(await api("/agent/runs", json({ ...wish, persona: currentPersona() })).catch(() => null), "Couldn't start the research.")).run;
 }
 
 export async function getRun(api: Api, id: string) {

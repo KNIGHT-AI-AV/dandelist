@@ -2,7 +2,7 @@ import { entries as catalogue, type Entry } from "@dandelist/catalogue";
 import { recurringBreakdown, type Period } from "@dandelist/cost";
 import { fetch as streamingFetch } from "expo/fetch";
 import { Platform } from "react-native";
-import type { Media, PriceOption, Step } from "./agent";
+import type { Media, PriceOption, Step, WishQuestion } from "./agent";
 import { API_URL } from "./auth";
 import { getSecret, setSecret } from "./storage";
 import type { NewWish, WishKind } from "./wishes";
@@ -204,10 +204,14 @@ async function readEvents<T>(path: string, body: unknown, onEvent: (e: T) => voi
   }
 }
 
+/**
+ * The guest hunt's events. A draft may come twice (again when its questions land); a card may too: first the fast one
+ * (`provisional`, about 10 to 15 s in), then the full research's when it found better, by 60 s.
+ */
 export type GuestEvent =
-  | { type: "draft"; title: string; kind: WishKind }
+  | { type: "draft"; title: string; kind: WishKind; questions?: WishQuestion[] }
   | { type: "step"; step: Step }
-  | { type: "priced"; title: string; kind: WishKind; option: PriceOption; explanation: string }
+  | { type: "priced"; title: string; kind: WishKind; option: PriceOption; explanation: string; questions?: WishQuestion[]; provisional?: boolean }
   | { type: "error"; message: string };
 
 /** Prices the first wish for real, before sign-in: what it is, the agent's live trail, then the best option. */

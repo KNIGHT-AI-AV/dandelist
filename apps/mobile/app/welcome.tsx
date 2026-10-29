@@ -194,10 +194,14 @@ export default function Welcome() {
         else if (e.type === "step") setTrail((t) => [...t, e.step]);
         else if (e.type === "priced") {
           const { label, seller, url, upfrontCents, recurring, status, statusLabel, checkedAt, imageUrl, media, source } = e.option;
+          // The fast card lands first; a better one from the full research replaces it quietly, with no second "found".
+          const first = !latest.current.wish?.option;
           patchWish((w) => ({ ...w, title: e.title, kind: e.kind, option: { label, seller, url, upfrontCents, recurring, status, statusLabel, checkedAt, imageUrl, media, source } }));
           setPricing("priced");
-          setFound(true);
-          setTimeout(() => setFound(false), FOUND_HOLD_MS);
+          if (first) {
+            setFound(true);
+            setTimeout(() => setFound(false), FOUND_HOLD_MS);
+          }
         } else if (e.type === "error") {
           patchWish((w) => ({ ...w, failed: e.message }));
           setPricing("failed");
