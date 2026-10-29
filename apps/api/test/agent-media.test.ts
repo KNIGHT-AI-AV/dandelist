@@ -212,9 +212,10 @@ describe("shopping search in the agent", () => {
 
     // New tools leave notes with a structured event, so the app's existing ledger draws them as they are.
     expect(new Set(run.steps.map((s: Step) => s.type))).toEqual(new Set(["open", "check", "price", "explain", "note"]));
-    expect(eventsOf(run.steps)).toEqual(expect.arrayContaining(["shop", "search3d", "model3d", "imagework", "photos"]));
+    expect(eventsOf(run.steps)).toEqual(expect.arrayContaining(["shop", "imagework", "photos"]));
+    // Real photographs only (owner, 2026-10-29): the agent no longer looks for 3D models.
+    expect(eventsOf(run.steps).some((k) => k === "search3d" || k === "model3d")).toBe(false);
     expect(run.steps.find((s: Step) => s.type === "note" && s.event?.kind === "shop")).toMatchObject({ text: "Searched shops for Leica Q3: 2 offers", event: { kind: "shop", query: "Leica Q3", offers: 2 } });
-    expect(run.steps.find((s: Step) => s.type === "note" && s.event?.kind === "model3d").text).toBe("Found a 3D model: Leica Q3 by Studio");
     expect(run.steps.find((s: Step) => s.type === "check" && s.listed)).toMatchObject({ verified: false, listed: true });
 
     const ledger = await db.query<{ model: string; cost_usd: string }>("select model, cost_usd from spend_ledger where kind <> 'interpret' order by id");
@@ -224,7 +225,7 @@ describe("shopping search in the agent", () => {
     // The tools the model was offered, and the date it was told
     const first = metaCalls.find((c) => (c.tools ?? []).some((t: { name?: string }) => t.name === "shopping_search"))!;
     expect(first.instructions).toContain("Today is 27 October 2026");
-    expect(first.tools.map((t: { name?: string; type: string }) => t.name ?? t.type)).toEqual(["web_search", "get_page", "fx_rate", "shopping_search", "find_3d_model"]);
+    expect(first.tools.map((t: { name?: string; type: string }) => t.name ?? t.type)).toEqual(["web_search", "get_page", "fx_rate", "shopping_search"]);
   });
 
   it("stops searching shops at the daily Apify cap and still finishes", async () => {
@@ -245,7 +246,7 @@ describe("shopping search in the agent", () => {
 });
 
 describe("media hunting in the agent", () => {
-  it("gives each option real photos best first, a SAM cutout and a matching 3D model, and serves the cutout", async () => {
+  it("gives each option real photos best first and a SAM cutout, looks for no 3D model, and serves the cutout", async () => {
     const t = await signIn("ada@example.com");
     const run = await runWish(t);
     const leica = run.result.options[0] as PriceOption;
@@ -258,23 +259,14 @@ describe("media hunting in the agent", () => {
     ]);
     expect(media.images[2]!.credit).toBe("Adorama");
     expect(leica.imageUrl).toBe("https://leica-camera.com/img/q3-top.webp");
-    expect(media.model3d).toEqual({
-      provider: "sketchfab",
-      uid: MODEL_UID,
-      name: "Leica Q3",
-      author: "Studio",
-      license: "CC Attribution",
-      embedUrl: `https://sketchfab.com/models/${MODEL_UID}/embed?autostart=1&ui_theme=dark&transparent=1&ui_hint=0`,
-      thumbnail: "https://media.sketchfab.com/q3.jpg",
-    });
+    expect(media.model3d).toBeUndefined();
     expect(media.cutout).toMatchObject({ width: 1001, height: 763, from: "https://leica-camera.com/img/q3-front.jpg", model: "sam-3.1" });
     // One cutout serves every option that shares the photo; nothing generated, since a real photo passed 2000 px.
     expect(metaCalls.filter((c) => c.model === "sam-3.1")).toHaveLength(1);
     expect(metaCalls.some((c) => String(c.url).includes("/images/"))).toBe(false);
     expect((run.result.options[1] as PriceOption).media!.cutout!.url).toBe(media.cutout!.url);
-    // Only the well-liked Leica model was put to the model, which picked it.
-    const pick = metaCalls.find((c) => c.text?.format?.name === "media_pick")!;
-    expect(JSON.parse(pick.input).MODELS.map((m: { uid: string }) => m.uid)).toEqual([MODEL_UID]);
+    // With no Commons photos to choose from and no 3D models, there is nothing for a pick call to choose.
+    expect(metaCalls.some((c) => c.text?.format?.name === "media_pick")).toBe(false);
 
     const key = media.cutout!.url.split("/media/")[1]!;
     const served = await app.request(`/media/${key}`);
@@ -287,7 +279,10 @@ describe("media hunting in the agent", () => {
     // The app can save the option's media with the wish.
     const saved = await request("POST", "/wishes", t, { name: "Leica Q3", kind: "buy", upfrontCents: 699500, details: { agent: { media } } });
     expect(saved.status).toBe(201);
-    const bad = await request("POST", "/wishes", t, { name: "Leica Q3", kind: "buy", upfrontCents: 1, details: { agent: { media: { ...media, model3d: { ...media.model3d, embedUrl: "javascript:alert(1)" } } } } });
+    // A card saved earlier with a 3D model still saves; a model pointing anywhere but Sketchfab's player never does.
+    const model3d = { provider: "sketchfab", uid: MODEL_UID, name: "Leica Q3", author: "Studio", license: "CC Attribution", embedUrl: `https://sketchfab.com/models/${MODEL_UID}/embed?autostart=1&ui_theme=dark&transparent=1&ui_hint=0`, thumbnail: "https://media.sketchfab.com/q3.jpg" };
+    expect((await request("POST", "/wishes", t, { name: "Leica Q3", kind: "buy", upfrontCents: 699500, details: { agent: { media: { ...media, model3d } } } })).status).toBe(201);
+    const bad = await request("POST", "/wishes", t, { name: "Leica Q3", kind: "buy", upfrontCents: 1, details: { agent: { media: { ...media, model3d: { ...model3d, embedUrl: "javascript:alert(1)" } } } } });
     expect(bad.status).toBe(400);
   });
 });

@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // Shop hostnames resolve to a public documentation address, so no test touches real DNS.
 vi.mock("node:dns/promises", async (importOriginal) => ({ ...(await importOriginal<object>()), lookup: async () => [{ address: "93.184.215.14", family: 4 }] }));
 import { createApp } from "../src/app";
+import { imageResponse, jpegHeader } from "./images";
 import { migrate, type Db } from "../src/db";
 import { GUEST_WISHES_PER_IP_PER_HOUR } from "../src/guest";
 import { ARCHIVE_PREFIX, fromArchive } from "../src/pool";
@@ -22,7 +23,12 @@ const fakeMeta = (async (_url: string, init: RequestInit) => {
   metaCalls.push(body);
   const format = body.text?.format?.name;
   const tools = (body.tools ?? []).map((t: { name?: string; type: string }) => t.name ?? t.type);
+  // The fast find: one bounded web search that names the seller's page.
+  if (String(body.instructions ?? "").startsWith("You find, fast")) {
+    return reply([{ type: "web_search_call", action: { query: "peloton bike+ price" }, results: [{ url: SHOP, title: "Peloton Bike+" }] }, message(`${SHOP} | $2,495.00 | USD`)]);
+  }
   if (format === "wish_draft") return reply([message(JSON.stringify({ title: "Peloton Bike+", kind: "buy", summary: "A Peloton Bike+ for home.", specifics: [], region: "US", currency: "usd", unknowns: [] }))]);
+  if (format === "wish_questions") return reply([message(JSON.stringify({ questions: [{ id: "package", label: "Which package?", options: ["Basics", "Essentials"], picked: "Basics" }] }))]);
   if (format === "price_options") {
     return reply([message(JSON.stringify({ options: [{ label: "Bike+ Basics", seller: "Peloton", url: SHOP, currency: "USD", price: 2495, recurring: [{ label: "All-Access", amount: 44, period: "month" }], evidence: "$2,495.00", confidence: "high" }], note: "" }))]);
   }
@@ -33,10 +39,14 @@ const fakeMeta = (async (_url: string, init: RequestInit) => {
   return reply([message("The Bike+ Basics costs $2,495 upfront.")]);
 }) as unknown as typeof fetch;
 
-const fakeWeb = (async (url: string | URL) =>
-  String(url).startsWith(SHOP)
-    ? new Response(`<html><head><title>Peloton Bike+</title></head><body>Bike+ $2,495.00. Membership $44/mo.</body></html>`, { status: 200, headers: { "content-type": "text/html" } })
-    : new Response("<html><body>Nothing here</body></html>", { status: 200, headers: { "content-type": "text/html" } })) as unknown as typeof fetch;
+const PRODUCT = `<script type="application/ld+json">{"@type":"Product","name":"Peloton Bike+","image":"https://www.onepeloton.com/img/bike-plus.jpg","offers":{"price":"2495.00","priceCurrency":"USD"}}</script>`;
+const fakeWeb = (async (url: string | URL) => {
+  const u = String(url);
+  if (u === "https://www.onepeloton.com/img/bike-plus.jpg") return imageResponse(jpegHeader(2400, 1600), "image/jpeg");
+  return u.startsWith(SHOP)
+    ? new Response(`<html><head><title>Peloton Bike+</title><meta property="og:site_name" content="Peloton">${PRODUCT}</head><body>Bike+ $2,495.00. Membership $44/mo.</body></html>`, { status: 200, headers: { "content-type": "text/html" } })
+    : new Response("<html><body>Nothing here</body></html>", { status: 200, headers: { "content-type": "text/html" } });
+}) as unknown as typeof fetch;
 
 function makeApp(withMeta = true) {
   return createApp({
@@ -119,16 +129,41 @@ describe("pricing the first wish before sign-in", () => {
     expect(metaCalls).toHaveLength(0);
   });
 
-  it("streams what it is, the agent's trail and a checked price", async () => {
+  it("streams what it is, the agent's trail, the fast card with its own photo, then the checked price", async () => {
     const res = await makeApp().request("/guest/wish", { method: "POST", headers: { "Content-Type": "application/json", "x-forwarded-for": "203.0.113.5" }, body: JSON.stringify({ text: "a peloton bike" }) });
     expect(res.status).toBe(200);
     const evs = await events(res);
-    expect(evs[0]).toEqual({ type: "draft", title: "Peloton Bike+", kind: "buy" });
+    // The draft goes out as soon as it is read, then again with the questions and the answer the hunt assumed.
+    const drafts = evs.filter((e) => e.type === "draft");
+    expect(drafts[0]).toMatchObject({ title: "Peloton Bike+", kind: "buy" });
+    expect(drafts.at(-1)).toMatchObject({ questions: [{ id: "package", label: "Which package?", options: ["Basics", "Essentials"], picked: "Basics", answered: false }] });
     expect(evs.some((e) => e.type === "step" && e.step.type === "note" && e.step.event?.kind === "thought")).toBe(true);
-    const priced = evs.find((e) => e.type === "priced");
-    expect(priced.option).toMatchObject({ seller: "Peloton", upfrontCents: 249_500, status: "verified" });
+    expect(evs.filter((e) => e.type === "step").every((e) => typeof e.step.line === "string" && e.step.line.length > 0)).toBe(true);
+    // The first card is the fast one: the seller's own page, its price and its own product photo.
+    const cards = evs.filter((e) => e.type === "priced");
+    expect(cards[0]).toMatchObject({ provisional: true, title: "Peloton Bike+", option: { url: SHOP, upfrontCents: 249_500, status: "verified", imageUrl: "https://www.onepeloton.com/img/bike-plus.jpg" }, questions: [{ id: "package", picked: "Basics" }] });
+    expect(evs.indexOf(cards[0])).toBeGreaterThan(evs.findIndex((e) => e.type === "draft"));
+    // The research's card follows only when it differs, never marked provisional; no error after a card.
+    expect(cards.slice(1).every((c) => !c.provisional)).toBe(true);
+    const priced = cards.at(-1);
+    expect(priced.option).toMatchObject({ upfrontCents: 249_500, status: "verified" });
+    expect(evs.some((e) => e.type === "error")).toBe(false);
     const spend = (await db.query<{ n: string }>("select count(*) as n from spend_ledger where user_id is null and kind = 'guest'")).rows[0]!;
     expect(Number(spend.n)).toBeGreaterThan(0);
+  });
+
+  it("hunts again with a changed answer, without reading the wish again", async () => {
+    const draft = { title: "Peloton Bike+", kind: "buy", summary: "A Peloton Bike+ for home.", specifics: [], region: "US", currency: "USD", unknowns: [], questions: [{ id: "package", label: "Which package?", options: ["Basics", "Essentials"], picked: "Basics" }] };
+    const res = await makeApp().request("/guest/wish", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-forwarded-for": "203.0.113.8" },
+      body: JSON.stringify({ text: "a peloton bike", draft, answers: [{ question: "package", answer: "Essentials with the mat" }] }),
+    });
+    const evs = await events(res);
+    expect(metaCalls.some((c) => c.text?.format?.name === "wish_draft")).toBe(false);
+    expect(evs.find((e) => e.type === "draft")).toMatchObject({ questions: [{ id: "package", picked: "Essentials with the mat", answered: true }] });
+    expect(metaCalls.find((c) => String(c.instructions ?? "").startsWith("You find, fast"))!.input).toContain("Which package? Essentials with the mat");
+    expect(evs.find((e) => e.type === "priced")).toMatchObject({ questions: [{ id: "package", picked: "Essentials with the mat", answered: true }] });
   });
 
   it("caps each network address per hour, before any model call", async () => {

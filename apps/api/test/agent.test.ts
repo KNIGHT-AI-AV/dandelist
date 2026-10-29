@@ -82,6 +82,10 @@ describe("page tools", () => {
 const SHOP = "https://www.onepeloton.com/bike-plus";
 let explainReplies: string[];
 let metaCalls: Record<string, unknown>[];
+/** The pages the fast find's search names; none unless a test sets some. */
+let quickLines: string;
+/** Holds the research's final answer back until a test releases it. */
+let gate: Promise<void> | null;
 
 function reply(output: unknown[], id = `resp_${metaCalls.length}`) {
   return new Response(JSON.stringify({ id, output, usage: { input_tokens: 1000, output_tokens: 200 } }), { status: 200 });
@@ -93,6 +97,10 @@ const fakeMeta = (async (_url: string, init: RequestInit) => {
   metaCalls.push(body);
   const format = body.text?.format?.name;
   const toolNames = (body.tools ?? []).map((t: { name?: string; type: string }) => t.name ?? t.type);
+  if (String(body.instructions ?? "").startsWith("You find, fast")) {
+    return reply(quickLines ? [{ type: "web_search_call", action: { query: "peloton bike+ price" }, results: [{ url: SHOP, title: "Peloton Bike+" }] }, message(quickLines)] : [message("Nothing found.")]);
+  }
+  if (format === "wish_questions") return reply([message(JSON.stringify({ questions: [] }))]);
   if (format === "wish_draft") {
     return reply([
       message(
@@ -104,6 +112,7 @@ const fakeMeta = (async (_url: string, init: RequestInit) => {
     return reply([{ type: "function_call", call_id: "ask_1", name: "ask_user", arguments: JSON.stringify({ questions: [{ question: "Which package?", choices: ["Basics", "Essentials"] }] }) }]);
   }
   if (format === "price_options") {
+    await gate;
     return reply([
       message(
         JSON.stringify({
@@ -162,6 +171,8 @@ beforeEach(async () => {
   mail = [];
   metaCalls = [];
   explainReplies = [];
+  quickLines = "";
+  gate = null;
   app = makeApp();
 });
 
@@ -221,6 +232,42 @@ describe("wish agent", () => {
     expect(run.steps[thoughtAt]).toMatchObject({ type: "note", text: "Peloton's own store sets the list price, so I'll read it there first:" });
     expect(run.steps[thoughtAt + 1]).toMatchObject({ type: "open" });
     expect(run.costUsd).toBeGreaterThan(0);
+  });
+
+  it("starts from the person's words, shows the fast card while it runs and ends with the research's, by question", async () => {
+    quickLines = `${SHOP} | $2,495.00 | USD`;
+    let release!: () => void;
+    gate = new Promise<void>((r) => (release = r));
+    const t = await signIn("ada@example.com");
+    const start = await call("POST", "/agent/runs", t, { text: "a peloton bike plus" });
+    expect(start.status).toBe(202);
+    const id = ((await start.json()) as { run: { id: string } }).run.id;
+    // While the research still runs, the run already holds the fast card, marked provisional, and the read draft.
+    let early: Record<string, any> | undefined;
+    for (let i = 0; i < 200 && !early; i++) {
+      const { run } = (await (await call("GET", `/agent/runs/${id}`, t)).json()) as { run: Record<string, any> };
+      if (run.status === "running" && run.result?.provisional) early = run;
+      else await new Promise((r) => setTimeout(r, 10));
+    }
+    expect(early!.result.options[0]).toMatchObject({ url: SHOP, upfrontCents: 249_500 });
+    expect(early!.draft).toMatchObject({ title: "Peloton Bike+", kind: "buy" });
+    expect(early!.steps.every((s: { line?: string }) => typeof s.line === "string" && s.line.length > 0 && s.line.length <= 64)).toBe(true);
+    release();
+    const run = await finished(t, id);
+    expect(run.status).toBe("done");
+    expect(run.result).toMatchObject({ provisional: false, questions: [] });
+    expect(run.result.options[0]).toMatchObject({ label: "Bike+ Basics", status: "verified", upfrontCents: 249_500 });
+  });
+
+  it("hunts again from a run's draft with changed answers", async () => {
+    const t = await signIn("ada@example.com");
+    const draft = { title: "Peloton Bike+", kind: "buy", summary: "A Peloton Bike+.", specifics: [], region: "US", currency: "USD", unknowns: [], questions: [{ id: "package", label: "Which package?", options: ["Basics", "Essentials"], picked: "Basics" }] };
+    const start = await call("POST", "/agent/runs", t, { draft, answers: [{ question: "package", answer: "Essentials" }] });
+    const run = await finished(t, ((await start.json()) as { run: { id: string } }).run.id);
+    expect(run.result.questions).toEqual([{ id: "package", label: "Which package?", options: ["Basics", "Essentials"], picked: "Essentials", answered: true }]);
+    expect(metaCalls.some((c) => (c.text as { format?: { name?: string } } | undefined)?.format?.name === "wish_draft")).toBe(false);
+    const researched = metaCalls.find((c) => String(c.instructions ?? "").startsWith("You are Dandelist's price researcher"))!;
+    expect(researched.input).toContain("The person answered: Which package? Essentials");
   });
 
   it("keeps thoughts to one short plain line", () => {
