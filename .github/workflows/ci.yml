@@ -33,6 +33,8 @@ jobs:
         with:
           run_install: false
           cache: false
+      - name: Reject tracked local database directories
+        run: node .github/scripts/check-source-tree.mjs
       - name: Install locked dependencies
         run: pnpm install --frozen-lockfile
       - name: Run all workspace tests
