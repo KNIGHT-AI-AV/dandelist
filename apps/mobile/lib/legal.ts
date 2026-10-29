@@ -61,12 +61,13 @@ export const PRIVACY: LegalSection[] = [
   },
 ];
 
-export const TERMS_UPDATED = "Last updated October 27, 2026";
+export const TERMS_UPDATED = "Last updated October 29, 2026";
 export const TERMS: LegalSection[] = [
   {
     heading: "Using Dandelist",
     body: [
-      "Dandelist is free to use. Its source code is open under the MIT License. By using the app, you agree to these terms.",
+      // 18 and over: Meta's Model API terms require it of every end user.
+      "Dandelist is free to use, for anyone 18 or older. Its source code is open under the MIT License. By using the app, you agree to these terms.",
     ],
   },
   {
