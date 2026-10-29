@@ -4,7 +4,7 @@
 # SIGNING (JSON: p12, p12Password, profile, ascKeyId, ascIssuerId, ascKeyP8). Nothing secret is printed.
 set -euo pipefail
 
-: "${SIGNING:?the dandelist/ios/signing secret did not reach the build}"
+: "${SIGNING:?the dandelist-ios/signing secret did not reach the build}"
 field() { node -e 'const j = JSON.parse(process.env.SIGNING); process.stdout.write(String(j[process.argv[1]] ?? ""))' "$1"; }
 
 WORK="$(mktemp -d)"
@@ -21,16 +21,26 @@ sw_vers -productVersion
 xcodebuild -version | head -1
 node --version
 
-echo "--- signing: a throwaway keychain with the distribution certificate, and the App Store profile"
+echo "--- unpack the secret, then take it out of the environment before any dependency code runs"
+umask 077
 field p12 | base64 --decode > "$WORK/dist.p12"
+field profile | base64 --decode > "$WORK/app.mobileprovision"
+P12_PASSWORD=$(field p12Password)
+KEY_ID=$(field ascKeyId)
+ISSUER=$(field ascIssuerId)
+ASC_KEY_P8=$(field ascKeyP8)
+unset SIGNING
+
+echo "--- signing: a throwaway keychain with the distribution certificate, and the App Store profile"
 security create-keychain -p "$KEYCHAIN_PW" "$KEYCHAIN"
 security set-keychain-settings -lut 7200 "$KEYCHAIN"
 security unlock-keychain -p "$KEYCHAIN_PW" "$KEYCHAIN"
-security import "$WORK/dist.p12" -k "$KEYCHAIN" -P "$(field p12Password)" -T /usr/bin/codesign -T /usr/bin/security >/dev/null
+security import "$WORK/dist.p12" -k "$KEYCHAIN" -P "$P12_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security >/dev/null
+rm -f "$WORK/dist.p12"
+unset P12_PASSWORD
 security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PW" "$KEYCHAIN" >/dev/null
 # shellcheck disable=SC2046
 security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
-field profile | base64 --decode > "$WORK/app.mobileprovision"
 security cms -D -i "$WORK/app.mobileprovision" > "$WORK/profile.plist"
 UUID=$(/usr/libexec/PlistBuddy -c 'Print UUID' "$WORK/profile.plist")
 PROFILE_NAME=$(/usr/libexec/PlistBuddy -c 'Print Name' "$WORK/profile.plist")
@@ -41,13 +51,17 @@ for dir in "$HOME/Library/MobileDevice/Provisioning Profiles" "$HOME/Library/Dev
 done
 echo "profile \"$PROFILE_NAME\" for team $TEAM"
 
-echo "--- App Store Connect key, for the build number and the upload"
-KEY_ID=$(field ascKeyId)
-ISSUER=$(field ascIssuerId)
-mkdir -p "$HOME/.appstoreconnect/private_keys"
-KEY_FILE="$HOME/.appstoreconnect/private_keys/AuthKey_$KEY_ID.p8"
-field ascKeyP8 > "$KEY_FILE"
-BUILD_NUMBER=$(ASC_KEY_ID="$KEY_ID" ASC_ISSUER_ID="$ISSUER" ASC_KEY_FILE="$KEY_FILE" node infra/aws/iphone/next-build.mjs)
+# The App Store Connect key is on disk only while it is used: here for the build number, and at the upload.
+key_on() {
+  mkdir -p "$HOME/.appstoreconnect/private_keys"
+  printf '%s
+' "$ASC_KEY_P8" > "$HOME/.appstoreconnect/private_keys/AuthKey_$KEY_ID.p8"
+}
+key_off() { rm -rf "$HOME/.appstoreconnect/private_keys"; }
+key_on
+BUILD_NUMBER=$(ASC_KEY_ID="$KEY_ID" ASC_ISSUER_ID="$ISSUER" ASC_KEY_FILE="$HOME/.appstoreconnect/private_keys/AuthKey_$KEY_ID.p8" node infra/aws/iphone/next-build.mjs)
+key_off
+umask 022
 echo "build number $BUILD_NUMBER"
 
 echo "--- install and generate the native project"
@@ -104,5 +118,6 @@ IPA=$(ls "$WORK"/ipa/*.ipa | head -1)
 echo "exported $(basename "$IPA") ($(du -h "$IPA" | cut -f1))"
 
 echo "--- upload to TestFlight"
+key_on
 xcrun altool --upload-app --type ios --file "$IPA" --apiKey "$KEY_ID" --apiIssuer "$ISSUER"
 echo "uploaded build $BUILD_NUMBER"

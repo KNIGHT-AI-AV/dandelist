@@ -4,7 +4,7 @@ version: 0.2
 
 env:
   secrets-manager:
-    SIGNING: dandelist/ios/signing
+    SIGNING: dandelist-ios/signing
   variables:
     EXPO_PUBLIC_API_URL: https://api.dandelist.knightaiav.com
 

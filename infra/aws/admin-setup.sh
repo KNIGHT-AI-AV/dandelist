@@ -47,7 +47,7 @@ aws iam put-role-policy --role-name dandelist-ios-build --policy-name dandelist-
   \"Version\": \"2012-10-17\",
   \"Statement\": [
     { \"Effect\": \"Allow\", \"Action\": [\"logs:CreateLogGroup\", \"logs:CreateLogStream\", \"logs:PutLogEvents\"], \"Resource\": \"arn:aws:logs:us-east-1:$ACCT:log-group:/aws/codebuild/dandelist-*\" },
-    { \"Effect\": \"Allow\", \"Action\": \"secretsmanager:GetSecretValue\", \"Resource\": \"arn:aws:secretsmanager:us-east-1:$ACCT:secret:dandelist/ios/*\" }
+    { \"Effect\": \"Allow\", \"Action\": \"secretsmanager:GetSecretValue\", \"Resource\": \"arn:aws:secretsmanager:us-east-1:$ACCT:secret:dandelist-ios/*\" }
   ]
 }"
 

@@ -33,7 +33,8 @@ import { credentials, region } from "./creds";
 
 const FLEET = "dandelist-mac";
 const PROJECT = "dandelist-ios";
-const SECRET = "dandelist/ios/signing";
+// Outside dandelist/*, which the live API's role may read: only the iPhone build role reads this one.
+const SECRET = "dandelist-ios/signing";
 const SOURCE = "https://github.com/KNIGHT-AI-AV/dandelist.git";
 const IMAGE = "aws/codebuild/macos-arm-base:15";
 const TAGS = [{ key: "project", value: "dandelist" }];
@@ -114,8 +115,9 @@ async function build() {
   const exists = (await cb.send(new BatchGetProjectsCommand({ names: [PROJECT] }))).projects?.length;
   await cb.send(exists ? new UpdateProjectCommand(project) : new CreateProjectCommand(project));
 
-  const id = (await cb.send(new StartBuildCommand({ projectName: PROJECT, sourceVersion: process.env.REF ?? "main" }))).build!.id!;
-  console.log(`building ${process.env.REF ?? "main"} on the Mac (${id.split(":")[1]})`);
+  // Only main, never another branch or a pull request: the build reads the signing secret, and the repo is public.
+  const id = (await cb.send(new StartBuildCommand({ projectName: PROJECT, sourceVersion: "main" }))).build!.id!;
+  console.log(`building main on the Mac (${id.split(":")[1]})`);
   let b;
   for (;;) {
     await sleep(30_000);
