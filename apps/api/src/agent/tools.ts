@@ -104,7 +104,7 @@ function meta(html: string, prop: string): string | undefined {
 }
 
 /** What a price in a page's product data pays for; see priceBasis. */
-export type PriceBasis = "price" | "list" | "payment" | "member" | "former";
+export type PriceBasis = "price" | "list" | "payment" | "charge" | "member" | "former";
 
 export interface MarkupPrice {
   amount: number;
@@ -124,14 +124,16 @@ const PER_WORD = /\b(?:months?|monthly|mo|years?|yearly|annual|annum|weeks?|week
 
 /**
  * What a price in a page's product data pays for (Codex R14, 09:00 batch). A payment towards the thing: per month,
- * year, night or person, an instalment, a deposit or a fee. A member-only price. A former, struck-through price. A
- * list price or MSRP beside the price paid. Or the price itself. An Offer's own price that its price specification
- * calls a payment is a payment too. A unit that measures the thing ("per 100 ml") leaves it the price.
+ * year, night or person, an instalment or a deposit. A charge on top of it: delivery, a payment method's charge, an
+ * activation or cleaning fee. A member-only price. A former, struck-through price. A list price or MSRP beside the
+ * price paid. Or the price itself. An Offer's own price that its price specification calls a payment is a payment
+ * too. A unit that measures the thing ("per 100 ml") leaves it the price.
  */
 export function priceBasis(o: Record<string, unknown>): PriceBasis {
   const str = (v: unknown) => (typeof v === "string" ? v : "");
   if (o.validForMemberTier !== undefined) return "member";
   if (/StrikethroughPrice$/i.test(str(o.priceType))) return "former";
+  if ([o["@type"]].flat().some((t) => /(?:Delivery|Payment)ChargeSpecification$/i.test(str(t))) || /Fee$/i.test(str(o.priceComponentType))) return "charge";
   if (o.billingDuration !== undefined || o.billingIncrement !== undefined || o.billingStart !== undefined || o.priceComponentType !== undefined) return "payment";
   const ref = o.referenceQuantity && typeof o.referenceQuantity === "object" ? (o.referenceQuantity as Record<string, unknown>) : {};
   if ([o.unitCode, ref.unitCode].some((c) => PER_TIME.test(str(c))) || [o.unitText, ref.unitText].some((t) => PER_WORD.test(str(t)))) return "payment";
