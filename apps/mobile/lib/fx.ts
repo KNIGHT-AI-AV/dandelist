@@ -41,9 +41,16 @@ function formatter(code: CurrencyCode, compact: boolean): Intl.NumberFormat {
 export const toLocal = (usdCents: number, rate: number) => Math.round(usdCents * rate);
 export const toUsd = (localCents: number, rate: number) => Math.round(localCents / rate);
 
-/** "$198,750", "€183,000", "£155,000", "¥30,210,000", "CN¥1,431,000": whole units, no cents. */
+/** Below this many units a price keeps its cents ("$49.99 a month"); above it, cents are noise. */
+const CENTS_BELOW = 1000;
+let withCents: Intl.NumberFormat | undefined;
+const centsFormatter = (code: CurrencyCode) => (withCents?.resolvedOptions().currency === code ? withCents : (withCents = new Intl.NumberFormat("en-US", { style: "currency", currency: code, minimumFractionDigits: 2, maximumFractionDigits: 2 })));
+
+/** "$198,750", "€183,000", "¥30,210,000", "CN¥1,431,000"; small amounts keep their cents ("$49.99"), never yen. */
 export function formatIn(code: CurrencyCode, rate: number, usdCents: number): string {
-  return formatter(code, false).format(Math.round(toLocal(usdCents, rate) / 100));
+  const local = toLocal(usdCents, rate);
+  if (code !== "JPY" && local % 100 !== 0 && Math.abs(local) < CENTS_BELOW * 100) return centsFormatter(code).format(local / 100);
+  return formatter(code, false).format(Math.round(local / 100));
 }
 
 /** "$7.2M", "€940K": for incomes and tight places. */
@@ -55,6 +62,19 @@ export function formatCompact(code: CurrencyCode, rate: number, usdCents: number
 export function symbolOf(code: CurrencyCode): string {
   return formatter(code, false).formatToParts(0).find((p) => p.type === "currency")?.value ?? code;
 }
+
+let shown: { code: CurrencyCode; rate: number } = { code: "USD", rate: 1 };
+
+/** Set by the currency provider whenever the choice or the rate changes. */
+export function setShownCurrency(code: CurrencyCode, rate: number): void {
+  shown = { code, rate };
+}
+
+/**
+ * The chosen currency for strings built outside React (lib helpers, accessibility lines). Screens should prefer
+ * useMoney(), which also re-renders when the choice changes.
+ */
+export const formatShown = (usdCents: number) => formatIn(shown.code, shown.rate, usdCents);
 
 /** Reads a rates answer from the API, keeping only sane numbers and filling gaps from the fallback. */
 export function readRates(body: unknown): Rates | null {

@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { formatShown } from "../lib/fx";
 import { AccessibilityInfo, Animated, Easing, Platform, Text, View, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
 import { ease, native, useReducedMotion } from "../lib/motion";
 import { METRICS, REPEATS, REST, cellsOf, emWidth, lineAt, normalize, plan, target, wheelTables, type Cell, type Mode, type Trend, type WheelCmd } from "../lib/odometer-plan";
@@ -23,7 +24,8 @@ const COALESCE_MS = 120;
 // The web reads a composite figure as one labelled image (as NumberFlow does); phones read it as text.
 const ROLE = Platform.OS === "web" ? ("image" as const) : ("text" as const);
 
-export const dollars = (cents: number) => `$${Math.round(cents / 100).toLocaleString("en-US")}`;
+/** Whole units in the chosen currency ("$107,529", "€98,900"); the name is older than the five currencies. */
+export const dollars = (cents: number) => formatShown(cents);
 
 export interface OdometerProps {
   cents: number;

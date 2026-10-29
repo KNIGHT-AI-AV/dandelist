@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { API_URL, useAuth } from "./auth";
-import { CURRENCIES, FALLBACK_RATES, formatCompact, formatIn, isCurrency, readRates, symbolOf, toLocal, toUsd, unitOf, type CurrencyCode, type Rates } from "./fx";
+import { CURRENCIES, FALLBACK_RATES, formatCompact, formatIn, formatShown, isCurrency, readRates, setShownCurrency, symbolOf, toLocal, toUsd, unitOf, type CurrencyCode, type Rates } from "./fx";
 import { getSecret, setSecret } from "./storage";
 
 export { CURRENCIES, type CurrencyCode };
@@ -25,9 +25,8 @@ export interface Money {
   choose(code: CurrencyCode): void;
 }
 
-let current = { code: "USD" as CurrencyCode, rate: 1 };
 /** The same formatting outside React (a string built in a callback). */
-export const formatMoney = (usdCents: number) => formatIn(current.code, current.rate, usdCents);
+export const formatMoney = formatShown;
 
 const Ctx = createContext<Money | null>(null);
 
@@ -108,7 +107,7 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
   );
 
   const rate = rates[code];
-  current = { code, rate };
+  setShownCurrency(code, rate);
   const value = useMemo<Money>(
     () => ({
       code,

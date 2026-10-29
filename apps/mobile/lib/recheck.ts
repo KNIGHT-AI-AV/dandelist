@@ -1,4 +1,4 @@
-import { formatCents } from "@dandelist/cost";
+import { formatCents } from "./money";
 import type { PriceOption, Run, Step } from "./agent";
 import { webOnly } from "./dream";
 import type { Wish, WishDetails } from "./wishes";

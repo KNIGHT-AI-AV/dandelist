@@ -1,35 +1,41 @@
 import { recurringBreakdown, upfrontCashCents } from "@dandelist/cost";
 import { router } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Animated, Pressable, RefreshControl, ScrollView, Text, View, useWindowDimensions } from "react-native";
+import { Animated, Keyboard, Pressable, RefreshControl, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { AgentDot, Backdrop, EdgeFade, Eyebrow, Glass, Grain, Hairline, Icon, Money, PrimaryButton, QuietButton, Shade, Wordmark } from "../lux";
+import { useAuth } from "../../lib/auth";
+import { comfortableIncome } from "../../lib/comfort";
+import { useMoney } from "../../lib/currency";
+import { useDandy } from "../../lib/dandy";
+import { ease, haptic, native, useReducedMotion } from "../../lib/motion";
+import { recheckWish } from "../../lib/rechecks";
+import { UNDO_MS } from "../../lib/removal";
+import { fonts, layout, radius, space, type, usePalette, useType } from "../../lib/theme";
+import { loadWelcome, saveWelcome, toWishes } from "../../lib/welcome";
+import { useWishes, type Wish } from "../../lib/wishes";
+import { rememberCard, type Rect } from "../../lib/zoom";
+import { DandyAvatar } from "../dandy-avatar";
+import { dockRoom } from "../inputs";
 import { ActionSheet, SheetRow } from "../list/action-sheet";
-import { choreo, delayFor } from "../list/choreo";
-import { AVATAR, CARD_GAP, DOCK_END, DOCK_LIFT, DOCK_PILL, DOCK_SEND, EMPTY_HEIGHT, cardHeights, toastBottom } from "../list/metrics";
-import { Presence, Rise, Swap } from "../list/presence";
+import { delayFor } from "../list/choreo";
+import { Presence, Rise } from "../list/presence";
 import { ListSkeleton } from "../list/skeleton";
 import { TierControl } from "../list/tier-control";
 import { Toast, type Note } from "../list/undo-toast";
 import { useRemovals } from "../list/use-removals";
-import { WishCard, WishFace, cardLabel } from "../list/wish-card";
-import { useAuth } from "../../lib/auth";
-import { formatCents } from "../../lib/money";
-import { haptic, usePress } from "../../lib/motion";
-import { UNDO_MS } from "../../lib/removal";
-import { layout, radius, space, type, usePalette, useType } from "../../lib/theme";
-import { loadWelcome, saveWelcome, toWishes } from "../../lib/welcome";
-import { useDandy } from "../../lib/dandy";
-import { useWishes, type Wish } from "../../lib/wishes";
-import { dockRoom } from "../inputs";
+import { WishFace } from "../list/wish-card";
+import { Backdrop, Chip, Eyebrow, Glass, Hairline, Money, PrimaryButton, Shade } from "../lux";
 import { useHome } from "./bridge";
+import { geometry, tailRoom } from "./card-metrics";
 import { useTopRoom } from "./chrome";
-import { hostOf, midSentence, whenChecked } from "../../lib/words";
-import { rememberCard, type Rect } from "../../lib/zoom";
+import { DandyArea } from "./dandy-area";
+import { GrowingCards, useCardLabel } from "./growing-cards";
+import { usePager } from "./pager";
 
 /**
- * After any sign-in (code, Apple, Google, GitHub), the list someone kept on the welcome screen becomes their first
- * wishes. It runs once: the saved picks are cleared before the wishes are added, so a reload can't add them twice.
+ * After any sign-in (code, Apple, Google, GitHub, Facebook), the list someone kept on the welcome screen becomes
+ * their first wishes. It runs once: the saved picks are cleared before the wishes are added, so a reload can't add
+ * them twice.
  */
 function useAdoptWelcome(ready: boolean, add: ReturnType<typeof useWishes>["add"]) {
   const started = useRef(false);
@@ -55,30 +61,63 @@ function useAfter(ms: number) {
   return on;
 }
 
-/** Loading placeholders wait this long, so a quick load shows nothing rather than a flash. */
-const SKELETON_AFTER_MS = 200;
-
 const errorText = (e: unknown, fallback: string) => (e instanceof Error ? e.message : fallback);
+/** Until the Dandy's own suggestions arrive (lib/suggestions), these start a thought. */
+const STARTERS = ["A weekend in Positano", "A Rolex Daytona", "A house with a view of the sea"];
 
-export function ListPage() {
+/**
+ * The field at the bottom has focus on the list: the list steps back and the Dandy comes forward with a few ideas,
+ * so the page turns into the Dandy's own space while the words are typed (owner, recording 03).
+ */
+function FocusVeil({ on, ideas, onIdea }: { on: boolean; ideas: string[]; onIdea(text: string): void }) {
+  const p = usePalette();
+  const t = useType();
   const dandy = useDandy();
+  const reduced = useReducedMotion();
+  const v = useRef(new Animated.Value(0)).current;
+  // Stays touchable while it fades out, so a tap on an idea that blurs the field still lands.
+  const [live, setLive] = useState(false);
+  useEffect(() => {
+    if (on) setLive(true);
+    Animated.timing(v, { toValue: on ? 1 : 0, duration: reduced ? 0 : on ? 280 : 220, easing: ease.out, useNativeDriver: native }).start(({ finished }) => finished && !on && setLive(false));
+  }, [on, v, reduced]);
+  if (!live && !on) return null;
+  return (
+    <Animated.View pointerEvents={on || live ? "auto" : "none"} style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, opacity: v }}>
+      <Pressable accessibilityLabel="Close" onPress={Keyboard.dismiss} style={{ flex: 1, backgroundColor: `rgba(${p.bgRgb}, 0.86)` }} />
+      <Animated.View pointerEvents="box-none" style={{ position: "absolute", left: 0, right: 0, bottom: "34%", alignItems: "center", gap: layout.stack.base, paddingHorizontal: layout.gutter(400), transform: [{ translateY: v.interpolate({ inputRange: [0, 1], outputRange: [16, 0] }) }] }}>
+        <DandyAvatar dandy={dandy} size={44} />
+        <Text style={[t.title2, { color: p.ink, textAlign: "center", fontFamily: fonts.titleItalic }]}>{`What should ${dandy.name} find for you?`}</Text>
+        <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: space[8] }}>
+          {ideas.map((i) => (
+            <Chip key={i} label={i} onPress={() => onIdea(i)} />
+          ))}
+        </View>
+      </Animated.View>
+    </Animated.View>
+  );
+}
+
+/**
+ * The list (owner, recording 03): the total in the middle with the income that carries it comfortably (tap for the
+ * money page), the Dandy's corner, then every wish as a full-width photograph, the one at the focus line opened up.
+ * Swipe a card either way to remove it (with undo); hold it for its quick actions, including a fresh price check.
+ */
+export function ListPage() {
   const auth = useAuth();
   const home = useHome();
-  const top = useTopRoom();
+  const pager = usePager();
+  const money = useMoney();
+  const label = useCardLabel();
   const { wishes, status, error, reload, add, remove, setTier } = useWishes();
   useAdoptWelcome(auth.status === "signedIn" && status === "ready", add);
   const p = usePalette();
   const t = useType();
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
-  const late = useAfter(SKELETON_AFTER_MS);
-  // When the wishes arrive after the screen (a cold start), the page builds itself top to bottom. When they are
-  // already here, the screen arrives with its navigation transition and nothing replays.
-  const [arriving] = useState(() => wishes.length === 0);
-  const appear = (order: number) => (arriving ? delayFor(order) : undefined);
-  // Cards that turn up later (a refresh, a delete the server refused) rise in rather than pop.
-  const [onScreenAtStart] = useState(() => new Set(wishes.map((w) => w.id)));
-  const cardAppear = (w: Wish, order: number) => (arriving ? delayFor(order) : onScreenAtStart.has(w.id) ? undefined : 0);
+  const { width, height } = useWindowDimensions();
+  const top = useTopRoom();
+  const late = useAfter(200);
+  const gutter = layout.gutter(width);
 
   // Notes in the toast that aren't undo: a failed delete, tier change or refresh.
   const [errorNote, setErrorNote] = useState<Note | null>(null);
@@ -88,17 +127,12 @@ export function ListPage() {
     const timer = setTimeout(() => setErrorNote(null), UNDO_MS);
     return () => clearTimeout(timer);
   }, [errorNote]);
-
   const removals = useRemovals(remove, showError);
-  // Focus requests for the toast's Undo (see Toast's `claim`).
   const [claim, setClaim] = useState(0);
   const pendingId = removals.pending?.id;
-  const hidden = useMemo(() => new Set(pendingId ? [pendingId] : []), [pendingId]);
-  const visible = useMemo(() => wishes.filter((w) => !hidden.has(w.id)), [wishes, hidden]);
-  const heights = useMemo(() => cardHeights(wishes.map((w) => w.id), hidden), [wishes, hidden]);
+  const visible = useMemo(() => wishes.filter((w) => w.id !== pendingId), [wishes, pendingId]);
 
-  // Quick actions: which card, where it sits, and what to do once the sheet has left. The sheet shows the store's
-  // copy of the wish (so a tier change shows at once) and keeps its own while a removal plays out under it.
+  // Quick actions: which card, where it sits, and what to do once the sheet has left.
   const [quick, setQuick] = useState<{ wish: Wish; at: Rect } | null>(null);
   const [quickOpen, setQuickOpen] = useState(false);
   const afterQuick = useRef<(() => void) | null>(null);
@@ -107,7 +141,6 @@ export function ListPage() {
     afterQuick.current = then ?? null;
     setQuickOpen(false);
   }, []);
-  const dismissQuick = useCallback(() => closeQuick(), [closeQuick]);
   const onQuickClosed = useCallback(() => {
     const then = afterQuick.current;
     afterQuick.current = null;
@@ -121,14 +154,11 @@ export function ListPage() {
     await reload();
     setPulling(false);
   }, [reload]);
-  // A failed refresh keeps the list on screen and says so in the toast; the full error state is for an empty list.
   useEffect(() => {
     if (status === "error" && error && wishes.length) showError(error);
   }, [status, error]); // eslint-disable-line react-hooks/exhaustive-deps
 
-
   const openWish = (w: Wish, at?: Rect) => {
-    // The detail zooms out of this card: remember where it is (by id, not by view) before navigating.
     if (at) rememberCard(w.id, at);
     router.push(`/wishes/${w.id}`);
   };
@@ -143,96 +173,94 @@ export function ListPage() {
   };
 
   const items = visible.map((w) => w.item);
-  const monthly = recurringBreakdown(items).perMonth;
-  // The briefing is the agent's most recent real check, never an invented event (a typical price has no page).
-  const latest = visible.filter((w) => w.details.agent?.url).sort((a, b) => b.details.agent!.checkedAt.localeCompare(a.details.agent!.checkedAt))[0];
-  const gutter = layout.gutter(width);
+  const total = upfrontCashCents(items);
+  const keepPerYear = recurringBreakdown(items).perMonth * 12;
+  const income = comfortableIncome(total, keepPerYear);
   const count = `${visible.length} ${visible.length === 1 ? "wish" : "wishes"}`;
-  const runLine = count;
-  const briefing = latest
-    ? `Priced ${midSentence(latest.name)} at ${formatCents(latest.item.upfrontCents)}, ${latest.details.agent!.status === "verified" ? "checked on" : "an estimate from"} ${hostOf(latest.details.agent!.url)} ${whenChecked(latest.details.agent!.checkedAt)}.`
-    : "";
   const loading = (status === "loading" || status === "idle") && wishes.length === 0;
   const pendingNote = removals.pending;
-  const note: Note | null = pendingNote
-    ? { key: pendingNote.id, text: `Removed ${pendingNote.name}`, action: { label: "Undo", onPress: () => removals.undo(pendingNote.id) } }
-    : errorNote;
+  const note: Note | null = pendingNote ? { key: pendingNote.id, text: `Removed ${pendingNote.name}`, action: { label: "Undo", onPress: () => removals.undo(pendingNote.id) } } : errorNote;
+
+  // The cards run edge to edge on a phone, and in a centred column on anything wider.
+  const column = Math.min(width, layout.list + 2 * gutter);
+  const g = useMemo(() => geometry(column), [column]);
+  const scrollY = useRef(new Animated.Value(0)).current;
+  const onScroll = useMemo(() => Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: native }), [scrollY]);
+  const [listTop, setListTop] = useState(0);
+  const bottomRoom = dockRoom(home.dock || layout.control.primary, insets.bottom);
+  // The focus line: the middle of what's visible between the top bar and the composer.
+  const focus = (top + height - bottomRoom) / 2;
 
   return (
     <View style={{ flex: 1 }}>
-      <ScrollView
-        refreshControl={<RefreshControl refreshing={pulling} onRefresh={refresh} tintColor={p.accent} colors={[p.accent]} progressBackgroundColor={p.surface} progressViewOffset={insets.top} />}
-        style={{ scrollbarWidth: "thin", scrollbarColor: `rgba(${p.inkRgb},0.2) transparent` } as object}
-        contentContainerStyle={{ paddingTop: top, paddingBottom: dockRoom(home.dock || DOCK_PILL, insets.bottom), paddingHorizontal: gutter, width: "100%", maxWidth: layout.list + 2 * gutter, alignSelf: "center" }}
+      <Animated.ScrollView
+        onScroll={onScroll}
+        scrollEventThrottle={16}
+        keyboardShouldPersistTaps="handled"
+        refreshControl={<RefreshControl refreshing={pulling} onRefresh={refresh} tintColor={p.accent} colors={[p.accent]} progressBackgroundColor={p.surface} progressViewOffset={top} />}
+        style={{ scrollbarWidth: "none" } as object}
+        contentContainerStyle={{ paddingTop: top, paddingBottom: visible.length ? tailRoom(height, focus, g, bottomRoom) : bottomRoom }}
       >
-        {/* The content area. The loading placeholders lie over it and cross-fade into what arrives. */}
-        <View>
-          <Presence show={visible.length > 0} appear={appear(0)}>
-            <View style={{ paddingTop: layout.stack.section, gap: layout.stack.tight }}>
+        <View style={{ paddingHorizontal: gutter, width: "100%", maxWidth: layout.list + 2 * gutter, alignSelf: "center", gap: layout.stack.base }}>
+          <Presence show={visible.length > 0} appear={0}>
+            <View style={{ alignItems: "center", paddingTop: layout.stack.base, gap: 6 }}>
               <Eyebrow>The list</Eyebrow>
-              <Money cents={upfrontCashCents(items)} size="hero" />
-              <Swap k={runLine}>
-                <Text style={[type.footnote, { color: p.ink2 }]}>{runLine}</Text>
-              </Swap>
+              <Pressable accessibilityRole="button" accessibilityLabel={`${money.format(total)}. Comfortable on ${money.format(income)} a year. Open money.`} onPress={() => pager.go("money")} style={{ alignItems: "center", gap: 4 }}>
+                <Money cents={total} size="hero" style={{ alignSelf: "center" }} />
+                <Text style={[type.callout, { color: p.ink2, textAlign: "center" }]}>
+                  {"Comfortable on "}
+                  <Text style={{ color: p.accentText }}>{money.compact(income)}</Text>
+                  {" a year"}
+                </Text>
+              </Pressable>
+              <Text style={[type.footnote, { color: p.ink3 }]}>{count}</Text>
             </View>
           </Presence>
+          <Rise delay={delayFor(1)}>
+            <DandyArea onOpen={() => pager.go("chat")} />
+          </Rise>
+        </View>
 
-          <Presence show={!!latest} appear={appear(1)}>
-            {latest ? (
-              <Glass style={{ marginTop: layout.stack.base, padding: layout.cardPad, gap: layout.stack.tight }}>
-                <View style={{ flexDirection: "row", alignItems: "center", gap: space[8] }}>
-                  <AgentDot />
-                  <Eyebrow>{dandy.name}</Eyebrow>
-                </View>
-                <Swap k={briefing}>
-                  <Text style={[type.callout, { color: p.ink }]}>{briefing}</Text>
-                </Swap>
-              </Glass>
-            ) : null}
-          </Presence>
+        <View onLayout={(e) => setListTop(e.nativeEvent.layout.y)} style={{ marginTop: layout.stack.base, width: column, alignSelf: "center" }}>
+          {visible.length ? (
+            <GrowingCards wishes={visible} g={g} scrollY={scrollY} listTop={listTop} focus={focus} width={column} onOpen={openWish} onQuick={openQuick} onRemove={(w) => removeWish(w, true)} />
+          ) : null}
 
-          <View style={{ marginTop: layout.stack.base }}>
-            {wishes.map((w, i) => (
-              <Presence key={w.id} show={!hidden.has(w.id)} height={heights.get(w.id)} gap={CARD_GAP} appear={cardAppear(w, i + 2)}>
-                <WishCard w={w} hidden={hidden.has(w.id)} onOpen={openWish} onQuick={openQuick} onRemove={(x) => removeWish(x, true)} />
-              </Presence>
-            ))}
-
+          <View style={{ paddingHorizontal: gutter }}>
             <Presence show={status === "error" && wishes.length === 0} appear={0}>
               <Glass style={{ padding: layout.cardPad, gap: space[12] }}>
                 <Text style={[type.callout, { color: p.danger }]}>{error}</Text>
                 <PrimaryButton label="Try again" onPress={() => reload()} />
               </Glass>
             </Presence>
-
             <Presence show={status === "ready" && visible.length === 0} appear={0}>
-              <View style={{ height: EMPTY_HEIGHT, borderRadius: radius.lg, borderCurve: "continuous", overflow: "hidden", justifyContent: "flex-end", padding: layout.cardPad, gap: space[12] }}>
+              <View style={{ height: 2 * g.rest, borderRadius: radius.lg, borderCurve: "continuous", overflow: "hidden", justifyContent: "flex-end", padding: layout.cardPad, gap: space[12] }}>
                 <Backdrop source={require("../../assets/backdrop.jpg")} />
                 <Shade from={0.1} />
                 <Eyebrow color={p.ink}>Your first wish</Eyebrow>
                 <Text style={[t.title1, { color: p.ink }]}>What do you want?</Text>
-                <Text style={[type.callout, { color: p.ink2 }]}>{`Tell ${dandy.name} below. You get the real price, and what it costs to keep.`}</Text>
+                <Text style={[type.callout, { color: p.ink2 }]}>Say it below. You get the real price, and what it costs to keep.</Text>
               </View>
             </Presence>
+            <Presence show={late && loading} appear={0} collapse={false} rise={false}>
+              <ListSkeleton />
+            </Presence>
           </View>
-
-          <Presence show={late && loading} appear={0} collapse={false} rise={false} style={{ position: "absolute", top: 0, left: 0, right: 0 }}>
-            <ListSkeleton />
-          </Presence>
         </View>
-      </ScrollView>
+      </Animated.ScrollView>
 
-      <Toast note={note} bottom={toastBottom(insets.bottom)} side={gutter} claim={claim} onHold={removals.hold} onRelease={removals.release} />
+      <FocusVeil on={home.focused} ideas={STARTERS} onIdea={(i) => home.ask(i)} />
+      <Toast note={note} bottom={bottomRoom - space[12]} side={gutter} claim={claim} onHold={removals.hold} onRelease={removals.release} />
 
       {quick && quickWish ? (
         <ActionSheet
           anchor={quick.at}
           open={quickOpen}
           label={quickWish.name}
-          onRequestClose={dismissQuick}
+          onRequestClose={() => closeQuick()}
           onClosed={onQuickClosed}
           preview={
-            <Pressable accessibilityRole="button" accessibilityLabel={cardLabel(quickWish)} onPress={() => closeQuick(() => openWish(quickWish, quick.at))} style={{ flex: 1, borderRadius: radius.lg, borderCurve: "continuous", overflow: "hidden" }}>
+            <Pressable accessibilityRole="button" accessibilityLabel={label(quickWish)} onPress={() => closeQuick(() => openWish(quickWish, quick.at))} style={{ flex: 1, overflow: "hidden" }}>
               <WishFace w={quickWish} still />
             </Pressable>
           }
@@ -245,11 +273,13 @@ export function ListPage() {
             <SheetRow label="Open" onPress={() => closeQuick(() => openWish(quickWish, quick.at))} />
           </Rise>
           <Rise delay={delayFor(3)}>
+            <SheetRow label="Check the price again" onPress={() => closeQuick(() => void recheckWish(auth.api, quickWish, reload))} />
+          </Rise>
+          <Rise delay={delayFor(4)}>
             <SheetRow
               label="Remove"
               danger
               onPress={() => {
-                // The card fades out under its lifted copy while the sheet leaves, so the two read as one.
                 removeWish(quickWish, false);
                 closeQuick(() => setClaim((c) => c + 1));
               }}

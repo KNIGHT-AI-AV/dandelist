@@ -103,7 +103,7 @@ export function Dock() {
   const here = page === "list" || page === "chat";
   return (
     <Animated.View pointerEvents={here ? "box-none" : "none"} style={{ position: "absolute", left: 0, right: 0, bottom: 0, top: 0, opacity, transform: [{ translateY: sink }] }} aria-hidden={!here}>
-      <KeyboardDock onHeight={home.setDock} maxWidth={layout.column} fade={false}>
+      <KeyboardDock onHeight={home.setDock} maxWidth={layout.column}>
         <Composer
           value={home.draft}
           onChangeText={home.setDraft}

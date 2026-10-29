@@ -1,4 +1,5 @@
-export { formatCents } from "@dandelist/cost";
+/** Whole units in the chosen currency (it was dollars only before the five currencies). */
+export { formatShown as formatCents } from "./fx";
 
 /** Parses what someone types ("$1,250.50", "99") into cents; null when it isn't a non-negative amount. */
 export function parseDollars(text: string): number | null {
