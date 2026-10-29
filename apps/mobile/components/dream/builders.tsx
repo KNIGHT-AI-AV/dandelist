@@ -33,8 +33,9 @@ function SearchBar({ primary, onPrimary, onJustSearch }: { primary: string; onPr
 /**
  * The home builder the agent opens from a description: pick the style from real photographs, toggle the features
  * it heard (and any it didn't), set the bedrooms and an optional budget. "Just search" skips straight to listings.
+ * Where it searches comes from Settings (the person's home) or from the chat; there is no place pill here.
  */
-export function HomeBuilder({ w, onApply, onSearchNow, onRegion }: { w: HomeWidget; onApply(values: Record<string, unknown>): void; onSearchNow(): void; onRegion(): void }) {
+export function HomeBuilder({ w, onApply, onSearchNow }: { w: HomeWidget; onApply(values: Record<string, unknown>): void; onSearchNow(): void }) {
   const p = usePalette();
   const [styles, setStyles] = useState<string[]>(() => w.styles.filter((s) => s.on).map((s) => s.id));
   const symbol = symbolOf(w.currency);
@@ -49,9 +50,11 @@ export function HomeBuilder({ w, onApply, onSearchNow, onRegion }: { w: HomeWidg
     <Glass style={{ padding: 18, gap: 18, borderRadius: radius.lg }}>
       <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
         <Eyebrow color={p.accentText}>Your home</Eyebrow>
-        <Pressable accessibilityRole="button" accessibilityLabel={`In ${w.region}`} onPress={onRegion} hitSlop={8} style={{ minHeight: TARGET, justifyContent: "center" }}>
-          <Text style={[type.footnote, { fontFamily: fonts.label, color: p.ink2 }]}>{`In ${w.region}  ▾`}</Text>
-        </Pressable>
+        {w.region ? (
+          <View style={{ minHeight: TARGET, justifyContent: "center", flexShrink: 1, paddingLeft: 12 }}>
+            <Text style={[type.footnote, { fontFamily: fonts.label, color: p.ink2 }]} numberOfLines={1}>{`In ${w.region}`}</Text>
+          </View>
+        ) : null}
       </View>
       <View style={{ gap: 10 }}>
         <Text style={[type.title3, { color: p.ink }]}>Which feels like home?</Text>
@@ -90,7 +93,7 @@ export function HomeBuilder({ w, onApply, onSearchNow, onRegion }: { w: HomeWidg
         </View>
       </View>
       <View style={{ gap: 10 }}>
-        <Text style={[type.title3, { color: p.ink }]}>Budget</Text>
+        <Text style={[type.title3, { color: p.ink }]}>Price</Text>
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
           {BUDGETS.map(([millions, cents]) => (
             <Chip key={millions} label={cents === null ? "No limit" : `Up to ${symbol}${millions}M`} selected={budget === cents} onPress={() => setBudget(cents)} />
