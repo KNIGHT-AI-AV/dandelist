@@ -6,6 +6,7 @@ import { Atmosphere } from "../../components/atmosphere";
 import { HeroGallery } from "../../components/detail/gallery";
 import { CONTROL_TOP, HERO_SHADE, PARALLAX } from "../../components/detail/metrics";
 import { Recheck } from "../../components/detail/recheck";
+import { RetakePhoto } from "../../components/detail/retake";
 import { Swap } from "../../components/detail/swap";
 import { PhotoViewer, type ViewerFrom } from "../../components/detail/viewer";
 import { AgentDot, Breathing, EdgeFade, ErrorLine, Eyebrow, Grain, IconButton, Protect, QuietButton, Shade } from "../../components/lux";
@@ -260,6 +261,7 @@ export default function WishDetail() {
               </Text>
             </Swap>
           ) : null}
+          <RetakePhoto wish={w} />
         </Animated.View>
 
         <View style={[column, { marginTop: layout.stack.section, gap: layout.stack.section }]}>

@@ -15,6 +15,7 @@ import {
   type WishQuestion,
 } from "./agent";
 import type { MediaImage } from "./media";
+import { findPhoto, subjectOf, type FoundPhoto } from "./photos";
 import { QUICK_MS, mediaKindOf, quickFind, subjectPhoto } from "./quick";
 import { within } from "./time";
 import { publicFetch } from "./tools";
@@ -72,10 +73,10 @@ const photoTravels = (draft: Draft, photo: { media?: { kind: string } }) => draf
 
 /**
  * The research's options with the fast card among them: first when it is better checked, otherwise after them. The
- * best card always carries a photograph when one of the wish itself is known (the fast card's, or `standIn`: the
- * archive's, or a trip's place), and never one of something else.
+ * best card always carries a photograph (owner, 2026-10-29: "Photos must always come"): the fast card's, else
+ * `standIn` (the archive's, or a trip's place), else `found`, the photo search's checked pick for this wish.
  */
-export function mergeFast(draft: Draft, researched: ResearchResult | null, fast: PriceOption | null, standIn: MediaImage | null = null): ResearchResult {
+export function mergeFast(draft: Draft, researched: ResearchResult | null, fast: PriceOption | null, standIn: MediaImage | null = null, found: FoundPhoto | null = null): ResearchResult {
   const options = [...(researched?.options ?? [])];
   let explanation = researched?.explanation ?? "";
   if (fast) {
@@ -95,9 +96,15 @@ export function mergeFast(draft: Draft, researched: ResearchResult | null, fast:
     } else if (standIn && (draft.kind === "visit" || draft.kind === "buy" || draft.kind === "do" || vehicle)) {
       best.imageUrl = standIn.url;
       best.media = { kind: draft.kind === "visit" ? "place" : draft.kind === "do" ? "experience" : vehicle ? "vehicle" : "product", images: [standIn] };
-    }
+    } else if (found) withPhoto(best, found);
   }
   return { options: options.slice(0, 4), explanation, note: researched?.note ?? "", horizonYears: researched?.horizonYears ?? HORIZON_YEARS };
+}
+
+/** Puts a found photo on an option that has none. */
+function withPhoto(o: PriceOption, found: FoundPhoto) {
+  o.imageUrl = found.image.url;
+  o.media = { kind: found.kind, images: [found.image] };
 }
 
 export async function huntWish(meta: Meta, ctx: HuntContext): Promise<HuntResult> {
@@ -146,14 +153,23 @@ export async function huntWish(meta: Meta, ctx: HuntContext): Promise<HuntResult
   });
   settledQuestions.catch(() => undefined);
   const questionsBy = async (ms: number) => (await within(settledQuestions, ms)) ?? draft.questions ?? [];
-  // A photo of the wish itself, for a card the research finds without one.
+  // A photo of the wish itself, for a card the research finds without one: the archive's or a trip's place, and the
+  // photo search's checked pick (one small model call, no web search), so a card never goes without a photo.
   const standIn = subjectPhoto(draft, { archive: ctx.archive, api: fetcher, by: t0 + RESEARCH_MS }).catch(() => null);
+  const searched = findPhoto(meta, subjectOf(draft), { fetcher, by: t0 + RESEARCH_MS }).catch(() => null);
 
   const card: { fast: PriceOption | null; settled: boolean; told: Promise<void> } = { fast: null, settled: false, told: Promise.resolve() };
   const early = quick.then((q) => {
     if (!q || card.settled) return;
     card.fast = q;
     card.told = (async () => {
+      if (!q.imageUrl) {
+        const [stand, found] = await Promise.all([within(standIn, 2_500), within(searched, 2_500)]);
+        if (stand) {
+          q.imageUrl = stand.url;
+          q.media = { kind: mediaKindOf(draft)[0]!, images: [stand] };
+        } else if (found) withPhoto(q, found);
+      }
       const questions = await questionsBy(2_000);
       await ctx.onProvisional?.({ options: [q], explanation: "", note: "", horizonYears: HORIZON_YEARS, draft, questions, provisional: true });
     })().then(
@@ -176,6 +192,6 @@ export async function huntWish(meta: Meta, ctx: HuntContext): Promise<HuntResult
   if (failure && !card.fast) throw failure;
   if (failure) console.warn("research failed; the fast card stands", (failure as Error).message);
   const questions = await questionsBy(Math.max(0, t0 + HUNT_STOP_MS - 2_000 - Date.now()));
-  const photo = await within(standIn, Math.max(0, t0 + HUNT_STOP_MS - 2_000 - Date.now()));
-  return { ...mergeFast(draft, researched, card.fast, photo), draft: { ...draft, questions }, questions, provisional: false };
+  const [photo, found] = await Promise.all([within(standIn, Math.max(0, t0 + HUNT_STOP_MS - 2_000 - Date.now())), within(searched, Math.max(0, t0 + HUNT_STOP_MS - 2_000 - Date.now()))]);
+  return { ...mergeFast(draft, researched, card.fast, photo, found), draft: { ...draft, questions }, questions, provisional: false };
 }

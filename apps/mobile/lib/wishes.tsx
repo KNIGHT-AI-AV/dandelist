@@ -62,6 +62,8 @@ interface WishStore {
    * reload, so nothing else on screen is disturbed.
    */
   mergeDetails(id: string, change: Partial<WishDetails>): void;
+  /** Saves a new photo on a wish (a retake). Shows at once; goes back if the server says no. */
+  setPhoto(id: string, photo: { imageUrl: string; media: Media }): Promise<void>;
 }
 
 type ServerWish = {
@@ -170,6 +172,16 @@ export function WishProvider({ children }: { children: ReactNode }) {
       },
       mergeDetails(id, change) {
         setWishes((ws) => ws.map((x) => (x.id === id ? { ...x, details: { ...x.details, ...change } } : x)));
+      },
+      async setPhoto(id, photo) {
+        const was = wishes.find((x) => x.id === id);
+        if (!was) return;
+        const details = { ...was.details, agent: { ...(was.details.agent ?? {}), imageUrl: photo.imageUrl, media: photo.media } } as WishDetails;
+        setWishes((ws) => ws.map((x) => (x.id === id ? { ...x, details } : x)));
+        const res = await api(`/wishes/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ details }) }).catch(() => null);
+        if (res?.ok) return;
+        setWishes((ws) => ws.map((x) => (x.id === id && x.details === details ? { ...x, details: was.details } : x)));
+        throw await failure(res, "Couldn't save the new photo.");
       },
     }),
     [wishes, status, error, reload, api],
