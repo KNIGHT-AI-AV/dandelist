@@ -30,6 +30,10 @@ export interface WishDetails {
     explanation: string;
     source: { currency: string; price: number; rate: number; rateDate: string };
   };
+  /** One plain sentence about the wish, written by the API (POST /wishes/describe) so search understands meaning. */
+  about?: string;
+  /** Up to five lowercase tags from the same call. */
+  tags?: string[];
 }
 
 export interface NewWish {
@@ -53,6 +57,11 @@ interface WishStore {
   remove(id: string): Promise<void>;
   /** Moves a wish to another tier. Shows at once; goes back if the server says no. */
   setTier(id: string, tier: WishTier): Promise<void>;
+  /**
+   * Folds details the server has already saved (a description) into the wish on screen, with no request and no
+   * reload, so nothing else on screen is disturbed.
+   */
+  mergeDetails(id: string, change: Partial<WishDetails>): void;
 }
 
 type ServerWish = {
@@ -158,6 +167,9 @@ export function WishProvider({ children }: { children: ReactNode }) {
         // Only undo this change: a later tap may already have moved the wish on.
         setWishes((ws) => ws.map((x) => (x.id === id && x.tier === tier ? { ...x, tier: was } : x)));
         throw await failure(res, "Couldn't save the wish.");
+      },
+      mergeDetails(id, change) {
+        setWishes((ws) => ws.map((x) => (x.id === id ? { ...x, details: { ...x.details, ...change } } : x)));
       },
     }),
     [wishes, status, error, reload, api],
