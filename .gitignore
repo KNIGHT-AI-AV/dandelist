@@ -18,5 +18,5 @@ expo-env.d.ts
 apps/mobile/credentials/
 apps/mobile/credentials.json
 
-# Local dev database (PGlite)
-apps/api/.devdb/
+# Local dev databases, including named QA clusters (PGlite/PostgreSQL)
+**/.devdb*/
