@@ -2,11 +2,10 @@ import { useState } from "react";
 import { Text, TextInput, View } from "react-native";
 import type { WishQuestion } from "../lib/agent";
 import { haptic } from "../lib/motion";
+import { OWN } from "../lib/own";
 import { answerOf, refineChanged } from "../lib/refine";
 import { layout, type, usePalette } from "../lib/theme";
 import { Chip, Hairline, PrimaryButton } from "./lux";
-
-const OWN = "Type your own";
 
 /**
  * The questions behind a price, opened only when the person asks (owner, 2026-10-29: "should only appear if the user

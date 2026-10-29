@@ -356,6 +356,19 @@ describe("dream turn", () => {
     expect(steps).toEqual(expect.arrayContaining(["search:running", "search:done", "read:running", "read:done"]));
   });
 
+  it("hunts with a style and a feature typed into the home builder, in the person's words (owner, 2026-10-29)", async () => {
+    const t = await signIn("ada@example.com");
+    concierge = [[fc("set_life_context", { country: "MT", region: "", city: "", label: "Malta", currency: "EUR", adults: 0, children: 0 }), fc("home_builder", VILLA_ARGS)], [message("")]];
+    const first = await turn(t, { type: "message", text: "a modern sea-view villa in Malta with a pool" });
+    const hb = widgets(first.events, "home_builder")[0];
+    const offered = hb.styles.filter((s: Ev) => s.on).map((s: Ev) => s.id);
+    await turn(t, { type: "builder", widgetId: hb.id, values: { styles: [...offered, "Japandi"], features: ["home cinema"] } }, first.sessionId);
+    const hunt = metaCalls.find((m) => String(m.instructions ?? "").startsWith("You find real listings"))!;
+    const asked = JSON.stringify(hunt.input);
+    expect(asked).toContain("Japandi");
+    expect(asked).toContain("home cinema");
+  });
+
   it("serves the same search from the 24-hour cache", async () => {
     const a = await signIn("ada@example.com");
     const b = await signIn("bob@example.com");

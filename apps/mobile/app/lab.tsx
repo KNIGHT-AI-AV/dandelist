@@ -1,6 +1,8 @@
+import type { Widget } from "@dandelist/catalogue/dream";
 import { Redirect } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { ScrollView, Text, View } from "react-native";
+import { HomeBuilder } from "../components/dream/builders";
 import { PaletteButton } from "../components/home/chrome";
 import { Composer } from "../components/inputs";
 import { Chip, Icon, IconButton, Money, PrimaryButton, QuietButton, Wordmark } from "../components/lux";
@@ -147,11 +149,43 @@ function IconBench() {
   );
 }
 
+const VILLA: Extract<Widget, { kind: "home_builder" }> = {
+  kind: "home_builder",
+  id: "bench-villa",
+  region: "Malta",
+  styles: [
+    { id: "modern", label: "Modern", on: true, imageUrl: lisbon.images[0]!.url },
+    { id: "mediterranean", label: "Mediterranean", imageUrl: lisbon.images[2]!.url },
+  ],
+  features: [
+    { id: "pool", label: "Pool", on: true },
+    { id: "sea-view", label: "Sea view", on: true },
+    { id: "garden", label: "Garden", on: false },
+  ],
+  bedrooms: 4,
+  budgetCents: 300_000_000,
+  currency: "EUR",
+};
+
+/** The home builder with a sample widget, and what its search button would send, for checking "Type your own". */
+function BuilderBench() {
+  const p = usePalette();
+  const [sent, setSent] = useState("");
+  return (
+    <View style={{ gap: 8, paddingHorizontal: 12 }}>
+      <Text style={[type.label, { color: p.ink2, paddingHorizontal: 4 }]}>Home builder</Text>
+      <HomeBuilder w={VILLA} onApply={(v) => setSent(JSON.stringify(v))} onSearchNow={() => setSent("just search")} />
+      <Text testID="builder-sent" style={[type.figure, { color: p.ink3, paddingHorizontal: 4 }]}>{sent}</Text>
+    </View>
+  );
+}
+
 export default function Lab() {
   const p = usePalette();
   if (!__DEV__) return <Redirect href="/" />;
   return (
     <ScrollView style={{ flex: 1, backgroundColor: p.bg }} contentContainerStyle={{ gap: 24, paddingVertical: 40, maxWidth: 520, width: "100%", alignSelf: "center" }}>
+      <BuilderBench />
       <IconBench />
       <OdometerBench />
       <GlassBench />
