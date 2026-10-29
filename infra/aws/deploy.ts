@@ -93,6 +93,7 @@ const secrets: Record<string, string> = {
 for (const [key, name] of [
   ["GOOGLE_CLIENT_SECRET", "dandelist/api/google-client-secret"],
   ["GITHUB_CLIENT_SECRET", "dandelist/api/github-client-secret"],
+  ["FACEBOOK_APP_SECRET", "dandelist/api/facebook-app-secret"],
 ] as const) {
   const arn = await existingSecret(name);
   if (arn) secrets[key] = arn;
@@ -106,13 +107,13 @@ const running = existing
   ? ((await ar.send(new DescribeServiceCommand({ ServiceArn: existing.ServiceArn! }))).Service?.SourceConfiguration?.ImageRepository?.ImageConfiguration?.RuntimeEnvironmentVariables ?? {})
   : {};
 const signInIds: Record<string, string> = {};
-for (const key of ["GOOGLE_CLIENT_ID", "GITHUB_CLIENT_ID", "APPLE_SERVICES_ID", "APPLE_BUNDLE_ID"]) {
+for (const key of ["GOOGLE_CLIENT_ID", "GITHUB_CLIENT_ID", "FACEBOOK_APP_ID", "APPLE_SERVICES_ID", "APPLE_BUNDLE_ID"]) {
   const value = process.env[key]?.trim() || running[key];
   if (value) signInIds[key] = value;
 }
 const onOff = (on: unknown) => (on ? "on" : "off");
 console.log(
-  `sign-in providers: google ${onOff(signInIds.GOOGLE_CLIENT_ID && secrets.GOOGLE_CLIENT_SECRET)}, github ${onOff(signInIds.GITHUB_CLIENT_ID && secrets.GITHUB_CLIENT_SECRET)}, apple web ${onOff(signInIds.APPLE_SERVICES_ID)}, apple iOS on`,
+  `sign-in providers: google ${onOff(signInIds.GOOGLE_CLIENT_ID && secrets.GOOGLE_CLIENT_SECRET)}, github ${onOff(signInIds.GITHUB_CLIENT_ID && secrets.GITHUB_CLIENT_SECRET)}, facebook ${onOff(signInIds.FACEBOOK_APP_ID && secrets.FACEBOOK_APP_SECRET)}, apple web ${onOff(signInIds.APPLE_SERVICES_ID)}, apple iOS on`,
 );
 
 // Image repository
