@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("node:dns/promises", async (importOriginal) => ({ ...(await importOriginal<object>()), lookup: async () => [{ address: "93.184.215.14", family: 4 }] }));
 import { createApp } from "../src/app";
 import { migrate, type Db } from "../src/db";
-import { MAX_AGENT_KEYS, MCP_TOOLS, hashAgentKey } from "../src/mcp";
+import { MAX_AGENT_KEYS, MAX_BATCH, MCP_CALLS_PER_MINUTE, MCP_TOOLS, PHOTO_CHECKS_PER_MINUTE, hashAgentKey } from "../src/mcp";
 import { imageResponse, jpegHeader } from "./images";
 
 /**
@@ -147,6 +147,32 @@ describe("the MCP server", () => {
     // Ada's wish is untouched.
     expect((await tool(adaKey, "list_wishes")).structuredContent.wishes).toMatchObject([{ id, name: "Ada's watch" }]);
     expect((await tool(beaKey, "summary")).structuredContent.all.count).toBe(0);
+  });
+
+  it("counts every message of a batch against the key's minute, and caps batches and photo checks", async () => {
+    const { key } = await makeKey(await signIn("ada@example.com"));
+    const batch = (n: number, method = "ping") =>
+      app.request("/mcp", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` }, body: JSON.stringify(Array.from({ length: n }, () => ({ jsonrpc: "2.0", id: ++seq, method }))) });
+    expect((await batch(MAX_BATCH + 1)).status).toBe(400);
+    for (let i = 0; i < MCP_CALLS_PER_MINUTE / MAX_BATCH; i++) expect((await batch(MAX_BATCH)).status).toBe(200);
+    // The minute's allowance is spent by batches as surely as by single calls.
+    const over = await rpc(key, "ping");
+    expect(over.status).toBe(429);
+    expect(over.body.error.code).toBe(-32002);
+  });
+
+  it("caps photo checks, which fetch from the web, tighter than other calls", async () => {
+    const { key } = await makeKey(await signIn("ada@example.com"));
+    for (let i = 0; i < PHOTO_CHECKS_PER_MINUTE; i++) expect((await tool(key, "photo_check", { url: PHOTO })).isError).toBe(false);
+    expect((await rpc(key, "tools/call", { name: "photo_check", arguments: { url: PHOTO } })).body.error.code).toBe(-32002);
+    expect((await tool(key, "list_wishes")).isError).toBe(false);
+  });
+
+  it("refuses a key whose session has expired", async () => {
+    const { key } = await makeKey(await signIn("ada@example.com"));
+    expect((await rpc(key, "ping")).status).toBe(200);
+    await db.query("update sessions set expires_at = '2000-01-01T00:00:00Z' where id = (select session_id from agent_tokens)");
+    expect((await rpc(key, "ping")).status).toBe(401);
   });
 
   it("says what is wrong with bad arguments instead of failing silently", async () => {

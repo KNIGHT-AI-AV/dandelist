@@ -23,8 +23,12 @@ export const MCP_PROTOCOL = "2025-06-18";
 const PROTOCOLS = new Set(["2024-11-05", "2025-03-26", "2025-06-18"]);
 /** Keys one person may hold at once. */
 export const MAX_AGENT_KEYS = 10;
-/** Calls one key may make a minute; hunts and photos keep their own daily caps on top. */
+/** Messages one key may send a minute, each message of a batch counted; hunts and photos keep their daily caps too. */
 export const MCP_CALLS_PER_MINUTE = 120;
+/** Photo checks one key may run a minute: each fetches from the open web. */
+export const PHOTO_CHECKS_PER_MINUTE = 30;
+/** Messages one request may batch; they run one after another. */
+export const MAX_BATCH = 10;
 const KEY_PREFIX = "dl_";
 /** An agent key's session lasts a year unless revoked first. */
 const KEY_SESSION_MS = 365 * 24 * 60 * 60 * 1000;
@@ -42,16 +46,16 @@ interface KeyRow {
   last_used_at: string | Date | null;
 }
 
-/** The person and session behind a key, or null for a missing, unknown or revoked one. */
-export async function agentFor(db: Db, pepper: string, header: string | undefined): Promise<KeyRow | null> {
+/** The person and session behind a key, or null for a missing, unknown, revoked or expired one. */
+export async function agentFor(db: Db, pepper: string, header: string | undefined, now: Date): Promise<KeyRow | null> {
   const key = header?.startsWith("Bearer ") ? header.slice(7).trim() : "";
   if (!key.startsWith(KEY_PREFIX) || key.length < 20 || key.length > 200) return null;
   const hash = hashAgentKey(pepper, key);
   const { rows } = await db.query<KeyRow>(
     `select t.id, t.user_id, t.session_id, t.token_hash, t.last_used_at from agent_tokens t
        join sessions s on s.id = t.session_id
-      where t.token_hash = $1 and t.revoked_at is null and s.revoked_at is null`,
-    [hash],
+      where t.token_hash = $1 and t.revoked_at is null and s.revoked_at is null and s.expires_at > $2`,
+    [hash, now.toISOString()],
   );
   const row = rows[0];
   return row && sameHash(row.token_hash, hash) ? row : null;
@@ -274,6 +278,7 @@ export function mcpRoutes(deps: AppDeps & { call: Call }) {
   const app = new Hono();
   const { db } = deps;
   const perKey = new RateLimiter(MCP_CALLS_PER_MINUTE, 60_000);
+  const photoChecks = new RateLimiter(PHOTO_CHECKS_PER_MINUTE, 60_000);
 
   app.get("/", (c) => c.json({ error: "Send MCP requests with POST." }, 405, { Allow: "POST" }));
   app.delete("/", (c) => c.json({ error: "Send MCP requests with POST." }, 405, { Allow: "POST" }));
@@ -282,9 +287,8 @@ export function mcpRoutes(deps: AppDeps & { call: Call }) {
     // A browser page on another site may not drive an account's agent.
     const origin = c.req.header("Origin");
     if (origin && !deps.webOrigins.includes(origin)) return c.json(rpcError(null, -32000, "This origin may not call Dandelist's MCP server."), 403);
-    const key = await agentFor(db, deps.codePepper, c.req.header("Authorization"));
+    const key = await agentFor(db, deps.codePepper, c.req.header("Authorization"), deps.now());
     if (!key) return c.json(rpcError(null, -32001, "Use an agent key from Dandelist's Settings, sent as a Bearer token."), 401, { "WWW-Authenticate": 'Bearer realm="dandelist"' });
-    if (!perKey.take(key.id, deps.now().getTime())) return c.json(rpcError(null, -32002, `Slow down: up to ${MCP_CALLS_PER_MINUTE} calls a minute per key.`), 429);
     const last = key.last_used_at ? new Date(key.last_used_at).getTime() : 0;
     if (deps.now().getTime() - last > 60_000) await db.query("update agent_tokens set last_used_at = $2 where id = $1", [key.id, deps.now().toISOString()]);
 
@@ -297,9 +301,13 @@ export function mcpRoutes(deps: AppDeps & { call: Call }) {
       return data;
     };
 
+    const slow = `Slow down: up to ${MCP_CALLS_PER_MINUTE} calls a minute per key.`;
     const handle = async (m: Rpc) => {
       if (!m || typeof m !== "object" || typeof m.method !== "string") return rpcError(m?.id, -32600, "Not a JSON-RPC request.");
       const notification = m.id === undefined || m.id === null;
+      // Every message counts against the key's minute, a batch's as much as single ones.
+      if (!perKey.take(key.id, deps.now().getTime())) return notification ? null : rpcError(m.id, -32002, slow);
+      if (m.method === "tools/call" && m.params?.name === "photo_check" && !photoChecks.take(key.id, deps.now().getTime())) return rpcError(m.id, -32002, `Slow down: up to ${PHOTO_CHECKS_PER_MINUTE} photo checks a minute per key.`);
       switch (m.method) {
         case "initialize": {
           const asked = String(m.params?.protocolVersion ?? "");
@@ -329,9 +337,15 @@ export function mcpRoutes(deps: AppDeps & { call: Call }) {
 
     const body = (await c.req.json().catch(() => undefined)) as Rpc | Rpc[] | undefined;
     if (body === undefined) return c.json(rpcError(null, -32700, "Send a JSON-RPC message."), 400);
-    const batch = Array.isArray(body) ? body.slice(0, 20) : [body];
-    const replies = (await Promise.all(batch.map(handle))).filter((r) => r !== null);
+    if (Array.isArray(body) && body.length > MAX_BATCH) return c.json(rpcError(null, -32600, `Send up to ${MAX_BATCH} messages at once.`), 400);
+    // One after another, so a batch never runs its tools side by side.
+    const replies: unknown[] = [];
+    for (const m of Array.isArray(body) ? body : [body]) {
+      const r = await handle(m);
+      if (r !== null) replies.push(r);
+    }
     if (!replies.length) return c.body(null, 202);
+    if (!Array.isArray(body) && (replies[0] as { error?: { code: number } }).error?.code === -32002) return c.json(replies[0], 429);
     return c.json(Array.isArray(body) ? replies : replies[0]);
   });
 
