@@ -1,13 +1,15 @@
 import { Redirect } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { ScrollView, Text, View } from "react-native";
-import { Chip, Money } from "../components/lux";
+import { PaletteButton } from "../components/home/chrome";
+import { Composer } from "../components/inputs";
+import { Chip, Icon, IconButton, Money, PrimaryButton, QuietButton, Wordmark } from "../components/lux";
 import { MediaHero, type Media } from "../components/media";
 import { dollars } from "../components/odometer";
 import { GlassReveal } from "../components/reveal";
 import type { Stage } from "../components/reveal-clock";
 import type { Mode } from "../lib/odometer-plan";
-import { type, usePalette } from "../lib/theme";
+import { layout, type, usePalette } from "../lib/theme";
 
 /** The odometer QA cases from the UI audit (§2.11), one tap each. */
 function OdometerBench() {
@@ -93,11 +95,64 @@ function GlassBench() {
   );
 }
 
+/** Every icon, button and the wordmark side by side, at their real sizes, for the icon audit (owner, 2026-10-29). */
+function IconBench() {
+  const p = usePalette();
+  const box = { borderWidth: 1, borderColor: `rgba(${p.inkRgb},0.25)` };
+  const label = (s: string) => <Text style={[type.figure, { color: p.ink3 }]}>{s}</Text>;
+  return (
+    <View testID="icon-bench" style={{ gap: 20, paddingHorizontal: 16 }}>
+      <Text style={[type.label, { color: p.ink2 }]}>Icons and buttons</Text>
+      {/* The top bar's right side as it is laid out: palette, then the profile photo. */}
+      <View testID="bench-header" style={{ height: layout.headerBar, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+        <Wordmark />
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+          <View style={box}>
+            <PaletteButton />
+          </View>
+          <View style={[box, { width: layout.control.chip, height: layout.control.chip, alignItems: "flex-end", justifyContent: "center" }]}>
+            <View style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: p.accent }} />
+          </View>
+        </View>
+      </View>
+      <View testID="bench-icons" style={{ flexDirection: "row", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+        {(["back", "close", "plus", "check"] as const).map((n) => (
+          <View key={n} style={{ alignItems: "center", gap: 4 }}>
+            <View style={box}>
+              <Icon name={n} size={34} />
+            </View>
+            {label(n)}
+          </View>
+        ))}
+        <IconButton icon="back" label="Back" onPress={() => {}} />
+        <IconButton icon="close" label="Close" onPress={() => {}} />
+      </View>
+      <View testID="bench-composer">
+        <Composer value="A Leica Q3" onChangeText={() => {}} onSend={() => {}} placeholder="Tell Dandy what you want..." label="Message Dandy" />
+      </View>
+      <View testID="bench-buttons" style={{ gap: 12 }}>
+        <PrimaryButton label="Add to my list" onPress={() => {}} />
+        <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
+          <Chip label="Must" selected onPress={() => {}} />
+          <Chip label="Nice" onPress={() => {}} />
+          <QuietButton label="Retake photo" onPress={() => {}} />
+        </View>
+      </View>
+      <View testID="bench-wordmark" style={{ gap: 12, alignItems: "flex-start" }}>
+        <View style={box}>
+          <Wordmark height={48} />
+        </View>
+      </View>
+    </View>
+  );
+}
+
 export default function Lab() {
   const p = usePalette();
   if (!__DEV__) return <Redirect href="/" />;
   return (
     <ScrollView style={{ flex: 1, backgroundColor: p.bg }} contentContainerStyle={{ gap: 24, paddingVertical: 40, maxWidth: 520, width: "100%", alignSelf: "center" }}>
+      <IconBench />
       <OdometerBench />
       <GlassBench />
       {[
