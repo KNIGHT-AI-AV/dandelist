@@ -3,8 +3,7 @@ import { router } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Animated, Keyboard, Pressable, RefreshControl, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { adoptionDone, adoptionKeys, alreadyHas, withoutAdopted } from "../../lib/adopt";
-import { getRun, startHunt } from "../../lib/agent";
+import { adoptWelcome, priceFirstWish } from "../../lib/adopt";
 import { useAuth } from "../../lib/auth";
 import { comfortableIncome } from "../../lib/comfort";
 import { useMoney } from "../../lib/currency";
@@ -14,7 +13,7 @@ import { recheckWish } from "../../lib/rechecks";
 import { useSuggestions } from "../../lib/suggestions";
 import { fonts, layout, radius, space, type, usePalette, useType } from "../../lib/theme";
 import { loadWelcome, saveWelcome, toWishes } from "../../lib/welcome";
-import { useWishes, type NewWish, type Wish } from "../../lib/wishes";
+import { useWishes, type Wish } from "../../lib/wishes";
 import { rememberCard, type Rect } from "../../lib/zoom";
 import { DandyAvatar } from "../dandy-avatar";
 import { dockRoom } from "../inputs";
@@ -49,64 +48,11 @@ function useAdoptWelcome(ready: boolean, add: ReturnType<typeof useWishes>["add"
     if (!ready || started.current) return;
     started.current = true;
     void (async () => {
-      let kept = await loadWelcome();
+      const kept = await loadWelcome();
       if (!kept?.kept) return;
-      const keys = adoptionKeys(kept);
-      const list = toWishes(kept);
-      for (let i = 0; i < list.length; i++) {
-        if (!alreadyHas(have.current, list[i]!)) {
-          const saved = await add(list[i]!).then(
-            () => true,
-            () => false,
-          );
-          if (!saved) return; // kept for the next try
-        }
-        kept = withoutAdopted(kept, keys[i]!);
-        await saveWelcome(adoptionDone(kept) ? null : kept);
-      }
-      if (kept.wish && !kept.wish.option) {
-        const wish = await priceFirstWish(api, kept.wish.text, kept.last === "wish" ? "dream" : "must").catch(() => null);
-        if (!wish) return; // kept for the next try
-        if (!alreadyHas(have.current, wish) && !(await add(wish).then(() => true, () => false))) return;
-        kept = { ...kept, wish: null };
-        await saveWelcome(adoptionDone(kept) ? null : kept);
-      }
-    })();
+      await adoptWelcome(kept, { have: () => have.current, add, save: saveWelcome, toWishes, price: (text) => priceFirstWish(api, text) });
+    })().catch(() => {}); // Storage failure leaves the existing checkpoint for the next mount.
   }, [ready, add, api]);
-}
-
-/** Prices a first wish from its words, the way the chat hunts one, waiting for the run to settle (60 s at most). */
-async function priceFirstWish(api: Api, text: string, tier: Wish["tier"]): Promise<NewWish | null> {
-  let run = await startHunt(api, { text });
-  const until = Date.now() + 75_000;
-  while (run.status === "running" && Date.now() < until) {
-    await new Promise((r) => setTimeout(r, 2_000));
-    run = await getRun(api, run.id);
-  }
-  const option = run.result?.options[0];
-  if (!option || !run.draft) return null;
-  return {
-    name: run.draft.title,
-    kind: run.draft.kind,
-    tier,
-    upfrontCents: option.upfrontCents,
-    recurringCents: 0,
-    period: "month",
-    recurring: option.recurring.map((r) => ({ amountCents: r.amountCents, period: r.period, label: r.label.slice(0, 60) })),
-    details: {
-      agent: {
-        runId: run.id,
-        seller: option.seller,
-        url: option.url,
-        status: option.status,
-        checkedAt: option.checkedAt,
-        ...(option.imageUrl ? { imageUrl: option.imageUrl } : {}),
-        ...(option.media ? { media: option.media } : {}),
-        explanation: run.result?.explanation ?? "",
-        source: option.source,
-      },
-    },
-  };
 }
 
 /** True once `ms` have passed: waits under a second show nothing rather than a flash (NN/g, UI audit P2-26). */

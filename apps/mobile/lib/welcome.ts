@@ -46,6 +46,9 @@ export interface FirstWish {
   title?: string;
   kind?: WishKind;
   option?: GuestOption;
+  /** Research completed after sign-in, kept on this device until the account write succeeds. */
+  runId?: string;
+  explanation?: string;
   /** Why it couldn't be priced; it still goes on the list to price after saving. */
   failed?: string;
 }
@@ -132,7 +135,7 @@ export function toWishes(s: WelcomeState): NewWish[] {
       recurringCents: 0,
       period: "month",
       recurring: o.recurring.map((r) => ({ amountCents: r.amountCents, period: r.period, label: r.label.slice(0, 60) })),
-      details: { agent: { runId: "guest", seller: o.seller, url: o.url, status: o.status, checkedAt: o.checkedAt, ...(o.imageUrl ? { imageUrl: o.imageUrl } : {}), ...(o.media ? { media: o.media as Media } : {}), explanation: "", source: o.source } },
+      details: { agent: { runId: w.runId ?? "guest", seller: o.seller, url: o.url, status: o.status, checkedAt: o.checkedAt, ...(o.imageUrl ? { imageUrl: o.imageUrl } : {}), ...(o.media ? { media: o.media as Media } : {}), explanation: w.explanation ?? "", source: o.source } },
     });
   }
   for (const e of s.items) {
