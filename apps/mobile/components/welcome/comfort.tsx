@@ -23,7 +23,6 @@ const FACES = [
   require("../../assets/faces/4-overjoyed.png"),
   require("../../assets/faces/5-pompous.png"),
 ];
-const FACE = 112;
 const THUMB = 30;
 /** The face change: the old one sinks back and softens while the new one settles in from a touch larger. */
 const SWAP_MS = 520;
@@ -33,7 +32,7 @@ const SWAP_MS = 520;
  * shrinks a little and blurs away while the incoming one settles from slightly larger on a spring, and a thin
  * champagne ring opens behind them and dissolves, like a lens focusing on the new expression.
  */
-function Face({ index }: { index: number }) {
+function Face({ index, size: FACE = 112 }: { index: number; size?: number }) {
   const p = usePalette();
   const reduced = useReducedMotion();
   const [shown, setShown] = useState({ now: index, was: index });
@@ -85,7 +84,7 @@ export function CurrencyChips() {
  * and the track. Notches are round numbers in the chosen currency; each one ticks (a haptic on phones, a soft click
  * on the web). The welcome's "What would it take?" and the money page both use it.
  */
-export function IncomeFader({ incomeCents, totalCents, keepPerYearCents = 0, onChange, size = 52 }: { incomeCents: number; totalCents: number; keepPerYearCents?: number; onChange(cents: number): void; size?: number }) {
+export function IncomeFader({ incomeCents, totalCents, keepPerYearCents = 0, onChange, size = 52, compact = false }: { incomeCents: number; totalCents: number; keepPerYearCents?: number; onChange(cents: number): void; size?: number; compact?: boolean }) {
   const p = usePalette();
   const money = useMoney();
   const reduced = useReducedMotion();
@@ -143,16 +142,32 @@ export function IncomeFader({ incomeCents, totalCents, keepPerYearCents = 0, onC
     onChange(next);
   };
 
+  const figure = <Odometer cents={incomeCents} format={money.format} size={size} family="bodoni" smallPrefix tracking={-0.02 * size} mode={reduced ? "instant" : "ui"} />;
+  const line = <Text accessibilityLiveRegion="polite" numberOfLines={1} style={[compact ? type.callout : type.title3, { fontFamily: fonts.titleItalic, color: p.accentText, textAlign: compact ? "left" : "center" }]}>{stage.line}</Text>;
   return (
-    <View style={{ gap: layout.stack.base + layout.stack.tight }}>
-      <View style={{ alignItems: "center", gap: layout.stack.tight }}>
-        <Face index={stage.index} />
-        <View style={{ alignItems: "center", gap: 2 }}>
-          <Odometer cents={incomeCents} format={money.format} size={size} family="bodoni" smallPrefix tracking={-0.02 * size} mode={reduced ? "instant" : "ui"} />
-          <Text style={[type.figure, { color: p.ink3 }]}>a year</Text>
+    <View style={{ gap: compact ? layout.stack.tight : layout.stack.base + layout.stack.tight }}>
+      {compact ? (
+        // The intro card's form: the face beside the figure and its line, so it fits the card's foot.
+        <View style={{ flexDirection: "row", alignItems: "center", gap: layout.stack.base }}>
+          <Face index={stage.index} size={56} />
+          <View style={{ flex: 1, gap: 2 }}>
+            <View style={{ flexDirection: "row", alignItems: "baseline", gap: 6 }}>
+              {figure}
+              <Text style={[type.figure, { color: p.ink3 }]}>a year</Text>
+            </View>
+            {line}
+          </View>
         </View>
-        <Text accessibilityLiveRegion="polite" style={[type.title3, { fontFamily: fonts.titleItalic, color: p.accentText, textAlign: "center" }]}>{stage.line}</Text>
-      </View>
+      ) : (
+        <View style={{ alignItems: "center", gap: layout.stack.tight }}>
+          <Face index={stage.index} />
+          <View style={{ alignItems: "center", gap: 2 }}>
+            {figure}
+            <Text style={[type.figure, { color: p.ink3 }]}>a year</Text>
+          </View>
+          {line}
+        </View>
+      )}
       <View style={{ gap: layout.stack.tight }}>
         <View
           ref={track}
@@ -175,7 +190,7 @@ export function IncomeFader({ incomeCents, totalCents, keepPerYearCents = 0, onC
           <Text style={[type.figure, { color: p.ink3 }]}>{money.compact(steps[steps.length - 1]!)}</Text>
         </View>
       </View>
-      <CurrencyChips />
+      {compact ? null : <CurrencyChips />}
     </View>
   );
 }

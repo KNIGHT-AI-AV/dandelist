@@ -1,9 +1,9 @@
 import { Redirect, useLocalSearchParams } from "expo-router";
 import { useRef, useState } from "react";
-import { Text, View, useWindowDimensions, type TextInput } from "react-native";
+import { StyleSheet, Text, View, useWindowDimensions, type TextInput } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CODE_LENGTH, CodeField, Field, KeyboardLift, KeyboardScroll, isEmail, type CodeFieldHandle } from "../components/inputs";
-import { Backdrop, Eyebrow, Grain, PrimaryButton, QuietButton, Shade } from "../components/lux";
+import { Backdrop, Eyebrow, Grain, PrimaryButton, QuietButton, Shade, Wordmark } from "../components/lux";
 import { SignInOptions } from "../components/sign-in-options";
 import { signInErrorMessage, useAuth, useSignInOptions, type ProviderId, type SignInOption } from "../lib/auth";
 import { haptic } from "../lib/motion";
@@ -94,6 +94,9 @@ export default function SignIn() {
     <View style={{ flex: 1, backgroundColor: p.bg }}>
       <Atmosphere />
       <Backdrop source={require("../assets/backdrop.jpg")} />
+      {/* The photo stays atmosphere, not the page: the emerald dusk over it keeps the mood dark and stops its warm
+          tones bleeding into borders and glass (Taste Engine adherence check, 2026-10-29). */}
+      <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: `rgba(${p.bgRgb}, 0.42)` }]} />
       <Shade from={0.05} />
       {/* The form is anchored to the bottom, so the whole column rides up with the keyboard instead of jumping. */}
       <KeyboardLift rest={insets.bottom + FOOT} gap={layout.stack.base} style={{ flex: 1 }}>
@@ -103,9 +106,9 @@ export default function SignIn() {
         >
           {!sentTo ? (
             <>
-              <Eyebrow color={p.ink}>Dandelist</Eyebrow>
+              <Wordmark height={30} />
               <Text accessibilityRole="header" style={[t.display, { color: p.ink }]}>
-                Price the life{"\n"}you <Text style={{ fontFamily: fonts.displayItalic, color: p.accentText }}>want</Text>.
+                Price everything{"\n"}you <Text style={{ fontFamily: fonts.displayItalic, color: p.accentText }}>want</Text>.
               </Text>
               <Text style={[type.body, { color: p.ink2, marginBottom: layout.stack.tight }]}>Dandelist finds the real price of everything you want, and what it costs over the years.</Text>
               {options ? <SignInOptions options={options} pending={provider} disabled={busy} onChoose={continueWith} /> : null}

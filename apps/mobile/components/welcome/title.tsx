@@ -5,7 +5,9 @@ import { Animated, Easing, Platform, Pressable, StyleSheet, Text, View, useWindo
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ease, native, useReducedMotion } from "../../lib/motion";
 import { fonts, layout, type, usePalette } from "../../lib/theme";
-import { hostOf, monthYearLong, reachBy, shortDate } from "../../lib/welcome";
+import { recurringBreakdown } from "@dandelist/cost";
+import { comfortableIncome } from "../../lib/comfort";
+import { hostOf, shortDate } from "../../lib/welcome";
 import { Grain, Shade, Wordmark } from "../lux";
 import { Odometer, dollars } from "../odometer";
 import { GlassReveal } from "../reveal";
@@ -22,7 +24,6 @@ const SHORT_FROM = 6600;
 /** The dissolve that carries the title into the first screen, from wherever it was touched. */
 const DISSOLVE_MS = 900;
 /** The title's example plan: a stated monthly amount, so the date it shows is honest arithmetic. */
-const EXAMPLE_MONTHLY_CENTS = 300_000;
 /** Where each hero's subject sits in its photograph, so the crop keeps the subject whole. */
 const FOCUS: Record<string, { x: number; y: number }> = { "porsche-911": { x: 0.42, y: 0.5 } };
 /** The dissolve's edge: how much wider each disc is than the core, and how opaque. */
@@ -30,7 +31,7 @@ const FEATHER = [[1.12, 0.3], [1.06, 0.55], [1, 1]] as const;
 
 /**
  * The opening, centred on one axis and paced slowly: a real thing surfaces through the glass, its checked price
- * spins in and lands with its source, the price becomes "Yours by …", then the wordmark resolves in the middle of
+ * spins in and lands with its source, the price becomes what it would take (the income that carries it), then the wordmark resolves in the middle of
  * the screen, its gold dot settles on the i, a hairline draws and the line lands. Touch anywhere and the title
  * dissolves outward from that point into the first screen; the Skip button and Escape do the same.
  */
@@ -90,7 +91,8 @@ export function TitleSequence({ hero, short, onDone }: { hero: Entry; short: boo
   const dateOut = range(6300, 7000, 1, 0);
   const rule = range(8000, 8900, 0, 1, ease.inOut);
   const line = range(8800, 9600);
-  const by = monthYearLong(reachBy(hero.upfrontCents, EXAMPLE_MONTHLY_CENTS));
+  // What it would take: the income that carries this wish comfortably, its running costs included.
+  const income = comfortableIncome(hero.upfrontCents, recurringBreakdown([hero]).perYear);
   const gutter = layout.gutter(width);
   const fade = out.interpolate({ inputRange: [0, 0.6, 1], outputRange: [1, 0.15, 0] });
   // The dissolve's reach: a circle from the touch point that covers the farthest corner.
@@ -115,7 +117,7 @@ export function TitleSequence({ hero, short, onDone }: { hero: Entry; short: boo
         </Animated.View>
         <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: p.bg, opacity: dim }]} />
 
-        {/* The checked price and its source, centred, then the date it becomes in the same place. */}
+        {/* The checked price and its source, centred, then what it would take in the same place. */}
         <View pointerEvents="none" style={centre}>
           <Animated.View style={{ alignItems: "center", gap: 8, opacity: Animated.multiply(priceIn, priceOut), transform: [{ translateY: priceLift }] }}>
             {price ? <Odometer cents={hero.upfrontCents} format={dollars} size={52} family="bodoni" smallPrefix tracking={-1.04} rollOnMount="cinema" /> : <View style={{ height: Math.round(52 * 1.18) }} />}
@@ -125,10 +127,10 @@ export function TitleSequence({ hero, short, onDone }: { hero: Entry; short: boo
         </View>
         <View pointerEvents="none" style={centre}>
           <Animated.View style={{ alignItems: "center", opacity: Animated.multiply(dateIn, dateOut), transform: [{ translateY: range(4500, 5600, 16, 0) }] }}>
-            {/* A deliberate two-line set, so the year is never orphaned. */}
-            <Text style={[type.dateline, { color: p.ink, textAlign: "center" }]}>Yours by</Text>
-            <Text style={[type.dateline, { fontFamily: fonts.displayItalic, color: p.accentText, textAlign: "center" }]}>{by}</Text>
-            <Text style={[type.figure, { color: p.ink2, marginTop: 8, textAlign: "center" }]}>at $3,000 a month</Text>
+            {/* A deliberate two-line set, so the figure is never orphaned. */}
+            <Text style={[type.dateline, { color: p.ink, textAlign: "center" }]}>Comfortable on</Text>
+            <Text style={[type.dateline, { fontFamily: fonts.displayItalic, color: p.accentText, textAlign: "center" }]}>{`${dollars(income)} a year`}</Text>
+            <Text style={[type.figure, { color: p.ink2, marginTop: 8, textAlign: "center" }]}>upkeep included</Text>
           </Animated.View>
         </View>
 
@@ -141,7 +143,7 @@ export function TitleSequence({ hero, short, onDone }: { hero: Entry; short: boo
           />
           <Animated.View style={{ width: 140, height: StyleSheet.hairlineWidth * 2, backgroundColor: p.accent, transform: [{ scaleX: rule }] }} />
           <Animated.Text style={[type.title3, { color: p.ink2, textAlign: "center", opacity: line, transform: [{ translateY: range(8800, 9600, 10, 0) }] }]}>
-            Price the life you <Text style={{ fontFamily: fonts.titleItalic, color: p.accentText }}>want</Text>.
+            Price everything you <Text style={{ fontFamily: fonts.titleItalic, color: p.accentText }}>want</Text>.
           </Animated.Text>
         </View>
       </Animated.View>

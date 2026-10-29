@@ -3,7 +3,7 @@ import { useEffect, useRef } from "react";
 import { ScrollView, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { layout, type, usePalette, useType } from "../lib/theme";
-import { Chip, EdgeFade, Eyebrow, Hairline, IconButton } from "./lux";
+import { Chip, EdgeFade, Eyebrow, Hairline, IconButton, Wordmark } from "./lux";
 import { Atmosphere } from "./atmosphere";
 
 export interface LegalSection {
@@ -60,7 +60,8 @@ export function LegalPage({ eyebrow, title, documents, focus }: { eyebrow: strin
       <Atmosphere />
       <ScrollView ref={scroll} contentContainerStyle={{ paddingTop: insets.top + layout.contentTop, paddingBottom: insets.bottom + 48, paddingHorizontal: layout.gutter(width), gap: layout.stack.section, maxWidth: 680, width: "100%", alignSelf: "center" }}>
         <View style={{ gap: 8 }}>
-          <Eyebrow>{eyebrow}</Eyebrow>
+          {/* The brand's own mark where the page names the brand (Taste Engine adherence check, 2026-10-29). */}
+          {eyebrow === "Dandelist" ? <Wordmark height={28} /> : <Eyebrow>{eyebrow}</Eyebrow>}
           <Text accessibilityRole="header" style={[t.title1, { color: p.ink }]}>
             {title}
           </Text>
@@ -105,7 +106,7 @@ export function LegalPage({ eyebrow, title, documents, focus }: { eyebrow: strin
                   {s.heading}
                 </Text>
                 {s.body.map((para, j) => (
-                  <Text key={j} style={[type.body, { lineHeight: 24, color: p.ink2 }]}>
+                  <Text key={j} style={[type.callout, { color: p.ink2 }]}>
                     {para}
                   </Text>
                 ))}

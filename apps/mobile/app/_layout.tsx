@@ -4,7 +4,7 @@ import { InstrumentSerif_400Regular, InstrumentSerif_400Regular_Italic } from "@
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold } from "@expo-google-fonts/inter";
 import { InterTight_400Regular } from "@expo-google-fonts/inter-tight";
 import { useFonts } from "expo-font";
-import { Stack } from "expo-router";
+import { DarkTheme, DefaultTheme, Stack, ThemeProvider as NavigationTheme } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -49,10 +49,14 @@ function Root() {
         <CurrencyProvider>
           <WishProvider>
             <StatusBar style={p.scheme === "dark" ? "light" : "dark"} />
+            {/* Navigation paints its own background between screens; without this it is React Navigation's light grey
+                (#F2F2F2), which Taste Engine found on the live site. */}
+            <NavigationTheme value={{ ...(p.scheme === "dark" ? DarkTheme : DefaultTheme), colors: { ...(p.scheme === "dark" ? DarkTheme : DefaultTheme).colors, background: p.bg, card: p.bg, text: p.ink, border: p.hair, primary: p.accent } }}>
             <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: p.bg } }}>
               {/* The detail grows out of its card over the list, so the list stays underneath (UI audit P1-17). */}
               <Stack.Screen name="wishes/[id]" options={{ presentation: "transparentModal", animation: "none", contentStyle: { backgroundColor: "transparent" } }} />
             </Stack>
+            </NavigationTheme>
           </WishProvider>
         </CurrencyProvider>
       </AuthProvider>
