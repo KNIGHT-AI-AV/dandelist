@@ -138,7 +138,7 @@ export function DetailsPage() {
               </View>
             ) : search.working ? null : (
               <View accessibilityLiveRegion="polite" aria-live="polite" style={{ gap: space[4] }}>
-                <Text style={[type.callout, { color: p.ink }]}>{`Nothing matches “${query.trim()}”.`}</Text>
+                <Text style={[type.callout, { color: p.ink }]}>{`Nothing matches "${query.trim()}".`}</Text>
                 <Text style={[type.footnote, { color: p.ink2 }]}>Try a word like travel, home or family.</Text>
               </View>
             )}
