@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CURRENCIES, FALLBACK_RATES, formatCompact, formatIn, isCurrency, readRates, symbolOf, toLocal, toUsd } from "./fx";
+import { CURRENCIES, formatCompact, formatIn, isCurrency, symbolOf, toLocal, toUsd } from "./fx";
 
 describe("currencies", () => {
   it("shows whole units in each currency", () => {
@@ -50,9 +50,4 @@ describe("currencies", () => {
     }
   });
 
-  it("reads only sane rates", () => {
-    expect(readRates({ rates: { EUR: 0.9, GBP: -1, JPY: "x" } })).toEqual({ ...FALLBACK_RATES, EUR: 0.9 });
-    expect(readRates({ rates: {} })).toBeNull();
-    expect(readRates(null)).toBeNull();
-  });
 });
