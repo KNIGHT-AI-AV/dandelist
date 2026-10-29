@@ -10,6 +10,7 @@ import { previewRoutes } from "./preview";
 import { isStoredKey } from "./media-store";
 import { agentKeyRoutes, mcpRoutes } from "./mcp";
 import { meRoutes } from "./me";
+import { pickRoutes } from "./picks";
 import { wishRoutes } from "./wishes";
 
 export interface AppDeps extends AgentDeps {
@@ -46,6 +47,8 @@ export function createApp(deps: AppDeps) {
   app.route("/fx", fxRoutes(deps));
   app.route("/auth", authRoutes(deps));
   app.route("/wishes", wishRoutes(deps));
+  // Today's pick: one suggestion a day, made when the list opens (picks.ts).
+  app.route("/picks", pickRoutes(deps));
   app.route("/agent", agentRoutes(deps));
   // The pre-login pool (catalogue plus archive subjects with photos), shared by the preview and the guest routes.
   const pool = poolSource(db, deps.now);
