@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Text, View } from "react-native";
-import { getRun, startHunt, type Answer, type Draft, type PriceOption, type Run, type Step, type WishQuestion } from "../../lib/agent";
+import { getRun, retakePhoto, startHunt, type Answer, type Draft, type FoundPhoto, type PriceOption, type Run, type Step, type WishQuestion } from "../../lib/agent";
 import { useAuth } from "../../lib/auth";
 import { useDandy } from "../../lib/dandy";
 import { haptic } from "../../lib/motion";
@@ -28,6 +28,10 @@ interface Hunt {
   /** Answers changed on the card and not hunted with yet, by question id. */
   edits: Record<string, string>;
   error: string | null;
+  /** A photo the AI found again for this card (a retake), shown and saved in place of the hunt's. */
+  shot?: FoundPhoto;
+  /** Photos this card has shown, never offered again by a retake. */
+  shown?: string[];
 }
 
 // One hunt per chat item, kept across remounts (the feed re-renders, the pager moves) so nothing starts twice.
@@ -122,7 +126,34 @@ export function HuntCard({ id, text, already }: { id: string; text: string; alre
   const option: PriceOption | undefined = h.run?.result?.options[0];
   const done = h.run?.status === "done" || h.run?.status === "error";
   const opened = h.run?.steps.slice().reverse().find((s): s is Extract<Step, { type: "open" }> => s.type === "open" && !!s.imageUrl);
-  const photo = option?.imageUrl ?? opened?.imageUrl ?? null;
+  const photo = h.shot?.imageUrl ?? option?.imageUrl ?? opened?.imageUrl ?? null;
+  const [retaking, setRetaking] = useState(false);
+
+  // Retake photo: the AI looks again with what the wish is, never offering a photo this card has shown.
+  const retake = useCallback(async () => {
+    const cur = hunts.get(id) ?? h;
+    const d = cur.run?.draft ?? cur.draft;
+    if (!d || retaking) return;
+    setRetaking(true);
+    const seen = [...new Set([...(cur.shown ?? []), ...(photo ? [photo] : [])])];
+    try {
+      const shot = await retakePhoto(api, { title: d.title, kind: d.kind, summary: d.summary }, seen);
+      keep({ ...(hunts.get(id) ?? cur), shot, shown: [...seen, shot.imageUrl] });
+      haptic.success();
+    } catch (e) {
+      keep({ ...(hunts.get(id) ?? cur), shown: seen, error: sorry(e) });
+    } finally {
+      if (alive.current) setRetaking(false);
+    }
+  }, [api, h, id, keep, photo, retaking]);
+
+  // Photos always come (owner, 2026-10-29): a finished hunt with no photo asks for one once, by itself.
+  const asked = useRef(false);
+  useEffect(() => {
+    if (asked.current || !option || photo || h.run?.status !== "done") return;
+    asked.current = true;
+    void retake();
+  }, [option, photo, h.run?.status, retake]);
 
   const huntAgain = () => {
     if (!draft || !refineChanged(questions, h.edits)) return;
@@ -156,7 +187,7 @@ export function HuntCard({ id, text, already }: { id: string; text: string; alre
             status: option.status,
             checkedAt: option.checkedAt,
             imageUrl: photo ?? undefined,
-            ...(option.media ? { media: option.media } : {}),
+            ...(h.shot ? { media: h.shot.media } : option.media ? { media: option.media } : {}),
             explanation: h.run.result.explanation,
             source: option.source,
           },
@@ -207,6 +238,7 @@ export function HuntCard({ id, text, already }: { id: string; text: string; alre
         </Text>
         {h.error ? <ErrorLine>{h.error}</ErrorLine> : null}
         {!done ? <Working dandy={dandy} label="Checking more sellers" /> : null}
+        <QuietButton label={retaking ? "Finding a better photo..." : "Retake photo"} onPress={() => void retake()} style={{ alignSelf: "flex-start" }} />
         <PrimaryButton label={saved || already ? "On your list" : "Add to my list"} busy={saving} disabled={saved || already} onPress={() => void save()} />
         {questions.length ? <QuietButton label={refining ? "Done refining" : "Refine it"} onPress={() => setRefining((r) => !r)} style={{ alignSelf: "flex-start" }} /> : null}
         {refining ? <RefinePanel questions={questions} edits={h.edits} onEdit={(q, a) => keep({ ...h, edits: { ...h.edits, [q]: a } })} onHunt={huntAgain} /> : null}

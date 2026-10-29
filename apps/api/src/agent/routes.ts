@@ -11,7 +11,8 @@ import { HUNT_STOP_MS, huntWish, type HuntResult } from "./find";
 import { SAM_MODEL } from "./cutout";
 import type { MediaOptions } from "./hunt";
 import { SHOPPING_ACTOR, SHOPPING_MAX_RESULTS, SHOPPING_PRICE_PER_RESULT_USD, shoppingSearch } from "./shopping";
-import type { Fetcher } from "./tools";
+import { findPhoto } from "./photos";
+import { publicFetch, type Fetcher } from "./tools";
 import { pgArchive, type Archive } from "../archive/archive";
 import { MAX_CLIP_BYTES, TRANSCRIBES_PER_USER_PER_DAY, WISH_KEYWORDS, cleanTranscript, clipProblem, readWav } from "./transcribe";
 import { personaSchema, voiceLine } from "./persona";
@@ -21,6 +22,10 @@ export const RUNS_PER_USER_PER_DAY = 20;
 /** Every judge shares one account, so it gets more runs; its share of the daily spend cap still bounds it. */
 export const RUNS_PER_JUDGE_PER_DAY = 120;
 export const INTERPRETS_PER_USER_PER_DAY = 60;
+/** New photos one person may ask for a day; each is a planned search, a web search and checked candidates. */
+export const RETAKES_PER_USER_PER_DAY = 30;
+/** A retake answers within this, well inside App Runner's 120 s. */
+const RETAKE_MS = 35_000;
 /** About 15 researched wishes; the per-day run cap usually bites first. */
 export const USER_DAILY_USD = 2;
 const CACHE_MS = 24 * 60 * 60 * 1000;
@@ -54,6 +59,15 @@ const runBody = z
     persona: personaSchema,
   })
   .refine((b) => !!b.draft || !!b.text, { message: "Describe the wish." });
+
+/** A retake: the wish the photo is for, and the photos already shown, which are never offered again. */
+const photoBody = z.object({
+  title: z.string().trim().min(1).max(200),
+  kind: z.enum(["buy", "own", "do", "visit"]),
+  summary: z.string().trim().max(400).optional(),
+  place: z.string().trim().max(120).optional(),
+  exclude: z.array(z.string().max(2000)).max(20).default([]),
+});
 
 /** A run started from words alone holds this until the draft is read, a few seconds in. */
 const pendingDraft = (text: string): Draft => ({ title: text.slice(0, 120), kind: "buy", summary: text.slice(0, 400), specifics: [], region: "US", currency: "USD", unknowns: [] });
@@ -166,6 +180,25 @@ export function agentRoutes(deps: AgentDeps) {
       const draft = await interpret(meta, body.data.text);
       const questions = await clarify(meta, draft);
       return c.json({ draft, questions });
+    } catch (e) {
+      return c.json({ error: friendly(e) }, e instanceof SpendLimitError ? 429 : 502);
+    }
+  });
+
+  // A retake (owner, 2026-10-29: "a retake for image gen that has ai find a better picture"): the photo search, deep,
+  // for one wish, never offering a photo already shown. Same caps as every Meta call, plus a per-person daily count.
+  app.post("/photo", async (c) => {
+    const body = photoBody.safeParse(await c.req.json().catch(() => null));
+    if (!body.success) return c.json({ error: "Say which wish needs a photo." }, 400);
+    const userId = c.get("userId");
+    const used = await db.query<{ n: string | number }>("select count(*) as n from spend_ledger where user_id = $1 and kind = 'photo' and created_at > $2", [userId, new Date(deps.now().getTime() - CACHE_MS).toISOString()]);
+    // A retake is about three model calls: the plan, a web search and its answer.
+    if (Number(used.rows[0]?.n ?? 0) >= RETAKES_PER_USER_PER_DAY * 3) return c.json({ error: `That's today's ${RETAKES_PER_USER_PER_DAY} new photos.` }, 429);
+    try {
+      const { exclude, ...subject } = body.data;
+      const found = await findPhoto(metaFor(userId, "photo"), subject, { fetcher: deps.webFetch ?? publicFetch, exclude, deep: true, by: Date.now() + RETAKE_MS });
+      if (!found) return c.json({ error: "No better photo turned up this time. Try again in a moment." }, 404);
+      return c.json({ photo: { imageUrl: found.image.url, media: { kind: found.kind, images: [found.image] }, how: found.how } });
     } catch (e) {
       return c.json({ error: friendly(e) }, e instanceof SpendLimitError ? 429 : 502);
     }

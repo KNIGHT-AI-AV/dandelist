@@ -213,6 +213,20 @@ export async function startHunt(api: Api, wish: { text: string } | { draft: Draf
   return (await read<{ run: Run }>(await api("/agent/runs", json({ ...wish, persona: currentPersona() })).catch(() => null), "Couldn't start the research.")).run;
 }
 
+/** A photo the AI found for a wish: its address and the media to save with it. */
+export interface FoundPhoto {
+  imageUrl: string;
+  media: Media;
+}
+
+/**
+ * A retake (owner, 2026-10-29): the AI looks for a better photo of this wish with its context (what it is, what kind,
+ * where), never one already shown.
+ */
+export async function retakePhoto(api: Api, wish: { title: string; kind: Draft["kind"]; summary?: string }, exclude: string[]) {
+  return (await read<{ photo: FoundPhoto }>(await api("/agent/photo", json({ ...wish, exclude: exclude.filter(Boolean).slice(0, 20) })).catch(() => null), "Couldn't find a new photo.")).photo;
+}
+
 export async function getRun(api: Api, id: string) {
   return (await read<{ run: Run }>(await api(`/agent/runs/${id}`).catch(() => null), "Lost track of the research.")).run;
 }
