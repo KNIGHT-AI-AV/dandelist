@@ -7,6 +7,7 @@ import { assertPublicUrl, htmlToText, pageNamesItem, pageShowsPrice, privateIp, 
 vi.mock("node:dns/promises", async (importOriginal) => ({ ...(await importOriginal<object>()), lookup: async () => [{ address: "93.184.215.14", family: 4 }] }));
 import { createApp } from "../src/app";
 import { migrate, type Db } from "../src/db";
+import { visionReply } from "./vision";
 
 describe("page tools", () => {
   it("finds a price however the page writes it", () => {
@@ -101,6 +102,8 @@ const fakeMeta = (async (_url: string, init: RequestInit) => {
     return reply(quickLines ? [{ type: "web_search_call", action: { query: "peloton bike+ price" }, results: [{ url: SHOP, title: "Peloton Bike+" }] }, message(quickLines)] : [message("Nothing found.")]);
   }
   if (format === "wish_questions") return reply([message(JSON.stringify({ questions: [] }))]);
+  const vision = visionReply(body);
+  if (vision !== null) return reply([message(vision)]);
   // The photo search's plan, beside every hunt: nothing it names opens here, so the hunt's own photos stand.
   if (format === "photo_plan") return reply([message(JSON.stringify({ articles: [], commons: "", web: "", kind: "product" }))]);
   if (format === "wish_draft") {

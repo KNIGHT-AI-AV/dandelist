@@ -4,7 +4,8 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("node:dns/promises", async (importOriginal) => ({ ...(await importOriginal<object>()), lookup: async () => [{ address: "93.184.215.14", family: 4 }] }));
 import type { Draft, Meta, PriceOption } from "../src/agent/agent";
 import { mergeFast } from "../src/agent/find";
-import { checkPhoto, findPhoto, wikipediaLeadPhotos, type FoundPhoto } from "../src/agent/photos";
+import { wikimediaRendering } from "../src/agent/media";
+import { checkPhoto, findPhoto, verifyPhoto, wikipediaLeadPhotos, type FoundPhoto, type PhotoPlan, type PhotoVerdict } from "../src/agent/photos";
 import { imageResponse, jpegHeader, pngHeader } from "./images";
 
 /**
@@ -85,44 +86,163 @@ describe("Wikipedia's lead photos", () => {
   });
 });
 
-describe("the photo search", () => {
-  const leads = { "Leica Q3": { source: BIG, width: 5184, height: 3456 }, "Digital camera": { source: GENERAL, width: 2000, height: 1500 } };
+/** A plan the photo search would get from the model for the Leica. */
+const leicaPlan = (o: Partial<PhotoPlan> = {}): PhotoPlan => ({ identity: "Leica Q3 camera", lookalikes: ["Leica Q2 camera", "Leica M11 camera"], exact: true, official: "leica-camera.com", articles: ["Leica Q3"], commons: "", web: "Leica Q3 maker photo", kind: "product", ...o });
+/** Looks that pass exactly the photos named, and record what they were asked. */
+const passing = (good: string[], asked: string[] = []) => async (url: string) => {
+  asked.push(url);
+  const ok = good.includes(url);
+  const fits = [ok ? "Leica Q3 camera" : "None of these, or can't tell"];
+  return { seen: ok ? "Leica Q3" : "another camera", fits: [fits, fits], quality: "studio", clean: true, ok } as PhotoVerdict;
+};
 
-  it("takes the most specific article's photo that passes the check, with no web search", async () => {
-    const calls: Record<string, unknown>[] = [];
-    const web = imagesAt({ [BIG]: [5184, 3456], [GENERAL]: [2000, 1500] }, wikipedia(leads));
-    const found = await findPhoto(planMeta({ articles: ["Leica Q3", "Digital camera"], commons: "Leica Q3", web: "Leica Q3 official photo", kind: "product" }, calls), leica, { fetcher: web });
-    expect(found).toMatchObject({ how: "wikipedia", kind: "product", image: { url: BIG, source: "wikipedia.org", credit: "Wikipedia: Leica Q3" } });
-    expect(calls).toHaveLength(1);
-    expect(calls[0]!.tools).toBeUndefined();
-    expect(String(calls[0]!.input)).toContain("Leica Q3");
-  });
+describe("the photo search (owner, 2026-10-29: 'Not any photo will do!!', 'right 99% of time')", () => {
+  const leads = { "Leica Q3": { source: BIG, width: 5184, height: 3456 } };
 
-  it("falls back to the general article when the specific photo fails the check, and never re-offers one shown", async () => {
-    const web = imagesAt({ [BIG]: [320, 200], [GENERAL]: [2000, 1500] }, wikipedia(leads));
-    const plan = { articles: ["Leica Q3", "Digital camera"], commons: "", web: "", kind: "product" };
-    expect((await findPhoto(planMeta(plan), leica, { fetcher: web }))?.image.url).toBe(GENERAL);
-    const big = imagesAt({ [BIG]: [5184, 3456], [GENERAL]: [2000, 1500] }, wikipedia(leads));
-    expect((await findPhoto(planMeta(plan), leica, { fetcher: big, exclude: [BIG] }))?.image.url).toBe(GENERAL);
-  });
-
-  it("looks on the web first for a thing on a retake, and Commons first for a place", async () => {
+  it("shows a photo only when the vision checks pass it, and no photo rather than a wrong one", async () => {
     const web = imagesAt({ [BIG]: [5184, 3456], [MAKER]: [2400, 1600] }, wikipedia(leads));
     const webPhotos = vi.fn(async () => [MAKER]);
-    const retake = await findPhoto(planMeta({ articles: ["Leica Q3"], commons: "", web: "Leica Q3 maker photo", kind: "product" }), leica, { fetcher: web, deep: true, webPhotos });
-    expect(retake).toMatchObject({ how: "web", image: { url: MAKER, source: "leica-camera.com" } });
-    expect(webPhotos).toHaveBeenCalledWith("Leica Q3 maker photo", leica);
-    // Without deep, the web is never searched.
-    const everyday = await findPhoto(planMeta({ articles: ["Leica Q3"], commons: "", web: "x", kind: "product" }), leica, { fetcher: web, webPhotos });
-    expect(everyday?.how).toBe("wikipedia");
-    expect(webPhotos).toHaveBeenCalledTimes(1);
+    const found = await findPhoto(planMeta(leicaPlan()), leica, { fetcher: web, webPhotos, verify: passing([BIG]) });
+    expect(found).toMatchObject({ how: "wikipedia", image: { url: BIG, credit: "Wikipedia: Leica Q3" }, verdict: { ok: true } });
+    expect(await findPhoto(planMeta(leicaPlan()), leica, { fetcher: web, webPhotos, verify: passing([]) })).toBeNull();
   });
 
-  it("reads the wish's own title when the model can't plan, and gives up with null when nothing passes", async () => {
+  it("looks first, for a thing, at the page it was priced on and then the maker's photo, every time", async () => {
+    const PAGE = "https://dealer.example/leica-q3";
+    const SHOT = "https://dealer.example/img/leica-q3-front.jpg";
+    const html = `<html><head><title>Leica Q3</title><meta property="og:image" content="${SHOT}"><script type="application/ld+json">{"@type":"Product","name":"Leica Q3","image":"${SHOT}","offers":{"price":"5995","priceCurrency":"USD"}}</script></head><body>Leica Q3</body></html>`;
+    const web = imagesAt({ [BIG]: [5184, 3456], [MAKER]: [2400, 1600], [SHOT]: [2000, 2000] }, (u) => (u === PAGE ? new Response(html, { headers: { "content-type": "text/html" } }) : wikipedia(leads)(u)));
+    const webPhotos = vi.fn(async () => [MAKER]);
+    const asked: string[] = [];
+    const found = await findPhoto(planMeta(leicaPlan()), leica, { fetcher: web, webPhotos, pages: [PAGE], verify: passing([SHOT, MAKER, BIG], asked) });
+    // All three passed; the page's own photo wins by its place in the order.
+    expect(found).toMatchObject({ how: "page", image: { url: SHOT } });
+    expect([...asked].sort()).toEqual([SHOT, MAKER, BIG].sort());
+    // The maker's photo when the page has none that passes; the web is searched on every hunt for a thing.
+    const maker = await findPhoto(planMeta(leicaPlan()), leica, { fetcher: web, webPhotos, verify: passing([MAKER, BIG]) });
+    expect(maker).toMatchObject({ how: "web", image: { url: MAKER, source: "leica-camera.com" } });
+    expect(webPhotos).toHaveBeenCalledWith("Leica Q3 maker photo", leica, expect.objectContaining({ identity: "Leica Q3 camera" }));
+  });
+
+  it("starts a place with Commons and Wikipedia, with the web searched beside them for a venue's own photos", async () => {
+    const lisbon = { title: "A week in Lisbon", kind: "visit" as const, place: "Lisbon" };
+    const LISBON = "https://upload.wikimedia.org/wikipedia/commons/l/li/Lisbon_view.jpg";
+    const web = imagesAt({ [LISBON]: [4000, 2600], [MAKER]: [2400, 1600] }, wikipedia({ Lisbon: { source: LISBON, width: 4000, height: 2600 } }));
+    const webPhotos = vi.fn(async () => [MAKER]);
+    const plan = leicaPlan({ identity: "Lisbon", exact: false, official: "", articles: ["Lisbon"], web: "Lisbon view", kind: "place" });
+    // Both pass; for a place the encyclopedia's photo comes first.
+    expect(await findPhoto(planMeta(plan), lisbon, { fetcher: web, webPhotos, verify: passing([LISBON, MAKER]) })).toMatchObject({ how: "wikipedia", kind: "place" });
+    expect(webPhotos).toHaveBeenCalledOnce();
+    // With nothing on Commons or Wikipedia, the web's photo stands.
+    expect(await findPhoto(planMeta(plan), lisbon, { fetcher: web, webPhotos, verify: passing([MAKER]) })).toMatchObject({ how: "web" });
+  });
+
+  it("on a retake, looks at the photo turned down beside the search, and holds every new photo up against it", async () => {
+    const calls: Record<string, unknown>[] = [];
+    const web = imagesAt({ [BIG]: [5184, 3456], [MAKER]: [2400, 1600] }, wikipedia(leads));
+    const asked: string[] = [];
+    const lineUps: PhotoPlan[] = [];
+    const looks = passing([MAKER], asked);
+    const verify = async (url: string, plan: PhotoPlan) => (lineUps.push(plan), looks(url));
+    const found = await findPhoto(planMeta(leicaPlan(), calls), leica, { fetcher: web, deep: true, exclude: [BIG], webPhotos: async () => [MAKER], verify });
+    expect(asked[0]).toBe(BIG);
+    expect(found?.image.url).toBe(MAKER);
+    // The new photo's line-up leads with what the turned-down one showed.
+    expect(lineUps.at(-1)!.lookalikes[0]).toBe("What the photo turned down showed: another camera");
+    // The plan doesn't wait for those looks, and thinks low like every other call.
+    const plan = calls.find((c) => (c.text as { format?: { name?: string } } | undefined)?.format?.name === "photo_plan")!;
+    expect(plan.model).toBeUndefined();
+    expect((plan.reasoning as { effort?: string }).effort).toBe("low");
+  });
+
+  it("plans from the wish's own title when the model can't, and gives up with null when nothing passes", async () => {
     const broken: Meta = { responses: async () => ({ text: "not json", citations: [], functionCalls: [], searchQueries: [], raw: {} }) as never };
     const web = imagesAt({ [BIG]: [5184, 3456] }, wikipedia({ "Leica Q3": { source: BIG, width: 5184, height: 3456 } }));
-    expect((await findPhoto(broken, leica, { fetcher: web }))?.image.url).toBe(BIG);
-    expect(await findPhoto(broken, { ...leica, title: "Nothing known" }, { fetcher: imagesAt({}, () => Response.json({ query: {} })) })).toBeNull();
+    expect((await findPhoto(broken, leica, { fetcher: web, webPhotos: async () => [], verify: passing([BIG]) }))?.image.url).toBe(BIG);
+    expect(await findPhoto(broken, { ...leica, title: "Nothing known" }, { fetcher: imagesAt({}, () => Response.json({ query: {} })), webPhotos: async () => [], verify: passing([]) })).toBeNull();
+  });
+});
+
+describe("the two looks: a line-up, twice", () => {
+  /** The line-up one look was shown: each option's letter and text, in order. */
+  const lineUp = (body: Record<string, unknown>) =>
+    String((body.input as { content: { text?: string }[] }[])[0]!.content[0]!.text)
+      .split("\n")
+      .slice(1)
+      .map((line) => /^([A-F])\. (.*)$/.exec(line)!)
+      .map((m) => ({ letter: m[1]!, text: m[2]! }));
+  /**
+   * A model that finds the photo fits what it is told in each look ("|" between options nothing visible tells apart;
+   * the last option when none of them is in the line-up), rated as told.
+   */
+  const looker = (sees: string[], rating: { quality?: string; clean?: boolean } = {}, calls: Record<string, unknown>[] = []): Meta => ({
+    responses: async (body) => {
+      const n = calls.push(body) - 1;
+      const options = lineUp(body);
+      const seen = sees[n % sees.length]!;
+      const fits = options.filter((o) => seen.split("|").includes(o.text)).map((o) => o.letter);
+      return { id: "r", text: JSON.stringify({ seen, fits: fits.length ? fits : [options.at(-1)!.letter], quality: rating.quality ?? "studio", clean: rating.clean ?? true }), citations: [], functionCalls: [], searchQueries: [], raw: {} } as never;
+    },
+  });
+  const plan = { identity: "Rolex Sky-Dweller, mint green dial", exact: true, lookalikes: ["Rolex Oyster Perpetual 41, green dial", "Rolex Sky-Dweller, blue dial"] };
+  const WISH = plan.identity;
+
+  it("passes a photo only when both looks pick the wish, never told which option is wanted, thinking low", async () => {
+    const calls: Record<string, unknown>[] = [];
+    expect(await verifyPhoto(looker([WISH], {}, calls), BIG, plan)).toMatchObject({ ok: true, fits: [[WISH], [WISH]], quality: "studio" });
+    expect(calls).toHaveLength(2);
+    for (const c of calls) {
+      // Every option, the wish among its lookalikes, with "none" last; the instructions never name the wish.
+      expect(lineUp(c).map((o) => o.text).sort()).toEqual([...plan.lookalikes, WISH, "None of these, or can't tell"].sort());
+      expect(lineUp(c).at(-1)!.text).toBe("None of these, or can't tell");
+      expect(String(c.instructions)).not.toContain("Sky-Dweller");
+      expect(JSON.stringify(c.input)).toContain(BIG);
+      expect((c.reasoning as { effort?: string } | undefined)?.effort).toBe("low");
+    }
+    // The wish sits in a different place in each look.
+    expect(lineUp(calls[0]!).findIndex((o) => o.text === WISH)).not.toBe(lineUp(calls[1]!).findIndex((o) => o.text === WISH));
+  });
+
+  it("turns down a lookalike, a photo neither look can place, and a photo the two looks disagree on", async () => {
+    const op = "Rolex Oyster Perpetual 41, green dial";
+    expect(await verifyPhoto(looker([op]), BIG, plan)).toMatchObject({ ok: false, fits: [[op], [op]] });
+    expect((await verifyPhoto(looker(["a dive watch"]), BIG, plan)).fits).toEqual([["None of these, or can't tell"], ["None of these, or can't tell"]]);
+    expect((await verifyPhoto(looker([WISH, "Rolex Sky-Dweller, blue dial"]), BIG, plan)).ok).toBe(false);
+    // "None" beside the wish is no answer.
+    expect((await verifyPhoto(looker([`${WISH}|None of these, or can't tell`]), BIG, plan)).ok).toBe(false);
+  });
+
+  it("keeps a photo when nothing visible tells the wish from a lookalike (a Leica Q2 and a Q3 face on)", async () => {
+    const same = `${WISH}|Rolex Sky-Dweller, blue dial`;
+    expect(await verifyPhoto(looker([same]), BIG, plan)).toMatchObject({ ok: true });
+  });
+
+  it("turns down an amateur snapshot or a crowded photo even when both looks pick the wish", async () => {
+    expect((await verifyPhoto(looker([WISH], { quality: "amateur" }), BIG, plan)).ok).toBe(false);
+    expect((await verifyPhoto(looker([WISH], { clean: false }), BIG, plan)).ok).toBe(false);
+    expect(await verifyPhoto(looker([WISH], { quality: "editorial" }), BIG, plan)).toMatchObject({ ok: true, quality: "editorial" });
+  });
+
+  it("sends the model the photo's bytes, read by our server, asking Wikimedia for its 1280 px rendering first", async () => {
+    const RENDERED = "https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/Leica_Q3.jpg/1280px-Leica_Q3.jpg";
+    expect(wikimediaRendering(BIG, 1280)).toBe(RENDERED);
+    expect(wikimediaRendering("https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/Leica_Q3.jpg/3840px-Leica_Q3.jpg", 1280)).toBe(RENDERED);
+    expect(wikimediaRendering(MAKER, 1280)).toBeNull();
+    const asked: string[] = [];
+    const sizes = imagesAt({ [RENDERED]: [1280, 853], [BIG]: [5184, 3456] });
+    const web = (async (input: string | URL, init?: RequestInit) => (asked.push(String(input)), sizes(input, init))) as unknown as typeof fetch;
+    const calls: Record<string, unknown>[] = [];
+    expect((await verifyPhoto(looker([WISH], {}, calls), BIG, plan, { fetcher: web })).ok).toBe(true);
+    expect(asked[0]).toBe(RENDERED);
+    for (const c of calls) {
+      expect(JSON.stringify(c.input)).toContain("data:image/jpeg;base64,");
+      expect(JSON.stringify(c.input)).not.toContain(BIG);
+    }
+    // Without a rendering, the photo itself; with nothing readable, the address for the model to fetch.
+    expect(await verifyPhoto(looker([WISH]), MAKER, plan, { fetcher: imagesAt({ [MAKER]: [2400, 1600] }) })).toMatchObject({ ok: true });
+    const fallback: Record<string, unknown>[] = [];
+    await verifyPhoto(looker([WISH], {}, fallback), MAKER, plan, { fetcher: imagesAt({}) });
+    expect(JSON.stringify(fallback[0]!.input)).toContain(MAKER);
   });
 });
 

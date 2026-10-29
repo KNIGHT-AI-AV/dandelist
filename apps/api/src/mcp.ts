@@ -145,7 +145,7 @@ export const MCP_TOOLS = [
   { name: "hunt", description: "Start the price hunt for a wish described in words. Poll hunt_status with the run_id; a first card lands in about 15 s and the hunt ends within a minute.", inputSchema: obj({ text: { type: "string", minLength: 2, maxLength: 1000 } }, ["text"]) },
   { name: "hunt_status", description: "A hunt's status and the prices and photos it found so far.", inputSchema: obj({ run_id: uuid }, ["run_id"]) },
   { name: "save_hunt", description: "Save a hunt's option (the best, unless you pick another by index) as a wish.", inputSchema: obj({ run_id: uuid, option: { type: "integer", minimum: 0, maximum: 3 }, tier: { type: "string", enum: TIERS } }, ["run_id"]) },
-  { name: "photo_check", description: "Check a photo before showing it: it opens, is large enough and photo-shaped, and isn't named like a logo, map, flag or diagram.", inputSchema: obj({ url: { type: "string" } }, ["url"]) },
+  { name: "photo_check", description: "Check a photo's form before showing it: it opens, is large enough and photo-shaped, and isn't named like a logo, map, flag or diagram. Whether it shows the very thing is find_photo's job: its pick has passed two vision checks against the wish.", inputSchema: obj({ url: { type: "string" } }, ["url"]) },
   {
     name: "find_photo",
     description: "Have the AI find a better photo of a wish, never one it already shows. With save true, the wish keeps it.",

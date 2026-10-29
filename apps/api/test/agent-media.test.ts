@@ -7,6 +7,7 @@ import { createApp } from "../src/app";
 import { migrate, type Db } from "../src/db";
 import { memoryMediaStore } from "../src/media-store";
 import { imageResponse, jpegHeader, productJpeg, webpHeader } from "./images";
+import { visionReply } from "./vision";
 
 /**
  * The agent with shopping search and media hunting: Apify, Sketchfab, Commons, SAM 3.1 and Muse Image are all
@@ -85,6 +86,8 @@ const fakeMeta = (async (url: string, init: RequestInit) => {
   }
   if (body.model === "sam-3.1") return reply([message(SAM_TEXT)], { input_tokens: 0, output_tokens: 0, images_processed: 1 });
   const format = body.text?.format?.name;
+  const vision = visionReply(body);
+  if (vision !== null) return reply([message(vision)]);
   if (format === "wish_draft") return reply([message(JSON.stringify(s.draft))]);
   if ((body.tools ?? []).some((t: { name?: string }) => t.name === "ask_user")) return reply([message("READY")]);
   if (format === "price_options") return reply([message(JSON.stringify({ options: s.options, note: "", media: s.media }))]);

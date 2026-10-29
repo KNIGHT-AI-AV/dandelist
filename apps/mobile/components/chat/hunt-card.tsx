@@ -135,9 +135,11 @@ export function HuntCard({ id, text, already }: { id: string; text: string; alre
     const d = cur.run?.draft ?? cur.draft;
     if (!d || retaking) return;
     setRetaking(true);
-    const seen = [...new Set([...(cur.shown ?? []), ...(photo ? [photo] : [])])];
+    // The photo on screen goes first: it is the one being turned down, and the hunt starts from what was wrong with it.
+    const seen = [...new Set([...(photo ? [photo] : []), ...(cur.shown ?? [])])];
+    const page = cur.run?.result?.options[0]?.url;
     try {
-      const shot = await retakePhoto(api, { title: d.title, kind: d.kind, summary: d.summary }, seen);
+      const shot = await retakePhoto(api, { title: d.title, kind: d.kind, summary: d.summary, ...(page ? { page } : {}) }, seen);
       keep({ ...(hunts.get(id) ?? cur), shot, shown: [...seen, shot.imageUrl] });
       haptic.success();
     } catch (e) {
