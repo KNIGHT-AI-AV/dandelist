@@ -1,8 +1,9 @@
-import { createHash, hkdfSync, randomBytes, timingSafeEqual } from "node:crypto";
-import { Hono, type Context } from "hono";
+import { createHash, createHmac, hkdfSync, randomBytes, timingSafeEqual } from "node:crypto";
+import { Hono, type Context, type MiddlewareHandler } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { EncryptJWT, createLocalJWKSet, jwtDecrypt, jwtVerify, type JWTPayload, type JWTVerifyOptions } from "jose";
 import { z } from "zod";
+import type { AuthVars } from "./auth";
 import type { Db } from "./db";
 import { RateLimiter, clientIp } from "./ratelimit";
 import { normalizeEmail } from "./tokens";
@@ -17,10 +18,23 @@ import { normalizeEmail } from "./tokens";
  * its SHA-256 (base64url) as `challenge` when it starts, and must show the verifier to redeem. Another app that
  * catches the dandelist://auth redirect gets a ticket it cannot use. Native Apple sign-in carries a single-use nonce
  * from /auth/apple/nonce, so a captured identity token can't be replayed.
+ *
+ * Linking (settings; owner, 2026-10-28: "Apple plus Google on one account") runs the same flow for someone already
+ * signed in. POST /auth/link/<provider> seals their user id into a start address; the provider round trip is the same;
+ * the callback hands back a link ticket instead of a sign-in ticket, and the app redeems it at /auth/link/redeem with
+ * its verifier and the same account's session, which is when the identity joins the account. An identity that already
+ * belongs to another account is refused.
  */
 
-export type Provider = "apple" | "google" | "github";
-export const PROVIDERS: readonly Provider[] = ["apple", "google", "github"];
+export type Provider = "apple" | "google" | "github" | "facebook";
+export const PROVIDERS: readonly Provider[] = ["apple", "google", "github", "facebook"];
+export const PROVIDER_NAMES: Record<Provider, string> = { apple: "Apple", google: "Google", github: "GitHub", facebook: "Facebook" };
+
+/**
+ * The Graph API version for Facebook Login. v26.0 is the current one (Meta's changelog, read 2026-10-28: released
+ * 2026-07-29). Keep it a constant and move it forward deliberately; Meta supports each version for about two years.
+ */
+export const FACEBOOK_GRAPH_VERSION = "v26.0";
 
 export interface OAuthConfig {
   /** Public origin of this API; providers return to `<apiUrl>/auth/oauth/<provider>/callback`. */
@@ -30,6 +44,8 @@ export interface OAuthConfig {
   github?: { clientId: string; clientSecret: string };
   /** `servicesId` turns on Apple for the web and Android; `bundleId` turns on the native iOS sheet. */
   apple?: { servicesId?: string; bundleId?: string };
+  /** Facebook Login; on only when both are set. */
+  facebook?: { appId: string; appSecret: string };
   /** Outbound HTTP for token exchanges and signing keys; tests replace it. */
   fetch?: typeof fetch;
 }
@@ -59,14 +75,18 @@ const APPLE_NONCE_TTL_MS = 10 * 60 * 1000;
 const CHALLENGE = /^[A-Za-z0-9_-]{43}$/;
 const STATE_ISSUER = "dandelist-api";
 const STATE_AUDIENCE = "dandelist-oauth-state";
+const LINK_AUDIENCE = "dandelist-oauth-link";
 const COOKIE = "dl_oauth";
 const NATIVE_REDIRECT = "dandelist://auth";
 
 const GOOGLE_ISSUERS = ["https://accounts.google.com", "accounts.google.com"];
 const APPLE_ISSUER = "https://appleid.apple.com";
 
-/** Why a sign-in didn't finish, as the app shows it. Only these codes ever reach the redirect. */
-export type FailureCode = "cancelled" | "expired" | "no_email" | "failed";
+/**
+ * Why a sign-in or a link didn't finish, as the app shows it. Only these codes ever reach the redirect. `taken` is for
+ * linking only: that provider account already belongs to another Dandelist account.
+ */
+export type FailureCode = "cancelled" | "expired" | "no_email" | "taken" | "failed";
 
 class OAuthFailure extends Error {
   constructor(readonly code: FailureCode) {
@@ -74,44 +94,73 @@ class OAuthFailure extends Error {
   }
 }
 
+const providerEnum = z.enum(["apple", "google", "github", "facebook"]);
+
 const stateSchema = z.object({
-  p: z.enum(["apple", "google", "github"]),
+  p: providerEnum,
   r: z.string(),
   n: z.string().min(16),
   v: z.string().min(43),
   // The app's challenge: SHA-256 of the verifier it must show to redeem the ticket.
   c: z.string().regex(CHALLENGE),
+  // Set when the flow links this identity to a signed-in account: that account's id.
+  u: z.string().uuid().optional(),
 });
 type State = z.infer<typeof stateSchema>;
 
-/** Seals and opens the state parameter. It is encrypted as well as authenticated, so the PKCE verifier and nonce never travel readable through the browser or the provider's logs. */
-function stateCodec(jwtSecret: string) {
-  const key = new Uint8Array(hkdfSync("sha256", jwtSecret, new Uint8Array(0), "dandelist oauth state v1", 32));
+/** A link request from POST /auth/link/<provider>: which provider, whose account, where to return, the app's challenge. */
+const linkSchema = z.object({ p: providerEnum, u: z.string().uuid(), r: z.string(), c: z.string().regex(CHALLENGE) });
+type LinkRequest = z.infer<typeof linkSchema>;
+
+/**
+ * Seals and opens a value that travels through the browser: the state parameter, and a link request. It is encrypted
+ * as well as authenticated, so the PKCE verifier, the nonce and the user id never travel readable through the browser
+ * or the provider's logs. Each kind has its own key and audience, so one can't be passed off as the other.
+ */
+function codec<T extends Record<string, unknown>>(jwtSecret: string, info: string, audience: string, schema: z.ZodType<T, z.ZodTypeDef, unknown>) {
+  const key = new Uint8Array(hkdfSync("sha256", jwtSecret, new Uint8Array(0), info, 32));
   return {
-    seal: (s: State, nowS: number) =>
-      new EncryptJWT({ ...s })
+    seal: (s: T, nowS: number) =>
+      new EncryptJWT({ ...s } as JWTPayload)
         .setProtectedHeader({ alg: "dir", enc: "A256GCM" })
         .setIssuer(STATE_ISSUER)
-        .setAudience(STATE_AUDIENCE)
+        .setAudience(audience)
         .setIssuedAt(nowS)
         .setExpirationTime(nowS + STATE_TTL_S)
         .encrypt(key),
-    async open(token: string, now: Date): Promise<State | null> {
+    async open(token: string, now: Date): Promise<T | null> {
       try {
         const { payload } = await jwtDecrypt(token, key, {
           issuer: STATE_ISSUER,
-          audience: STATE_AUDIENCE,
+          audience,
           currentDate: now,
           keyManagementAlgorithms: ["dir"],
           contentEncryptionAlgorithms: ["A256GCM"],
         });
-        const parsed = stateSchema.safeParse(payload);
+        const parsed = schema.safeParse(payload);
         return parsed.success ? parsed.data : null;
       } catch {
         return null;
       }
     },
   };
+}
+
+/** One sign-in account on a Dandelist account, as settings lists it. */
+export interface LinkedIdentity {
+  provider: Provider;
+  email: string | null;
+  name: string | null;
+  linkedAt: string;
+}
+
+/** Every sign-in account linked to `userId`, oldest first. */
+export async function listIdentities(db: Db, userId: string): Promise<LinkedIdentity[]> {
+  const { rows } = await db.query<{ provider: Provider; email: string | null; name: string | null; created_at: string | Date }>(
+    "select provider, email, name, created_at from user_identities where user_id = $1 order by created_at, provider",
+    [userId],
+  );
+  return rows.map((r) => ({ provider: r.provider, email: r.email, name: r.name, linkedAt: new Date(r.created_at).toISOString() }));
 }
 
 /**
@@ -180,6 +229,7 @@ const nativeBody = z.object({
     .object({ givenName: z.string().max(100).nullish(), familyName: z.string().max(100).nullish() })
     .nullish(),
 });
+const linkStartBody = z.object({ redirect: z.string().max(300), challenge: z.string().regex(CHALLENGE) });
 const redeemBody = z.object({
   ticket: z.string().min(20).max(100),
   // The secret behind the challenge sent at start: 43 to 128 URL-safe characters, as in PKCE.
@@ -193,13 +243,17 @@ function verifierMatches(verifier: string, challenge: string): boolean {
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
-export function oauthRoutes(deps: OAuthRouteDeps, issueSession: (userId: string) => Promise<Session>) {
-  const app = new Hono();
+/** The identity a link ticket carries until the account that asked for it redeems it. */
+type LinkIdentityRow = { provider: Provider; subject: string; email: string | null; name: string | null };
+
+export function oauthRoutes(deps: OAuthRouteDeps, issueSession: (userId: string) => Promise<Session>, auth: MiddlewareHandler<{ Variables: AuthVars }>) {
+  const app = new Hono<{ Variables: AuthVars }>();
   const { db } = deps;
   const cfg = deps.oauth;
   const production = cfg?.production ?? false;
   const webOrigins = deps.webOrigins ?? [];
-  const state = stateCodec(deps.jwtSecret);
+  const state = codec<State>(deps.jwtSecret, "dandelist oauth state v1", STATE_AUDIENCE, stateSchema);
+  const linkCodec = codec<LinkRequest>(deps.jwtSecret, "dandelist oauth link v1", LINK_AUDIENCE, linkSchema);
   const http = () => cfg?.fetch ?? fetch;
   const googleKeys = new SigningKeys("https://www.googleapis.com/oauth2/v3/certs", http);
   const appleKeys = new SigningKeys("https://appleid.apple.com/auth/keys", http);
@@ -207,15 +261,18 @@ export function oauthRoutes(deps: OAuthRouteDeps, issueSession: (userId: string)
   const redeemsPerIp = new RateLimiter(60, 60 * 60 * 1000);
   const nativePerIp = new RateLimiter(30, 60 * 60 * 1000);
   const noncesPerIp = new RateLimiter(60, 60 * 60 * 1000);
+  const linksPerUser = new RateLimiter(30, 60 * 60 * 1000);
   const ip = (c: Context) => clientIp(c.req.header("X-Forwarded-For"));
   const nowS = () => Math.floor(deps.now().getTime() / 1000);
 
   const google = cfg?.google?.clientId && cfg.google.clientSecret ? cfg.google : undefined;
   const github = cfg?.github?.clientId && cfg.github.clientSecret ? cfg.github : undefined;
+  const facebook = cfg?.facebook?.appId && cfg.facebook.appSecret ? cfg.facebook : undefined;
   const appleServicesId = cfg?.apple?.servicesId || undefined;
   const appleBundleId = cfg?.apple?.bundleId || undefined;
-  const webEnabled: Record<Provider, boolean> = { apple: !!appleServicesId, google: !!google, github: !!github };
-  const callbackUrl = (p: Provider) => `${(cfg?.apiUrl ?? "").replace(/\/+$/, "")}/auth/oauth/${p}/callback`;
+  const webEnabled: Record<Provider, boolean> = { apple: !!appleServicesId, google: !!google, github: !!github, facebook: !!facebook };
+  const apiBase = (cfg?.apiUrl ?? "").replace(/\/+$/, "");
+  const callbackUrl = (p: Provider) => `${apiBase}/auth/oauth/${p}/callback`;
 
   // The browser that starts a sign-in must be the one that finishes it, or a stranger could finish their own sign-in
   // in your browser and sign you into their account. A short-lived cookie carries the flow's nonce for that check.
@@ -253,6 +310,16 @@ export function oauthRoutes(deps: OAuthRouteDeps, issueSession: (userId: string)
         code_challenge: pkceChallenge(s.v),
         code_challenge_method: "S256",
       };
+    } else if (p === "facebook") {
+      // Facebook's login dialog, code flow. The code is exchanged server to server with the app secret.
+      base = `https://www.facebook.com/${FACEBOOK_GRAPH_VERSION}/dialog/oauth`;
+      params = {
+        client_id: facebook!.appId,
+        redirect_uri,
+        response_type: "code",
+        scope: "email,public_profile",
+        state: sealed,
+      };
     } else {
       base = "https://appleid.apple.com/auth/authorize";
       params = {
@@ -277,6 +344,17 @@ export function oauthRoutes(deps: OAuthRouteDeps, issueSession: (userId: string)
     });
     const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
     if (!res.ok || typeof body.error === "string") throw new Error(`token exchange failed (${res.status} ${String(body.error ?? "")})`);
+    return body;
+  }
+
+  /** A server-to-server GET to Facebook's Graph API, which reports failures as an `error` object. */
+  async function graphGet(path: string, query: Record<string, string>): Promise<Record<string, unknown>> {
+    const res = await http()(`https://graph.facebook.com/${FACEBOOK_GRAPH_VERSION}${path}?${new URLSearchParams(query).toString()}`, {
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(10_000),
+    });
+    const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    if (!res.ok || body.error) throw new Error(`Facebook ${path} answered ${res.status}`);
     return body;
   }
 
@@ -331,6 +409,26 @@ export function oauthRoutes(deps: OAuthRouteDeps, issueSession: (userId: string)
       const primary = Array.isArray(emails) ? emails.find((e) => e.primary === true && e.verified === true && typeof e.email === "string") : undefined;
       return { subject: String(user.id), email: primary ? String(primary.email) : null, emailVerified: !!primary, name: text(user.name) ?? text(user.login) };
     }
+    if (p === "facebook") {
+      if (!params.code) throw new Error("Facebook returned no code");
+      const tokens = await graphGet("/oauth/access_token", {
+        client_id: facebook!.appId,
+        client_secret: facebook!.appSecret,
+        redirect_uri: callbackUrl("facebook"),
+        code: params.code,
+      });
+      if (typeof tokens.access_token !== "string") throw new Error("Facebook returned no access token");
+      // Calls made with the person's token are signed with the app secret (appsecret_proof), so a token lifted from
+      // somewhere else is no use against this app.
+      const proof = createHmac("sha256", facebook!.appSecret).update(tokens.access_token).digest("hex");
+      const me = await graphGet("/me", { fields: "id,name,email", access_token: tokens.access_token, appsecret_proof: proof });
+      if (typeof me.id !== "string" && typeof me.id !== "number") throw new Error("Facebook user has no id");
+      // Facebook returns an email only when the person has confirmed it with Facebook and allowed the email
+      // permission, so an email that is present counts as verified. Many accounts (phone sign-ups) have none, and
+      // those can still link to an account from settings.
+      const email = text(me.email);
+      return { subject: String(me.id), email, emailVerified: !!email, name: text(me.name) };
+    }
     // Apple on the web posts back an id_token alongside the code; we only need the token, so no client secret.
     if (!params.id_token) throw new Error("Apple returned no id_token");
     let name: string | null = null;
@@ -343,14 +441,17 @@ export function oauthRoutes(deps: OAuthRouteDeps, issueSession: (userId: string)
     return appleProfile(params.id_token, appleServicesId!, async (nonce) => nonce === s.n, name);
   }
 
+  const ownerOf = async (p: Provider, subject: string) =>
+    (await db.query<{ user_id: string }>("select user_id from user_identities where provider = $1 and subject = $2", [p, subject])).rows[0]?.user_id ?? null;
+
   /**
    * The account for a provider identity. A known identity signs straight in. Otherwise the person joins the account
    * that already has their email, but only when the provider has verified that email; without one there is nothing
    * safe to link or create.
    */
   async function accountFor(p: Provider, profile: Profile): Promise<string> {
-    const known = await db.query<{ user_id: string }>("select user_id from user_identities where provider = $1 and subject = $2", [p, profile.subject]);
-    if (known.rows[0]) return known.rows[0].user_id;
+    const known = await ownerOf(p, profile.subject);
+    if (known) return known;
     if (!profile.email || !profile.emailVerified) throw new OAuthFailure("no_email");
     const email = normalizeEmail(profile.email);
     await db.query("insert into users (email) values ($1) on conflict (email) do nothing", [email]);
@@ -360,18 +461,33 @@ export function oauthRoutes(deps: OAuthRouteDeps, issueSession: (userId: string)
       [p, profile.subject, user.id, email, profile.name],
     );
     // Re-read so two first sign-ins racing each other land on the same account.
-    return (await db.query<{ user_id: string }>("select user_id from user_identities where provider = $1 and subject = $2", [p, profile.subject])).rows[0]!.user_id;
+    return (await ownerOf(p, profile.subject))!;
   }
 
-  async function issueTicket(userId: string, challenge: string): Promise<string> {
+  /** Adds an identity to `userId`. "taken" when it already belongs to another account; linking it again is fine. */
+  async function attach(userId: string, link: LinkIdentityRow): Promise<"linked" | "taken"> {
+    await db.query("insert into user_identities (provider, subject, user_id, email, name) values ($1, $2, $3, $4, $5) on conflict (provider, subject) do nothing", [
+      link.provider,
+      link.subject,
+      userId,
+      link.email,
+      link.name,
+    ]);
+    return (await ownerOf(link.provider, link.subject)) === userId ? "linked" : "taken";
+  }
+
+  const takenMessage = (p: Provider) => `That ${PROVIDER_NAMES[p]} account is already linked to another Dandelist account. Sign in with it there and unlink it first.`;
+
+  async function issueTicket(userId: string, challenge: string, link?: LinkIdentityRow): Promise<string> {
     const ticket = randomToken(32);
     const nowMs = deps.now().getTime();
     await db.query("delete from oauth_tickets where expires_at < $1", [new Date(nowMs - 60 * 60 * 1000).toISOString()]);
-    await db.query("insert into oauth_tickets (ticket_hash, user_id, expires_at, client_challenge) values ($1, $2, $3, $4)", [
+    await db.query("insert into oauth_tickets (ticket_hash, user_id, expires_at, client_challenge, link) values ($1, $2, $3, $4, $5::jsonb)", [
       sha256hex(ticket),
       userId,
       new Date(nowMs + TICKET_TTL_MS).toISOString(),
       challenge,
+      link ? JSON.stringify(link) : null,
     ]);
     return ticket;
   }
@@ -407,11 +523,16 @@ export function oauthRoutes(deps: OAuthRouteDeps, issueSession: (userId: string)
     noStore(c);
     const p = c.req.param("provider") as Provider;
     if (!PROVIDERS.includes(p) || !webEnabled[p]) return c.json({ error: "That sign-in option isn't available." }, 404);
-    const redirect = c.req.query("redirect") ?? "";
+    // A link carries everything (whose account, where to return, the app's challenge), sealed by
+    // POST /auth/link/<provider>; a sign-in takes the address and the challenge from the query.
+    const rawLink = c.req.query("link");
+    const link = rawLink ? await linkCodec.open(rawLink, deps.now()) : null;
+    if (rawLink && (!link || link.p !== p)) return c.text("This link has expired or isn't valid. Go back to Dandelist and try again.", 400);
+    const redirect = link?.r ?? c.req.query("redirect") ?? "";
     if (!redirectAllowed(redirect, webOrigins, production)) return c.json({ error: "That return address isn't allowed." }, 400);
-    const challenge = c.req.query("challenge") ?? "";
+    const challenge = link?.c ?? c.req.query("challenge") ?? "";
     if (!CHALLENGE.test(challenge)) return c.json({ error: "That sign-in request is incomplete. Update Dandelist and try again." }, 400);
-    const s: State = { p, r: redirect, n: randomToken(24), v: randomToken(32), c: challenge };
+    const s: State = { p, r: redirect, n: randomToken(24), v: randomToken(32), c: challenge, ...(link ? { u: link.u } : {}) };
     const sealed = await state.seal(s, nowS());
     setCookie(c, COOKIE, s.n, cookieOpts);
     return c.redirect(authorizeUrl(p, sealed, s), 302);
@@ -429,7 +550,9 @@ export function oauthRoutes(deps: OAuthRouteDeps, issueSession: (userId: string)
       return c.text("This sign-in link has expired or isn't valid. Go back to Dandelist and try again.", 400);
     }
     // From here the state is ours, so its redirect is safe to send the person back to, with or without a ticket.
-    const back = (query: string) => c.redirect(`${s.r}?${query}`, c.req.method === "POST" ? 303 : 302);
+    // A link says so, so the app finishes it in settings instead of signing in.
+    const intent = s.u ? "intent=link&" : "";
+    const back = (query: string) => c.redirect(`${s.r}?${intent}${query}`, c.req.method === "POST" ? 303 : 302);
     const bounce = (code: FailureCode) => back(`error=${code}`);
 
     const bound = readCookie(c);
@@ -440,11 +563,20 @@ export function oauthRoutes(deps: OAuthRouteDeps, issueSession: (userId: string)
     if (!webEnabled[p]) return bounce("failed");
 
     try {
-      const userId = await accountFor(p, await finish(p, params, s));
+      const profile = await finish(p, params, s);
+      if (s.u) {
+        // A link needs no email: the account is already known. It must never take an identity from someone else.
+        const owner = await ownerOf(p, profile.subject);
+        if (owner && owner !== s.u) return bounce("taken");
+        if (!(await db.query("select 1 from users where id = $1", [s.u])).rows.length) return bounce("failed");
+        const link: LinkIdentityRow = { provider: p, subject: profile.subject, email: profile.email ? normalizeEmail(profile.email) : null, name: profile.name };
+        return back(`ticket=${await issueTicket(s.u, s.c, link)}`);
+      }
+      const userId = await accountFor(p, profile);
       return back(`ticket=${await issueTicket(userId, s.c)}`);
     } catch (e) {
       if (e instanceof OAuthFailure) return bounce(e.code);
-      console.warn(`${p} sign-in failed: ${e instanceof Error ? e.message : String(e)}`);
+      console.warn(`${p} ${s.u ? "link" : "sign-in"} failed: ${e instanceof Error ? e.message : String(e)}`);
       return bounce("failed");
     }
   }
@@ -458,8 +590,9 @@ export function oauthRoutes(deps: OAuthRouteDeps, issueSession: (userId: string)
     if (!redeemsPerIp.take(ip(c), deps.now().getTime())) return c.json({ error: "Too many sign-in attempts from this network. Try again in an hour." }, 429);
     const nowIso = deps.now().toISOString();
     const expired = () => c.json({ error: "That sign-in has expired. Try again." }, 400);
+    // Link tickets never sign anyone in; only /auth/link/redeem takes them.
     const found = await db.query<{ id: string; client_challenge: string }>(
-      "select id, client_challenge from oauth_tickets where ticket_hash = $1 and consumed_at is null and expires_at > $2",
+      "select id, client_challenge from oauth_tickets where ticket_hash = $1 and consumed_at is null and expires_at > $2 and link is null",
       [sha256hex(parsed.data.ticket), nowIso],
     );
     const ticket = found.rows[0];
@@ -507,6 +640,67 @@ export function oauthRoutes(deps: OAuthRouteDeps, issueSession: (userId: string)
       if (e instanceof OAuthFailure) return c.json({ error: "Apple didn't share a verified email. Sign in with an email code instead." }, 400);
       throw e;
     }
+  });
+
+  // ------------------------------------------------------------------ linking, for someone already signed in
+
+  // Finishes a link: the ticket from the callback, the verifier of the app that started it, and the same account's
+  // session. Registered before /link/:provider, so "redeem" is never read as a provider.
+  app.post("/link/redeem", auth, async (c) => {
+    noStore(c);
+    const parsed = redeemBody.safeParse(await c.req.json().catch(() => null));
+    const expired = () => c.json({ error: "That link has expired. Try again." }, 400);
+    if (!parsed.success) return expired();
+    if (!redeemsPerIp.take(ip(c), deps.now().getTime())) return c.json({ error: "Too many tries from this network. Try again in an hour." }, 429);
+    const userId = c.get("userId");
+    const nowIso = deps.now().toISOString();
+    const found = await db.query<{ id: string; client_challenge: string; user_id: string }>(
+      "select id, client_challenge, user_id from oauth_tickets where ticket_hash = $1 and consumed_at is null and expires_at > $2 and link is not null",
+      [sha256hex(parsed.data.ticket), nowIso],
+    );
+    const ticket = found.rows[0];
+    if (!ticket || ticket.user_id !== userId || !verifierMatches(parsed.data.verifier, ticket.client_challenge)) return expired();
+    const { rows } = await db.query<{ link: unknown }>("update oauth_tickets set consumed_at = $2 where id = $1 and consumed_at is null returning link", [ticket.id, nowIso]);
+    if (!rows[0]) return expired();
+    const link = (typeof rows[0].link === "string" ? JSON.parse(rows[0].link) : rows[0].link) as LinkIdentityRow;
+    if ((await attach(userId, link)) === "taken") return c.json({ error: takenMessage(link.provider) }, 409);
+    return c.json({ identities: await listIdentities(db, userId) });
+  });
+
+  // Apple on an iPhone links through the system sheet, with a nonce from /auth/apple/nonce, like native sign-in.
+  app.post("/link/apple/native", auth, async (c) => {
+    noStore(c);
+    if (!appleBundleId) return c.json({ error: "Sign in with Apple isn't available." }, 404);
+    const parsed = nativeBody.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: "Apple didn't send an account. Try again." }, 400);
+    if (!nativePerIp.take(ip(c), deps.now().getTime())) return c.json({ error: "Too many tries from this network. Try again in an hour." }, 429);
+    const { identityToken, fullName } = parsed.data;
+    let profile: Profile;
+    try {
+      profile = await appleProfile(identityToken, appleBundleId, consumeAppleNonce, text([fullName?.givenName, fullName?.familyName].filter(Boolean).join(" ")));
+    } catch (e) {
+      console.warn(`native Apple link rejected: ${e instanceof Error ? e.message : String(e)}`);
+      return c.json({ error: "Apple couldn't confirm that account. Try again." }, 401);
+    }
+    const userId = c.get("userId");
+    const link: LinkIdentityRow = { provider: "apple", subject: profile.subject, email: profile.email ? normalizeEmail(profile.email) : null, name: profile.name };
+    if ((await attach(userId, link)) === "taken") return c.json({ error: takenMessage("apple") }, 409);
+    return c.json({ identities: await listIdentities(db, userId) });
+  });
+
+  // Starts a link and answers the address the app opens in a browser. The request inside it is sealed and lasts ten
+  // minutes, and it finishes only with this account's session and the app's verifier at /auth/link/redeem.
+  app.post("/link/:provider", auth, async (c) => {
+    noStore(c);
+    const p = c.req.param("provider") as Provider;
+    if (!PROVIDERS.includes(p) || !webEnabled[p]) return c.json({ error: "That sign-in option isn't available." }, 404);
+    const parsed = linkStartBody.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: "That request is incomplete. Update Dandelist and try again." }, 400);
+    if (!redirectAllowed(parsed.data.redirect, webOrigins, production)) return c.json({ error: "That return address isn't allowed." }, 400);
+    const userId = c.get("userId");
+    if (!linksPerUser.take(userId, deps.now().getTime())) return c.json({ error: "Too many tries. Try again in an hour." }, 429);
+    const sealedLink = await linkCodec.seal({ p, u: userId, r: parsed.data.redirect, c: parsed.data.challenge }, nowS());
+    return c.json({ url: `${apiBase}/auth/oauth/${p}/start?link=${encodeURIComponent(sealedLink)}` });
   });
 
   return app;
