@@ -247,7 +247,8 @@ export function readCandidates(text: string): Candidate[] {
     const amount = parseAmount(shown);
     const currency = /\b([A-Za-z]{3})\b/.exec(rest[2] ?? "")?.[1]?.toUpperCase() ?? "";
     const figure = FIGURE.exec(shown);
-    const part = PART_PRICE.test(shown) || (!!figure && feeAt({ before: shown.slice(0, figure.index), after: shown.slice(figure.index + figure[0].length) }));
+    const around = figure ? { before: shown.slice(0, figure.index), after: shown.slice(figure.index + figure[0].length) } : null;
+    const part = PART_PRICE.test(shown) || (!!around && (feeAt(around) || FEE_WORD_AFTER.test(around.after)));
     if (!out.some((c) => c.url === url)) out.push({ url, amount, currency, ...(part ? { part } : {}) });
   }
   return out;
@@ -268,14 +269,17 @@ const PART_AFTER =
   /^\s*(?:[A-Z]{3}|[€£$¥])?\s*(?:\/\s*(?:mo|month|m|night|nt|wk|week|day|hr|hour|yr|year|person|pp|pax|guest)\b|(?:per|a)\s+(?:month|night|week|day|hour|year|person|guest|head)\b|p\.?p\.?(?![a-z])|pppn\b|each\b|(?:monthly|nightly|weekly|daily|hourly)\b|deposit\b|down\b)/i;
 
 /**
- * A charge on top of the thing, named right at its figure (Codex R14, 09:00 batch): "USD 250 shipping fee",
- * "Delivery: $250", "$95 booking fee". Shipping named any other way ("$2,495 + free shipping", "$2,495 delivery
- * included", "incl. delivery $2,495") leaves the figure the price.
+ * A charge on top of the thing, named right at its figure on the same line (Codex R14, 09:00 batch): "USD 250 shipping
+ * fee", "$95 booking fee", "Delivery: $250". On a page, a word after the figure counts only as "fee" or "charge", since
+ * shops follow their price with "Shipping calculated at checkout" or a "Shipping & Returns" heading. Shipping named
+ * any other way ("$2,495 + free shipping", "incl. delivery $2,495") leaves the figure the price.
  */
 const FEE_AFTER =
-  /^\s*(?:[A-Z]{3}|[€£$¥])?\s*(?:(?:shipping|delivery|postage|handling|freight|surcharge)\b(?!\s+(?:included|incl|free)\b)|(?:(?:booking|service|processing|admin|documentation|destination|cleaning|resort|registration|application|activation)\s+)?(?:fee|fees|charge)\b)/i;
-const FEE_BEFORE = /(?<!\b(?:free|incl\.?|including|with)\s)\b(?:shipping|delivery|postage|handling|freight|surcharge|fees?)(?:\s+(?:fee|charge|cost))?\s*[:=]?\s*(?:[A-Z]{3}|[€£$¥])?\s*$/i;
+  /^[ \t]*(?:[A-Z]{3}|[€£$¥])?[ \t]*(?:(?:shipping|delivery|postage|handling|freight|booking|service|processing|admin|documentation|destination|cleaning|resort|registration|application|activation)[ \t]+)?(?:fees?|charge|surcharge)\b/i;
+const FEE_BEFORE = /(?<!\b(?:free|incl\.?|including|with)[ \t])\b(?:shipping|delivery|postage|handling|freight|surcharge|fees?)(?:[ \t]+(?:fee|charge|cost))?[ \t]*[:=]?[ \t]*(?:[A-Z]{3}|[€£$¥])?[ \t]*$/i;
 const feeAt = (m: { before: string; after: string }) => FEE_AFTER.test(m.after) || FEE_BEFORE.test(m.before);
+/** What the model writes after its figure is about that figure: "USD 250 shipping" is shipping, unless it says included or free. */
+const FEE_WORD_AFTER = /^[ \t]*(?:[A-Z]{3}|[€£$¥])?[ \t]*(?:shipping|delivery|postage|handling|freight)\b(?![ \t]+(?:included|incl|free)\b)/i;
 
 /** A mention of the price that reads as the whole price: no unit or fee straight after it, nor a deposit, lease or fee just before. */
 export const wholeMention = (m: { before: string; after: string }) =>

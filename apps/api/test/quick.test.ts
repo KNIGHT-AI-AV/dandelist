@@ -652,6 +652,10 @@ describe("a price keeps what it pays for through every fallback (Codex R14, 09:0
     expect(priceMentions("Alder X Camera $2,400. Shipping $250.", 250).some(wholeMention)).toBe(false);
     expect(priceMentions("Alder X Camera $2,400. Shipping $250.", 2400).every(wholeMention)).toBe(true);
     expect(priceMentions("Free shipping $2,400 today", 2400).every(wholeMention)).toBe(true);
+    // A shop's price followed by its shipping note or heading is still the price.
+    expect(priceMentions("Alder X Camera $2,495.00 Shipping calculated at checkout.", 2495).every(wholeMention)).toBe(true);
+    expect(priceMentions("Alder X Camera\n$2,495.00\nShipping & Returns", 2495).every(wholeMention)).toBe(true);
+    expect(readCandidates(`${CAM} | USD 250 shipping | USD`)[0]).toMatchObject({ part: true });
   });
 
   it("never moves a figure from one model year's page to another's", async () => {
