@@ -5,7 +5,8 @@ vi.mock("node:dns/promises", async (importOriginal) => ({ ...(await importOrigin
 import { WRAP_UP_MS, explainFacts, research, tidyQuestions, type Draft, type Meta, type PriceOption, type Step } from "../src/agent/agent";
 import { huntWish, mergeFast, type HuntResult } from "../src/agent/find";
 import { lineFor } from "../src/agent/lines";
-import { mediaKindOf, namesWish, parseAmount, photoCandidates, quickFind, readCandidates, wishWords, type ProductPage } from "../src/agent/quick";
+import { mediaKindOf, namesWish, parseAmount, photoCandidates, quickFind, readCandidates, wholeMention, wishWords, type ProductPage } from "../src/agent/quick";
+import { priceMentions } from "../src/agent/tools";
 import { imageResponse, jpegHeader, pngHeader } from "./images";
 
 /**
@@ -26,6 +27,7 @@ const PROVIDER = "https://www.cook.example/private-chef-services-denver";
 const OLDCARS = "https://oldcarsdata.com/aston-martin/db11/price-history";
 const KBB = "https://www.kbb.com/aston-martin/db11/2020/";
 const DEALER = "https://www.dealer.example/aston-martin-db11";
+const LEASE = "https://www.lease.example/aston-martin-db11";
 
 const html = (head: string, body: string) => `<html><head>${head}</head><body>${body}</body></html>`;
 const ld = (data: unknown) => `<script type="application/ld+json">${JSON.stringify(data)}</script>`;
@@ -46,6 +48,7 @@ const PAGES: Record<string, string> = {
     `<title>Private Chef Services in Denver | Mile High Cook</title>${ld({ "@type": "Service", name: "Cherry Hills Village", offers: { price: 1200, priceCurrency: "USD" } })}`,
     "<p>Your private chef cooks a dinner party at home for up to twelve guests. From $1,200.</p>",
   ),
+  [LEASE]: html(`<title>Aston Martin DB11 | Lease</title>`, "<p>Drive an Aston Martin DB11 for $450/mo with $5,000 down.</p>"),
   [VILLA]: html(`<title>Villa in Santa Lucija | Agency</title><meta property="og:image" content="/photos/villa-santa-lucija-1.jpg">`, "<p>Detached villa in Santa Lucija, Malta. 3 bedrooms, pool. Price: €1,950,000</p>"),
 };
 
@@ -58,6 +61,7 @@ const fakeWeb = (async (input: string | URL) => {
   if (u === "https://www.watchshop.example/daytona.jpg") return imageResponse(jpegHeader(1600, 1200), "image/jpeg");
   if (u === "https://www.agency.example/photos/villa-santa-lucija-1.jpg") return imageResponse(jpegHeader(2048, 1365), "image/jpeg");
   if (u === CHEF || u === OLDCARS || u === KBB || u === DEALER) return new Response("denied", { status: 403, headers: { "content-type": "text/html" } });
+  if (/^https:\/\/(seller|other|third|trips)\.example\//.test(u)) return new Response("denied", { status: 403, headers: { "content-type": "text/html" } });
   if (u.endsWith("/static/logo.png")) return imageResponse(pngHeader(600, 200), "image/png");
   if (u.startsWith("https://api.frankfurter.dev/")) return Response.json({ date: "2026-10-28", rates: { USD: 1.08 } });
   if (u.startsWith("https://commons.wikimedia.org/") && (new URL(u).searchParams.get("gsrsearch") ?? "").includes("Aston Martin DB11")) {
@@ -483,5 +487,59 @@ describe("what the explanation may say about running costs", () => {
     const card = (await quickFind(meta, { words: "rolex submariner date", draft: DRAFT, homeCurrency: "USD" }, ctx()))!;
     expect(card.recurring).toEqual([]);
     expect(explainFacts(DRAFT, [card]).options[0]!.running_cost_per_month).toBe("not recorded");
+  });
+});
+
+describe("price units and evidence (Codex R14)", () => {
+  const car: Draft = { title: "Aston Martin DB11", kind: "own", summary: "An Aston Martin DB11.", specifics: [], region: "US", currency: "USD", unknowns: [] };
+  const trip: Draft = { title: "A week in Lisbon for two", kind: "visit", summary: "Seven nights in Lisbon for two people.", specifics: [], region: "US", currency: "USD", unknowns: [] };
+  const DB11 = "Aston Martin DB11 for sale";
+  const find = (lines: string[], returned: { url: string; title: string }[], draft: Draft = car) =>
+    quickFind(metaOf(() => searched(lines, returned)), { words: draft.title.toLowerCase(), draft, homeCurrency: "USD" }, { ...ctx(), api: fakeWeb });
+
+  it("never makes a monthly, per-person or deposit figure the whole price", async () => {
+    expect(await find(["https://seller.example/db11 | $450/mo | USD"], [{ url: "https://seller.example/db11", title: "Aston Martin DB11 lease, USD 450/mo" }])).toBeNull();
+    expect(await find(["https://trips.example/lisbon-week-for-two | From $1,299 pp | USD"], [{ url: "https://trips.example/lisbon-week-for-two", title: "Lisbon trip from USD 1,299 per person" }], trip)).toBeNull();
+    expect(await find(["https://seller.example/db11 | $500 deposit | USD"], [{ url: "https://seller.example/db11", title: "Aston Martin DB11 reserve with USD 500 deposit" }])).toBeNull();
+    // The model left the unit out, but the page says it: a lease page's monthly figure is not the car's price.
+    expect(await find([`${LEASE} | $450 | USD`], [{ url: LEASE, title: "Aston Martin DB11 lease" }])).toBeNull();
+  });
+
+  it("still reads a whole price that a monthly figure follows later on the page", () => {
+    const mentions = priceMentions("Bike+ $2,495.00. Membership $44/mo.", 2495);
+    expect(mentions.length).toBeGreaterThan(0);
+    expect(mentions.every(wholeMention)).toBe(true);
+    expect(priceMentions("Drive it for $450/mo with $5,000 down.", 450).some(wholeMention)).toBe(false);
+    expect(priceMentions("Reserve it with a $500 deposit.", 500).some(wholeMention)).toBe(false);
+    expect(priceMentions("Lisbon from USD 1,299 per person", 1299).some(wholeMention)).toBe(false);
+  });
+
+  it("needs a second site that agrees before the search's own figure stands", async () => {
+    expect(await find(["https://seller.example/db11 | $9 | USD"], [{ url: "https://seller.example/db11", title: DB11 }])).toBeNull();
+    const two = [{ url: "https://seller.example/db11", title: DB11 }, { url: "https://other.example/db11", title: DB11 }];
+    expect(await find(["https://seller.example/db11 | $9 | USD", "https://other.example/db11 | $128,000 | USD"], two)).toBeNull();
+    const three = [...two, { url: "https://third.example/db11", title: DB11 }];
+    const card = await find(["https://seller.example/db11 | $9 | USD", "https://other.example/db11 | $128,000 | USD", "https://third.example/db11 | $119,000 | USD"], three);
+    expect(card).toMatchObject({ url: "https://other.example/db11", upfrontCents: 12_800_000, status: "estimate" });
+  });
+
+  it("does not count one site twice, nor a variant the search never returned", async () => {
+    const samePage = [{ url: "https://seller.example/db11", title: DB11 }, { url: "https://seller.example/db11?view=print", title: DB11 }];
+    expect(await find(["https://seller.example/db11 | $110,500 | USD", "https://seller.example/db11?view=print | $110,500 | USD"], samePage)).toBeNull();
+    expect(await find(["https://seller.example/car?model=vantage | $119,000 | USD", "https://other.example/db11 | $121,000 | USD"], [{ url: "https://seller.example/car", title: DB11 }, { url: "https://other.example/db11", title: DB11 }])).toBeNull();
+  });
+
+  it("keeps currencies straight: a figure the page states in another currency, or a lone figure in a second currency, never stands", async () => {
+    expect(await find(["https://seller.example/db11 | 110500 | USD"], [{ url: "https://seller.example/db11", title: "Aston Martin DB11 for sale, GBP 110,500" }])).toBeNull();
+    const mixed = await find(
+      ["https://seller.example/db11 | $100,000 | USD", "https://other.example/db11 | $110,000 | USD", "https://third.example/db11 | 9 € | EUR"],
+      [{ url: "https://seller.example/db11", title: DB11 }, { url: "https://other.example/db11", title: DB11 }, { url: "https://third.example/db11", title: DB11 }],
+    );
+    expect(mixed).toMatchObject({ url: "https://seller.example/db11", upfrontCents: 10_000_000 });
+  });
+
+  it("treats a page that is gone as no evidence, unlike one that turned the server away", async () => {
+    const gone = [{ url: "https://gone.example/db11", title: DB11 }, { url: "https://lost.example/db11", title: DB11 }];
+    expect(await find(["https://gone.example/db11 | $110,500 | USD", "https://lost.example/db11 | $112,000 | USD"], gone)).toBeNull();
   });
 });
