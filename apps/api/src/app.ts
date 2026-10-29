@@ -8,6 +8,7 @@ import { guestRoutes } from "./guest";
 import { poolSource } from "./pool";
 import { previewRoutes } from "./preview";
 import { MEDIA_KEY } from "./media-store";
+import { meRoutes } from "./me";
 import { wishRoutes } from "./wishes";
 
 export interface AppDeps extends AgentDeps {
@@ -50,6 +51,7 @@ export function createApp(deps: AppDeps) {
   app.route("/preview", previewRoutes({ ...deps, pool }));
   app.route("/guest", guestRoutes({ ...deps, pool }));
   app.route("/", dreamRoutes(deps));
+  app.route("/me", meRoutes(deps));
 
   app.use("/me", requireAuth(deps));
   app.get("/me", async (c) => {

@@ -26,7 +26,7 @@ export interface AuthDeps {
   codePepper: string;
   judge?: { email: string; code: string };
   now: () => Date;
-  /** Google, GitHub and Apple sign-in; each provider stays off until its settings are present. */
+  /** Google, GitHub, Apple and Facebook sign-in; each provider stays off until its settings are present. */
   oauth?: OAuthConfig;
   /** Web app origins; each may receive social sign-in tickets at /auth/callback. */
   webOrigins?: string[];
@@ -167,7 +167,8 @@ export function authRoutes(deps: AuthDeps) {
     return c.json(await issueSession(old.user_id));
   });
 
-  app.route("/", oauthRoutes(deps, issueSession));
+  // Sign-in with a provider, and linking one more provider to the account that is signed in.
+  app.route("/", oauthRoutes(deps, issueSession, requireAuth(deps)));
 
   app.use("/logout", requireAuth(deps));
   app.post("/logout", async (c) => {
