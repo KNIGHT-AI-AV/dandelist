@@ -13,7 +13,7 @@ import { json, strictObject } from "./dream/context";
 import { readLife } from "./dream/life";
 import { notesFor } from "./notes";
 import { stoppable } from "./sse";
-import { SpendLimitError, assertBudget, assertUserBudget, recordSpend, userCapUsd, withHold } from "./spend";
+import { HOLD_USD, SpendLimitError, assertBudget, assertUserBudget, hold, recordSpend, userCapUsd, withHold } from "./spend";
 
 /**
  * Today's pick (owner, 2026-10-29: "intelligent suggestions... Maybe we'll do something like daily item suggestions
@@ -40,9 +40,9 @@ export const PICK_RETRY_MS = 5 * 60 * 1000;
 /** A claim this old was left by a request that died; the next request takes it over. */
 const STALE_MS = 2 * 60 * 1000;
 /** The whole pick, photo included, answers within this or not at all. */
-const PICK_MS = 30_000;
-/** The photo search's share of it. */
-const PHOTO_MS = 9_000;
+const PICK_MS = 40_000;
+/** The photo search's share of it: a plan, a web search and two looks at each candidate. */
+const PHOTO_MS = 20_000;
 /** What the model reads: the newest wishes and earlier picks. */
 const WISHES_READ = 40;
 const PICKS_READ = 30;
@@ -210,13 +210,11 @@ export async function choosePick(meta: Meta, input: PickInput): Promise<MadePick
 }
 
 /**
- * The photo search's checked photo of the pick, or none. Never an unchecked photo, and only https. Its plan runs at low
- * reasoning effort too: at the default it took 8.6 s and 2,000 output tokens on the live API (2026-10-29), most of
- * the photo's time.
+ * The photo search's pick for today's pick (agent/photos.ts: sized, then picked out of a line-up twice), or none. Never
+ * a photo that didn't pass, and only https.
  */
 export async function photoFor(meta: Meta, made: MadePick, fetcher: Fetcher, by: number): Promise<PickPhoto | null> {
-  const quick: Meta = { ...meta, responses: (body) => meta.responses(body.reasoning ? body : { ...body, reasoning: { effort: "low" } }) };
-  const found = await findPhoto(quick, { title: made.title, kind: made.kind, summary: made.summary, ...(made.place ? { place: made.place } : {}) }, { fetcher, by }).catch(() => null);
+  const found = await findPhoto(meta, { title: made.title, kind: made.kind, summary: made.summary, ...(made.place ? { place: made.place } : {}) }, { fetcher, by }).catch(() => null);
   if (!found || !/^https:\/\//i.test(found.image.url)) return null;
   const i = found.image;
   return {
@@ -332,6 +330,22 @@ export function pickRoutes(deps: AgentDeps) {
     const stop = new AbortController();
     const client = new MetaClient({ ...deps.meta, fetch: stoppable(deps.meta.fetch ?? fetch, stop.signal), onUsage: (usage, cost) => recordSpend(db, userId, "pick", usage, cost, deps.now()) });
     const meta: Meta = { responses: (b) => withHold(guard, () => client.responses(b), userId) };
+    // The photo search looks at each photo twice at once, a few photos at a time: more calls side by side than one
+    // person may hold one by one (spend.ts). It runs under a single hold instead, each call still checking the caps.
+    const looks: Meta = { responses: async (b) => (await guard(), client.responses(b)) };
+    const searchPhoto = async (pick: MadePick) => {
+      let release: () => void;
+      try {
+        release = hold(HOLD_USD, userId);
+      } catch {
+        return null; // the person has other work in flight: the card shows without a photo
+      }
+      try {
+        return await photoFor(looks, pick, deps.webFetch ?? publicFetch, Date.now() + PHOTO_MS);
+      } finally {
+        release();
+      }
+    };
     try {
       const [life, notes, past] = await Promise.all([
         readLife(db, userId),
@@ -341,7 +355,7 @@ export function pickRoutes(deps: AgentDeps) {
       const made = await within(
         (async () => {
           const pick = await choosePick(meta, { day, home: life.home?.label ?? null, wishes, picks: past.rows, notes, persona });
-          return { pick, photo: await photoFor(meta, pick, deps.webFetch ?? publicFetch, Date.now() + PHOTO_MS) };
+          return { pick, photo: await searchPhoto(pick) };
         })(),
         PICK_MS,
       );

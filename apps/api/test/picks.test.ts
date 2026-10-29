@@ -28,6 +28,8 @@ let calls: Json[];
 let answers: (Json | string)[];
 /** The size of the pick's photo on Wikipedia, or none. */
 let photoSize: [number, number] | null;
+/** Whether the photo search's two looks pick the photo out of the line-up. */
+let looksPass: boolean;
 
 const reply = (output: unknown[]) => Response.json({ id: `resp_${calls.length}`, output, usage: { input_tokens: 4000, output_tokens: 300 } });
 const message = (text: string) => ({ type: "message", content: [{ type: "output_text", text, annotations: [] }] });
@@ -41,7 +43,15 @@ const fakeMeta = (async (_url: string, init: RequestInit) => {
     // The live API often writes a sentence before the JSON when it has searched (2026-10-29).
     return reply([{ type: "web_search_call", action: { query: "riva boats" } }, message(typeof next === "string" ? next : `Checking what's current first. ${JSON.stringify(next)}`)]);
   }
-  if (format === "photo_plan") return reply([message(JSON.stringify({ articles: ["Riva Aquariva"], commons: "", web: "", kind: "vehicle" }))]);
+  if (format === "photo_plan") {
+    return reply([message(JSON.stringify({ identity: RIVA.title, lookalikes: ["Riva Iseo"], exact: true, official: "", articles: ["Riva Aquariva"], commons: "", web: "", kind: "vehicle" }))]);
+  }
+  if (format === "photo_check") {
+    // Each look sees the line-up in its own order and answers by letter.
+    const options = JSON.stringify(body.input);
+    const letter = (name: string) => new RegExp(`([A-G])\\. ${name}`).exec(options)?.[1];
+    return reply([message(JSON.stringify({ seen: "A wooden runabout on a lake.", fits: [looksPass ? letter(RIVA.title) : letter("None of these")], quality: "studio", clean: true }))]);
+  }
   return reply([message("Nothing.")]);
 }) as unknown as typeof fetch;
 
@@ -63,6 +73,7 @@ beforeEach(async () => {
   calls = [];
   answers = [];
   photoSize = [3000, 2000];
+  looksPass = true;
   clock = new Date("2026-10-29T12:00:00Z");
   app = createApp({
     db,
@@ -176,11 +187,11 @@ describe("today's pick", () => {
     expect(ask!.input).toContain('THEIR WISHES (newest first): [{"title":"Riva boat","kind":"a thing to buy"},{"title":"Leica Q3","kind":"a thing to buy"}]');
     expect(ask!.input).toContain("PICKED BEFORE (newest first): none yet");
     expect(ask!.input).toContain("TODAY: 2026-10-29");
-    // The photo search's plan runs at low effort too.
-    expect(calls.find((b) => b.text?.format?.name === "photo_plan")).toMatchObject({ reasoning: { effort: "low" } });
-    // It counts against the person's own allowance.
+    // The photo passed the search's two looks, each picking it out of a line-up.
+    expect(calls.filter((b) => b.text?.format?.name === "photo_check")).toHaveLength(2);
+    // Every call, the photo search's included, counts against the person's own allowance.
     const spent = (await db.query<{ n: number }>("select count(*)::int as n from spend_ledger where user_id = $1 and kind = 'pick'", [id])).rows[0]!;
-    expect(spent.n).toBe(2);
+    expect(spent.n).toBe(calls.length);
 
     // Opening the list again the same day costs nothing.
     const again = await today(token);
@@ -196,6 +207,12 @@ describe("today's pick", () => {
     photoSize = null;
     answers = [{ ...RIVA, title: "Riva Rivamare" }];
     expect((await today(token, "2026-10-30")).body.pick).toMatchObject({ title: "Riva Rivamare", photo: null });
+    // A photo of the right size that the two looks don't pick out is not shown either.
+    photoSize = [3000, 2000];
+    looksPass = false;
+    answers = [{ ...RIVA, title: "Riva Dolceriva" }];
+    expect((await today(token, "2026-10-28")).body.pick).toMatchObject({ title: "Riva Dolceriva", photo: null });
+    expect(calls.filter((b) => b.text?.format?.name === "photo_check").length).toBeGreaterThan(0);
   });
 
   it("makes one pick when two requests come at once", async () => {
