@@ -120,7 +120,8 @@ export function MoneyPage() {
             </View>
           </>
         ) : (
-          <Text style={[type.callout, { color: p.ink2 }]}>Nothing on your list costs anything to keep once it's yours.</Text>
+          // An empty list of running costs means none are recorded, not that keeping these things is free (Codex R13).
+          <Text style={[type.callout, { color: p.ink2 }]}>No running costs recorded yet.</Text>
         )}
       </Section>
 

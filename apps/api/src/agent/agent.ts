@@ -756,7 +756,8 @@ export function explainFacts(draft: Draft, options: PriceOption[]) {
       seller: o.seller,
       price_source: o.status === "verified" ? "checked on the seller's page" : o.listing ? `listed by ${o.listing.merchant} in today's shopping search` : "an estimate, not checked",
       upfront: formatCents(o.upfrontCents),
-      running_cost_per_month: o.totals.monthlyCents ? formatCents(o.totals.monthlyCents) : "none",
+      // No recorded running costs is not the same as none: the hunt prices the thing, not always its upkeep.
+      running_cost_per_month: o.totals.monthlyCents ? formatCents(o.totals.monthlyCents) : "not recorded",
       total_over_horizon: formatCents(o.totals.horizonCents),
       spread_per_month: formatCents(o.totals.spreadMonthlyCents),
       ...(o.parts

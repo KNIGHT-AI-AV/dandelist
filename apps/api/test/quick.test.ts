@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Shop hostnames resolve to a public documentation address, so no test touches real DNS.
 vi.mock("node:dns/promises", async (importOriginal) => ({ ...(await importOriginal<object>()), lookup: async () => [{ address: "93.184.215.14", family: 4 }] }));
-import { WRAP_UP_MS, research, tidyQuestions, type Draft, type Meta, type PriceOption, type Step } from "../src/agent/agent";
+import { WRAP_UP_MS, explainFacts, research, tidyQuestions, type Draft, type Meta, type PriceOption, type Step } from "../src/agent/agent";
 import { huntWish, mergeFast, type HuntResult } from "../src/agent/find";
 import { lineFor } from "../src/agent/lines";
 import { mediaKindOf, namesWish, parseAmount, photoCandidates, quickFind, readCandidates, wishWords, type ProductPage } from "../src/agent/quick";
@@ -474,5 +474,14 @@ describe("the research's deadline", () => {
     const out = await research(meta, { draft: DRAFT, answers: [], onStep: () => undefined, now: () => clock, fetcher: fakeWeb, deadline: Date.now() + 60_000 });
     expect(refused).toBeGreaterThan(1);
     expect(out.options[0]).toMatchObject({ url: ROLEX });
+  });
+});
+
+describe("what the explanation may say about running costs", () => {
+  it("calls an empty set of running costs not recorded, never none (Codex R13)", async () => {
+    const meta = metaOf(() => searched([`${ROLEX} | $10,250 | USD`], [{ url: ROLEX, title: "Submariner Date | Rolex" }]));
+    const card = (await quickFind(meta, { words: "rolex submariner date", draft: DRAFT, homeCurrency: "USD" }, ctx()))!;
+    expect(card.recurring).toEqual([]);
+    expect(explainFacts(DRAFT, [card]).options[0]!.running_cost_per_month).toBe("not recorded");
   });
 });
