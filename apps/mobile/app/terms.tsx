@@ -1,6 +1,6 @@
-import { LegalPage } from "../components/legal";
-import { TERMS, TERMS_UPDATED } from "../lib/legal";
+import { Redirect } from "expo-router";
 
+/** /terms still works: it opens the combined page at the terms. */
 export default function Terms() {
-  return <LegalPage eyebrow="Dandelist" title="Terms" updated={TERMS_UPDATED} sections={TERMS} />;
+  return <Redirect href={{ pathname: "/legal", params: { section: "terms" } }} />;
 }

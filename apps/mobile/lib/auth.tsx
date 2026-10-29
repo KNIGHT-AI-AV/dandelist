@@ -16,9 +16,11 @@ const VERIFIER_KEY = "dandelist.oauth.verifier";
 type User = { id: string; email: string };
 type Status = "loading" | "signedOut" | "signedIn";
 
-export type ProviderId = "apple" | "google" | "github";
+export type ProviderId = "apple" | "google" | "github" | "facebook";
 /** A sign-in option to offer here. `native` means the system sheet (Apple on iOS); otherwise the API's browser flow. */
 export type SignInOption = { id: ProviderId; native: boolean };
+/** A sign-in account linked to this Dandelist account, as GET /me/identities lists it. */
+export type LinkedIdentity = { provider: ProviderId; email: string | null; name: string | null; linkedAt: string };
 
 interface Auth {
   status: Status;
@@ -26,7 +28,7 @@ interface Auth {
   startEmail(email: string): Promise<void>;
   verifyEmail(email: string, code: string): Promise<void>;
   /**
-   * Signs in with Google, GitHub or Apple through the API. On the web the page leaves for the provider and comes back
+   * Signs in with Google, GitHub, Facebook or Apple through the API. On the web the page leaves for the provider and comes back
    * at /auth/callback. On a phone it opens a browser sheet and resolves true once signed in, false if the person
    * backed out.
    */
@@ -35,6 +37,14 @@ interface Auth {
   signInWithApple(): Promise<boolean>;
   /** Swaps the one-time ticket from a finished provider sign-in for a session. Safe to call twice with one ticket. */
   redeemTicket(ticket: string): Promise<void>;
+  /**
+   * Links one more sign-in account to the account that is signed in (settings). Same trip as signInWith: the web
+   * leaves for the provider and comes back at /auth/callback, a phone opens a sheet and resolves with the account's
+   * linked identities, or null if the person backed out. Apple on an iPhone uses the system sheet.
+   */
+  linkWith(option: SignInOption): Promise<LinkedIdentity[] | null>;
+  /** Finishes a link with the ticket a provider sent back. Safe to call twice with one ticket. */
+  redeemLink(ticket: string): Promise<LinkedIdentity[]>;
   signOut(): Promise<void>;
   /** fetch against the API with the access token, refreshing once on 401. */
   api(path: string, init?: RequestInit): Promise<Response>;
@@ -60,8 +70,8 @@ async function post(path: string, body: unknown, token?: string) {
   });
 }
 
-const PROVIDER_ORDER: ProviderId[] = ["apple", "google", "github"];
-const PROVIDER_NAME: Record<ProviderId, string> = { apple: "Apple", google: "Google", github: "GitHub" };
+export const PROVIDER_ORDER: ProviderId[] = ["apple", "google", "facebook", "github"];
+const PROVIDER_NAME: Record<ProviderId, string> = { apple: "Apple", google: "Google", github: "GitHub", facebook: "Facebook" };
 
 /** What the person sees when a provider sign-in comes back without a ticket; `null` when there is nothing to say. */
 export function signInErrorMessage(code: string | null | undefined): string | null {
@@ -77,6 +87,33 @@ export function signInErrorMessage(code: string | null | undefined): string | nu
       return "That account has no verified email address. Verify one with the provider, or use an email code below.";
     default:
       return "That sign-in didn't go through. Try again.";
+  }
+}
+
+/** A link that didn't finish, with the code settings turns into words. */
+export class LinkError extends Error {
+  constructor(
+    message: string,
+    readonly code: "taken" | "failed",
+  ) {
+    super(message);
+  }
+}
+
+/** What settings says when linking an account comes back without a ticket; `null` when there is nothing to say. */
+export function linkErrorMessage(code: string | null | undefined): string | null {
+  switch (code) {
+    case undefined:
+    case null:
+    case "":
+    case "cancelled":
+      return null;
+    case "taken":
+      return "That account is already linked to another Dandelist account. Sign in with it there and unlink it first.";
+    case "expired":
+      return "That took too long. Try again.";
+    default:
+      return "That didn't go through. Try again.";
   }
 }
 
@@ -145,6 +182,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const access = useRef<string | null>(null);
   const redemptions = useRef(new Map<string, Promise<void>>());
+  const linkRedemptions = useRef(new Map<string, Promise<LinkedIdentity[]>>());
 
   const takeTokens = useCallback(async (t: { accessToken: string; refreshToken: string; user?: User }) => {
     access.current = t.accessToken;
@@ -228,6 +266,79 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [finishSignIn],
   );
 
+  const redeemLink = useCallback(
+    (ticket: string) => {
+      // Like sign-in tickets, Android can deliver one return address twice; both share one redemption.
+      let pending = linkRedemptions.current.get(ticket);
+      if (!pending) {
+        pending = (async () => {
+          const verifier = await getSecret(VERIFIER_KEY);
+          if (!verifier) throw new Error("That took too long. Try again.");
+          const res = await api("/auth/link/redeem", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ticket, verifier }) }).catch(() => null);
+          if (!res) throw new Error("Can't reach Dandelist. Check your connection.");
+          if (!res.ok) throw new LinkError(await errorMessage(res), res.status === 409 ? "taken" : "failed");
+          await setSecret(VERIFIER_KEY, null);
+          return ((await res.json()) as { identities: LinkedIdentity[] }).identities;
+        })();
+        linkRedemptions.current.set(ticket, pending);
+        pending.catch(() => linkRedemptions.current.delete(ticket));
+      }
+      return pending;
+    },
+    [api],
+  );
+
+  const linkWith = useCallback(
+    async (option: SignInOption): Promise<LinkedIdentity[] | null> => {
+      const json = { method: "POST", headers: { "Content-Type": "application/json" } } as const;
+      if (option.native && option.id === "apple") {
+        const nonceRes = await fetch(`${API_URL}/auth/apple/nonce`).catch(() => null);
+        if (!nonceRes) throw new Error("Can't reach Dandelist. Check your connection.");
+        if (!nonceRes.ok) throw new Error(await errorMessage(nonceRes));
+        const { nonce } = (await nonceRes.json()) as { nonce: string };
+        let credential: AppleAuthentication.AppleAuthenticationCredential;
+        try {
+          credential = await AppleAuthentication.signInAsync({ requestedScopes: [AppleAuthentication.AppleAuthenticationScope.FULL_NAME, AppleAuthentication.AppleAuthenticationScope.EMAIL], nonce });
+        } catch (e) {
+          if ((e as { code?: string }).code === "ERR_REQUEST_CANCELED") return null;
+          throw new Error("Apple didn't confirm that account. Try again.");
+        }
+        if (!credential.identityToken) throw new Error("Apple didn't confirm that account. Try again.");
+        const fullName = credential.fullName ? { givenName: credential.fullName.givenName, familyName: credential.fullName.familyName } : null;
+        const res = await api("/auth/link/apple/native", { ...json, body: JSON.stringify({ identityToken: credential.identityToken, fullName }) }).catch(() => null);
+        if (!res) throw new Error("Can't reach Dandelist. Check your connection.");
+        if (!res.ok) throw new Error(await errorMessage(res));
+        return ((await res.json()) as { identities: LinkedIdentity[] }).identities;
+      }
+      const challenge = await newChallenge();
+      const web = Platform.OS === "web";
+      const back = web ? `${globalThis.location.origin}/auth/callback` : appReturnUrl();
+      const res = await api(`/auth/link/${option.id}`, { ...json, body: JSON.stringify({ redirect: back, challenge }) }).catch(() => null);
+      if (!res) throw new Error("Can't reach Dandelist. Check your connection.");
+      if (!res.ok) throw new Error(await errorMessage(res));
+      const { url } = (await res.json()) as { url: string };
+      if (web) {
+        // A full-page trip; /auth/callback finishes the link and returns to settings.
+        globalThis.location.assign(url);
+        return new Promise<LinkedIdentity[] | null>(() => {});
+      }
+      brokerPending = true;
+      try {
+        const result = await WebBrowser.openAuthSessionAsync(url, back);
+        if (result.type !== "success") return null;
+        const { queryParams } = Linking.parse(result.url);
+        const ticket = typeof queryParams?.ticket === "string" ? queryParams.ticket : null;
+        if (ticket) return await redeemLink(ticket);
+        const message = linkErrorMessage(typeof queryParams?.error === "string" ? queryParams.error : "failed");
+        if (message) throw new Error(message);
+        return null;
+      } finally {
+        brokerPending = false;
+      }
+    },
+    [api, redeemLink],
+  );
+
   const value = useMemo<Auth>(
     () => ({
       status,
@@ -235,6 +346,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       api,
       apiStream,
       redeemTicket,
+      linkWith,
+      redeemLink,
       async startEmail(email) {
         const res = await post("/auth/email/start", { email }).catch(() => null);
         if (!res) throw new Error("Can't reach Dandelist. Check your connection.");
@@ -303,7 +416,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setStatus("signedOut");
       },
     }),
-    [status, user, api, apiStream, takeTokens, redeemTicket, finishSignIn],
+    [status, user, api, apiStream, takeTokens, redeemTicket, linkWith, redeemLink, finishSignIn],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
