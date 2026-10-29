@@ -62,7 +62,13 @@ export function createApp(deps: AppDeps) {
 
   // Account deletion is required by the App Store; everything the user owns goes with the row.
   app.delete("/me", async (c) => {
+    const avatar = (await db.query<{ avatar_key: string | null }>("select avatar_key from users where id = $1", [c.get("userId")])).rows[0]?.avatar_key;
     await db.query("delete from users where id = $1", [c.get("userId")]);
+    // Their profile photo goes too, unless someone else uses the very same picture (keys are the bytes' sha256).
+    if (avatar && deps.media?.store?.delete) {
+      const shared = (await db.query<{ n: number }>("select count(*)::int as n from users where avatar_key = $1", [avatar])).rows[0];
+      if (!Number(shared?.n ?? 0)) await deps.media.store.delete(avatar).catch((e: unknown) => console.warn("could not delete a profile photo", e instanceof Error ? e.message : e));
+    }
     return c.body(null, 204);
   });
 

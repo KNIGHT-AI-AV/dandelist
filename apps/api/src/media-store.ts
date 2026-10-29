@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 /**
@@ -10,6 +10,8 @@ import { join } from "node:path";
 export interface MediaStore {
   put(bytes: Uint8Array, type: MediaType): Promise<string>;
   get(key: string): Promise<{ bytes: Uint8Array; type: MediaType } | null>;
+  /** Removes an object nobody uses any more (a replaced profile photo, a deleted account's). */
+  delete?(key: string): Promise<void>;
 }
 
 export type MediaType = "image/png" | "image/jpeg" | "image/webp";
@@ -33,6 +35,9 @@ export function memoryMediaStore(publicBase: string): MediaStore & { objects: Ma
       const bytes = objects.get(key);
       return bytes ? { bytes, type: typeOfKey(key) } : null;
     },
+    async delete(key) {
+      objects.delete(key);
+    },
   };
 }
 
@@ -53,11 +58,14 @@ export function fileMediaStore(dir: string, publicBase: string): MediaStore {
         return null;
       }
     },
+    async delete(key) {
+      if (MEDIA_KEY.test(key)) await rm(join(dir, key), { force: true });
+    },
   };
 }
 
 export async function s3MediaStore(bucket: string, region: string, publicBase: string): Promise<MediaStore> {
-  const { S3Client, PutObjectCommand, GetObjectCommand } = await import("@aws-sdk/client-s3");
+  const { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } = await import("@aws-sdk/client-s3");
   const s3 = new S3Client({ region });
   return {
     async put(bytes, type) {
@@ -75,6 +83,9 @@ export async function s3MediaStore(bucket: string, region: string, publicBase: s
         if ((e as { name?: string }).name === "NoSuchKey") return null;
         throw e;
       }
+    },
+    async delete(key) {
+      if (MEDIA_KEY.test(key)) await s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: `agent/${key}` }));
     },
   };
 }
