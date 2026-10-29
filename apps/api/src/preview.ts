@@ -3,6 +3,7 @@ import { formatCents, recurringBreakdown, upfrontCashCents, type Item } from "@d
 import { MetaClient } from "@dandelist/meta";
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
+import { heartbeat } from "./sse";
 import { z } from "zod";
 import { unknownNumbers } from "./agent/agent";
 import { getPage, pageShowsPrice, publicFetch, type Fetcher } from "./agent/tools";
@@ -118,67 +119,72 @@ export function previewRoutes(deps: AgentDeps & { webFetch?: Fetcher; pool?: () 
     const { monthlyCents } = parsed.data;
     return streamSSE(c, async (stream) => {
       const send = (data: unknown) => stream.writeSSE({ data: JSON.stringify(data) });
-      await send({ type: "row", id: "read", state: "done", text: `Read your ${picks.length} ${picks.length === 1 ? "pick" : "picks"}.` });
+      const stopBeat = heartbeat(stream);
+      try {
+        await send({ type: "row", id: "read", state: "done", text: `Read your ${picks.length} ${picks.length === 1 ? "pick" : "picks"}.` });
 
-      // One live check per visit: the most expensive pick that was checked on its seller's page.
-      const target = [...picks].filter((p) => p.status === "verified" && p.url && p.checkedAt).sort((a, b) => b.upfrontCents - a.upfrontCents)[0];
-      if (target?.url && target.checkedAt) {
-        const host = new URL(target.url).hostname.replace(/^www\./, "");
-        await send({ type: "row", id: "check", state: "running", text: `Checking ${target.name} on ${host}` });
-        const fetcher: Fetcher = (u, init) => (deps.webFetch ?? publicFetch)(u, { ...init, signal: AbortSignal.timeout(CHECK_TIMEOUT_MS) });
-        const page = await getPage(target.url, fetcher).catch(() => null);
-        const shown = !!page?.ok && pageShowsPrice(page, target.upfrontCents / 100);
-        const earlier = day.format(new Date(target.checkedAt));
-        await send({
-          type: "row",
-          id: "check",
-          state: "done",
-          text: shown
-            ? `Checked ${target.name} on ${host}: ${formatCents(target.upfrontCents)} (just now)`
-            : page?.ok
-              ? `Couldn't confirm ${host} just now. Using the ${earlier} check.`
-              : `Couldn't reach ${host}. Using the ${earlier} check.`,
-        });
-      }
-
-      const facts = planFacts(picks, monthlyCents, now);
-      const labels = [...new Set(picks.flatMap((p) => p.recurring.map((r) => r.label?.toLowerCase()).filter(Boolean)))];
-      await send({ type: "row", id: "running", state: "done", text: labels.length ? `Added running costs: ${labels.slice(0, 3).join(", ")}.` : "No running costs on these picks." });
-      await send({ type: "row", id: "total", state: "done", text: `Added it all up: ${facts.everything_upfront}.` });
-
-      let note = fallbackNote(facts);
-      if (deps.meta) {
-        try {
-          // Give the note writer the unit to copy; the streamed result still uses the numeric share.
-          const noteFacts = { ...facts, largest: { ...facts.largest, share_percent: `${facts.largest.share_percent}%` } };
-          const client = new MetaClient({ ...deps.meta, onUsage: (usage, cost) => recordSpend(db, null, "preview", usage, cost, deps.now()) });
-          const res = await withBudgetScope("preview", async () => {
-            await assertBudget(db, deps.spendCaps ?? { dailyUsd: 10, totalUsd: 120 }, now);
-            const dayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).toISOString();
-            const spent = (await db.query<{ s: string | null }>("select coalesce(sum(cost_usd), 0) as s from spend_ledger where kind = 'preview' and created_at >= $1", [dayStart])).rows[0];
-            const usd = Number(spent?.s ?? 0);
-            if (usd >= PREVIEW_DAILY_USD || usd + heldForScope("preview") > PREVIEW_DAILY_USD) throw new SpendLimitError("daily");
-          }, () => client.responses({
-            instructions:
-              "You are Dandelist's agent. In two short sentences, under 40 words, say something useful about this wish list: what stands out, the largest share, and what it costs to keep each month if anything. Use only numbers that appear in FACTS, written exactly as given, including the % sign on percentages. No dates, no saving or budgeting advice, no financial advice, no hype, no questions.",
-            input: `FACTS: ${JSON.stringify(noteFacts)}`,
-          }));
-          const text = res.text.trim();
-          if (text && !unknownNumbers(text, noteFacts).length) note = text;
-        } catch (e) {
-          if (!(e instanceof SpendLimitError)) console.error("preview note failed", (e as Error).message);
+        // One live check per visit: the most expensive pick that was checked on its seller's page.
+        const target = [...picks].filter((p) => p.status === "verified" && p.url && p.checkedAt).sort((a, b) => b.upfrontCents - a.upfrontCents)[0];
+        if (target?.url && target.checkedAt) {
+          const host = new URL(target.url).hostname.replace(/^www\./, "");
+          await send({ type: "row", id: "check", state: "running", text: `Checking ${target.name} on ${host}` });
+          const fetcher: Fetcher = (u, init) => (deps.webFetch ?? publicFetch)(u, { ...init, signal: AbortSignal.timeout(CHECK_TIMEOUT_MS) });
+          const page = await getPage(target.url, fetcher).catch(() => null);
+          const shown = !!page?.ok && pageShowsPrice(page, target.upfrontCents / 100);
+          const earlier = day.format(new Date(target.checkedAt));
+          await send({
+            type: "row",
+            id: "check",
+            state: "done",
+            text: shown
+              ? `Checked ${target.name} on ${host}: ${formatCents(target.upfrontCents)} (just now)`
+              : page?.ok
+                ? `Couldn't confirm ${host} just now. Using the ${earlier} check.`
+                : `Couldn't reach ${host}. Using the ${earlier} check.`,
+          });
         }
-      }
-      await send({ type: "note", text: note });
 
-      const items = picks.map(toItem);
-      await send({
-        type: "result",
-        upfrontCents: upfrontCashCents(items),
-        monthlyRunningCents: Math.round(recurringBreakdown(items).perMonth),
-        everythingBy: reachBy(upfrontCashCents(items), monthlyCents, now).toISOString().slice(0, 7),
-        largest: facts.largest.rest_by_if_bought_last && facts.largest.share_percent >= 40 ? { name: facts.largest.name, share: facts.largest.share_percent, restBy: facts.largest.rest_by_if_bought_last } : null,
-      });
+        const facts = planFacts(picks, monthlyCents, now);
+        const labels = [...new Set(picks.flatMap((p) => p.recurring.map((r) => r.label?.toLowerCase()).filter(Boolean)))];
+        await send({ type: "row", id: "running", state: "done", text: labels.length ? `Added running costs: ${labels.slice(0, 3).join(", ")}.` : "No running costs on these picks." });
+        await send({ type: "row", id: "total", state: "done", text: `Added it all up: ${facts.everything_upfront}.` });
+
+        let note = fallbackNote(facts);
+        if (deps.meta) {
+          try {
+            // Give the note writer the unit to copy; the streamed result still uses the numeric share.
+            const noteFacts = { ...facts, largest: { ...facts.largest, share_percent: `${facts.largest.share_percent}%` } };
+            const client = new MetaClient({ ...deps.meta, onUsage: (usage, cost) => recordSpend(db, null, "preview", usage, cost, deps.now()) });
+            const res = await withBudgetScope("preview", async () => {
+              await assertBudget(db, deps.spendCaps ?? { dailyUsd: 10, totalUsd: 120 }, now);
+              const dayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).toISOString();
+              const spent = (await db.query<{ s: string | null }>("select coalesce(sum(cost_usd), 0) as s from spend_ledger where kind = 'preview' and created_at >= $1", [dayStart])).rows[0];
+              const usd = Number(spent?.s ?? 0);
+              if (usd >= PREVIEW_DAILY_USD || usd + heldForScope("preview") > PREVIEW_DAILY_USD) throw new SpendLimitError("daily");
+            }, () => client.responses({
+              instructions:
+                "You are Dandelist's agent. In two short sentences, under 40 words, say something useful about this wish list: what stands out, the largest share, and what it costs to keep each month if anything. Use only numbers that appear in FACTS, written exactly as given, including the % sign on percentages. No dates, no saving or budgeting advice, no financial advice, no hype, no questions.",
+              input: `FACTS: ${JSON.stringify(noteFacts)}`,
+            }));
+            const text = res.text.trim();
+            if (text && !unknownNumbers(text, noteFacts).length) note = text;
+          } catch (e) {
+            if (!(e instanceof SpendLimitError)) console.error("preview note failed", (e as Error).message);
+          }
+        }
+        await send({ type: "note", text: note });
+
+        const items = picks.map(toItem);
+        await send({
+          type: "result",
+          upfrontCents: upfrontCashCents(items),
+          monthlyRunningCents: Math.round(recurringBreakdown(items).perMonth),
+          everythingBy: reachBy(upfrontCashCents(items), monthlyCents, now).toISOString().slice(0, 7),
+          largest: facts.largest.rest_by_if_bought_last && facts.largest.share_percent >= 40 ? { name: facts.largest.name, share: facts.largest.share_percent, restBy: facts.largest.rest_by_if_bought_last } : null,
+        });
+      } finally {
+        stopBeat();
+      }
     });
   });
 

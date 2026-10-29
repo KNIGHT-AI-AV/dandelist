@@ -8,6 +8,7 @@ import type { Meta } from "../agent/agent";
 import { USER_DAILY_USD, type AgentDeps } from "../agent/routes";
 import { publicFetch } from "../agent/tools";
 import { requireAuth, type AuthVars } from "../auth";
+import { heartbeat, stoppable } from "../sse";
 import { assertBudget, assertUserBudget, recordSpend, SpendLimitError, userCapUsd, withHold } from "../spend";
 import { deckWidget, runTurn } from "./agent";
 import { TurnBudget, TurnLimitError, type ApifyConfig, type DreamCtx } from "./context";
@@ -27,6 +28,11 @@ import { emptyState, type DreamState, type TranscriptEntry } from "./types";
 
 /** Meta calls one person's dream turns may make in a day, on top of the shared and per-person spend caps. */
 export const DREAM_CALLS_PER_USER_PER_DAY = 400;
+/**
+ * A turn's stream closes by then, whatever is still running (2026-10-29: App Runner cuts a request at 120 s, which the
+ * phone reported as "The network connection was lost"). Turns wrap up on their own well before (TURN_WRAP_MS).
+ */
+export const TURN_STOP_MS = 95_000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export interface DreamDeps extends AgentDeps {
@@ -146,7 +152,8 @@ export function dreamRoutes(deps: DreamDeps) {
     const state: DreamState = { ...emptyState(), ...(saved ?? {}) };
     const sessionId = session.id;
     const budget = new TurnBudget();
-    const client = new MetaClient({ ...deps.meta, onUsage: (usage, cost) => recordSpend(db, userId, "dream", usage, cost, deps.now()) });
+    const stop = new AbortController();
+    const client = new MetaClient({ ...deps.meta, fetch: stoppable(deps.meta.fetch ?? fetch, stop.signal), onUsage: (usage, cost) => recordSpend(db, userId, "dream", usage, cost, deps.now()) });
     const meta: Meta = {
       responses: async (b) => {
         budget.meta();
@@ -165,6 +172,8 @@ export function dreamRoutes(deps: DreamDeps) {
     return streamSSE(c, async (stream) => {
       let open = true;
       stream.onAbort(() => void (open = false));
+      // A comment line every 15 s keeps the phone and App Runner from closing a quiet stream mid-search.
+      const stopBeat = heartbeat(stream);
       const emit = async (e: DreamEvent) => {
         if (!open) return;
         try {
@@ -189,9 +198,16 @@ export function dreamRoutes(deps: DreamDeps) {
         voice: voiceLine(body.data.persona),
         name: body.data.name,
       };
-      try {
-        await runTurn(ctx, transcript, state, body.data.action);
-      } catch (e) {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const late = new Promise<"late">((resolve) => (timer = setTimeout(() => resolve("late"), TURN_STOP_MS)));
+      const outcome = await Promise.race([runTurn(ctx, transcript, state, body.data.action).then(() => null, (e: unknown) => ({ e })), late]);
+      clearTimeout(timer);
+      if (outcome === "late") {
+        // Whatever is still running stops spending; what the turn already showed stays in the conversation.
+        stop.abort();
+        await emit({ type: "error", message: friendly(new TurnLimitError("time")) });
+      } else if (outcome) {
+        const e = outcome.e;
         if (!(e instanceof SpendLimitError || e instanceof TurnLimitError)) console.error("dream turn failed", sessionId, e instanceof MetaApiError ? `${e.status} ${e.body.slice(0, 200)}` : e);
         await emit({ type: "error", message: friendly(e) });
       }
@@ -208,6 +224,9 @@ export function dreamRoutes(deps: DreamDeps) {
         console.error("could not save dream session", sessionId, e);
       }
       await emit({ type: "done", sessionId });
+      stopBeat();
+      stop.abort();
+      open = false;
     });
   });
 
