@@ -4,7 +4,7 @@ import { recurringBreakdown } from "@dandelist/cost";
 import { z } from "zod";
 import { unknownNumbers } from "../agent/agent";
 import { fxRate } from "../agent/tools";
-import { applyCarValues, buildReady, buildTotal, carBuilder, carWidget, commonsPhoto, homeBuilder } from "./builders";
+import { applyCarValues, buildReady, buildTotal, carBuildCriteria, carBuilder, carWidget, commonsPhoto, homeBuilder } from "./builders";
 import { TurnLimitError, json, strictObject, type DreamCtx } from "./context";
 import { describe, searchListings, type Found } from "./hunt";
 import { NBSP, carKeep, compact, convert, homeKeep, isTropical, money, serviceLines, type Fx, type Rate, type RateUnit, type ServiceComponent } from "./keep";
@@ -505,7 +505,13 @@ async function carEvidence(ctx: DreamCtx, car: string) {
 async function pickBuild(ctx: DreamCtx, t: TranscriptEntry[], state: DreamState, buildId: string): Promise<string> {
   const b = state.builds[buildId];
   if (!b) return "That build has closed.";
-  const { total, verified, parts } = buildTotal(b);
+  const { total, verified, parts, unpriced } = buildTotal(b);
+  if (unpriced.length) {
+    const previous = state.widgets[buildId];
+    await show(ctx, t, state, carWidget(b, previous?.kind === "car_builder" ? previous.currency ?? ctx.life.currency : ctx.life.currency), "Kept the custom build with its unpriced parts.");
+    return `Not priced yet: ${unpriced.join("; ")}. Your choices are kept. Use Just search to find matching cars.`;
+  }
+  if (!buildReady(b)) return "Choose a model and trim first.";
   if (!total) return "The build has no price yet.";
   const name = parts.length ? parts.join(", ") : `${b.make} ${b.model}`;
   await ctx.step("keep", "running", `Working out what the ${b.make} ${b.model} costs to keep`);
@@ -977,7 +983,7 @@ export async function runTurn(ctx: DreamCtx, t: TranscriptEntry[], state: DreamS
       const w = state.widgets[action.widgetId];
       let criteria: Criteria | undefined = deck?.criteria;
       if (!criteria && w?.kind === "home_builder") criteria = state.home;
-      if (!criteria && w?.kind === "car_builder") criteria = state.car;
+      if (!criteria && w?.kind === "car_builder") criteria = state.builds[w.id] ? carBuildCriteria(state.builds[w.id]!, ctx.life.currency) : state.car;
       criteria ??= state.home ?? state.car;
       if (!criteria) return void (await ctx.emit({ type: "error", message: "Tell me what to look for first." }));
       ctx.budget.tool();
@@ -1026,18 +1032,15 @@ export async function runTurn(ctx: DreamCtx, t: TranscriptEntry[], state: DreamS
         const widget = carWidget(b, w.currency ?? ctx.life.currency);
         remember(state, widget);
         if (v.search === true) {
-          const trim = b.steps.find((s) => s.id === "trim");
-          const colour = b.steps.find((s) => s.id === "colour");
-          const label = (s: typeof trim) => s?.choices.find((c) => c.id === s.selected[0])?.label ?? "";
-          state.car = { kind: "car", make: b.make, model: b.model, trim: label(trim), colour: label(colour), condition: "any", maxPrice: null, currency: ctx.life.currency, notes: "" };
+          state.car = carBuildCriteria(b, ctx.life.currency);
           ctx.budget.tool();
           await runSearch(ctx, t, state, state.car, 1);
           return;
         }
         if (v.done === true) {
-          if (!buildReady(b)) return void (await ctx.emit({ type: "error", message: "Choose a trim first." }));
           ctx.budget.tool();
-          await pickBuild(ctx, t, state, b.id);
+          const result = await pickBuild(ctx, t, state, b.id);
+          if (!/^Made /.test(result)) await ctx.emit({ type: "error", message: result });
         }
         return;
       }

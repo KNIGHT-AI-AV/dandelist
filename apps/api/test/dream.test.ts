@@ -575,6 +575,45 @@ describe("dream turn", () => {
     expect(wish.keep.map((l: Ev) => l.label)).toEqual(expect.arrayContaining(["Insurance", "Fuel", "Maintenance", "Registration and road licence"]));
   });
 
+  it("keeps custom car parts across reload, blocks incomplete wishes and forwards the full build to search", async () => {
+    const t = await signIn("ada@example.com");
+    concierge = [[fc("car_builder", { make: "Mercedes-Benz", model: "G 63", notes: "black" })], [message("")]];
+    const first = await turn(t, { type: "message", text: "configure a black G 63" });
+    const cb = widgets(first.events, "car_builder")[0];
+    const callsBefore = metaCalls.length;
+    const pagesBefore = webCalls.length;
+    const incomplete = await turn(t, { type: "builder", widgetId: cb.id, values: { selections: { options: ["night_package"] }, own: { colour: ["Mint green"], interior: ["Cream leather"], options: ["Armoured glass"] }, done: true } }, first.sessionId);
+    expect(widgets(incomplete.events, "wish_ready")).toHaveLength(0);
+    expect(metaCalls).toHaveLength(callsBefore);
+    expect(webCalls).toHaveLength(pagesBefore);
+    expect(incomplete.events.find((e) => e.type === "error")?.message).toContain("Armoured glass");
+    const pending = widgets(incomplete.events, "car_builder")[0];
+    expect(pending.unpriced).toEqual(["Colour: Mint green", "Interior: Cream leather", "Options: Armoured glass"]);
+    expect(pending.knownSubtotalCents).toBe((186550 + 1300) * 100);
+    const saved = await (await call("GET", `/dream/sessions/${first.sessionId}`, t)).json() as Ev;
+    expect(saved.widgets.find((w: Ev) => w.id === cb.id).unpriced).toEqual(pending.unpriced);
+    const again = await turn(t, { type: "pick", widgetId: cb.id }, first.sessionId);
+    expect(widgets(again.events, "wish_ready")).toHaveLength(0);
+    expect(metaCalls).toHaveLength(callsBefore);
+    await turn(t, { type: "builder", widgetId: cb.id, values: { search: true } }, first.sessionId);
+    const hunt = metaCalls.find((m) => String(m.instructions ?? "").startsWith("You find real listings"))!;
+    for (const text of ["Mint green", "Cream leather", "Armoured glass", "Night Package"]) expect(String(hunt.input)).toContain(text);
+    const complete = await turn(t, { type: "builder", widgetId: cb.id, values: { selections: { colour: ["obsidian_black_metallic"], interior: [], options: ["night_package"] }, own: { colour: [], interior: [], options: [] }, done: true } }, first.sessionId);
+    expect(widgets(complete.events, "wish_ready")[0].wish).toMatchObject({ upfrontCents: (186550 + 1300) * 100, status: "verified" });
+  });
+
+  it("persists a custom label safely when the length boundary splits an emoji", async () => {
+    const t = await signIn("ada@example.com");
+    concierge = [[fc("car_builder", { make: "Mercedes-Benz", model: "G 63", notes: "" })], [message("")]];
+    const first = await turn(t, { type: "message", text: "configure a G 63" });
+    const cb = widgets(first.events, "car_builder")[0];
+    const pending = await turn(t, { type: "builder", widgetId: cb.id, values: { own: { options: ["A".repeat(39) + "\uD83D\uDE80"] }, done: true } }, first.sessionId);
+    expect(pending.events.some((event) => event.type === "done")).toBe(true);
+    expect(widgets(pending.events, "wish_ready")).toHaveLength(0);
+    const saved = await (await call("GET", `/dream/sessions/${first.sessionId}`, t)).json() as Ev;
+    expect(saved.widgets.find((w: Ev) => w.id === cb.id).unpriced).toEqual([`Options: ${"A".repeat(39)}\uFFFD`]);
+  });
+
   it("adds a portal's listings through Apify, records the spend and respects the daily cap", async () => {
     app = makeApp({ apify: true });
     const t = await signIn("ada@example.com");
