@@ -9,11 +9,12 @@ import { fonts, type, usePalette } from "../../lib/theme";
  * The signed-in person in a disc: the picture they chose in settings, else the first letter of their name (or their
  * email). Small sizes set the letter as a label; large ones, as on the settings page, in the house serif.
  */
-export function ProfileAvatar({ size }: { size: number }) {
+export function ProfileAvatar({ size, preview }: { size: number; preview?: string | null }) {
   const p = usePalette();
   const auth = useAuth();
   const { profile } = useProfile();
-  const uri = avatarUri(profile?.avatarKey);
+  // A just-chosen picture shows at once while it uploads; the stored one takes over when it's saved.
+  const uri = preview ?? avatarUri(profile?.avatarKey);
   const [failed, setFailed] = useState<string | null>(null);
   const initial = initialOf(profile ?? { email: auth.user?.email });
   const large = size > 48;

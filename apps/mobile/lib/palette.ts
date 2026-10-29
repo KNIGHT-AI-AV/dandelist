@@ -202,8 +202,10 @@ export const type = {
   eyebrow: { fontFamily: fonts.label, fontSize: 12, lineHeight: 16, letterSpacing: 1.2, textTransform: "uppercase" },
   /** Source lines and small figures: Inter Medium, tabular, so they read at a glance (mono read as code). */
   figure: { fontFamily: fonts.medium, fontSize: 13, lineHeight: 18, letterSpacing: 0.1, fontVariant: tab },
-  figure13: { fontFamily: fonts.figure, fontSize: 13, lineHeight: 18 },
-  figure15: { fontFamily: fonts.figure, fontSize: 15, lineHeight: 20 },
+  // Ledger amounts and list numbers, the same Inter Medium tabular: Taste Engine flagged the mono on all five
+  // signed-in pages (2026-10-29), against the brand's own price style.
+  figure13: { fontFamily: fonts.medium, fontSize: 13, lineHeight: 18, letterSpacing: 0.1, fontVariant: tab },
+  figure15: { fontFamily: fonts.medium, fontSize: 15, lineHeight: 20, fontVariant: tab },
   /** Card prices: the serif with tabular figures. */
   cardPrice: { fontFamily: fonts.title, fontSize: 26, lineHeight: 28, fontVariant: tab },
   /** The title-sequence wordmark, the one brand exception to the scale. */
