@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { formatShown } from "../lib/fx";
 import { AccessibilityInfo, Animated, Easing, Platform, Text, View, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
 import { ease, native, useReducedMotion } from "../lib/motion";
 import { METRICS, REPEATS, REST, cellsOf, emWidth, lineAt, normalize, plan, target, wheelTables, type Cell, type Mode, type Trend, type WheelCmd } from "../lib/odometer-plan";
@@ -23,7 +24,8 @@ const COALESCE_MS = 120;
 // The web reads a composite figure as one labelled image (as NumberFlow does); phones read it as text.
 const ROLE = Platform.OS === "web" ? ("image" as const) : ("text" as const);
 
-export const dollars = (cents: number) => `$${Math.round(cents / 100).toLocaleString("en-US")}`;
+/** Whole units in the chosen currency ("$107,529", "€98,900"); the name is older than the five currencies. */
+export const dollars = (cents: number) => formatShown(cents);
 
 export interface OdometerProps {
   cents: number;
@@ -391,11 +393,13 @@ function Crossfade(props: OdometerProps) {
     if (props.rollOnMount) onLand?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  const hasPrefix = smallPrefix && /^\D/.test(shown);
+  // "$", "€" or "CN¥": everything before the first digit.
+  const prefix = smallPrefix ? (shown.match(/^\D+/)?.[0] ?? "") : "";
+  const hasPrefix = prefix.length > 0;
   return (
     <Animated.View style={[{ height: H, flexDirection: "row", alignSelf: align === "right" ? "flex-end" : "flex-start", opacity: o }, style]} accessible accessibilityRole={ROLE} accessibilityLabel={figure} accessibilityLiveRegion={live ? "polite" : "none"}>
-      {hasPrefix ? <Text style={[text, { fontSize: size * 0.5, color: prefixColor, marginRight: size * 0.04, transform: [{ translateY: prefixLift }] }]}>{shown[0]}</Text> : null}
-      <Text style={[text, { color: props.color ?? p.ink, letterSpacing: props.tracking }]}>{hasPrefix ? shown.slice(1) : shown}</Text>
+      {hasPrefix ? <Text style={[text, { fontSize: size * 0.5, color: prefixColor, marginRight: size * 0.04, transform: [{ translateY: prefixLift }] }]}>{prefix}</Text> : null}
+      <Text style={[text, { color: props.color ?? p.ink, letterSpacing: props.tracking }]}>{shown.slice(prefix.length)}</Text>
     </Animated.View>
   );
 }

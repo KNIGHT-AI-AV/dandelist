@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { INCOME_MAX, INCOME_MIN, INCOME_STEPS, fractionOf, incomeAt, stageOf, startIncome } from "./comfort";
+import { INCOME_MAX, INCOME_MIN, INCOME_STEPS, comfortableIncome, fractionOf, incomeAt, incomeSteps, stageOf, startIncome } from "./comfort";
+import { formatIn } from "./fx";
 
 describe("the comfort fader", () => {
   it("runs from $10,000 to $100 million a year on round notches", () => {
@@ -30,5 +31,26 @@ describe("the comfort fader", () => {
     const list = 16_000_000;
     expect(stageOf(startIncome(list), list).index).toBe(2);
     expect(startIncome(0)).toBe(INCOME_MIN);
+  });
+
+  it("counts round numbers in the shown currency", () => {
+    const yen = incomeSteps(152, 100);
+    expect(formatIn("JPY", 152, yen[0]!)).toBe("¥1,000,000");
+    expect(formatIn("JPY", 152, yen.at(-1)!)).toBe("¥10,000,000,000");
+    expect(yen.map((c) => formatIn("JPY", 152, c))).toContain("¥25,000,000");
+    const euros = incomeSteps(0.92, 1);
+    expect(euros.map((c) => formatIn("EUR", 0.92, c))).toContain("€250,000");
+    for (const s of euros) expect(incomeAt(fractionOf(s, euros), euros)).toBe(s);
+  });
+
+  it("names the income that carries a list comfortably, running costs included", () => {
+    const list = 123_456_700; // $1,234,567
+    const income = comfortableIncome(list);
+    expect(income).toBe(75_000_000); // $750,000
+    expect(stageOf(income, list).index).toBe(2);
+    // A boat whose crew costs $1.2M a year needs more than its price suggests.
+    const keep = 120_000_000;
+    expect(comfortableIncome(10_000_000, keep)).toBe(800_000_000);
+    expect(stageOf(comfortableIncome(10_000_000, keep), 10_000_000, keep).index).toBe(2);
   });
 });

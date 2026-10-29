@@ -11,13 +11,18 @@ import { requireAuth, type AuthVars } from "../auth";
 import { assertBudget, assertUserBudget, recordSpend, SpendLimitError, userCapUsd, withHold } from "../spend";
 import { deckWidget, runTurn } from "./agent";
 import { TurnBudget, TurnLimitError, type ApifyConfig, type DreamCtx } from "./context";
+import { HISTORY_LIMIT, previewOf, summary, titleOf } from "./history";
 import { homeSchema, lifeBody, readLife, writeLife } from "./life";
+import { Suggestions } from "./suggest";
 import { emptyState, type DreamState, type TranscriptEntry } from "./types";
 
 /**
  * GET/PUT /me/life: where the person lives, which prices everything regional.
  * POST /dream/turn: one chat turn with the concierge, streamed as DreamEvents over server-sent events.
+ * GET /dream/sessions: the person's conversations, newest first, for the chat history.
  * GET /dream/sessions/:id: a session's transcript and open widgets, to resume after the app reopens.
+ * DELETE /dream/sessions/:id: removes one conversation for good.
+ * GET /dream/suggestions: three things to say to start a new chat, from what the app knows about the person.
  */
 
 /** Meta calls one person's dream turns may make in a day, on top of the shared and per-person spend caps. */
@@ -37,15 +42,24 @@ const actionSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("region"), home: homeSchema }),
   z.object({ type: z.literal("pick"), widgetId: z.string().max(40), listingId: z.string().max(40).optional() }),
 ]);
-const turnBody = z.object({ sessionId: z.string().uuid().nullish(), action: actionSchema, persona: personaSchema });
+/** The Dandy's name as its owner typed it: one line of printable characters, so it can introduce itself. */
+export const dandyNameSchema = z.string().trim().min(1).max(24).regex(/^[^\p{C}]+$/u).optional();
+const turnBody = z.object({ sessionId: z.string().uuid().nullish(), action: actionSchema, persona: personaSchema, name: dandyNameSchema });
+const suggestQuery = z.object({ persona: personaSchema });
 
 type SessionRow = { id: string; transcript: unknown; state: unknown };
+type SummaryRow = { id: string; title: string | null; preview: string | null; created_at: unknown; updated_at: unknown };
 const parse = (v: unknown) => (typeof v === "string" ? JSON.parse(v) : v);
 
+/** What the person reads in the chat when a turn can't run, in the Dandy's own voice: no model, no "AI". */
 function friendly(e: unknown): string {
-  if (e instanceof SpendLimitError) return e.message;
+  if (e instanceof SpendLimitError) {
+    if (e.scope === "user") return "That's all I can look into for you today. Your allowance comes back tomorrow.";
+    if (e.scope === "daily") return "I've done all I can for today. Let's pick this up tomorrow.";
+    return "I'm not taking new requests just now. Try again later.";
+  }
   if (e instanceof TurnLimitError) return e.message;
-  if (e instanceof MetaApiError) return e.status === 429 ? "The AI is busy right now. Try again in a minute." : "The AI couldn't answer just now. Try again.";
+  if (e instanceof MetaApiError) return e.status === 429 ? "I'm a little busy right now. Try again in a minute." : "I couldn't answer just now. Try again.";
   return "Something went wrong. Try again.";
 }
 
@@ -54,6 +68,7 @@ export function dreamRoutes(deps: DreamDeps) {
   const { db } = deps;
   const caps = deps.spendCaps ?? { dailyUsd: 10, totalUsd: 120 };
   const auth = requireAuth(deps);
+  const suggestions = new Suggestions({ db, meta: deps.meta, caps, personUsd: USER_DAILY_USD, judge: deps.judge, now: deps.now });
   app.use("/me/life", auth);
   app.use("/dream/*", auth);
 
@@ -68,6 +83,27 @@ export function dreamRoutes(deps: DreamDeps) {
   app.put("/me/life", putLife);
   app.patch("/me/life", putLife);
 
+  app.get("/dream/sessions", async (c) => {
+    const { rows } = await db.query<SummaryRow>(
+      "select id, title, preview, created_at, updated_at from dream_sessions where user_id = $1 and jsonb_array_length(transcript) > 0 order by updated_at desc limit $2",
+      [c.get("userId"), HISTORY_LIMIT],
+    );
+    return c.json({ sessions: rows.map(summary) });
+  });
+
+  app.delete("/dream/sessions/:id", async (c) => {
+    const id = z.string().uuid().safeParse(c.req.param("id"));
+    if (!id.success) return c.json({ error: "That conversation wasn't found." }, 404);
+    const { rows } = await db.query("delete from dream_sessions where id = $1 and user_id = $2 returning id", [id.data, c.get("userId")]);
+    if (!rows[0]) return c.json({ error: "That conversation wasn't found." }, 404);
+    return c.body(null, 204);
+  });
+
+  app.get("/dream/suggestions", async (c) => {
+    const q = suggestQuery.safeParse({ persona: c.req.query("persona") || undefined });
+    return c.json(await suggestions.next(c.get("userId"), q.success ? q.data.persona : undefined));
+  });
+
   app.get("/dream/sessions/:id", async (c) => {
     const id = z.string().uuid().safeParse(c.req.param("id"));
     if (!id.success) return c.json({ error: "That conversation wasn't found." }, 404);
@@ -79,7 +115,7 @@ export function dreamRoutes(deps: DreamDeps) {
   });
 
   app.post("/dream/turn", async (c) => {
-    if (!deps.meta) return c.json({ error: "The AI helper isn't set up on this server." }, 503);
+    if (!deps.meta) return c.json({ error: "Chat isn't available on this server yet." }, 503);
     const body = turnBody.safeParse(await c.req.json().catch(() => null));
     if (!body.success) return c.json({ error: "That message couldn't be read. Try again." }, 400);
     const userId = c.get("userId");
@@ -151,6 +187,7 @@ export function dreamRoutes(deps: DreamDeps) {
         emit,
         step: (id, state, text) => emit({ type: "step", id, state, text }),
         voice: voiceLine(body.data.persona),
+        name: body.data.name,
       };
       try {
         await runTurn(ctx, transcript, state, body.data.action);
@@ -159,7 +196,14 @@ export function dreamRoutes(deps: DreamDeps) {
         await emit({ type: "error", message: friendly(e) });
       }
       try {
-        await db.query("update dream_sessions set transcript = $1::jsonb, state = $2::jsonb, updated_at = $3 where id = $4", [JSON.stringify(transcript), JSON.stringify(state), deps.now().toISOString(), sessionId]);
+        await db.query("update dream_sessions set transcript = $1::jsonb, state = $2::jsonb, updated_at = $3, title = coalesce(title, $5), preview = coalesce($6, preview) where id = $4", [
+          JSON.stringify(transcript),
+          JSON.stringify(state),
+          deps.now().toISOString(),
+          sessionId,
+          titleOf(transcript),
+          previewOf(transcript),
+        ]);
       } catch (e) {
         console.error("could not save dream session", sessionId, e);
       }

@@ -7,6 +7,7 @@ import { Ledger } from "../../components/ledger";
 import { AgentDot, Backdrop, Chip, EdgeFade, ErrorLine, Eyebrow, Glass, Grain, Hairline, IconButton, Money, Photo, PrimaryButton, Protect, QuietButton, Shade } from "../../components/lux";
 import { Statement, Take } from "../../components/statement";
 import { getRun, interpretWish, startResearch, transcribeWish, type Answer, type Draft, type PriceOption, type Question, type Run, type Step } from "../../lib/agent";
+import { endTask, startTask } from "../../lib/activity";
 import { useAuth } from "../../lib/auth";
 import { fonts, layout, radius, space, type, usePalette, useType } from "../../lib/theme";
 import { useWishes, type WishTier } from "../../lib/wishes";
@@ -93,6 +94,12 @@ export default function NewWish() {
     onError: setError,
   });
   const working = run?.status === "running";
+  // The list's Dandy area shows the research as a live task while it runs.
+  useEffect(() => {
+    if (!working || !draft?.title) return;
+    const id = startTask(`Pricing ${draft.title}`);
+    return () => endTask(id);
+  }, [working, draft?.title]);
   const clock = useClock(working ? startedAt : null);
 
   // The answer landing is the moment that matters: one success tick, paired with the photo coming into focus.
@@ -388,7 +395,7 @@ export default function NewWish() {
             </>
           ) : result && !result.options.length ? (
             <Glass style={{ padding: layout.cardPad, gap: 12 }}>
-              <Text style={[type.callout, { color: p.ink }]}>The agent couldn't find a price it could stand behind for this one.</Text>
+              <Text style={[type.callout, { color: p.ink }]}>No price we could stand behind turned up for this one. You can add it with your own price.</Text>
               <PrimaryButton label="Enter it yourself" onPress={() => router.push("/wishes/manual")} />
             </Glass>
           ) : null}
@@ -399,7 +406,7 @@ export default function NewWish() {
         <>
           <EdgeFade height={dock} />
           <View pointerEvents="box-none" style={{ position: "absolute", left: gutter, right: gutter, bottom: insets.bottom + 20, alignItems: "center" }}>
-            <PrimaryButton label="Add to my life list" commit busy={saving} onPress={save} />
+            <PrimaryButton label="Add to my list" commit busy={saving} onPress={save} />
           </View>
         </>
       ) : null}

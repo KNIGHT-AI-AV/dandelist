@@ -62,6 +62,8 @@ export interface ComposerProps {
   idleAction?: ReactNode;
   /** Shown in place of the text box, such as the listening bars while someone speaks. */
   cover?: ReactNode;
+  /** The field gained or lost focus. */
+  onFocusChange?(focused: boolean): void;
 }
 
 /**
@@ -69,7 +71,7 @@ export interface ComposerProps {
  * inside itself, and shrinks back faster. Return sends (on the web Shift+Return makes a new line); the send button
  * stays an outline while the text is blank. A send ticks the selection haptic.
  */
-export const Composer = forwardRef<TextInput, ComposerProps>(function Composer({ value, onChangeText, onSend, placeholder, label, busy = false, idleAction, cover }, ref) {
+export const Composer = forwardRef<TextInput, ComposerProps>(function Composer({ value, onChangeText, onSend, placeholder, label, busy = false, idleAction, cover, onFocusChange }, ref) {
   const p = usePalette();
   const reduced = useReducedMotion();
   const input = useRef<TextInput>(null);
@@ -134,6 +136,8 @@ export const Composer = forwardRef<TextInput, ComposerProps>(function Composer({
           autoComplete="off"
           textContentType="none"
           onSubmitEditing={send}
+          onFocus={() => onFocusChange?.(true)}
+          onBlur={() => onFocusChange?.(false)}
           onKeyPress={(e) => {
             if (Platform.OS !== "web") return;
             const k = e.nativeEvent as unknown as { key: string; shiftKey?: boolean; isComposing?: boolean; keyCode?: number };

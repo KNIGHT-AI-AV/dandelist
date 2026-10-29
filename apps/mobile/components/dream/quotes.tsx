@@ -74,10 +74,13 @@ export function ServiceQuote({ w, onAccept }: { w: Extract<Widget, { kind: "serv
   );
 }
 
-/** A finished find: the price, the cost to keep it, and one tap to put it on the life list. */
-export function WishReady({ w, onAdd }: { w: Extract<Widget, { kind: "wish_ready" }>; onAdd(): Promise<void> }) {
+/**
+ * A finished find: the price, the cost to keep it, and one tap to put it on the list. `already` is true when a
+ * conversation reopens on a find that is on the list by now, so it can't be added twice.
+ */
+export function WishReady({ w, onAdd, already = false }: { w: Extract<Widget, { kind: "wish_ready" }>; onAdd(): Promise<void>; already?: boolean }) {
   const p = usePalette();
-  const [added, setAdded] = useState(false);
+  const [added, setAdded] = useState(already);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const wish = w.wish;
@@ -95,7 +98,7 @@ export function WishReady({ w, onAdd }: { w: Extract<Widget, { kind: "wish_ready
       {wish.keep.length ? <KeepStatement lines={wish.keep} currency={wish.currency} /> : null}
       {error ? <ErrorLine>{error}</ErrorLine> : null}
       <PrimaryButton
-        label={added ? "On your life list" : "Add to my life"}
+        label={added ? "On your list" : "Add to my list"}
         busy={busy}
         disabled={added}
         onPress={async () => {

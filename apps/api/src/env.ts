@@ -44,6 +44,9 @@ const schema = z.object({
   // set APPLE_BUNDLE_ID to an empty value to turn that off.
   APPLE_SERVICES_ID: optional,
   APPLE_BUNDLE_ID: z.string().trim().default("com.knightaiav.dandelist"),
+  // Facebook Login, from the Meta app dashboard (App settings > Basic). On only when both are set.
+  FACEBOOK_APP_ID: optional,
+  FACEBOOK_APP_SECRET: optional,
 });
 
 export type Env = z.infer<typeof schema> & { PUBLIC_API_URL: string };

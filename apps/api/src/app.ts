@@ -3,10 +3,12 @@ import { cors } from "hono/cors";
 import { agentRoutes, type AgentDeps } from "./agent/routes";
 import { authRoutes, requireAuth, type AuthVars } from "./auth";
 import { dreamRoutes } from "./dream/routes";
+import { fxRoutes } from "./fx";
 import { guestRoutes } from "./guest";
 import { poolSource } from "./pool";
 import { previewRoutes } from "./preview";
-import { MEDIA_KEY } from "./media-store";
+import { isStoredKey } from "./media-store";
+import { meRoutes } from "./me";
 import { wishRoutes } from "./wishes";
 
 export interface AppDeps extends AgentDeps {
@@ -28,7 +30,7 @@ export function createApp(deps: AppDeps) {
   app.get("/media/:key", async (c) => {
     const key = c.req.param("key");
     const store = deps.media?.store;
-    if (!store || !MEDIA_KEY.test(key)) return c.json({ error: "Not found." }, 404);
+    if (!store || !isStoredKey(key)) return c.json({ error: "Not found." }, 404);
     const obj = await store.get(key);
     if (!obj) return c.json({ error: "Not found." }, 404);
     return c.body(obj.bytes as never, 200, {
@@ -40,6 +42,7 @@ export function createApp(deps: AppDeps) {
     });
   });
 
+  app.route("/fx", fxRoutes(deps));
   app.route("/auth", authRoutes(deps));
   app.route("/wishes", wishRoutes(deps));
   app.route("/agent", agentRoutes(deps));
@@ -48,6 +51,7 @@ export function createApp(deps: AppDeps) {
   app.route("/preview", previewRoutes({ ...deps, pool }));
   app.route("/guest", guestRoutes({ ...deps, pool }));
   app.route("/", dreamRoutes(deps));
+  app.route("/me", meRoutes(deps));
 
   app.use("/me", requireAuth(deps));
   app.get("/me", async (c) => {
@@ -58,7 +62,10 @@ export function createApp(deps: AppDeps) {
 
   // Account deletion is required by the App Store; everything the user owns goes with the row.
   app.delete("/me", async (c) => {
+    const avatar = (await db.query<{ avatar_key: string | null }>("select avatar_key from users where id = $1", [c.get("userId")])).rows[0]?.avatar_key;
     await db.query("delete from users where id = $1", [c.get("userId")]);
+    // Their profile photo goes too. Avatar keys belong to one person, and the store deletes nothing else.
+    if (avatar && deps.media?.store) await deps.media.store.delete(avatar).catch((e: unknown) => console.warn("could not delete a profile photo", e instanceof Error ? e.message : e));
     return c.body(null, 204);
   });
 

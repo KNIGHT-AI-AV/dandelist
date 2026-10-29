@@ -181,7 +181,7 @@ async function readEvents<T>(path: string, body: unknown, onEvent: (e: T) => voi
   const res = await doFetch(`${API_URL}${path}`, { method: "POST", headers: { "Content-Type": "application/json", Accept: "text/event-stream" }, body: JSON.stringify(body), signal });
   if (!res.ok || !res.body) {
     const b = (await res.json().catch(() => null)) as { error?: string } | null;
-    throw new Error(b?.error ?? "The agent couldn't start just now.");
+    throw new Error(b?.error ?? "That couldn't start just now. Try again in a moment.");
   }
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
