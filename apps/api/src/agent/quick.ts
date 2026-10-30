@@ -6,6 +6,7 @@ import { HORIZON_YEARS, cleanUrl, hostOf, type Draft, type Meta, type PriceOptio
 import { clip, withLine } from "./lines";
 import { commonsImage, commonsPhotos, probeImage, type MediaImage, type MediaKind } from "./media";
 import { within } from "./time";
+import { personPrice } from "./person-price";
 import { fxRate, htmlToText, pageShowsPrice, priceMentions, readCapped, safeGet, structuredPrices, type Fetcher, type MarkupPrice } from "./tools";
 
 /**
@@ -248,7 +249,7 @@ export function readCandidates(text: string): Candidate[] {
     const currency = /\b([A-Za-z]{3})\b/.exec(rest[2] ?? "")?.[1]?.toUpperCase() ?? "";
     const figure = FIGURE.exec(shown);
     const around = figure ? { before: shown.slice(0, figure.index), after: shown.slice(figure.index + figure[0].length) } : null;
-    const part = PART_PRICE.test(shown) || (!!around && (feeAt(around) || FEE_WORD_AFTER.test(around.after)));
+    const part = PART_PRICE.test(shown) || personPrice(shown, amount, currency) || (!!around && (feeAt(around) || FEE_WORD_AFTER.test(around.after)));
     if (!out.some((c) => c.url === url)) out.push({ url, amount, currency, ...(part ? { part } : {}) });
   }
   return out;
@@ -295,7 +296,8 @@ const near = (a: number, b: number) => Math.abs(a - b) < 0.005;
  * on it ("USD 450/mo"). The rejection belongs to this amount, never to the whole page, so a later, weaker source
  * (a search result's figure) can't bring it back as the price.
  */
-export function onlyPart(text: string, amount: number, prices: MarkupPrice[] = []): boolean {
+export function onlyPart(text: string, amount: number, prices: MarkupPrice[] = [], currency?: string): boolean {
+  if (personPrice(text, amount, currency)) return true;
   const here = prices.filter((p) => near(p.amount, amount));
   if (here.length) return !here.some(payable);
   const mentions = priceMentions(text, amount);
@@ -381,10 +383,14 @@ const readable = (raw: string) => {
 function priceOn(page: ProductPage, cand: Candidate): { amount: number; currency: string; how: "data" | "page" } | null {
   if (cand.part) return null; // the model read a monthly, nightly, per-person or deposit figure on this page
   if (new Set(page.prices.map((p) => p.amount)).size > 6) return null; // a results page, not one thing
-  if (page.price && (page.currency ?? cand.currency)) return { amount: page.price, currency: (page.currency ?? cand.currency).toUpperCase(), how: "data" };
-  const whole = page.prices.filter(payable);
+  const personUnit = (amount: number, currency: string) =>
+    personPrice(page.text, amount, currency) || personPrice(cand.resultText ?? cand.resultTitle ?? "", amount, currency);
+  if (page.price && (page.currency ?? cand.currency) && !personUnit(page.price, page.currency ?? cand.currency))
+    return { amount: page.price, currency: (page.currency ?? cand.currency).toUpperCase(), how: "data" };
+  const whole = page.prices.filter((p) => payable(p) && !personUnit(p.amount, p.currency ?? cand.currency));
   const stated = whole.find((p) => p.currency && /^[A-Za-z]{3}$/.test(p.currency));
-  const shownWhole = !onlyPart(page.text, cand.amount, page.prices) && (whole.some((p) => near(p.amount, cand.amount)) || priceMentions(page.text, cand.amount).some(wholeMention));
+  const shownWhole = !personUnit(cand.amount, cand.currency) && !onlyPart(page.text, cand.amount, page.prices, cand.currency) &&
+    (whole.some((p) => near(p.amount, cand.amount)) || priceMentions(page.text, cand.amount).some(wholeMention));
   if (cand.amount > 0 && cand.currency && shownWhole) return { amount: cand.amount, currency: cand.currency, how: "page" };
   if (stated) return { amount: stated.amount, currency: stated.currency!.toUpperCase(), how: "data" };
   return null;
@@ -522,7 +528,7 @@ export async function quickFind(meta: Meta, input: QuickInput, ctx: QuickContext
     if (ordered.length >= MAX_READS) break;
     if (seen.has(pageKey(r.url)) || !readable(r.url) || !titleNames(r.title, words, loose)) continue;
     seen.add(pageKey(r.url));
-    ordered.push({ url: r.url, amount: 0, currency: "", resultTitle: r.title });
+    ordered.push({ url: r.url, amount: 0, currency: "", resultTitle: r.title, resultText: said.get(pageKey(r.url)) ?? r.title });
   }
   const cands = ordered.slice(0, MAX_READS);
   if (!cands.length) return null;
@@ -551,9 +557,9 @@ export async function quickFind(meta: Meta, input: QuickInput, ctx: QuickContext
   if (!chosen) {
     for (const { c, page } of pages) {
       const text = said.get(pageKey(c.url)) ?? c.resultTitle ?? "";
-      if (c.part || (!page.ok && !refused(page)) || otherCurrency(text, c.currency)) continue;
+      if (c.part || (!page.ok && !refused(page)) || otherCurrency(text, c.currency) || personPrice(text, c.amount, c.currency)) continue;
       // The page itself says this figure is a payment, a member's or a former price: the search can't make it the price.
-      if (page.ok && onlyPart(page.text, c.amount, page.prices)) continue;
+      if (page.ok && onlyPart(page.text, c.amount, page.prices, c.currency)) continue;
       const named = page.ok ? namesWish(page, words, loose) : titleNames(text, words, loose);
       if (c.amount > 0 && c.currency && text && named && priceMentions(text, c.amount).some(wholeMention)) {
         chosen = { c, ...(page.ok ? { page } : {}), price: { amount: c.amount, currency: c.currency, how: "result" } };
@@ -574,7 +580,7 @@ export async function quickFind(meta: Meta, input: QuickInput, ctx: QuickContext
       c.resultTitle !== undefined &&
       !PART_PRICE.test(c.resultTitle) &&
       !otherCurrency(c.resultTitle, c.currency) &&
-      !onlyPart(c.resultText ?? c.resultTitle, c.amount);
+      !onlyPart(c.resultText ?? c.resultTitle, c.amount, [], c.currency);
     const near = (a: Candidate, b: Candidate) => a.currency === b.currency && a.amount <= b.amount * 2 && a.amount * 2 >= b.amount;
     const figures = picked.filter(usable);
     const sites = new Set(figures.map((c) => hostOf(c.url)));
