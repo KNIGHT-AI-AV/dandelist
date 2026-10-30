@@ -73,25 +73,30 @@ export function hold(usd = HOLD_USD, userId?: string): () => void {
  * Holds `usd` for `userId` as soon as one of their call slots is free, waiting up to SLOT_WAIT_MS for one, so a busy
  * person's extra calls queue behind their own instead of failing (2026-10-29: two wishes hunted at once both ended in
  * an error at four slots). The check and the hold happen in the same turn, so no other call can take the slot between.
+ * A wait whose caller has given up (`signal` aborted: a retake or a hunt past its deadline) leaves the queue at once and
+ * never takes a slot, so nothing starts for an answer nobody will read (Codex's review of #72).
  */
-async function holdWhenFree(usd: number, userId: string): Promise<() => void> {
+async function holdWhenFree(usd: number, userId: string, signal?: AbortSignal): Promise<() => void> {
   const by = Date.now() + SLOT_WAIT_MS;
   for (;;) {
+    signal?.throwIfAborted();
     if ((heldBy.get(userId)?.calls ?? 0) < MAX_INFLIGHT_PER_USER) return hold(usd, userId);
     const left = by - Date.now();
     if (left <= 0) throw new SpendLimitError("user");
     await new Promise<void>((resolve) => {
       const queue = waiting.get(userId) ?? [];
-      const wake = () => {
+      // Called once: by a release (already shifted off the queue), the time running out, or the caller giving up.
+      const done = () => {
         clearTimeout(timer);
+        signal?.removeEventListener("abort", done);
+        const at = queue.indexOf(done);
+        if (at >= 0) queue.splice(at, 1);
+        if (!queue.length) waiting.delete(userId);
         resolve();
       };
-      const timer = setTimeout(() => {
-        const at = queue.indexOf(wake);
-        if (at >= 0) queue.splice(at, 1);
-        resolve();
-      }, left);
-      queue.push(wake);
+      const timer = setTimeout(done, left);
+      signal?.addEventListener("abort", done, { once: true });
+      queue.push(done);
       waiting.set(userId, queue);
     });
   }
@@ -103,11 +108,13 @@ export const heldFor = (userId: string) => heldBy.get(userId)?.usd ?? 0;
 /**
  * Runs one Meta call under a hold: hold (once one of the person's slots is free), check the caps with the hold
  * counted, call, then release. `usd` is the most the call can cost; HOLD_USD unless the call is known to be smaller.
+ * Once `signal` aborts, a call that hasn't started never will.
  */
-export async function withHold<T>(check: () => Promise<void>, run: () => Promise<T>, userId?: string, usd = HOLD_USD): Promise<T> {
-  const release = userId ? await holdWhenFree(usd, userId) : hold(usd);
+export async function withHold<T>(check: () => Promise<void>, run: () => Promise<T>, userId?: string, usd = HOLD_USD, signal?: AbortSignal): Promise<T> {
+  const release = userId ? await holdWhenFree(usd, userId, signal) : hold(usd);
   try {
     await check();
+    signal?.throwIfAborted();
     return await run();
   } finally {
     release();

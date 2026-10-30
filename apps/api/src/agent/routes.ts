@@ -139,7 +139,7 @@ export function agentRoutes(deps: AgentDeps) {
       await assertUserBudget(db, userId, await userCapUsd(db, userId, USER_DAILY_USD, deps.judge, caps), deps.now());
     };
     return {
-      responses: (body) => withHold(guard, () => client.responses(body), userId, holdFor(body)),
+      responses: (body) => withHold(guard, () => client.responses(body), userId, holdFor(body), stop),
       images: (op, body) => withHold(guard, () => client.images(op, body), userId),
     };
   };
@@ -208,9 +208,18 @@ export function agentRoutes(deps: AgentDeps) {
       // stupidly picked this photo for 1 of 1000 reasons like not the right watch"): every new photo is held up against
       // the one turned down, and the hunt looks wider.
       const { exclude, page, ...subject } = body.data;
-      const found = await findPhoto(metaFor(userId, "photo"), subject, { fetcher: deps.webFetch ?? publicFetch, exclude, deep: true, pages: page ? [page] : [], by: Date.now() + RETAKE_MS });
-      if (!found) return c.json({ error: "No better photo turned up this time. Try again in a moment." }, 404);
-      return c.json({ photo: { imageUrl: found.image.url, media: { kind: found.kind, images: [found.image] }, how: found.how } });
+      // The retake's calls stop with it: once it has answered, or at its 35 s, no call of its starts, even one still
+      // waiting for a slot, and the ones running are cut off.
+      const stop = new AbortController();
+      const timer = setTimeout(() => stop.abort(), RETAKE_MS);
+      try {
+        const found = await findPhoto(metaFor(userId, "photo", undefined, stop.signal), subject, { fetcher: deps.webFetch ?? publicFetch, exclude, deep: true, pages: page ? [page] : [], by: Date.now() + RETAKE_MS });
+        if (!found) return c.json({ error: "No better photo turned up this time. Try again in a moment." }, 404);
+        return c.json({ photo: { imageUrl: found.image.url, media: { kind: found.kind, images: [found.image] }, how: found.how } });
+      } finally {
+        clearTimeout(timer);
+        stop.abort();
+      }
     } catch (e) {
       return c.json({ error: friendly(e) }, e instanceof SpendLimitError ? 429 : 502);
     }
