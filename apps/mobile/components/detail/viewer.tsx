@@ -39,7 +39,7 @@ type Phase = "opening" | "open" | "closing";
  * has already turned to. Mount it once per opening (key it). Reduced motion swaps the flight for a short cross-fade;
  * the screen passes its already-resolved setting in, since a fresh hook reads "off" for its first frame.
  */
-export function PhotoViewer({ photos, from, reduced, onSettle, onClose }: { photos: MediaImage[]; from: ViewerFrom; reduced: boolean; onSettle(i: number): void; onClose(): void }) {
+export function PhotoViewer({ photos, from, reduced, onSettle, onClose }: { photos: MediaImage[]; from: ViewerFrom; reduced: boolean; onSettle(i: number): void; onClose(i: number): void }) {
   const { id } = useTheme();
   const insets = useSafeAreaInsets();
   const { width: W, height: H } = useWindowDimensions();
@@ -80,14 +80,15 @@ export function PhotoViewer({ photos, from, reduced, onSettle, onClose }: { phot
     if (phaseRef.current === "closing") return;
     go("closing");
     placedRef.current = false;
+    const settledIndex = curRef.current;
     // The hero turns to this photo under the scrim, so the flight lands on the same picture.
-    onSettle(curRef.current);
+    onSettle(settledIndex);
     Animated.parallel([top, foot].map((v) => Animated.timing(v, { toValue: 0, duration: step.outMs, easing: ease.out, useNativeDriver: native }))).start();
     const leave = reduced
       ? Animated.timing(t, { toValue: 0, duration: step.outMs, easing: ease.out, useNativeDriver: false })
       : Animated.spring(t, { toValue: 0, ...spring.snap, useNativeDriver: false });
     // Starting from wherever the flight is, so a close during the opening turns straight round.
-    leave.start(({ finished }) => finished && onClose());
+    leave.start(({ finished }) => finished && onClose(settledIndex));
   };
 
   // Arrow keys page on the web; Escape is the Modal's own close (onRequestClose).
