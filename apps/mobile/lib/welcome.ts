@@ -161,7 +161,8 @@ export const listTotal = (s: Pick<WelcomeState, "items" | "wish">) => listed(s).
 const worthDetails = (w: FirstWish): WishDetails => ({
   worth: w.worth,
   ...(w.worth === "priceless" && w.line ? { line: w.line.slice(0, 120) } : {}),
-  ...(w.worth === "money" && w.photo ? { agent: photoOnly(w.photo.imageUrl, w.photo.media) } : {}),
+  // Money's gold bars, or the priceless wish's own photo (owner, 2026-10-30: "own the moon" needs "a great image").
+  ...(w.photo ? { agent: photoOnly(w.photo.imageUrl, w.photo.media) } : {}),
 });
 export const monthlyOf = (e: Pick<PoolItem, "id" | "upfrontCents" | "recurring">) => recurringBreakdown([{ id: e.id, upfrontCents: e.upfrontCents, recurring: e.recurring }]).perMonth;
 

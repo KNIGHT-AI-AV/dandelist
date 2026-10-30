@@ -233,7 +233,7 @@ export function HuntCard({ id, text, already }: { id: string; text: string; alre
           recurringCents: 0,
           period: "month",
           recurring: [],
-          details: w.worth === "money" ? { worth: "money", ...(shot ? { agent: photoOnly(shot.imageUrl, shot.media) } : {}) } : { worth: "priceless", line: w.line.slice(0, 120) },
+          details: { ...(w.worth === "money" ? { worth: "money" as const } : { worth: "priceless" as const, line: w.line.slice(0, 120) }), ...(shot ? { agent: photoOnly(shot.imageUrl, shot.media) } : {}) },
         });
         haptic.success();
         setSaved(true);
