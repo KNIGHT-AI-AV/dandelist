@@ -9,9 +9,11 @@ import { HUNT_STOP_MS, huntWish, type HuntResult } from "./agent/find";
 import type { AgentDeps } from "./agent/routes";
 import { publicFetch } from "./agent/tools";
 import { MAX_CLIP_BYTES, WISH_KEYWORDS, cleanTranscript, clipProblem, readWav } from "./agent/transcribe";
-import { moneyPhoto, photoMedia } from "./agent/worth";
+import { moneyPhoto, photoMedia, pricelessPhoto } from "./agent/worth";
+import { within } from "./agent/time";
 import { pgArchive } from "./archive/archive";
-import type { PoolItem } from "./pool";
+import { PAIRS_MS, makePairs } from "./pairs";
+import type { PoolItem, TypicalEntity } from "./pool";
 import { ipOf } from "./preview";
 import { SpendLimitError, assertBudget, heldForScope, recordSpend, recordToolSpend, withBudgetScope } from "./spend";
 import { heartbeat, stoppable } from "./sse";
@@ -34,18 +36,27 @@ import { heartbeat, stoppable } from "./sse";
  *                                                     An error event follows for apps that predate it; apps that
  *                                                     know this event ignore that error.
  *   {type:"photo", imageUrl, media}                   a money wish's checked photo, when one is found in time
+ *   {type:"pairs", pairs:[{a, b, why, adjacent}]}     only when the body asks with `pairs: true` (owner, 2026-10-30:
+ *                                                     this or that made from the wish itself, while it is hunted).
+ *                                                     Each side is a pool-shaped card with a real photo; none is
+ *                                                     sent when the pairs fail or are slow, and the app keeps its
+ *                                                     pool. It may come before or after the card, by about 28 s.
  *   {type:"error", message}                           only when no card was sent. Only the reason: the app adds
  *                                                     that the wish stays on the list.
- * Hunting again with changed answers: the same body plus `draft` (from the draft event) and `answers`. A money or
- * priceless card's "Price it": the same body plus `price: true`, which hunts it as an ordinary priced wish.
+ * Hunting again with changed answers: the same body plus `draft` (from the draft event) and `answers`; that never makes
+ * pairs. A money or priceless card's "Price it": the same body plus `price: true`, which hunts it as an ordinary priced
+ * wish, and makes pairs only if asked again.
  */
 
-export const GUEST_WISHES_PER_IP_PER_HOUR = 6;
+// Raised 2026-10-30: one person re-running the intro (and judges sharing a network) hit 6 in minutes.
+export const GUEST_WISHES_PER_IP_PER_HOUR = 15;
 export const GUEST_WISHES_PER_DAY = 150;
 export const GUEST_VOICE_PER_IP_PER_HOUR = 20;
 export const GUEST_VOICE_PER_DAY = 400;
 /** Every guest wish and voice clip together, a day. Signed-in people have their own caps. */
-export const GUEST_DAILY_USD = 3;
+// Raised 2026-10-30 from 3: a guest run averages about $0.20, so 3 a day ran out after some 15 runs. The app's own
+// daily and all-time caps (spend.ts) still bound everything.
+export const GUEST_DAILY_USD = 6;
 const MAX_TRACKED_IPS = 5000;
 
 /**
@@ -56,6 +67,8 @@ export const NOT_FOUND = "Couldn't find a price for that just now.";
 export const NOT_PRICED = "Couldn't price that just now.";
 /** How long a money wish's stream stays open for its photo, at most. */
 export const MONEY_PHOTO_MS = 20_000;
+/** How long a priceless wish's stream stays open for its photo, at most: a whole hunt for it, not one held photo. */
+export const PRICELESS_PHOTO_MS = 40_000;
 
 /** Calls per address in the last hour, and per day for everyone, kept in memory like the preview's. */
 function limiter(perHour: number, perDay: number) {
@@ -84,13 +97,15 @@ const wishBody = z.object({
   answers: z.array(answerSchema).max(6).default([]),
   /** "Price it" on a money or priceless card: hunt it as an ordinary priced wish, whatever it reads as. */
   price: z.boolean().optional(),
+  /** This or that made from this wish, sent as a "pairs" event: one more model call, so only apps that show them ask. */
+  pairs: z.boolean().optional(),
 });
 
 /** The same card: nothing new to show (price, running costs, photo, source), so a second priced event would only repeat the first. */
 const sameCard = (a: PriceOption, b: PriceOption | null) =>
   !!b && a.url === b.url && a.upfrontCents === b.upfrontCents && a.imageUrl === b.imageUrl && a.status === b.status && a.totals.monthlyCents === b.totals.monthlyCents;
 
-export function guestRoutes(deps: AgentDeps & { pool: () => Promise<PoolItem[]> }) {
+export function guestRoutes(deps: AgentDeps & { pool: () => Promise<PoolItem[]>; typicals?: () => Promise<TypicalEntity[]> }) {
   const app = new Hono();
   const { db } = deps;
   const caps = deps.spendCaps ?? { dailyUsd: 10, totalUsd: 120 };
@@ -107,10 +122,13 @@ export function guestRoutes(deps: AgentDeps & { pool: () => Promise<PoolItem[]> 
     const usd = Number(spent?.s ?? 0);
     if (usd >= GUEST_DAILY_USD || usd + heldForScope("guest") > GUEST_DAILY_USD) throw new SpendLimitError("daily");
   };
-  /** Guest model calls under the guest allowance; once `stop` fires, any call still running is dropped. */
-  const guestMeta = (stop?: AbortSignal): Meta => {
+  /**
+   * Guest model calls under the guest allowance; once `stop` fires, any call still running is dropped. `kind` names the
+   * ledger rows ("guest-pairs" for this or that); every guest kind shares the one daily allowance.
+   */
+  const guestMeta = (stop?: AbortSignal, kind = "guest"): Meta => {
     const base = deps.meta!.fetch ?? fetch;
-    const client = new MetaClient({ ...deps.meta!, fetch: stop ? stoppable(base, stop) : base, onUsage: (usage, cost) => recordSpend(db, null, "guest", usage, cost, deps.now()) });
+    const client = new MetaClient({ ...deps.meta!, fetch: stop ? stoppable(base, stop) : base, onUsage: (usage, cost) => recordSpend(db, null, kind, usage, cost, deps.now()) });
     return { responses: (body) => withBudgetScope("guest", guard, () => client.responses(body)) };
   };
   const busy = (why: "hour" | "day") => (why === "hour" ? "That's a lot for one hour. Try again soon, or sign in." : "The agent is resting until tomorrow. Sign in to keep going.");
@@ -132,18 +150,30 @@ export function guestRoutes(deps: AgentDeps & { pool: () => Promise<PoolItem[]> 
     } catch {
       return c.json({ error: busy("day") }, 429);
     }
-    const { text, draft, answers, price } = parsed.data;
+    const { text, draft, answers, price, pairs: wantPairs } = parsed.data;
     const startedAt = Date.now();
     return streamSSE(c, async (stream) => {
       let open = true;
+      // The hunt's own live events stop once its answer is in; the stream itself may wait a little longer for the pairs.
+      let hunting = true;
       const send = async (data: unknown) => {
         if (open) await stream.writeSSE({ data: JSON.stringify(data) }).catch(() => undefined);
       };
+      const live = (data: unknown) => (hunting ? send(data) : Promise.resolve());
       // Research can take a minute; a comment line keeps proxies from closing a quiet stream.
       const stopBeat = heartbeat(stream);
       const stop = new AbortController();
       // A money wish's photo hunt runs after the hunt's own calls are stopped, so it has its own stop.
       const shot = new AbortController();
+      // This or that from the wish itself, made beside the hunt (owner, 2026-10-30): one model call of its own, then
+      // photo and price lookups that call no model (pairs.ts). Never for a hunt again with changed answers.
+      const pairing = new AbortController();
+      const paired: Promise<unknown> =
+        wantPairs && !draft
+          ? makePairs(guestMeta(pairing.signal, "guest-pairs"), { wish: text }, { pool: deps.pool, typicals: deps.typicals ?? (async () => []), archive, api: deps.webFetch ?? publicFetch, now: deps.now, by: startedAt + PAIRS_MS })
+              .then((pairs) => (pairs.length ? send({ type: "pairs", pairs }) : undefined))
+              .catch(() => undefined)
+          : Promise.resolve();
       const shown: { card: PriceOption | null } = { card: null };
       const card = (r: HuntResult, provisional: boolean) => ({
         type: "priced",
@@ -160,15 +190,15 @@ export function guestRoutes(deps: AgentDeps & { pool: () => Promise<PoolItem[]> 
         answers,
         price,
         startedAt,
-        onStep: (step) => send({ type: "step", step }),
+        onStep: (step) => live({ type: "step", step }),
         fetcher: deps.webFetch,
         now: deps.now,
         archive,
         homeCurrency: "USD",
-        onDraft: (d) => send({ type: "draft", title: d.title, kind: d.kind, draft: d, questions: d.questions ?? [] }),
+        onDraft: (d) => live({ type: "draft", title: d.title, kind: d.kind, draft: d, questions: d.questions ?? [] }),
         onProvisional: async (r) => {
           shown.card = r.options[0] ?? null;
-          await send(card(r, true));
+          await live(card(r, true));
         },
       });
       let timer: ReturnType<typeof setTimeout> | undefined;
@@ -194,6 +224,10 @@ export function guestRoutes(deps: AgentDeps & { pool: () => Promise<PoolItem[]> 
             const by = Math.min(Date.now() + MONEY_PHOTO_MS, startedAt + HUNT_STOP_MS);
             const photo = await moneyPhoto(guestMeta(shot.signal), { fetcher: deps.webFetch ?? publicFetch, archive, by }).catch(() => null);
             if (photo) await send({ type: "photo", ...photoMedia(photo) });
+          } else {
+            const by = Math.min(Date.now() + PRICELESS_PHOTO_MS, startedAt + HUNT_STOP_MS);
+            const photo = await pricelessPhoto(guestMeta(shot.signal), outcome.r.draft, { fetcher: deps.webFetch ?? publicFetch, by }).catch(() => null);
+            if (photo) await send({ type: "photo", ...photoMedia(photo) });
           }
         } else {
           const best = outcome.r.options[0];
@@ -202,10 +236,14 @@ export function guestRoutes(deps: AgentDeps & { pool: () => Promise<PoolItem[]> 
         }
       } finally {
         clearTimeout(timer);
-        // Whatever is still running stops here and spends nothing more; its late steps are not sent.
-        open = false;
+        // Whatever the hunt still has running stops here and spends nothing more; its late steps are not sent.
+        hunting = false;
         stop.abort();
         shot.abort();
+        // The pairs go out before the stream closes: a hunt can end long before them (money, a wish that can't be read).
+        await within(paired, Math.max(0, startedAt + PAIRS_MS - Date.now()));
+        open = false;
+        pairing.abort();
         stopBeat();
       }
     });

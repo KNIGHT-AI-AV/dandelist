@@ -4,10 +4,14 @@ import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import Svg, { Circle, Line, Rect } from "react-native-svg";
 import { SearchField } from "../components/details/search-field";
-import { HomeBuilder } from "../components/dream/builders";
+import { AddedLine } from "../components/added-line";
+import { CarBuilder, HomeBuilder } from "../components/dream/builders";
+import { RefinePanel } from "../components/refine";
+import type { WishQuestion } from "../lib/agent";
 import { PaletteButton } from "../components/home/chrome";
 import { Composer } from "../components/inputs";
-import { Chip, Glass, Icon, IconButton, Money, PrimaryButton, QuietButton, Wordmark, type IconName } from "../components/lux";
+import { Chip, Glass, Icon, IconButton, Money, Photo, PrimaryButton, QuietButton, Wordmark, type IconName } from "../components/lux";
+import { WaitingLight } from "../components/waiting-light";
 import { MediaHero, type Media } from "../components/media";
 import { dollars } from "../components/odometer";
 import { GlassReveal } from "../components/reveal";
@@ -101,7 +105,7 @@ function GlassBench() {
   );
 }
 
-const ICONS: IconName[] = ["palette", "back", "forward", "close", "plus", "check", "send", "mic", "search", "heart"];
+const ICONS: IconName[] = ["palette", "back", "forward", "arrow", "close", "plus", "check", "send", "mic", "search", "heart"];
 
 /** A microphone at rest, so the composer shows it the way it does before anything is typed. */
 const QUIET_VOICE: VoiceWish = { supported: true, phase: "idle", levels: [], elapsedMs: 0, toggle: () => {}, cancel: () => {} };
@@ -282,30 +286,115 @@ const VILLA: Extract<Widget, { kind: "home_builder" }> = {
   currency: "EUR",
 };
 
-/** The home builder with a sample widget, and what its search button would send, for checking "Type your own". */
+const G_CLASS: Extract<Widget, { kind: "car_builder" }> = {
+  kind: "car_builder",
+  id: "bench-car",
+  currency: "USD",
+  steps: [
+    { id: "model", title: "Model", choices: [{ id: "g", label: "Mercedes-Benz G-Class", imageUrl: car.images[0]?.url }], selected: "g" },
+    { id: "trim", title: "Trim", choices: [{ id: "g550", label: "G 550", priceCents: 14800000, detail: "Included" }, { id: "amg", label: "AMG G 63", priceCents: 18655000 }] },
+    { id: "colour", title: "Colour", choices: [{ id: "red", label: "Hyacinth Red", priceCents: 75000 }, { id: "black", label: "Obsidian Black", priceCents: 0, detail: "Included" }] },
+    { id: "interior", title: "Interior", choices: [] },
+    { id: "options", title: "Options", choices: [{ id: "night", label: "Night Package", priceCents: 130000 }, { id: "burmester", label: "Burmester sound", priceCents: 640000 }] },
+  ],
+};
+
+const WATCH: WishQuestion[] = [
+  { id: "bracelet", label: "Which bracelet?", options: ["Oyster", "President"], picked: "Oyster" },
+  { id: "condition", label: "New or pre-owned?", options: ["New", "Pre-owned"], picked: "Pre-owned" },
+];
+
+/**
+ * The builders with sample widgets, opened as if the Dandy had just asked (one question at a time, its clock running),
+ * the refine questions, and what each would send.
+ */
 function BuilderBench() {
   const p = usePalette();
   const [sent, setSent] = useState("");
+  const [carSent, setCarSent] = useState("");
+  const [edits, setEdits] = useState<Record<string, string>>({});
+  const [refined, setRefined] = useState("");
+  const [refining, setRefining] = useState(true);
   return (
     <View style={{ gap: 8, paddingHorizontal: 12 }}>
       <Text style={[type.label, { color: p.ink2, paddingHorizontal: 4 }]}>Home builder</Text>
-      <HomeBuilder w={VILLA} onApply={(v) => setSent(JSON.stringify(v))} onSearchNow={() => setSent("just search")} />
+      <HomeBuilder w={VILLA} live waiting onApply={(v) => setSent(JSON.stringify(v))} onSearchNow={() => setSent("just search")} />
       <Text testID="builder-sent" style={[type.figure, { color: p.ink3, paddingHorizontal: 4 }]}>{sent}</Text>
+      <Text style={[type.label, { color: p.ink2, paddingHorizontal: 4 }]}>Car builder</Text>
+      <CarBuilder w={G_CLASS} live waiting onApply={(v) => setCarSent(JSON.stringify(v))} />
+      <Text testID="car-sent" style={[type.figure, { color: p.ink3, paddingHorizontal: 4 }]}>{carSent}</Text>
+      <Text style={[type.label, { color: p.ink2, paddingHorizontal: 4 }]}>Refine</Text>
+      <Glass style={{ padding: 18, gap: 10, borderRadius: radius.lg }}>
+        {refining ? (
+          <RefinePanel
+            questions={WATCH}
+            edits={edits}
+            onEdit={(q, a) => setEdits((e) => ({ ...e, [q]: a }))}
+            onHunt={(e) => {
+              setRefining(false);
+              setRefined(`hunt again: ${JSON.stringify(e)}`);
+            }}
+            onClose={(line) => {
+              setRefining(false);
+              setRefined(`closed: ${line ?? ""}`);
+            }}
+          />
+        ) : (
+          <QuietButton label="Refine it" onPress={() => setRefining(true)} style={{ alignSelf: "flex-start" }} />
+        )}
+        <AddedLine onPress={() => setRefined("show on list")} />
+      </Glass>
+      <Text testID="refine-sent" style={[type.figure, { color: p.ink3, paddingHorizontal: 4 }]}>{refined}</Text>
+    </View>
+  );
+}
+
+/** One photo frame as the screens hold it: the waiting light while the picture is made, then the picture over it. */
+function WaitFrame({ landed }: { landed: boolean }) {
+  const p = usePalette();
+  return (
+    <View style={{ aspectRatio: 4 / 3, borderRadius: radius.lg, overflow: "hidden", backgroundColor: p.bg }}>
+      <Photo />
+      <WaitingLight active={!landed} />
+      {landed ? <Photo uri={camera.images[0]!.url} /> : null}
+    </View>
+  );
+}
+
+/** The waiting light (owner, 2026-10-30): a picture being made for 8 s, then landing for 4, in a dark and a light theme. */
+function WaitBench() {
+  const p = usePalette();
+  const [landed, setLanded] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setLanded((v) => !v), landed ? 4000 : 8000);
+    return () => clearTimeout(t);
+  }, [landed]);
+  return (
+    <View testID="wait-bench" style={{ gap: 12, paddingHorizontal: 12 }}>
+      <Text style={[type.label, { color: p.ink2, paddingHorizontal: 4 }]}>{`Waiting light · ${landed ? "landed" : "making"}`}</Text>
+      {(["emerald", "ivory"] as const).map((id) => (
+        <ThemeScope key={id} id={id}>
+          <WaitFrame landed={landed} />
+        </ThemeScope>
+      ))}
     </View>
   );
 }
 
 export default function Lab() {
   const p = usePalette();
-  // /lab?only=icons shows the icon bench alone, without the photographs and the 3D viewer.
+  // /lab?only=icons shows the icon bench alone, without the photographs and the 3D viewer; /lab?only=wait the waiting light.
   const { only } = useLocalSearchParams<{ only?: string }>();
   if (!__DEV__) return <Redirect href="/" />;
   return (
     <ScrollView style={{ flex: 1, backgroundColor: p.bg }} contentContainerStyle={{ gap: 24, paddingVertical: 40, maxWidth: 520, width: "100%", alignSelf: "center" }}>
       {only === "icons" ? (
         <IconBench />
+      ) : only === "wait" ? (
+        <WaitBench />
       ) : (
         <>
+          <WaitBench />
           <BuilderBench />
           <IconBench />
           <OdometerBench />

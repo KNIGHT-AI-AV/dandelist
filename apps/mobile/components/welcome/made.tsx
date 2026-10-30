@@ -3,11 +3,13 @@ import { Animated, Text, View, useWindowDimensions } from "react-native";
 import { useMoney } from "../../lib/currency";
 import { useDandy } from "../../lib/dandy";
 import { ease, native, useReducedMotion } from "../../lib/motion";
-import { play, preloadSounds } from "../../lib/sound";
 import { layout, radius, type, usePalette, useType } from "../../lib/theme";
+import { useWaitingMusic } from "../../lib/waiting";
 import type { FirstWish } from "../../lib/welcome";
 import { Working } from "../chat/working";
 import { Eyebrow, Glass, Money, Photo, PrimaryButton, QuietButton } from "../lux";
+import { GuessRow } from "../guess";
+import { WaitingLight } from "../waiting-light";
 import { AmountPicker, PricelessPrice, glyphFor } from "../worth";
 
 /** After this long the person can move on; the hunt keeps going and lands on their list. */
@@ -32,7 +34,30 @@ export const STAYS_ON_LIST = "It stays on your list, and the Dandy prices it aft
  * `waited`: they already moved on from this card while it was hunted, and came Back to it; "Keep going" is there at
  * once rather than after another wait.
  */
-export function MadeStep({ wish, pricing, line, waited = false, onContinue, onAmount, onPrice }: { wish: FirstWish; pricing: "idle" | "pricing" | "priced" | "failed"; line: string; waited?: boolean; onContinue(): void; onAmount(cents: number): void; onPrice(): void }) {
+export function MadeStep({
+  wish,
+  pricing,
+  line,
+  waited = false,
+  onContinue,
+  onAmount,
+  onPrice,
+  onGuessConfirm,
+  onGuessPick,
+  onGuessElse,
+}: {
+  wish: FirstWish;
+  pricing: "idle" | "pricing" | "priced" | "failed";
+  line: string;
+  waited?: boolean;
+  onContinue(): void;
+  onAmount(cents: number): void;
+  onPrice(): void;
+  /** The best-guess row (components/guess.tsx): keep the guess, hunt another likely name, or say more. */
+  onGuessConfirm?(): void;
+  onGuessPick?(name: string): void;
+  onGuessElse?(): void;
+}) {
   const p = usePalette();
   const t = useType();
   const dandy = useDandy();
@@ -67,11 +92,9 @@ export function MadeStep({ wish, pricing, line, waited = false, onContinue, onAm
     return () => loop.stop();
   }, [reduced, landed, failed, breathe]);
 
-  // Three soft felt notes as it lands, once: a better card replacing it later stays quiet.
-  useEffect(() => preloadSounds("land"), []);
-  useEffect(() => {
-    if (landed) play("land");
-  }, [landed]);
+  // The waiting ballad while the card is made; as it lands, the haptic ramp and the chime, once: a better card replacing
+  // it later stays quiet.
+  useWaitingMusic(landed ? "landed" : failed ? "idle" : "waiting");
 
   // The real card fades up, slowly, when it lands; a card that couldn't be priced shows its panel at once.
   useEffect(() => {
@@ -95,13 +118,15 @@ export function MadeStep({ wish, pricing, line, waited = false, onContinue, onAm
         <Text accessibilityRole="header" style={[t.title1, { color: p.ink, textAlign: "center" }]} numberOfLines={3}>
           {title}
         </Text>
+        {wish.guess && !failed && onGuessConfirm && onGuessPick ? <GuessRow center others={wish.guess} onConfirm={onGuessConfirm} onPick={onGuessPick} onElse={onGuessElse} /> : null}
       </View>
 
       <View style={{ width: cardW, alignSelf: "center" }}>
         <Glass style={{ borderRadius: radius.lg, overflow: "hidden", padding: 0 }}>
           <View style={{ width: "100%", height: photoH }}>
-            {/* Held: a soft glow breathing where the photo will land. */}
+            {/* Held: a soft glow breathing where the photo will land, light crossing it and motes drifting up. */}
             <Animated.View style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, backgroundColor: p.surface, opacity: breathe.interpolate({ inputRange: [0, 1], outputRange: [0.35, 0.7] }) }} />
+            <WaitingLight active={!landed && !failed} />
             {landed || failed ? (
               <Animated.View style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, opacity: shown, transform: [{ scale: shown.interpolate({ inputRange: [0, 1], outputRange: [1.04, 1] }) }] }}>
                 <Photo uri={photo} glyph={glyphFor(worth, title, money.symbol)} style={{ width: "100%", height: "100%" }} />

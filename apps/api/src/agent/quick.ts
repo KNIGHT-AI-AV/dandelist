@@ -2,7 +2,7 @@ import { equivalentMonthly } from "@dandelist/cost";
 import { toMediaImage as archiveImage, words as subjectWords, type Archive } from "../archive/archive";
 import { SEARCH_INCLUDE, searchResults } from "../dream/context";
 import { NOT_A_SOURCE, listingData } from "../dream/pages";
-import { HORIZON_YEARS, cleanUrl, hostOf, type Draft, type Meta, type PriceOption, type PricePart, type Step } from "./agent";
+import { HORIZON_YEARS, cleanUrl, hostOf, nameOf, type Draft, type Meta, type PriceOption, type PricePart, type Step } from "./agent";
 import { clip, withLine } from "./lines";
 import { commonsImage, commonsPhotos, probeImage, type MediaImage, type MediaKind } from "./media";
 import { within } from "./time";
@@ -438,17 +438,21 @@ export function placeOf(draft: Draft): string {
  */
 export async function subjectPhoto(draft: Draft, ctx: { archive?: Archive; api: Fetcher; by: number }): Promise<MediaImage | null> {
   const left = () => ctx.by - Date.now();
+  // A photo shows the thing by its bare name: "Mercedes-Benz G-Class", not "Mercedes-Benz G-Class in pink".
+  const name = nameOf(draft);
   if (ctx.archive) {
     for (const k of mediaKindOf(draft)) {
-      const hit = await within(ctx.archive.lookup(draft.title, k).catch(() => null), Math.max(0, left()));
-      if (hit?.photos[0]) return archiveImage(hit.photos[0]);
+      for (const title of [...new Set([name, draft.title])]) {
+        const hit = await within(ctx.archive.lookup(title, k).catch(() => null), Math.max(0, left()));
+        if (hit?.photos[0]) return archiveImage(hit.photos[0]);
+      }
     }
   }
   // A trip shows its place. A car, or a thing to buy, shows a photograph whose own title names it in full: most cars,
   // and many watches and cameras, have one on Commons. A home or a service is different on every listing, so never.
   const kind = mediaKindOf(draft)[0];
   if (draft.kind !== "visit" && kind !== "vehicle" && kind !== "product") return null;
-  const subject = draft.kind === "visit" ? placeOf(draft) : draft.title;
+  const subject = draft.kind === "visit" ? placeOf(draft) : name;
   const key = squash(subject);
   if (!key || (draft.kind !== "visit" && subjectWords(subject).length < 2)) return null;
   const found = (await within(commonsPhotos(subject, ctx.api, { limit: 6 }), left())) ?? [];
@@ -482,7 +486,8 @@ export async function quickFind(meta: Meta, input: QuickInput, ctx: QuickContext
   const step = (s: Step) => ctx.onStep(withLine(s));
   const api = ctx.api ?? ctx.fetcher;
   const home = input.homeCurrency.toUpperCase();
-  await step({ type: "note", text: `Hunting for ${clip(input.words, 48)}`, at: at() });
+  // The hunt names what the wish was understood as once it is read (find.ts); until then, no raw words on show.
+  await step({ type: "note", text: "Reading your wish", at: at() });
 
   const res = await within(
     meta.responses({
@@ -522,7 +527,7 @@ export async function quickFind(meta: Meta, input: QuickInput, ctx: QuickContext
   const seen = new Set(picked.map((c) => pageKey(c.url)));
   const ordered = [...picked.filter((c) => !returned.size || c.resultTitle !== undefined), ...picked.filter((c) => returned.size && c.resultTitle === undefined)];
   const draft = (await within(Promise.resolve(input.draft).catch(() => null), Math.max(0, left() - 6_000))) ?? null;
-  const words = wishWords(draft?.title ?? input.words);
+  const words = wishWords(draft ? nameOf(draft) : input.words);
   const loose = listingWish(draft);
   for (const r of results) {
     if (ordered.length >= MAX_READS) break;

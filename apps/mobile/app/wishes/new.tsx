@@ -10,6 +10,8 @@ import { getRun, startHunt, transcribeWish, type Answer, type Draft, type PriceO
 import { answerPick, pickAdded } from "../../lib/picks";
 import { answersFrom, refineChanged, withGiven } from "../../lib/refine";
 import { RefinePanel } from "../../components/refine";
+import { AddAnotherDock } from "../../components/add-another";
+import { AskNote } from "../../components/ask";
 import { endTask, startTask } from "../../lib/activity";
 import { useAuth } from "../../lib/auth";
 import { fonts, layout, radius, space, type, usePalette, useType } from "../../lib/theme";
@@ -22,7 +24,7 @@ import { ListeningPanel, MicButton, useVoiceWish } from "../../components/voice/
 import { KeyboardDock, KeyboardScroll, dockRoom } from "../../components/inputs";
 import { Rise } from "../../components/welcome/kit";
 import { haptic } from "../../lib/motion";
-import { play } from "../../lib/sound";
+import { useWaitingMusic } from "../../lib/waiting";
 import { clarityOf, deckFor, thoughtOf } from "../../lib/reveal";
 import { useMoney } from "../../lib/currency";
 import { amountSteps, photoOnly, startAmount, wholeCents } from "../../lib/worth";
@@ -81,6 +83,10 @@ export default function NewWish() {
   // Answers changed under "Refine it" and not hunted with yet, by question id.
   const [edits, setEdits] = useState<Record<string, string>>({});
   const [refining, setRefining] = useState(false);
+  // The Dandy's line when it kept its pick for a question left open under "Refine it".
+  const [refineNote, setRefineNote] = useState<string | null>(null);
+  // The height of "Add another while you wait", docked while the research runs.
+  const [addDock, setAddDock] = useState(0);
   const [run, setRun] = useState<Run | null>(null);
   const draft = run?.draft ?? asked;
   const questions = run?.result?.questions?.length ? run.result.questions : (draft?.questions ?? []);
@@ -119,14 +125,10 @@ export default function NewWish() {
   }, [working, draft?.title]);
   const clock = useClock(working ? startedAt : null);
 
-  // The first card landing is the moment that matters: one success tick, paired with the photo coming into focus. Money
-  // and the priceless land with their own card.
+  // The first card landing is the moment that matters. While the agent works, the waiting ballad; as the card lands, the
+  // haptic ramp and the chime (lib/waiting.ts). Money and the priceless land with their own card.
   const landed = !!run?.result?.options.length || !!run?.result?.worth;
-  useEffect(() => {
-    if (!landed) return;
-    haptic.success();
-    play("land");
-  }, [landed]);
+  useWaitingMusic(stage !== "research" ? "idle" : landed ? "landed" : working ? "waiting" : "idle");
 
   // Poll the research run until the agent finishes.
   useEffect(() => {
@@ -163,6 +165,7 @@ export default function NewWish() {
       setRun(next);
       setEdits({});
       setRefining(false);
+      setRefineNote(null);
       setChosen(0);
       setAmount(null);
       setShowTrail(false);
@@ -179,9 +182,9 @@ export default function NewWish() {
     void hunt({ text: text.trim() });
   }
 
-  function huntAgain() {
-    if (!draft || !refineChanged(questions, edits)) return;
-    const answers = answersFrom(questions, edits);
+  function huntAgain(given: Record<string, string> = edits) {
+    if (!draft || !refineChanged(questions, given)) return;
+    const answers = answersFrom(questions, given);
     void hunt({ draft: { ...draft, questions: withGiven(questions, answers) }, answers });
   }
 
@@ -205,7 +208,7 @@ export default function NewWish() {
         recurringCents: 0,
         period: "month",
         recurring: [],
-        details: w.worth === "money" ? { worth: "money", ...(shot ? { agent: photoOnly(shot.imageUrl, shot.media) } : {}) } : { worth: "priceless", line: w.line.slice(0, 120) },
+        details: { ...(w.worth === "money" ? { worth: "money" as const } : { worth: "priceless" as const, line: w.line.slice(0, 120) }), ...(shot ? { agent: photoOnly(shot.imageUrl, shot.media) } : {}) },
       });
       if (fromPick) {
         pickAdded(fromPick);
@@ -353,7 +356,7 @@ export default function NewWish() {
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
       <Atmosphere />
-      <ScrollView contentContainerStyle={{ paddingBottom: result?.options.length || worth ? dock : insets.bottom + 40 }} style={{ scrollbarWidth: "thin", scrollbarColor: `rgba(${p.inkRgb},0.2) transparent` } as object}>
+      <ScrollView contentContainerStyle={{ paddingBottom: result?.options.length || worth ? dock : working ? dockRoom(addDock, insets.bottom) : insets.bottom + 40 }} style={{ scrollbarWidth: "thin", scrollbarColor: `rgba(${p.inkRgb},0.2) transparent` } as object}>
         <View style={{ height: HERO_HEIGHT, width: "100%" }}>
           {worth ? (
             <Photo uri={result?.photo?.imageUrl} glyph={glyphFor(worth.worth, worth.title, money.symbol)} />
@@ -426,8 +429,28 @@ export default function NewWish() {
               {result.note ? <Text style={[type.footnote, { color: p.ink2 }]}>{result.note}</Text> : null}
               {questions.length ? (
                 <View style={{ gap: 10 }}>
-                  <QuietButton label={refining ? "Done refining" : "Refine it"} onPress={() => setRefining((r) => !r)} style={{ alignSelf: "flex-start" }} />
-                  {refining ? <RefinePanel questions={questions} edits={edits} onEdit={(q, a) => setEdits((e) => ({ ...e, [q]: a }))} onHunt={huntAgain} /> : null}
+                  <QuietButton
+                    label={refining ? "Done refining" : "Refine it"}
+                    onPress={() => {
+                      setRefineNote(null);
+                      setRefining((r) => !r);
+                    }}
+                    style={{ alignSelf: "flex-start" }}
+                  />
+                  {refining ? (
+                    <RefinePanel
+                      questions={questions}
+                      edits={edits}
+                      onEdit={(q, a) => setEdits((e) => ({ ...e, [q]: a }))}
+                      onHunt={huntAgain}
+                      onClose={(line) => {
+                        setRefining(false);
+                        setRefineNote(line);
+                      }}
+                    />
+                  ) : (
+                    <AskNote text={refineNote} />
+                  )}
                 </View>
               ) : null}
               <Rise delay={LAND_AT.rest} style={{ gap: 8 }}>
@@ -477,6 +500,9 @@ export default function NewWish() {
             <PrimaryButton label="Add to my list" commit busy={saving} onPress={save} />
           </View>
         </>
+      ) : working ? (
+        // While this one is priced, the next can be added; it joins the chat's queue (components/add-another).
+        <AddAnotherDock onHeight={setAddDock} />
       ) : null}
       <Grain />
     </View>

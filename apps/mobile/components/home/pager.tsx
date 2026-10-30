@@ -29,6 +29,11 @@ export function usePager(): Pager {
   return ctx;
 }
 
+/** The page in front, or null outside the ring (a pushed screen such as New wish). */
+export function useFrontPage(): PageId | null {
+  return useContext(Ctx)?.page ?? null;
+}
+
 /**
  * Holds the ring's position. Everything that follows the swipe (the pages, the dots, the dock) reads `pos`, so
  * they move together frame by frame.

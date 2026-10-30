@@ -239,7 +239,7 @@ export function GlyphPanel({ glyph, style }: { glyph: string; style?: StyleProp<
   );
 }
 
-export type IconName = "back" | "forward" | "close" | "plus" | "check" | "send" | "mic" | "search" | "heart" | "palette";
+export type IconName = "back" | "forward" | "arrow" | "close" | "plus" | "check" | "send" | "mic" | "search" | "heart" | "palette";
 
 /** `d` is stroked; `dots` are small solid circles, [cx, cy, r]. */
 type Glyph = { d: string; dots?: readonly (readonly [number, number, number])[] };
@@ -252,6 +252,8 @@ type Glyph = { d: string; dots?: readonly (readonly [number, number, number])[] 
 const GLYPHS: Record<IconName, Glyph> = {
   back: { d: "M14.75 4.75 L8.25 12 L14.75 19.25" },
   forward: { d: "M9.25 4.75 L15.75 12 L9.25 19.25" },
+  // "Added to your list": a stem and an open head, pointing on to the list.
+  arrow: { d: "M4.75 12 H19.25 M13 5.75 L19.25 12 L13 18.25" },
   close: { d: "M6 6 L18 18 M18 6 L6 18" },
   plus: { d: "M12 4.5 V19.5 M4.5 12 H19.5" },
   check: { d: "M4.5 12.25 L9.5 17.25 L19.5 6.25" },

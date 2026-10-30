@@ -1,6 +1,7 @@
 import { entries as catalogue, heroOf, type Entry } from "@dandelist/catalogue";
 import type { Period } from "@dandelist/cost";
 import type { Db } from "./db";
+import type { ArchiveEntity } from "./archive/archive";
 import { selectHeroPhotos } from "./archive/photo-selection";
 
 /**
@@ -94,30 +95,52 @@ export interface ArchiveRow {
 const SOURCE_SITE: Record<string, string> = { commons: "commons.wikimedia.org", unsplash: "unsplash.com", pexels: "pexels.com" };
 const parse = <T>(v: T | string): T => (typeof v === "string" ? (JSON.parse(v) as T) : v);
 
-export function fromArchive(row: ArchiveRow, checkedAt: string): PoolItem | null {
+/** An archive subject's typical price paid once, as a card shows it: the low end of its range and what it covers. */
+export interface Typical {
+  kind: PoolItem["kind"];
+  group: PoolGroup;
+  category: string;
+  upfrontCents: number;
+  note: string;
+}
+
+/** The typical price of an archive subject whose shape the pool can price honestly; null for any other. */
+export function typicalOf(row: Pick<ArchiveRow, "kind" | "price_model" | "domain" | "typical">): Typical | null {
   const shape = SHAPE[`${row.kind}/${row.price_model}`];
   const typical = row.typical ? parse(row.typical) : null;
-  const photos = selectHeroPhotos(parse(row.photos) ?? []);
-  if (!shape || !typical || typical.currency !== "USD" || !(Number(typical.low) > 0) || !photos) return null;
-  const hero = photos[0]!;
+  if (!shape || !typical || typical.currency !== "USD" || !(Number(typical.low) > 0)) return null;
   // "7 nights for two incl. economy flights; mid-range hotel (low) to luxury hotel (high)" -> the part before the range.
   const unit = (typical.unit ?? "").split(";")[0]!.trim();
   return {
+    kind: shape.kind,
+    group: shape.group,
+    category: shape.kind === "buy" ? (PRODUCT_CATEGORY[row.domain] ?? shape.category) : shape.category,
+    upfrontCents: Math.round(Number(typical.low) * 100),
+    note: unit && !/^typical/i.test(unit) ? `Typical price · ${unit}` : "Typical price",
+  };
+}
+
+export function fromArchive(row: ArchiveRow, checkedAt: string): PoolItem | null {
+  const price = typicalOf(row);
+  const photos = selectHeroPhotos(parse(row.photos) ?? []);
+  if (!price || !photos) return null;
+  const hero = photos[0]!;
+  return {
     id: `${ARCHIVE_PREFIX}${row.id}`,
     name: row.name,
-    kind: shape.kind,
-    category: shape.kind === "buy" ? (PRODUCT_CATEGORY[row.domain] ?? shape.category) : shape.category,
-    group: shape.group,
-    upfrontCents: Math.round(Number(typical.low) * 100),
+    kind: price.kind,
+    category: price.category,
+    group: price.group,
+    upfrontCents: price.upfrontCents,
     recurring: [],
     status: "estimate",
     seller: "Typical price",
     url: "",
     checkedAt,
-    note: unit && !/^typical/i.test(unit) ? `Typical price · ${unit}` : "Typical price",
+    note: price.note,
     ...(hero.photographer ? { credit: `Photo: ${hero.photographer}, ${hero.license}` } : {}),
     media: {
-      kind: shape.group === "travel" ? "place" : shape.group === "home" ? "place" : "product",
+      kind: price.group === "travel" ? "place" : price.group === "home" ? "place" : "product",
       images: photos.slice(0, 4).map((p) => ({ url: p.url, width: p.width, height: p.height, source: SOURCE_SITE[p.source] ?? p.source, ...(p.photographer ? { credit: p.photographer } : {}), license: p.license })),
     },
   };
@@ -148,6 +171,37 @@ export function poolSource(db: Db, now: () => Date = () => new Date()) {
       }
     } catch (e) {
       console.error("pool: archive unreadable, catalogue only", (e as Error).message);
+    }
+    cached = { at: t, items };
+    return items;
+  };
+}
+
+/** An archive subject with a typical price paid once, photographed or not: what a this-or-that card is priced from. */
+export interface TypicalEntity extends ArchiveEntity {
+  price: Typical;
+}
+
+/**
+ * Every live archive subject with a typical price the pool's shapes allow, read at most every ten minutes; none when
+ * the archive can't be read (a card then carries the agent's own rounded estimate, marked typical like these).
+ */
+export function typicalSource(db: Db, now: () => Date = () => new Date()) {
+  let cached: { at: number; items: TypicalEntity[] } | null = null;
+  return async (): Promise<TypicalEntity[]> => {
+    const t = now().getTime();
+    if (cached && t - cached.at < POOL_TTL_MS) return cached.items;
+    const items: TypicalEntity[] = [];
+    try {
+      const { rows } = await db.query<Omit<ArchiveRow, "photos"> & { aliases: string[] | null; tier: number; subcategory: string }>(
+        "select id, name, aliases, kind, price_model, domain, typical, tier, subcategory from archive_entities where status = 'live' and typical is not null",
+      );
+      for (const r of rows) {
+        const price = typicalOf(r);
+        if (price) items.push({ id: r.id, name: r.name, aliases: r.aliases ?? [], kind: r.kind, tier: Number(r.tier), subcategory: r.subcategory, price });
+      }
+    } catch (e) {
+      console.error("typical prices: archive unreadable", (e as Error).message);
     }
     cached = { at: t, items };
     return items;
