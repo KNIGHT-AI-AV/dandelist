@@ -110,6 +110,7 @@ const FILES: Record<string, { w: number; h: number; mime?: string; artist?: stri
 
 const upload = (file: string) => `https://upload.wikimedia.org/wikipedia/commons/a/ab/${file.replace(/ /g, "_")}`;
 const thumb = (file: string, width: number) => `https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/${file.replace(/ /g, "_")}/${width}px-${file.replace(/ /g, "_")}`;
+const description = (file: string) => `https://commons.wikimedia.org/wiki/File:${encodeURIComponent(file.replace(/ /g, "_"))}`;
 
 const DRAFT = { title: "Peloton Bike+", kind: "buy", summary: "A Peloton Bike+ for home.", specifics: [], region: "US", currency: "usd", unknowns: [], worth: "priced", amount: 0, line: "" };
 const draftFor = (said: string) =>
@@ -175,7 +176,7 @@ const fakeWeb = (async (input: string | URL) => {
       const f = FILES[name];
       if (!f) return { title: `File:${name}`, missing: true };
       const extmetadata = { ...(f.artist ? { Artist: { value: f.artist } } : {}), LicenseShortName: { value: "CC BY-SA 4.0" } };
-      return { title: `File:${name}`, imagerepository: "shared", imageinfo: [{ url: `${upload(name)}?utm_source=en.wikipedia.org`, width: f.w, height: f.h, mime: f.mime ?? "image/jpeg", thumburl: `${thumb(name, width)}?utm_source=en.wikipedia.org&utm_content=thumbnail`, thumbwidth: width, thumbheight: Math.round((f.h * width) / f.w), extmetadata }] };
+      return { title: `File:${name}`, imagerepository: "shared", imageinfo: [{ url: `${upload(name)}?utm_source=en.wikipedia.org`, descriptionurl: description(name), width: f.w, height: f.h, mime: f.mime ?? "image/jpeg", thumburl: `${thumb(name, width)}?utm_source=en.wikipedia.org&utm_content=thumbnail`, thumbwidth: width, thumbheight: Math.round((f.h * width) / f.w), extmetadata }] };
     });
     return Response.json({ query: { pages } });
   }
@@ -352,7 +353,7 @@ describe("this or that from the first wish", () => {
       note: "Typical price · new",
       credit: "Photo: Vauxford, CC BY-SA 4.0",
       checkedAt: clock.toISOString(),
-      media: { kind: "vehicle", images: [{ url: thumb("Bentley Mulsanne 2016.jpg", 1920), width: 1920, height: 1248, source: "commons.wikimedia.org" }] },
+      media: { kind: "vehicle", images: [{ url: thumb("Bentley Mulsanne 2016.jpg", 1920), width: 1920, height: 1248, source: "commons.wikimedia.org", sourcePage: description("Bentley Mulsanne 2016.jpg") }] },
     });
     // The archive's typical price when it has the thing (a car, never the tour that shares its name), as the pool shows
     // it; else the agent's own, to two figures.
@@ -397,6 +398,7 @@ describe("this or that from the first wish", () => {
     // The Seychelles' article leads with its flag; the Wikidata item's own image, a beach, stands.
     expect(card("Seychelles")).toMatchObject({ kind: "visit", group: "travel", note: "Typical price · 7 nights for two incl. economy flights", upfrontCents: 1_200_000, credit: "Photo: Ralf Roletschek, CC BY-SA 4.0" });
     expect(card("Seychelles").media.images[0].url).toBe(thumb("La Digue asv2024-10 img56 Anse Patates.jpg", 1920));
+    expect(card("Seychelles").media.images[0].sourcePage).toBe(description("La Digue asv2024-10 img56 Anse Patates.jpg"));
     expect(fetched("www.wikidata.org", "wbgetclaims")).toBe(1);
     expect(fetched("en.wikipedia.org", "imageinfo")).toBe(2);
     // The model was shown the places the pool already has curated photographs of.

@@ -43,7 +43,7 @@ const wiki = (async (input: string | URL) => {
     const pages = (p.get("titles") ?? "").split("|").map((t) => ({
       title: t,
       imagerepository: "shared",
-      imageinfo: [{ url: `https://upload.wikimedia.org/${encodeURIComponent(t.slice(5))}`, width: 3000, height: 2000, mime: "image/jpeg", extmetadata: { Artist: { value: "<a>A. Photographer</a>" }, LicenseShortName: { value: "CC BY-SA 4.0" } } }],
+      imageinfo: [{ url: `https://upload.wikimedia.org/${encodeURIComponent(t.slice(5))}`, descriptionurl: `https://commons.wikimedia.org/wiki/${encodeURIComponent(t)}`, width: 3000, height: 2000, mime: "image/jpeg", extmetadata: { Artist: { value: "<a>A. Photographer</a>" }, LicenseShortName: { value: "CC BY-SA 4.0" } } }],
     }));
     return Response.json({ query: { pages } });
   }
@@ -71,8 +71,8 @@ describe("a photo for each candidate", () => {
       [porsche("911", "GT3"), porsche("911", "Carrera S"), porsche("Taycan"), porsche("Cayenne"), { name: "Maine Coon kitten", make: "Cat", model: "Maine Coon", variant: "" }],
       { archive, api: wiki, kind: "vehicle", by: Date.now() + 5_000 },
     );
-    expect(out[0]!.image).toMatchObject({ url: "https://images.example/gt3.jpg", credit: "B. Shooter", license: "CC BY 2.0" });
-    expect(out[1]!.image).toMatchObject({ url: expect.stringContaining("Porsche_911_(992).jpg"), credit: "A. Photographer", license: "CC BY-SA 4.0" });
+    expect(out[0]!.image).toMatchObject({ url: "https://images.example/gt3.jpg", credit: "B. Shooter", license: "CC BY 2.0", sourcePage: "https://commons.wikimedia.org/wiki/File:GT3.jpg" });
+    expect(out[1]!.image).toMatchObject({ url: expect.stringContaining("Porsche_911_(992).jpg"), credit: "A. Photographer", license: "CC BY-SA 4.0", sourcePage: "https://commons.wikimedia.org/wiki/File%3APorsche_911_(992).jpg" });
     // "Porsche Taycan" lands on the "Porsche" article: the brand's photo is not the Taycan's.
     expect(out[2]!.image).toBeUndefined();
     expect(out[3]!.image).toBeUndefined();
