@@ -197,7 +197,10 @@ export function guestRoutes(deps: AgentDeps & { pool: () => Promise<PoolItem[]>;
         homeCurrency: "USD",
         onDraft: (d) => live({ type: "draft", title: d.title, kind: d.kind, draft: d, questions: d.questions ?? [] }),
         onProvisional: async (r) => {
-          shown.card = r.options[0] ?? null;
+          // A copy of the card as shown: the hunt keeps working on its own object (a photo found later lands on it), so
+          // holding that object made the final card always look the same as the fast one, and the photo never went out
+          // (live, 2026-10-30: three wishes in a row ended on the fast card with no photo).
+          shown.card = r.options[0] ? structuredClone(r.options[0]) : null;
           await live(card(r, true));
         },
       });
