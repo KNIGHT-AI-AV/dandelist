@@ -219,9 +219,11 @@ export function GlyphPanel({ glyph, style }: { glyph: string; style?: StyleProp<
     >
       <LinearGradient colors={[p.surface, p.bg]} start={{ x: 0.2, y: 0 }} end={{ x: 0.8, y: 1 }} style={StyleSheet.absoluteFill} />
       {size > 0 ? (
+        // No numberOfLines: on the web it clips the text box, which cut off the italic figure's overhang and its glow
+        // (owner, 2026-10-30: "the broken first letter with the cut off graphic"). Padding gives both room.
         <Text
-          numberOfLines={1}
           style={{
+            paddingHorizontal: Math.round(size * 0.25),
             fontFamily: fonts.displayItalic,
             fontSize: size,
             lineHeight: Math.round(size * 1.15),

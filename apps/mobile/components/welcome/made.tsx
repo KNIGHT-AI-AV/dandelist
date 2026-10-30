@@ -1,3 +1,4 @@
+import { Image } from "expo-image";
 import { useEffect, useRef, useState } from "react";
 import { Animated, Text, View, useWindowDimensions } from "react-native";
 import { useMoney } from "../../lib/currency";
@@ -7,6 +8,7 @@ import { layout, radius, type, usePalette, useType } from "../../lib/theme";
 import { useWaitingMusic } from "../../lib/waiting";
 import type { FirstWish } from "../../lib/welcome";
 import { Working } from "../chat/working";
+import { FrostedWait } from "../frosted-wait";
 import { Eyebrow, Glass, Money, Photo, PrimaryButton, QuietButton } from "../lux";
 import { CandidateRow, GuessRow } from "../guess";
 import { WaitingLight } from "../waiting-light";
@@ -37,6 +39,7 @@ export const STAYS_ON_LIST = "It stays on your list, and the Dandy prices it aft
 export function MadeStep({
   wish,
   pricing,
+  looking = false,
   line,
   waited = false,
   onContinue,
@@ -48,6 +51,8 @@ export function MadeStep({
 }: {
   wish: FirstWish;
   pricing: "idle" | "pricing" | "priced" | "failed";
+  /** The hunt is still running, so a photo may still come (the fast card lands before it). */
+  looking?: boolean;
   line: string;
   waited?: boolean;
   onContinue(): void;
@@ -106,6 +111,9 @@ export function MadeStep({
   const title = wish.title ?? wish.text;
   const cardW = Math.min(width - 2 * gutter, 420);
   const photo = option?.imageUrl ?? wish.photo?.imageUrl;
+  // The candidate being hunted, when the wish had them and it is one of them: its photo, blurred, waits under the glass.
+  // When the hunted thing is none of them (current -1), the house backdrop does instead (Codex, #120 review).
+  const pickPhoto = wish.pick && wish.pick.current >= 0 ? wish.pick.candidates[wish.pick.current]?.image?.url : undefined;
   // The amount slider needs the room under the photo, so a money card's photo is wide (4:3) and gives way on a short
   // screen, where the step's other parts take about 520 pt; every other card keeps its tall 4:5.
   const full = worth === "money" ? Math.max(120, Math.min(Math.round((cardW * 3) / 4), height - 520)) : Math.round((cardW * 5) / 4);
@@ -162,7 +170,16 @@ export function MadeStep({
               <WaitingLight active={!landed && !failed} />
               {landed || failed ? (
                 <Animated.View style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, opacity: shown, transform: [{ scale: shown.interpolate({ inputRange: [0, 1], outputRange: [1.04, 1] }) }] }}>
-                  <Photo uri={photo} glyph={glyphFor(worth, title, money.symbol)} style={{ width: "100%", height: "100%" }} />
+                  {worth === "money" || worth === "priceless" ? (
+                    <Photo uri={photo} glyph={glyphFor(worth, title, money.symbol)} style={{ width: "100%", height: "100%" }} />
+                  ) : (
+                    // A priced card never shows its first letter (owner, 2026-10-30): frosted glass over a blurred picture
+                    // while the photo is still coming, the photo landing over it.
+                    <>
+                      <FrostedWait uri={pickPhoto} active={!photo && looking} />
+                      {photo ? <Image source={{ uri: photo }} style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0 }} contentFit="cover" transition={{ duration: 400, effect: "cross-dissolve" }} accessibilityIgnoresInvertColors /> : null}
+                    </>
+                  )}
                 </Animated.View>
               ) : null}
             </View>
