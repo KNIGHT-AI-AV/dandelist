@@ -79,8 +79,14 @@ export function hold(usd = HOLD_USD, userId?: string): () => void {
 async function holdWhenFree(usd: number, userId: string, signal?: AbortSignal): Promise<() => void> {
   const by = Date.now() + SLOT_WAIT_MS;
   for (;;) {
-    signal?.throwIfAborted();
-    if ((heldBy.get(userId)?.calls ?? 0) < MAX_INFLIGHT_PER_USER) return hold(usd, userId);
+    const free = (heldBy.get(userId)?.calls ?? 0) < MAX_INFLIGHT_PER_USER;
+    if (signal?.aborted) {
+      // A slot freed for this call just as its caller gave up goes to the next call waiting, so that call doesn't sleep
+      // to its timeout beside a free slot (Codex's review of #73: release wakes A, A is aborted before it runs).
+      if (free) waiting.get(userId)?.shift()?.();
+      signal.throwIfAborted();
+    }
+    if (free) return hold(usd, userId);
     const left = by - Date.now();
     if (left <= 0) throw new SpendLimitError("user");
     await new Promise<void>((resolve) => {

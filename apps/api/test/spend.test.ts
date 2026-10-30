@@ -1,7 +1,7 @@
 import { PGlite } from "@electric-sql/pglite";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { migrate, type Db } from "../src/db";
-import { HOLD_USD, MAX_INFLIGHT_PER_USER, SLOT_WAIT_MS, SpendLimitError, assertBudget, heldFor, heldForScope, withBudgetScope, withHold } from "../src/spend";
+import { HOLD_USD, MAX_INFLIGHT_PER_USER, SLOT_WAIT_MS, SpendLimitError, assertBudget, heldFor, heldForScope, hold, withBudgetScope, withHold } from "../src/spend";
 
 describe("spend holds", () => {
   let db: Db;
@@ -83,6 +83,24 @@ describe("spend holds", () => {
     // Nothing is left held or queued.
     expect(heldFor("user-e")).toBe(0);
     await expect(withHold(async () => {}, async () => "ok", "user-e")).resolves.toBe("ok");
+  });
+
+  it("passes a freed slot on when the call it woke has just given up, so the next one needn't wait out its timer", async () => {
+    const releases = Array.from({ length: MAX_INFLIGHT_PER_USER }, () => hold(HOLD_USD, "user-g"));
+    const stop = new AbortController();
+    let ranA = false;
+    const first = withHold(async () => {}, async () => ((ranA = true), "a"), "user-g", HOLD_USD, stop.signal);
+    const second = withHold(async () => {}, async () => "b", "user-g");
+    // The release wakes the first waiter, whose caller gives up before it runs (Codex's exact order).
+    releases[0]!();
+    stop.abort();
+    await expect(first).rejects.toThrow();
+    // The second gets the slot at once: this test's 5 s limit would fail long before its 20 s timer.
+    await expect(second).resolves.toBe("b");
+    expect(ranA).toBe(false);
+    for (const release of releases.slice(1)) release();
+    expect(heldFor("user-g")).toBe(0);
+    await expect(withHold(async () => {}, async () => "ok", "user-g")).resolves.toBe("ok");
   });
 
   it("checks the caller once more after the hold, before the call starts", async () => {
