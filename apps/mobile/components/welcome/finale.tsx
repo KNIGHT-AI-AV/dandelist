@@ -67,7 +67,9 @@ export function RevealCard({ picks, upfrontCents, monthlyRunningCents, onKeep, o
   const h = 124;
   const mid = (shown.length - 1) / 2;
   const spread = Math.min(46, (Math.min(width, 520) - 2 * layout.gutter(width) - w) / Math.max(1, shown.length - 1));
-  const facts = [`${picks.length} ${picks.length === 1 ? "wish" : "wishes"}`, checked ? `${checked} checked on the seller's own site` : null, monthlyRunningCents ? `${formatCents(Math.round(monthlyRunningCents))} a month to keep` : null].filter(Boolean).join(" · ");
+  // A priceless wish is on the list but not in the figure (lib/worth.ts), so the line says so.
+  const priceless = picks.filter((e) => e.worth === "priceless").length;
+  const facts = [`${picks.length} ${picks.length === 1 ? "wish" : "wishes"}`, priceless ? `${priceless} priceless` : null, checked ? `${checked} checked on the seller's own site` : null, monthlyRunningCents ? `${formatCents(Math.round(monthlyRunningCents))} a month to keep` : null].filter(Boolean).join(" · ");
   return (
     <Animated.View style={{ flex: 1, justifyContent: "center", paddingHorizontal: layout.gutter(width), gap: layout.stack.section, maxWidth: layout.column + 2 * layout.gutter(width), width: "100%", alignSelf: "center", opacity: card, transform: [{ scale: card.interpolate({ inputRange: [0, 1], outputRange: [0.94, 1] }) }] }}>
       {/* The deck: stacked, riffled, then fanned across the table like prints. */}

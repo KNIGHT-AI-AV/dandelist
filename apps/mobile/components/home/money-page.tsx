@@ -9,6 +9,7 @@ import { biggest, keepLines, tierTotals } from "../../lib/money-summary";
 import { fonts, layout, radius, space, type, usePalette, useType } from "../../lib/theme";
 import { useWishes } from "../../lib/wishes";
 import { TIER_LABEL, TIER_RANK } from "../../lib/words";
+import { counted, pricelessAside } from "../../lib/worth";
 import { Eyebrow, Glass, Hairline, Money, QuietButton } from "../lux";
 import { IncomeFader } from "../welcome/comfort";
 import { useTopRoom } from "./chrome";
@@ -61,8 +62,10 @@ export function MoneyPage() {
   const top = useTopRoom();
   const gutter = layout.gutter(width);
   const { wishes } = useWishes();
-  const items = wishes.map((w) => w.item);
+  // A priceless wish is on the list but in no sum (lib/worth.ts).
+  const items = counted(wishes).map((w) => w.item);
   const total = upfrontCashCents(items);
+  const aside = pricelessAside(wishes);
   const keep = recurringBreakdown(items);
   const comfortable = comfortableIncome(total, keep.perYear);
   const [income, setIncome] = useState(comfortable);
@@ -92,6 +95,7 @@ export function MoneyPage() {
         <Eyebrow>Money</Eyebrow>
         <Money cents={total} size="hero" style={{ alignSelf: "center" }} />
         <Text style={[type.callout, { color: p.ink2, textAlign: "center" }]}>{`Everything on your list, ${wishes.length} ${wishes.length === 1 ? "wish" : "wishes"}`}</Text>
+        {aside ? <Text style={[type.footnote, { color: p.ink3, textAlign: "center" }]}>{aside}</Text> : null}
       </View>
 
       <Section title="To keep it all">

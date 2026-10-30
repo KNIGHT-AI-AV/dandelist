@@ -30,8 +30,11 @@ export function whenChecked(iso: string, now = new Date()): string {
   return then.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-/** What the agent last did for a wish, in a few words. */
+/** What the agent last did for a wish, in a few words; for something priceless, the Dandy's line for it. */
 export function agentLine(w: Wish): string {
+  if (w.details.worth === "priceless") return w.details.line || "Priceless";
+  // Money's amount is the person's own, whatever photo the agent found for it.
+  if (w.details.worth === "money") return "Priced by you";
   const a = w.details.agent;
   if (!a) return "Priced by you";
   // A typical price from the archive has no single page to name.

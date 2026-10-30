@@ -1,11 +1,13 @@
 import {
   HORIZON_YEARS,
   applyAnswers,
+  asPriced,
   explainFacts,
   fallbackExplanation,
   interpret,
   pickQuestions,
   research,
+  unpriced,
   type Answer,
   type Draft,
   type Meta,
@@ -19,6 +21,7 @@ import { fallbackPlan, findPhoto, photoPlan, subjectOf, verifyPhoto, type FoundP
 import { QUICK_MS, mediaKindOf, quickFind, subjectPhoto } from "./quick";
 import { within } from "./time";
 import { publicFetch } from "./tools";
+import { worthCard, type WorthCard } from "./worth";
 
 /**
  * One hunt for one wish, the way every caller runs it: the guest's first wish (SSE), a signed-in run (polled) and the
@@ -39,6 +42,11 @@ export interface HuntResult extends ResearchResult {
   questions: WishQuestion[];
   /** True only for the fast card, which the full research may still replace. */
   provisional: boolean;
+  /**
+   * Money itself, or something priceless (agent.ts WORTHS): no shop prices it, so no hunt ran and `options` is empty.
+   * The caller shows this card instead and stops whatever started beside the reading.
+   */
+  worth?: WorthCard;
 }
 
 export interface HuntContext extends Omit<ResearchContext, "draft" | "answers" | "deadline"> {
@@ -53,6 +61,8 @@ export interface HuntContext extends Omit<ResearchContext, "draft" | "answers" |
   onDraft?: (draft: Draft) => Promise<void> | void;
   /** The fast card, as soon as it is ready, while the full research carries on. */
   onProvisional?: (result: HuntResult) => Promise<void> | void;
+  /** Price it anyway (a money or priceless card's "Price it"): hunt it as an ordinary priced wish, whatever it reads as. */
+  price?: boolean;
 }
 
 /** The draft with every question answered, by the person or by the agent's pick, and the answers left over. */
@@ -118,8 +128,9 @@ export async function huntWish(meta: Meta, ctx: HuntContext): Promise<HuntResult
   const home = (ctx.homeCurrency ?? "USD").toUpperCase();
   const fetcher = ctx.fetcher ?? publicFetch;
   const given = ctx.answers ?? [];
-  const known = ctx.draft ? withAnswers(ctx.draft, given) : null;
-  const reading: Promise<{ draft: Draft; extra: Answer[] }> = known ? Promise.resolve(known) : interpret(meta, ctx.text ?? "").then((d) => withAnswers(d, given));
+  const priced = (d: Draft) => (ctx.price ? asPriced(d) : d);
+  const known = ctx.draft ? withAnswers(priced(ctx.draft), given) : null;
+  const reading: Promise<{ draft: Draft; extra: Answer[] }> = known ? Promise.resolve(known) : interpret(meta, ctx.text ?? "").then((d) => withAnswers(priced(d), given));
   reading.catch(() => undefined);
   // The questions start at once from the person's own words, beside reading the wish, so they are usually in hand
   // before the research starts and it prices their picks; nothing ever waits for them. A re-hunt brings its own.
@@ -147,6 +158,13 @@ export async function huntWish(meta: Meta, ctx: HuntContext): Promise<HuntResult
   const read = await reading; // a wish that can't be read fails here, as it always has
   const extra = read.extra;
   let draft = read.draft;
+  // Money itself or something priceless: no shop has a price for it, so nothing is hunted or asked. The fast find
+  // and the questions that started beside the reading are dropped; the caller's stop ends any call still running.
+  if (unpriced(draft)) {
+    await ctx.onDraft?.(draft);
+    const worth = await worthCard(draft, fetcher);
+    if (worth) return { options: [], explanation: "", note: "", horizonYears: HORIZON_YEARS, draft, questions: [], provisional: false, worth };
+  }
   // Questions already in hand go on the draft before the research reads it, so the hunt prices their picks.
   if (held.questions?.length) draft = { ...draft, questions: held.questions };
   await ctx.onDraft?.(draft);

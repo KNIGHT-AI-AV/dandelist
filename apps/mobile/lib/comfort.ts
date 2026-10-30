@@ -17,10 +17,18 @@ const LADDER = [1, 1.5, 2, 2.5, 3, 4, 5, 7.5];
  * on the round figure.
  */
 export function incomeSteps(rate = 1, unit = 1, range?: { low: number; high: number }): number[] {
-  const out: number[] = [];
   // Whole decades of the shown currency, wide enough for the range (in US cents) when one is given.
   const low = Math.min(INCOME_MIN * unit, range ? 10 ** Math.floor(Math.log10(range.low * rate)) : Infinity);
   const top = Math.max(INCOME_MAX * unit, range ? 10 ** Math.ceil(Math.log10(range.high * rate)) : 0);
+  return ladderSteps(rate, low, top);
+}
+
+/**
+ * The ladder's notches in US cents, from `low` up to `top`: both in the shown currency's cents and each a power of
+ * ten. The income fader and the money wish's amount slider both count on it.
+ */
+export function ladderSteps(rate: number, low: number, top: number): number[] {
+  const out: number[] = [];
   for (let decade = low; decade < top; decade *= 10) for (const m of LADDER) out.push(Math.round(decade * m) / rate);
   out.push(top / rate);
   return rate === 1 ? out.map(Math.round) : out;

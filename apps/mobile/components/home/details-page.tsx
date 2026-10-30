@@ -15,6 +15,7 @@ import { useMoney } from "../../lib/currency";
 import { layout, space, type, usePalette } from "../../lib/theme";
 import { useWishes, type Wish, type WishTier } from "../../lib/wishes";
 import { TIER_LABEL, TIER_RANK } from "../../lib/words";
+import { counted } from "../../lib/worth";
 import { useTopRoom } from "./chrome";
 
 /** The tiers in scale order: Must have, Would love, Someday. */
@@ -73,12 +74,12 @@ export function DetailsPage() {
       TIERS.map((tier) => {
         const rows = wishes.filter((w) => w.tier === tier).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
         const shown = rows.filter((w) => w.id !== pendingId);
-        return { tier, rows, shown, cents: upfrontCashCents(shown.map((w) => w.item)) };
+        return { tier, rows, shown, cents: upfrontCashCents(counted(shown).map((w) => w.item)) };
       }),
     [wishes, pendingId],
   );
   const found = search.ids.filter((id) => id !== pendingId);
-  const total = upfrontCashCents(visible.map((w) => w.item));
+  const total = upfrontCashCents(counted(visible).map((w) => w.item));
 
 
   // Each row brings the rule above it, so a row that leaves takes its own rule along.

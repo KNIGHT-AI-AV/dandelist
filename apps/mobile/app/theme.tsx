@@ -6,6 +6,7 @@ import { IconButton } from "../components/lux";
 import { ThemeChooser } from "../components/welcome/theme";
 import { layout, usePalette, useTheme } from "../lib/theme";
 import { useWishes } from "../lib/wishes";
+import { counted } from "../lib/worth";
 import { Atmosphere } from "../components/atmosphere";
 
 const leave = () => (router.canGoBack() ? router.back() : router.replace("/wishes"));
@@ -20,7 +21,7 @@ export default function ThemeScreen() {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const { wishes } = useWishes();
-  const total = upfrontCashCents(wishes.map((w) => w.item));
+  const total = upfrontCashCents(counted(wishes).map((w) => w.item));
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
       <Atmosphere />

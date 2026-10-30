@@ -234,6 +234,8 @@ async function runTool(name: string, args: Record<string, unknown>, as: (method:
         status: run.status,
         title: run.draft?.title ?? null,
         provisional: !!run.result?.provisional,
+        // Money itself or something priceless: no options; money's amount is the person's to choose (add_wish).
+        ...(run.result?.worth ? { worth: run.result.worth } : {}),
         error: run.error,
         options: options.map((o, i) => ({ index: i, seller: o.seller, url: o.url, upfront_cents: o.upfrontCents, status: o.status, photo_url: o.imageUrl ?? null })),
       };

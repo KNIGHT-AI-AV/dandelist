@@ -20,7 +20,10 @@ import { FLICK, ease, native, spring, step, useReducedMotion } from "../../lib/m
 import { layout, radius, type, usePalette, useType } from "../../lib/theme";
 import { useWishes, type Wish } from "../../lib/wishes";
 import { KIND_LABEL, TIER_LABEL, agentLine } from "../../lib/words";
+import { worthOf } from "../../lib/worth";
 import { cardRect } from "../../lib/zoom";
+import { useMoney } from "../../lib/currency";
+import { savedGlyph } from "../../components/worth";
 
 const HERO = 470;
 /** How far the title block rises onto the photo, into its shade. */
@@ -52,6 +55,7 @@ export default function WishDetail() {
   const { wishes, status, remove } = useWishes();
   const p = usePalette();
   const t = useType();
+  const money = useMoney();
   const insets = useSafeAreaInsets();
   const { width: winW, height: winH } = useWindowDimensions();
   const reduced = useReducedMotion();
@@ -158,7 +162,11 @@ export default function WishDetail() {
       </View>
     );
   }
-  const a = w.details.agent;
+  // The agent's record of where the price came from. Money's amount is the person's own and the priceless has none,
+  // so those show no source to open or check again, only the photo the agent found for money (lib/worth.ts).
+  const worth = worthOf(w);
+  const a = worth ? undefined : w.details.agent;
+  const pictured = w.details.agent;
 
   async function onRemove() {
     // Two taps: the first only arms it.
@@ -192,8 +200,8 @@ export default function WishDetail() {
     opacity: sections[i]!,
     transform: [{ translateY: sections[i]!.interpolate({ inputRange: [0, 1], outputRange: [reduced ? 0 : layout.stack.base, 0] }) }],
   });
-  const photos = realPhotos(a?.media);
-  const gallery = showsGallery(a?.media);
+  const photos = realPhotos(pictured?.media);
+  const gallery = showsGallery(pictured?.media);
   // The photo drifts down at a fraction of the scroll, so the page slides over it. Transform only; off under reduced motion.
   const drift = reduced ? undefined : { transform: [{ translateY: scrollY.interpolate({ inputRange: [0, HERO], outputRange: [0, HERO * PARALLAX], extrapolate: "clamp" }) }] };
   const openPhoto = (index: number) =>
@@ -242,7 +250,7 @@ export default function WishDetail() {
             ) : (
               <>
                 <Animated.View style={[StyleSheet.absoluteFill, drift]}>
-                  <MediaHero media={a?.media} fallbackUri={a?.imageUrl} kind={w.kind} style={StyleSheet.absoluteFill} />
+                  <MediaHero media={pictured?.media} fallbackUri={pictured?.imageUrl} kind={w.kind} glyph={savedGlyph(w, money.symbol)} style={StyleSheet.absoluteFill} />
                 </Animated.View>
                 <Shade from={HERO_SHADE} />
               </>
@@ -273,9 +281,9 @@ export default function WishDetail() {
           {/* Price: the statement, then the agent's take. */}
           <Animated.View style={[{ gap: layout.stack.base }, enter(1)]}>
             <Swap id={priceKey}>
-              <Statement item={w.item} monthlyHint={w.item.recurring.map((rr) => rr.label).filter(Boolean).join(", ")} />
+              <Statement item={w.item} priceless={worth === "priceless"} monthlyHint={w.item.recurring.map((rr) => rr.label).filter(Boolean).join(", ")} />
             </Swap>
-            {a?.explanation ? <Take>{a.explanation}</Take> : null}
+            {a?.explanation ? <Take>{a.explanation}</Take> : worth === "priceless" && w.details.line ? <Take>{w.details.line}</Take> : null}
           </Animated.View>
 
           {/* Why it matters to them, in their own words (saved as they type). */}
@@ -283,8 +291,8 @@ export default function WishDetail() {
             <WishNote key={w.id} wish={w} onReveal={(dy) => scroller.current?.scrollTo({ y: Math.max(0, scrollTop.current + dy), animated: true })} />
           </Animated.View>
 
-          {/* Source: who sells it, how the price was found, and the check. */}
-          <Animated.View style={[{ gap: layout.stack.base }, enter(3)]}>
+          {/* Source: who sells it, how the price was found, and the check. Something priceless has none. */}
+          <Animated.View style={[{ gap: layout.stack.base, ...(worth === "priceless" ? { display: "none" as const } : null) }, enter(3)]}>
             <View style={{ gap: layout.stack.tight }}>
               <Eyebrow>Source</Eyebrow>
               <Text style={[type.title3, { color: p.ink }]}>{a ? a.seller : agentLine(w)}</Text>

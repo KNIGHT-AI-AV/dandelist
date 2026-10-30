@@ -14,7 +14,21 @@ export interface Draft {
   unknowns: string[];
   /** The details that move the price, each with the answer the hunt used. */
   questions?: WishQuestion[];
+  /** "priced" for almost every wish; money itself and the priceless have no shop price (lib/worth.ts). */
+  worth?: "priced" | "money" | "priceless";
+  /** Money: the amount the wish named, in `currency`. */
+  amount?: number;
+  /** Priceless: the Dandy's line for it. */
+  line?: string;
 }
+
+/**
+ * The card for a wish no shop prices, in place of options: money, with the amount the wish named in US cents when it
+ * named one, or priceless, with the Dandy's line.
+ */
+export type WorthCard =
+  | { worth: "money"; title: string; kind: WishKind; amountCents?: number }
+  | { worth: "priceless"; title: string; kind: WishKind; line: string };
 
 /**
  * A detail that moves the price, with the answer the hunt used: the agent's likely pick, or the person's own
@@ -174,7 +188,18 @@ export interface Run {
    * While the run is still going, the fast card alone (`provisional`), usually 10 to 15 s in; at "done" the best
    * option first, with each question and the answer this hunt used.
    */
-  result: { options: PriceOption[]; explanation: string; note: string; horizonYears: number; questions?: WishQuestion[]; provisional?: boolean } | null;
+  result: {
+    options: PriceOption[];
+    explanation: string;
+    note: string;
+    horizonYears: number;
+    questions?: WishQuestion[];
+    provisional?: boolean;
+    /** Money or priceless: no options, this card instead. */
+    worth?: WorthCard;
+    /** A money wish's checked photo, when one was found. */
+    photo?: { imageUrl: string; media: Media };
+  } | null;
   error: string | null;
   cached?: boolean;
   createdAt: string;
@@ -207,9 +232,10 @@ export async function startResearch(api: Api, draft: Draft, answers: Answer[]) {
 
 /**
  * Hunts one wish straight from the person's words, with no separate read first; or again from a run's draft with
- * changed answers, given by question id. Poll it with getRun.
+ * changed answers, given by question id. `price` is a money or priceless card's "Price it": hunt the words as an
+ * ordinary priced wish. Poll it with getRun.
  */
-export async function startHunt(api: Api, wish: { text: string } | { draft: Draft; answers: Answer[] }) {
+export async function startHunt(api: Api, wish: { text: string; price?: boolean } | { draft: Draft; answers: Answer[] }) {
   return (await read<{ run: Run }>(await api("/agent/runs", json({ ...wish, persona: currentPersona() })).catch(() => null), "Couldn't start the research.")).run;
 }
 

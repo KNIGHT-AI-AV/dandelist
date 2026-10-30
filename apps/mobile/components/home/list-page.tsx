@@ -14,6 +14,7 @@ import { useSuggestions } from "../../lib/suggestions";
 import { fonts, layout, radius, space, type, usePalette, useType } from "../../lib/theme";
 import { loadWelcome, saveWelcome, toWishes } from "../../lib/welcome";
 import { useWishes, type Wish } from "../../lib/wishes";
+import { countLine, counted, worthOf } from "../../lib/worth";
 import { rememberCard, type Rect } from "../../lib/zoom";
 import { DandyAvatar } from "../dandy-avatar";
 import { dockRoom } from "../inputs";
@@ -164,11 +165,12 @@ export function ListPage() {
     setQuickOpen(true);
   };
 
-  const items = visible.map((w) => w.item);
+  // A priceless wish is on the list but in no sum; the count beside the total says how many (lib/worth.ts).
+  const items = counted(visible).map((w) => w.item);
   const total = upfrontCashCents(items);
   const keepPerYear = recurringBreakdown(items).perMonth * 12;
   const income = comfortableIncome(total, keepPerYear);
-  const count = `${visible.length} ${visible.length === 1 ? "wish" : "wishes"}`;
+  const count = countLine(visible);
   const loading = (status === "loading" || status === "idle") && wishes.length === 0;
 
   // The cards run edge to edge on a phone, and in a centred column on anything wider.
@@ -263,9 +265,12 @@ export function ListPage() {
             <Hairline style={{ marginVertical: space[8] }} />
             <SheetRow label="Open" onPress={() => closeQuick(() => openWish(quickWish, quick.at))} />
           </Rise>
-          <Rise delay={delayFor(3)}>
-            <SheetRow label="Check the price again" onPress={() => closeQuick(() => void recheckWish(auth.api, quickWish, reload))} />
-          </Rise>
+          {/* Money's amount is the person's own and the priceless has none, so there is no price to check again. */}
+          {worthOf(quickWish) ? null : (
+            <Rise delay={delayFor(3)}>
+              <SheetRow label="Check the price again" onPress={() => closeQuick(() => void recheckWish(auth.api, quickWish, reload))} />
+            </Rise>
+          )}
           <Rise delay={delayFor(4)}>
             <SheetRow
               label="Remove"

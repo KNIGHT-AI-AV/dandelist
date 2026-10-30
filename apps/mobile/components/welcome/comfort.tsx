@@ -1,12 +1,12 @@
 import { Image } from "expo-image";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Animated, PanResponder, Platform, Text, View, useWindowDimensions } from "react-native";
-import { fractionOf, fullRange, incomeAt, incomeSteps, stageOf } from "../../lib/comfort";
+import { Animated, Platform, Text, View, useWindowDimensions } from "react-native";
+import { fullRange, incomeSteps, stageOf } from "../../lib/comfort";
 import { CURRENCIES, useMoney } from "../../lib/currency";
 import { symbolOf } from "../../lib/fx";
-import { ease, haptic, native, spring, useReducedMotion } from "../../lib/motion";
-import { fonts, layout, shadow, type, usePalette, useType } from "../../lib/theme";
-import { tick } from "../../lib/tick";
+import { ease, native, useReducedMotion } from "../../lib/motion";
+import { fonts, layout, type, usePalette, useType } from "../../lib/theme";
+import { Fader } from "../fader";
 import { Chip, Eyebrow, PrimaryButton } from "../lux";
 import { Odometer } from "../odometer";
 import { Rise } from "./kit";
@@ -23,7 +23,6 @@ const FACES = [
   require("../../assets/faces/4-overjoyed.png"),
   require("../../assets/faces/5-pompous.png"),
 ];
-const THUMB = 30;
 /** The face change: the old one sinks back and softens while the new one settles in from a touch larger. */
 const SWAP_MS = 520;
 
@@ -90,57 +89,9 @@ export function IncomeFader({ incomeCents, totalCents, keepPerYearCents = 0, onC
   const reduced = useReducedMotion();
   // The far left always reads horrid and the far right ritzy, however small or large the list.
   const steps = useMemo(() => incomeSteps(money.rate, money.unit, fullRange(totalCents, keepPerYearCents)), [money.rate, money.unit, totalCents, keepPerYearCents]);
-  const track = useRef<View>(null);
-  const box = useRef({ x: 0, w: 1 });
-  const hold = useRef(new Animated.Value(0)).current;
-  const last = useRef(incomeCents);
   const stage = stageOf(incomeCents, totalCents, keepPerYearCents);
-  const lastStage = useRef(stage.index);
-  const f = fractionOf(incomeCents, steps);
-
-  const measure = () => track.current?.measureInWindow((x, _y, w) => (box.current = { x, w: Math.max(1, w) }));
-  // The responder is made once; it reaches the latest props through this ref.
-  const act = useRef({ setFromPage: (_pageX: number) => {} });
-  act.current.setFromPage = (pageX: number) => {
-    const c = incomeAt((pageX - box.current.x) / box.current.w, steps);
-    if (c === last.current) return;
-    last.current = c;
-    tick();
-    const s = stageOf(c, totalCents, keepPerYearCents).index;
-    if (s !== lastStage.current) {
-      lastStage.current = s;
-      haptic.soft();
-    } else haptic.select();
-    onChange(c);
-  };
-  // Positions come from the page, not the touched element, so the thumb follows the finger both ways from anywhere
-  // on the track (the old slider read the child under the finger and stuck). It captures the drag, so a page swipe
-  // never starts on the track.
-  const pan = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponderCapture: () => true,
-      onMoveShouldSetPanResponderCapture: () => true,
-      onPanResponderTerminationRequest: () => false,
-      onPanResponderGrant: (e) => {
-        measure();
-        Animated.spring(hold, { toValue: 1, ...spring.press, useNativeDriver: native }).start();
-        act.current.setFromPage(e.nativeEvent.pageX);
-      },
-      onPanResponderMove: (e) => act.current.setFromPage(e.nativeEvent.pageX),
-      onPanResponderRelease: () => Animated.spring(hold, { toValue: 0, ...spring.press, useNativeDriver: native }).start(),
-      onPanResponderTerminate: () => Animated.spring(hold, { toValue: 0, ...spring.press, useNativeDriver: native }).start(),
-    }),
-  ).current;
-
-  const step = (dir: 1 | -1) => {
-    let i = 0;
-    for (let k = 0; k < steps.length; k++) if (Math.abs(steps[k]! - incomeCents) < Math.abs(steps[i]! - incomeCents)) i = k;
-    const next = steps[Math.max(0, Math.min(steps.length - 1, i + dir))]!;
-    last.current = next;
-    tick();
-    haptic.select();
-    onChange(next);
-  };
+  // A new face lands with the firmer haptic.
+  const newFace = (from: number, to: number) => stageOf(from, totalCents, keepPerYearCents).index !== stageOf(to, totalCents, keepPerYearCents).index;
 
   const figure = <Odometer cents={incomeCents} format={money.format} size={size} family="bodoni" smallPrefix tracking={-0.02 * size} mode={reduced ? "instant" : "ui"} />;
   const line = <Text accessibilityLiveRegion="polite" numberOfLines={1} style={[compact ? type.callout : type.title3, { fontFamily: fonts.titleItalic, color: p.accentText, textAlign: compact ? "left" : "center" }]}>{stage.line}</Text>;
@@ -168,28 +119,15 @@ export function IncomeFader({ incomeCents, totalCents, keepPerYearCents = 0, onC
           {line}
         </View>
       )}
-      <View style={{ gap: layout.stack.tight }}>
-        <View
-          ref={track}
-          onLayout={measure}
-          {...pan.panHandlers}
-          accessibilityRole="adjustable"
-          accessibilityLabel="Income a year"
-          accessibilityValue={{ text: `${money.format(incomeCents)} a year. ${stage.line}` }}
-          accessibilityActions={[{ name: "increment" }, { name: "decrement" }]}
-          onAccessibilityAction={(e) => step(e.nativeEvent.actionName === "increment" ? 1 : -1)}
-          style={[{ height: 44, justifyContent: "center" }, Platform.OS === "web" ? ({ cursor: "grab", touchAction: "none", userSelect: "none" } as object) : null]}
-        >
-          <View style={{ height: 3, borderRadius: 1.5, backgroundColor: p.track }}>
-            <View style={{ height: 3, borderRadius: 1.5, width: `${f * 100}%`, backgroundColor: p.accent }} />
-          </View>
-          <Animated.View pointerEvents="none" style={{ position: "absolute", left: `${f * 100}%`, marginLeft: -THUMB / 2, width: THUMB, height: THUMB, borderRadius: THUMB / 2, backgroundColor: p.ink, boxShadow: shadow.thumb, transform: [{ scale: hold.interpolate({ inputRange: [0, 1], outputRange: [1, 1.14] }) }] }} />
-        </View>
-        <View style={{ flexDirection: "row", justifyContent: "space-between" }} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-          <Text style={[type.figure, { color: p.ink3 }]}>{money.compact(steps[0]!)}</Text>
-          <Text style={[type.figure, { color: p.ink3 }]}>{money.compact(steps[steps.length - 1]!)}</Text>
-        </View>
-      </View>
+      <Fader
+        value={incomeCents}
+        steps={steps}
+        onChange={onChange}
+        label="Income a year"
+        valueText={`${money.format(incomeCents)} a year. ${stage.line}`}
+        labels={[steps[0]!, steps[steps.length - 1]!].map((c) => ({ cents: c, text: money.compact(c) }))}
+        firm={newFace}
+      />
       {compact ? null : <CurrencyChips />}
     </View>
   );
@@ -198,9 +136,9 @@ export function IncomeFader({ incomeCents, totalCents, keepPerYearCents = 0, onC
 /**
  * "What would it take?" No dates and no budgets: this is a wish list, not a savings plan. The fader runs from 10,000
  * to 100 million a year in the chosen currency, and the face and the line say how comfortably that income carries
- * the whole list.
+ * the whole list. `note` says what the list leaves out of its total (a priceless wish).
  */
-export function Comfort({ incomeCents, totalCents, keepPerYearCents = 0, onChange, onDone }: { incomeCents: number; totalCents: number; keepPerYearCents?: number; onChange(cents: number): void; onDone(): void }) {
+export function Comfort({ incomeCents, totalCents, keepPerYearCents = 0, note, onChange, onDone }: { incomeCents: number; totalCents: number; keepPerYearCents?: number; note?: string; onChange(cents: number): void; onDone(): void }) {
   const p = usePalette();
   const t = useType();
   const { width } = useWindowDimensions();
@@ -214,8 +152,9 @@ export function Comfort({ incomeCents, totalCents, keepPerYearCents = 0, onChang
         </Text>
         <Text style={[type.callout, { color: p.ink2, textAlign: "center" }]}>Slide to a year's income and see how comfortably it carries everything on your list.</Text>
       </Rise>
-      <Rise delay={60}>
+      <Rise delay={60} style={{ gap: layout.stack.tight }}>
         <IncomeFader incomeCents={incomeCents} totalCents={totalCents} keepPerYearCents={keepPerYearCents} onChange={onChange} />
+        {note ? <Text style={[type.footnote, { color: p.ink3, textAlign: "center" }]}>{note}</Text> : null}
       </Rise>
       <Rise delay={160}>
         <PrimaryButton label="Show me my list" onPress={onDone} />

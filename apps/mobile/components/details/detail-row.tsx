@@ -4,7 +4,9 @@ import { usePress } from "../../lib/motion";
 import { radius, space, type, usePalette, useType } from "../../lib/theme";
 import type { Wish } from "../../lib/wishes";
 import { TIER_LABEL } from "../../lib/words";
+import { isPriceless, priceWords } from "../../lib/worth";
 import { Money, Photo } from "../lux";
+import { savedGlyph } from "../worth";
 import { SwipeToRemove } from "../list/swipe-remove";
 import { TierPips } from "./tier-pips";
 
@@ -24,7 +26,7 @@ export function DetailRow({ w, onOpen, onRemove }: { w: Wish; onOpen(w: Wish): v
     <SwipeToRemove onRemove={() => onRemove(w)} style={{ borderRadius: radius.sm, borderCurve: "continuous" }}>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={`${w.name}, ${TIER_LABEL[w.tier]}, ${money.format(w.item.upfrontCents)}`}
+        accessibilityLabel={`${w.name}, ${TIER_LABEL[w.tier]}, ${priceWords(w, money.format)}`}
         accessibilityHint="Opens the wish"
         onPress={() => onOpen(w)}
         onPressIn={press.onPressIn}
@@ -32,7 +34,7 @@ export function DetailRow({ w, onOpen, onRemove }: { w: Wish; onOpen(w: Wish): v
       >
         <Animated.View style={{ flexDirection: "row", alignItems: "center", gap: space[12], paddingVertical: space[12], transform: [{ scale: press.scale }] }}>
           <View style={{ width: THUMB, height: THUMB, borderRadius: radius.sm, borderCurve: "continuous", overflow: "hidden", backgroundColor: p.track }}>
-            <Photo uri={w.details.agent?.imageUrl} />
+            <Photo uri={w.details.agent?.imageUrl} glyph={savedGlyph(w, money.symbol)} />
           </View>
           <View style={{ flex: 1, gap: space[4] }}>
             <Text style={[t.title3, { color: p.ink }]} numberOfLines={1}>
@@ -45,7 +47,7 @@ export function DetailRow({ w, onOpen, onRemove }: { w: Wish; onOpen(w: Wish): v
               </Text>
             </View>
           </View>
-          <Money cents={w.item.upfrontCents} size="ledger15" color={p.ink} align="right" />
+          <Money cents={w.item.upfrontCents} priceless={isPriceless(w)} size="ledger15" color={p.ink} align="right" />
         </Animated.View>
       </Pressable>
     </SwipeToRemove>

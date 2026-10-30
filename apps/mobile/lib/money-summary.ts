@@ -1,9 +1,11 @@
 import { upfrontCashCents, type Period } from "@dandelist/cost";
 import type { Wish, WishTier } from "./wishes";
+import { counted } from "./worth";
 
 /**
  * The money page's figures (owner, recording 03: "a full money page about the costs of all items"), worked out from
- * the wishes alone. Amounts are US cents; the page shows them in the chosen currency. Pure, so it has tests.
+ * the wishes alone. Amounts are US cents; the page shows them in the chosen currency. A priceless wish (lib/worth.ts)
+ * counts as a wish in its tier but is in no sum, share or ranking. Pure, so it has tests.
  */
 
 const PER_YEAR: Record<Period, number> = { week: 52, month: 12, year: 1 };
@@ -18,10 +20,10 @@ export interface TierTotal {
 }
 
 export function tierTotals(wishes: readonly Wish[]): TierTotal[] {
-  const all = upfrontCashCents(wishes.map((w) => w.item)) || 1;
+  const all = upfrontCashCents(counted(wishes).map((w) => w.item)) || 1;
   return TIERS.map((tier) => {
     const mine = wishes.filter((w) => w.tier === tier);
-    const cents = upfrontCashCents(mine.map((w) => w.item));
+    const cents = upfrontCashCents(counted(mine).map((w) => w.item));
     return { tier, count: mine.length, cents, share: cents / all };
   });
 }
@@ -31,10 +33,10 @@ export interface Biggest {
   share: number;
 }
 
-/** The `n` dearest wishes and their share of the total. */
+/** The `n` dearest wishes and their share of the total; a priceless one is beyond ranking. */
 export function biggest(wishes: readonly Wish[], n = 5): Biggest[] {
-  const all = upfrontCashCents(wishes.map((w) => w.item)) || 1;
-  return [...wishes]
+  const all = upfrontCashCents(counted(wishes).map((w) => w.item)) || 1;
+  return counted(wishes)
     .sort((a, b) => b.item.upfrontCents - a.item.upfrontCents)
     .slice(0, n)
     .map((wish) => ({ wish, share: wish.item.upfrontCents / all }));

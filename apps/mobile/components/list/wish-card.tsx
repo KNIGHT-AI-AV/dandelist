@@ -3,37 +3,43 @@ import { Image } from "expo-image";
 import { useRef, useState } from "react";
 import { Animated, Platform, Pressable, StyleSheet, Text, View, type AccessibilityActionEvent } from "react-native";
 import { AgentDot, Money, Photo, Shade } from "../lux";
+import { savedGlyph } from "../worth";
+import { useMoney } from "../../lib/currency";
 import { formatCents } from "../../lib/money";
 import { usePress } from "../../lib/motion";
 import { layout, radius, space, type, usePalette } from "../../lib/theme";
 import type { Wish } from "../../lib/wishes";
 import { TIER_LABEL, agentLine } from "../../lib/words";
+import { isPriceless, priceWords } from "../../lib/worth";
 import type { Rect } from "../../lib/zoom";
 import { Swap } from "./presence";
 
 /** What a screen reader says for a card, and for its lifted copy in the action sheet. */
 export function cardLabel(w: Wish): string {
-  return `${w.name}, ${formatCents(w.item.upfrontCents)}`;
+  return `${w.name}, ${priceWords(w, formatCents)}`;
 }
 
 /**
  * The photograph shown without the list's cross-dissolve. The action sheet lays a copy of the card exactly over the
- * card itself; a fade from the empty gradient there would flash. With no photo it is the same quiet gradient.
+ * card itself; a fade from the empty gradient there would flash. With no photo it is the same quiet gradient, or the
+ * same glyph panel as the card.
  */
-function StillPhoto({ uri }: { uri?: string }) {
+function StillPhoto({ uri, glyph }: { uri?: string; glyph?: string }) {
   const [failed, setFailed] = useState(false);
-  if (!uri || failed) return <Photo />;
+  if (!uri || failed) return <Photo glyph={glyph} />;
   return <Image source={{ uri }} style={StyleSheet.absoluteFill} contentFit="cover" onError={() => setFailed(true)} accessibilityIgnoresInvertColors />;
 }
 
 /** The inside of a wish card: photo, shade, name, the agent's line, tier and price. Fills its parent. */
 export function WishFace({ w, still = false }: { w: Wish; still?: boolean }) {
   const p = usePalette();
+  const money = useMoney();
   const monthly = recurringBreakdown([w.item]).perMonth;
   const uri = w.details.agent?.imageUrl;
+  const glyph = savedGlyph(w, money.symbol);
   return (
     <>
-      {still ? <StillPhoto uri={uri} /> : <Photo uri={uri} />}
+      {still ? <StillPhoto uri={uri} glyph={glyph} /> : <Photo uri={uri} glyph={glyph} />}
       <Shade from={0.25} />
       <View style={{ position: "absolute", left: layout.cardPad, right: layout.cardPad, bottom: layout.cardPad, gap: layout.stack.tight }}>
         <Text style={[type.title2, { color: p.ink }]} numberOfLines={2}>
@@ -50,7 +56,7 @@ export function WishFace({ w, still = false }: { w: Wish; still?: boolean }) {
             <Swap k={w.tier}>
               <Text style={[type.figure, { color: p.ink2, textTransform: "uppercase" }]}>{TIER_LABEL[w.tier]}</Text>
             </Swap>
-            <Money cents={w.item.upfrontCents} size="card" />
+            <Money cents={w.item.upfrontCents} priceless={isPriceless(w)} size="card" />
           </View>
         </View>
       </View>

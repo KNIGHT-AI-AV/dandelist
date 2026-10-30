@@ -36,6 +36,13 @@ export interface WishDetails {
   about?: string;
   /** Up to five lowercase tags from the same call. */
   tags?: string[];
+  /**
+   * A wish no shop prices (lib/worth.ts): "money", whose upfront cost is the amount the person picked, or
+   * "priceless", saved at zero, shown as infinity and left out of every total.
+   */
+  worth?: "money" | "priceless";
+  /** A priceless wish's line, written by the Dandy when it read the wish. */
+  line?: string;
 }
 
 export interface NewWish {

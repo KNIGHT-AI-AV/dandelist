@@ -6,6 +6,7 @@ import { assertPublicUrl, htmlToText, pageNamesItem, pageShowsPrice, privateIp, 
 // Shop hostnames resolve to a public documentation address, so no test touches real DNS.
 vi.mock("node:dns/promises", async (importOriginal) => ({ ...(await importOriginal<object>()), lookup: async () => [{ address: "93.184.215.14", family: 4 }] }));
 import { createApp } from "../src/app";
+import { forgetMoneyPhoto } from "../src/agent/worth";
 import { migrate, type Db } from "../src/db";
 import { visionReply } from "./vision";
 
@@ -106,6 +107,12 @@ const fakeMeta = (async (_url: string, init: RequestInit) => {
   if (vision !== null) return reply([message(vision)]);
   // The photo search's plan, beside every hunt: nothing it names opens here, so the hunt's own photos stand.
   if (format === "photo_plan") return reply([message(JSON.stringify({ articles: [], commons: "", web: "", kind: "product" }))]);
+  if (format === "wish_draft" && /million dollars/i.test(String(body.input))) {
+    return reply([message(JSON.stringify({ title: "A million dollars", kind: "buy", summary: "A million dollars.", specifics: [], region: "US", currency: "USD", unknowns: [], worth: "money", amount: 1_000_000, line: "" }))]);
+  }
+  if (format === "wish_draft" && /\blove\b/i.test(String(body.input))) {
+    return reply([message(JSON.stringify({ title: "Love", kind: "do", summary: "Love.", specifics: [], region: "US", currency: "USD", unknowns: [], worth: "priceless", amount: 0, line: "Free to give, impossible to buy." }))]);
+  }
   if (format === "wish_draft") {
     return reply([
       message(
@@ -178,6 +185,7 @@ beforeEach(async () => {
   explainReplies = [];
   quickLines = "";
   gate = null;
+  forgetMoneyPhoto();
   app = makeApp();
 });
 
@@ -273,6 +281,43 @@ describe("wish agent", () => {
     expect(metaCalls.some((c) => (c.text as { format?: { name?: string } } | undefined)?.format?.name === "wish_draft")).toBe(false);
     const researched = metaCalls.find((c) => String(c.instructions ?? "").startsWith("You are Dandelist's price researcher"))!;
     expect(researched.input).toContain("The person answered: Which package? Essentials");
+  });
+
+  it("hands money back as an amount to pick and something priceless as infinity, with no price hunt", async () => {
+    const t = await signIn("ada@example.com");
+    const money = await finished(t, ((await (await call("POST", "/agent/runs", t, { text: "a million dollars" })).json()) as { run: { id: string } }).run.id);
+    expect(money.status).toBe("done");
+    expect(money.draft).toMatchObject({ title: "A million dollars", worth: "money", amount: 1_000_000 });
+    expect(money.result).toMatchObject({ options: [], provisional: false, worth: { worth: "money", title: "A million dollars", kind: "buy", amountCents: 100_000_000 } });
+    expect(money.result.photo).toBeUndefined(); // nothing passed here, so the card shows its own panel
+
+    const love = await finished(t, ((await (await call("POST", "/agent/runs", t, { text: "love" })).json()) as { run: { id: string } }).run.id);
+    expect(love.result).toMatchObject({ options: [], worth: { worth: "priceless", title: "Love", line: "Free to give, impossible to buy." } });
+    expect(metaCalls.some((c) => (c.text as { format?: { name?: string } } | undefined)?.format?.name === "price_options")).toBe(false);
+
+    // Reading money for the add-a-wish screen asks nothing back: there is no price to narrow down.
+    const read = (await (await call("POST", "/agent/interpret", t, { text: "a million dollars" })).json()) as { draft: Record<string, unknown>; questions: unknown[] };
+    expect(read).toMatchObject({ draft: { worth: "money" }, questions: [] });
+    expect(metaCalls.some((c) => (c.tools as { name?: string }[] | undefined)?.some((x) => x.name === "ask_user"))).toBe(false);
+  });
+
+  it("prices a money wish when its card's Price it asks, never serving the money run from the cache", async () => {
+    const t = await signIn("ada@example.com");
+    const id = async (res: Response) => ((await res.json()) as { run: { id: string } }).run.id;
+    const money = await finished(t, await id(await call("POST", "/agent/runs", t, { text: "a million dollars" })));
+    expect(money.result.worth).toMatchObject({ worth: "money" });
+
+    const asked = await call("POST", "/agent/runs", t, { text: "a million dollars", price: true });
+    expect(asked.status).toBe(202); // a new hunt, not the cached money run
+    const priced = await finished(t, await id(asked));
+    expect(priced.result.worth).toBeUndefined();
+    expect(priced.draft).toMatchObject({ worth: "priced" });
+    expect(priced.result.options.length).toBeGreaterThan(0);
+
+    // The same words without "Price it" still get the money card, from the cache.
+    const again = await call("POST", "/agent/runs", t, { text: "a million dollars" });
+    expect(again.status).toBe(200);
+    expect(((await again.json()) as { run: { id: string; result: { worth?: unknown } } }).run).toMatchObject({ id: money.id, result: { worth: { worth: "money" } } });
   });
 
   it("keeps thoughts to one short plain line", () => {
