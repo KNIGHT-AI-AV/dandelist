@@ -1,3 +1,4 @@
+import { safeCommonsSourcePage } from "@dandelist/catalogue";
 import { COMMONS_UA, type MediaImage } from "./agent/media";
 import type { Fetcher } from "./agent/tools";
 import { words } from "./archive/archive";
@@ -98,6 +99,8 @@ export async function wikiPhotos(titles: string[], api: Fetcher, ms = 6_000): Pr
       const scaled = width > PHOTO_WIDTH && typeof ii.thumburl === "string" && /^https:\/\//.test(ii.thumburl);
       const artist = stripHtml(ii.extmetadata?.Artist?.value).slice(0, 80);
       const license = stripHtml(ii.extmetadata?.LicenseShortName?.value).slice(0, 60);
+      // Imageinfo already supplies the description URL; only an explicit shared repository can identify Commons.
+      const sourcePage = p.imagerepository === "shared" ? safeCommonsSourcePage({ source: "commons.wikimedia.org", sourcePage: ii.descriptionurl }) : undefined;
       found.set(fileKey(p.title), {
         url: untracked(scaled ? ii.thumburl : ii.url),
         width: scaled ? Number(ii.thumbwidth) || PHOTO_WIDTH : width,
@@ -105,6 +108,7 @@ export async function wikiPhotos(titles: string[], api: Fetcher, ms = 6_000): Pr
         source: p.imagerepository === "local" ? "wikipedia.org" : "commons.wikimedia.org",
         credit: artist && !/see file history/i.test(artist) ? artist : "Wikimedia Commons contributor",
         ...(license ? { license } : {}),
+        ...(sourcePage ? { sourcePage } : {}),
       });
     }
     return found;
