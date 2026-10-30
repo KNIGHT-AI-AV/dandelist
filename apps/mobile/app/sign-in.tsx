@@ -1,9 +1,9 @@
-import { Redirect, useLocalSearchParams } from "expo-router";
+import { Redirect, router, useLocalSearchParams } from "expo-router";
 import { useRef, useState } from "react";
 import { StyleSheet, Text, View, useWindowDimensions, type TextInput } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CODE_LENGTH, CodeField, Field, KeyboardLift, KeyboardScroll, isEmail, type CodeFieldHandle } from "../components/inputs";
-import { Backdrop, Eyebrow, Grain, PrimaryButton, QuietButton, Shade, Wordmark } from "../components/lux";
+import { Backdrop, Eyebrow, Grain, IconButton, PrimaryButton, QuietButton, Shade, Wordmark } from "../components/lux";
 import { SignInOptions } from "../components/sign-in-options";
 import { signInErrorMessage, useAuth, useSignInOptions, type ProviderId, type SignInOption } from "../lib/auth";
 import { haptic } from "../lib/motion";
@@ -98,6 +98,13 @@ export default function SignIn() {
           tones bleeding into borders and glass (Taste Engine adherence check, 2026-10-29). */}
       <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: `rgba(${p.bgRgb}, 0.42)` }]} />
       <Shade from={0.05} />
+      {/* A way back for someone who arrived here from a link (UI audit, 2026-10-30: only the browser's Back left). */}
+      <IconButton
+        icon="back"
+        label="Back"
+        onPress={() => (router.canGoBack() ? router.back() : router.replace("/welcome"))}
+        style={{ position: "absolute", zIndex: 2, top: insets.top + (layout.headerBar - layout.control.icon) / 2, left: gutter }}
+      />
       {/* The form is anchored to the bottom, so the whole column rides up with the keyboard instead of jumping. */}
       <KeyboardLift rest={insets.bottom + FOOT} gap={layout.stack.base} style={{ flex: 1 }}>
         <KeyboardScroll

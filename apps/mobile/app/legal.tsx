@@ -37,10 +37,13 @@ function PhotoCredits() {
         Photo credits
       </Text>
       {CREDITS.map((c) => (
-        <View key={c.id} style={{ gap: 4 }}>
+        <View key={c.id} style={{ gap: 0 }}>
           <Text style={[type.callout, { color: p.ink }]}>{c.name}</Text>
+          {/* Each credit on its own 44 pt row, its links tall enough to tap (UI audit, 2026-10-30: they were 16 pt). */}
           {c.photos.map((i) => (
-            <PhotoCredit key={i.url} image={i} />
+            <View key={i.url} style={{ minHeight: 44, justifyContent: "center" }}>
+              <PhotoCredit image={i} roomy style={type.callout} />
+            </View>
           ))}
         </View>
       ))}
