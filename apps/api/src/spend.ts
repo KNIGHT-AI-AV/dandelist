@@ -36,8 +36,15 @@ const dayStart = (now: Date) => new Date(Date.UTC(now.getUTCFullYear(), now.getU
 let held = 0;
 const heldBy = new Map<string, { usd: number; calls: number }>();
 export const HOLD_USD = 0.1;
-/** Calls one person may have in flight at once, so nobody can inflate the shared hold and lock others out. */
-export const MAX_INFLIGHT_PER_USER = 4;
+/**
+ * Calls one person may have in flight at once, so nobody can inflate the shared hold and lock others out. One hunt
+ * reads the wish, asks its questions, researches and looks at photos side by side (two looks a photo, a few photos
+ * at a time), and several wishes from one message hunt at once, so it's 8; past that a call waits its turn.
+ */
+export const MAX_INFLIGHT_PER_USER = 8;
+/** How long a call waits for one of its person's slots before it gives up. */
+export const SLOT_WAIT_MS = 20_000;
+const waiting = new Map<string, (() => void)[]>();
 
 /** Holds `usd` against the caps (and against `userId`'s own) until the returned release is called (safe twice). */
 export function hold(usd = HOLD_USD, userId?: string): () => void {
@@ -57,16 +64,48 @@ export function hold(usd = HOLD_USD, userId?: string): () => void {
       if (!mine) return;
       if (mine.calls <= 1) heldBy.delete(userId);
       else heldBy.set(userId, { usd: Math.max(0, mine.usd - usd), calls: mine.calls - 1 });
+      waiting.get(userId)?.shift()?.();
     }
   };
+}
+
+/**
+ * Holds `usd` for `userId` as soon as one of their call slots is free, waiting up to SLOT_WAIT_MS for one, so a busy
+ * person's extra calls queue behind their own instead of failing (2026-10-29: two wishes hunted at once both ended in
+ * an error at four slots). The check and the hold happen in the same turn, so no other call can take the slot between.
+ */
+async function holdWhenFree(usd: number, userId: string): Promise<() => void> {
+  const by = Date.now() + SLOT_WAIT_MS;
+  for (;;) {
+    if ((heldBy.get(userId)?.calls ?? 0) < MAX_INFLIGHT_PER_USER) return hold(usd, userId);
+    const left = by - Date.now();
+    if (left <= 0) throw new SpendLimitError("user");
+    await new Promise<void>((resolve) => {
+      const queue = waiting.get(userId) ?? [];
+      const wake = () => {
+        clearTimeout(timer);
+        resolve();
+      };
+      const timer = setTimeout(() => {
+        const at = queue.indexOf(wake);
+        if (at >= 0) queue.splice(at, 1);
+        resolve();
+      }, left);
+      queue.push(wake);
+      waiting.set(userId, queue);
+    });
+  }
 }
 
 /** What `userId` has in flight right now. */
 export const heldFor = (userId: string) => heldBy.get(userId)?.usd ?? 0;
 
-/** Runs one Meta call under a hold: hold, check the caps with the hold counted, call, then release. */
-export async function withHold<T>(check: () => Promise<void>, run: () => Promise<T>, userId?: string): Promise<T> {
-  const release = hold(HOLD_USD, userId);
+/**
+ * Runs one Meta call under a hold: hold (once one of the person's slots is free), check the caps with the hold
+ * counted, call, then release. `usd` is the most the call can cost; HOLD_USD unless the call is known to be smaller.
+ */
+export async function withHold<T>(check: () => Promise<void>, run: () => Promise<T>, userId?: string, usd = HOLD_USD): Promise<T> {
+  const release = userId ? await holdWhenFree(usd, userId) : hold(usd);
   try {
     await check();
     return await run();

@@ -5,13 +5,13 @@ import { bodyLimit } from "hono/body-limit";
 import { z } from "zod";
 import { requireAuth, type AuthDeps, type AuthVars } from "../auth";
 import type { MediaStore } from "../media-store";
-import { SpendLimitError, TOOL_MODEL_PREFIX, assertBudget, assertUserBudget, callsToday, recordSpend, recordToolSpend, spentToday, userCapUsd, isJudge, withHold, type SpendCaps } from "../spend";
+import { HOLD_USD, SpendLimitError, TOOL_MODEL_PREFIX, assertBudget, assertUserBudget, callsToday, recordSpend, recordToolSpend, spentToday, userCapUsd, isJudge, withHold, type SpendCaps } from "../spend";
 import { answerSchema, clarify, draftSchema, interpret, type Draft, type Meta, type Step } from "./agent";
 import { HUNT_STOP_MS, huntWish, type HuntResult } from "./find";
 import { SAM_MODEL } from "./cutout";
 import type { MediaOptions } from "./hunt";
 import { SHOPPING_ACTOR, SHOPPING_MAX_RESULTS, SHOPPING_PRICE_PER_RESULT_USD, shoppingSearch } from "./shopping";
-import { findPhoto } from "./photos";
+import { PHOTO_CHECK, findPhoto } from "./photos";
 import { publicFetch, type Fetcher } from "./tools";
 import { pgArchive, type Archive } from "../archive/archive";
 import { MAX_CLIP_BYTES, TRANSCRIBES_PER_USER_PER_DAY, WISH_KEYWORDS, cleanTranscript, clipProblem, readWav } from "./transcribe";
@@ -117,6 +117,12 @@ export function agentRoutes(deps: AgentDeps) {
   const archive = deps.archive === undefined ? pgArchive(db) : deps.archive ?? undefined;
   app.use("*", requireAuth(deps));
 
+  /**
+   * The most one call can cost, held while it runs. A look at one photo is small and fixed (an image, a short line-up,
+   * low effort: about half a cent), so it holds a fifth of a full call's worst case and a hunt's looks fit beside it.
+   */
+  const holdFor = (body: Record<string, unknown>) => ((body.text as { format?: { name?: string } } | undefined)?.format?.name === PHOTO_CHECK ? HOLD_USD / 5 : HOLD_USD);
+
   /** A Meta client that checks the spend caps before each call and records what each call cost. */
   const metaFor = (userId: string, kind: string, onCost?: (usd: number) => Promise<void>, stop?: AbortSignal): Meta => {
     const cfg = deps.meta!;
@@ -133,7 +139,7 @@ export function agentRoutes(deps: AgentDeps) {
       await assertUserBudget(db, userId, await userCapUsd(db, userId, USER_DAILY_USD, deps.judge, caps), deps.now());
     };
     return {
-      responses: (body) => withHold(guard, () => client.responses(body), userId),
+      responses: (body) => withHold(guard, () => client.responses(body), userId, holdFor(body)),
       images: (op, body) => withHold(guard, () => client.images(op, body), userId),
     };
   };

@@ -1,7 +1,7 @@
 import { PGlite } from "@electric-sql/pglite";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { migrate, type Db } from "../src/db";
-import { HOLD_USD, MAX_INFLIGHT_PER_USER, SpendLimitError, assertBudget, heldForScope, withBudgetScope, withHold } from "../src/spend";
+import { HOLD_USD, MAX_INFLIGHT_PER_USER, SLOT_WAIT_MS, SpendLimitError, assertBudget, heldFor, heldForScope, withBudgetScope, withHold } from "../src/spend";
 
 describe("spend holds", () => {
   let db: Db;
@@ -33,15 +33,46 @@ describe("spend holds", () => {
     await expect(withHold(() => assertBudget(db, caps, now), async () => "ok")).rejects.toBeInstanceOf(SpendLimitError);
   });
 
-  it("caps one person's calls in flight, so nobody can lock the budget for everyone", async () => {
+  it("caps one person's calls in flight, so nobody can lock the budget for everyone; past the cap a call waits its turn", async () => {
     let open!: () => void;
     const gate = new Promise<void>((r) => (open = r));
     const mine = Array.from({ length: MAX_INFLIGHT_PER_USER }, () => withHold(async () => {}, () => gate, "user-a"));
-    await expect(withHold(async () => {}, async () => "ok", "user-a")).rejects.toBeInstanceOf(SpendLimitError);
+    // One more of this person's calls waits for a slot instead of failing; someone else's runs at once.
+    let ran = false;
+    const queued = withHold(async () => {}, async () => ((ran = true), "ok"), "user-a");
     await expect(withHold(async () => {}, async () => "ok", "user-b")).resolves.toBe("ok");
+    await new Promise((r) => setTimeout(r, 20));
+    expect(ran).toBe(false);
     open();
     await Promise.all(mine);
-    await expect(withHold(async () => {}, async () => "ok", "user-a")).resolves.toBe("ok");
+    await expect(queued).resolves.toBe("ok");
+  });
+
+  it("gives up on a call that waits past SLOT_WAIT_MS for one of its person's slots", async () => {
+    vi.useFakeTimers();
+    try {
+      let open!: () => void;
+      const gate = new Promise<void>((r) => (open = r));
+      const mine = Array.from({ length: MAX_INFLIGHT_PER_USER }, () => withHold(async () => {}, () => gate, "user-c"));
+      const late = expect(withHold(async () => {}, async () => "ok", "user-c")).rejects.toBeInstanceOf(SpendLimitError);
+      await vi.advanceTimersByTimeAsync(SLOT_WAIT_MS + 1);
+      await late;
+      open();
+      await Promise.all(mine);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("holds what a call can cost: a photo look holds a fifth of a full call", async () => {
+    let open!: () => void;
+    const gate = new Promise<void>((r) => (open = r));
+    const call = withHold(async () => {}, () => gate, "user-d", HOLD_USD / 5);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(heldFor("user-d")).toBeCloseTo(HOLD_USD / 5);
+    open();
+    await call;
+    expect(heldFor("user-d")).toBe(0);
   });
 
   it("counts concurrent feature calls together while keeping guest and preview allowances separate", async () => {
