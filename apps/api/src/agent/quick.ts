@@ -6,7 +6,7 @@ import { HORIZON_YEARS, cleanUrl, hostOf, type Draft, type Meta, type PriceOptio
 import { clip, withLine } from "./lines";
 import { commonsImage, commonsPhotos, probeImage, type MediaImage, type MediaKind } from "./media";
 import { within } from "./time";
-import { partyOf, personPrice } from "./person-price";
+import { partyOf, perPersonApplies, personPrice } from "./person-price";
 import { fxRate, htmlToText, pageShowsPrice, priceMentions, readCapped, safeGet, structuredPrices, type Fetcher, type MarkupPrice } from "./tools";
 
 /**
@@ -600,14 +600,16 @@ export async function quickFind(meta: Meta, input: QuickInput, ctx: QuickContext
   let people: number | null = null;
   const party = chosen ? null : partyOf(draft, [input.words, ...(input.details ?? [])].join("; "));
   if (party) {
+    // Only a one-time quote for each of them (never monthly or a child's rate; an adult's rate only for adults).
+    const applies = (text: string, c: Candidate) => personPrice(text, c.amount, c.currency) && perPersonApplies([text], c.amount, c.currency, party.adultsOnly);
     for (const { c, page } of pages) {
       if (!(c.amount > 0) || !/^[A-Z]{3}$/.test(c.currency)) continue;
       const text = said.get(pageKey(c.url)) ?? c.resultTitle ?? "";
-      const onPage = page.ok && namesWish(page, words, loose) && personPrice(page.text, c.amount, c.currency);
-      const inResult = !page.ok && refused(page) && !!c.resultTitle && titleNames(c.resultTitle, words, loose) && personPrice(text, c.amount, c.currency);
+      const onPage = page.ok && namesWish(page, words, loose) && applies(page.text, c);
+      const inResult = !page.ok && refused(page) && !!c.resultTitle && titleNames(c.resultTitle, words, loose) && applies(text, c);
       if (!onPage && !inResult) continue;
       chosen = { c, ...(onPage ? { page } : {}), price: { amount: c.amount, currency: c.currency, how: onPage ? "page" : "result" } };
-      people = party;
+      people = party.count;
       break;
     }
   }

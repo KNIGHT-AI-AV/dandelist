@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { research, type Draft, type Meta, type PriceOption, type Step } from "../src/agent/agent";
-import { headcount, partyOf, personPrice } from "../src/agent/person-price";
+import { headcount, partyOf, perPersonApplies, personPrice } from "../src/agent/person-price";
 import { quickFind } from "../src/agent/quick";
 
 const isolation = vi.hoisted(() => ({
@@ -96,6 +96,8 @@ type ResearchFixture = {
   head?: string;
   /** 0: nothing says how many people. */
   guests?: 0 | 1 | 8;
+  /** Who's going, in words, in place of the eight adults ("2 adults, 2 children"). */
+  party?: string;
   evidence?: string;
   parts?: Record<string, unknown>[];
   recurring?: { label: string; amount: number; period: "week" | "month" | "year" }[];
@@ -105,9 +107,11 @@ async function researchDinner(fixture: ResearchFixture) {
   const modelCalls: Record<string, unknown>[] = [];
   const steps: Step[] = [];
   const guests = fixture.guests ?? 8;
-  const guestText = guests === 1 ? "1 adult" : "8 adults";
-  const label = guests === 1 ? "Private tasting dinner for one adult" : guests === 0 ? draft.title : LABEL;
-  const requested: Draft = guests === 8 ? draft : guests === 0 ? { ...draft, summary: "A private tasting dinner.", specifics: [] } : {
+  const guestText = fixture.party ?? (guests === 1 ? "1 adult" : "8 adults");
+  const label = fixture.party ? draft.title : guests === 1 ? "Private tasting dinner for one adult" : guests === 0 ? draft.title : LABEL;
+  const requested: Draft = fixture.party
+    ? { ...draft, summary: `A private tasting dinner for ${fixture.party}.`, specifics: [{ name: "guests", value: fixture.party }] }
+    : guests === 8 ? draft : guests === 0 ? { ...draft, summary: "A private tasting dinner.", specifics: [] } : {
     ...draft, summary: "A private tasting dinner for one adult.", specifics: [{ name: "guests", value: guestText }],
   };
   const meta: Meta = {
@@ -166,8 +170,13 @@ async function researchDinner(fixture: ResearchFixture) {
   return { result, steps };
 }
 
-async function quickDinner(fixture: { quote: string; price: number; head?: string; status?: number; snippet?: string; modelPicksPage?: boolean; shown?: string; party?: false }) {
-  const asked: Draft = fixture.party === false ? { ...draft, summary: "A private tasting dinner.", specifics: [] } : draft;
+async function quickDinner(fixture: { quote: string; price: number; head?: string; status?: number; snippet?: string; modelPicksPage?: boolean; shown?: string; party?: false | string }) {
+  // false: nothing says how many people; a string: who's going, in place of the eight adults.
+  const guests = typeof fixture.party === "string" ? fixture.party : "8 adults";
+  const asked: Draft =
+    fixture.party === false ? { ...draft, summary: "A private tasting dinner.", specifics: [] }
+    : typeof fixture.party === "string" ? { ...draft, summary: `A private tasting dinner for ${guests}.`, specifics: [{ name: "guests", value: guests }] }
+    : draft;
   const calls: Record<string, unknown>[] = [];
   const steps: Step[] = [];
   const meta: Meta = {
@@ -189,7 +198,7 @@ async function quickDinner(fixture: { quote: string; price: number; head?: strin
   };
   const { fetched, fetcher } = pageFetcher(pageHtml(fixture.quote, fixture.head), fixture.status);
   const result = await quickFind(meta, {
-    words: asked.summary, draft: asked, details: fixture.party === false ? [] : ["Guests: 8 adults"], homeCurrency: "USD",
+    words: asked.summary, draft: asked, details: fixture.party === false ? [] : [`Guests: ${guests}`], homeCurrency: "USD",
   }, {
     fetcher,
     api: fetcher,
@@ -198,7 +207,7 @@ async function quickDinner(fixture: { quote: string; price: number; head?: strin
     onStep: (step) => { steps.push(step); },
   });
   expect(calls).toHaveLength(1);
-  if (fixture.party !== false) expect(calls[0]!.input).toContain("Guests: 8 adults");
+  if (fixture.party !== false) expect(calls[0]!.input).toContain(`Guests: ${guests}`);
   expect(fetched).toEqual([PAGE]);
   expect(isolation.dns.length).toBeGreaterThan(0);
   expect(new Set(isolation.dns)).toEqual(new Set(["atlastable.example"]));
@@ -206,6 +215,15 @@ async function quickDinner(fixture: { quote: string; price: number; head?: strin
   if (result === null) expect(steps.filter((step) => step.type === "price")).toEqual([]);
   return result;
 }
+
+/**
+ * Codex's two repros of #79 (2026-10-30): a mixed party with an adult and a child rate became four adult rates (USD 600
+ * for a USD 450 dinner), and a per-person monthly charge became a one-time USD 300. Both must be held.
+ */
+const CODEX_REPRO = [
+  { name: "adult and child rates for 2 adults and 2 children", party: "2 adults, 2 children", quote: "Private tasting dinner costs USD 150 per adult and USD 75 per child, with no other charges." },
+  { name: "a per-person monthly charge for 2 adults", party: "2 adults", quote: "Private tasting dinner club membership costs USD 150 per person per month, with no upfront charge." },
+];
 
 /** One option: eight guests at USD 150 each, as one per-person part; never one person's 150 as the whole price. */
 function expectEightGuests(options: (PriceOption | null)[]) {
@@ -299,13 +317,37 @@ describe("how many people a wish is for", () => {
 
   it("takes the people question's answer first, then a named detail, then the wish's words", () => {
     const base = { specifics: [], summary: "" };
-    expect(partyOf({ ...base, questions: [{ id: "travellers", label: "Who's going?", picked: "2 adults" }] })).toBe(2);
-    expect(partyOf({ ...base, questions: [{ id: "format", label: "Which class?", picked: "Pasta for 6" }] }, "for two")).toBe(2);
-    expect(partyOf({ ...base, specifics: [{ name: "guests", value: "8 adults" }] })).toBe(8);
-    expect(partyOf({ ...base, specifics: [{ name: "people", value: "3" }] })).toBe(3);
-    expect(partyOf({ ...base, specifics: [{ name: "model", value: "2 door" }] }, "A balloon ride over Cappadocia for two")).toBe(2);
+    expect(partyOf({ ...base, questions: [{ id: "travellers", label: "Who's going?", picked: "2 adults" }] })).toEqual({ count: 2, adultsOnly: true });
+    expect(partyOf({ ...base, questions: [{ id: "format", label: "Which class?", picked: "Pasta for 6" }] }, "for two")).toEqual({ count: 2, adultsOnly: false });
+    expect(partyOf({ ...base, specifics: [{ name: "guests", value: "8 adults" }] })).toEqual({ count: 8, adultsOnly: true });
+    expect(partyOf({ ...base, specifics: [{ name: "people", value: "3" }] })).toEqual({ count: 3, adultsOnly: false });
+    expect(partyOf({ ...base, specifics: [{ name: "model", value: "2 door" }] }, "A balloon ride over Cappadocia for two")).toEqual({ count: 2, adultsOnly: false });
+    expect(partyOf({ ...base }, "a weekend away for a couple")).toEqual({ count: 2, adultsOnly: true });
     expect(partyOf({ ...base, summary: "A private tasting dinner." })).toBeNull();
     expect(partyOf(null, "a pasta class")).toBeNull();
+  });
+
+  it.each(["2 adults, 2 children", "2 adults and 1 child", "4 kids", "family of four", "2 seniors"])(
+    "holds a party that counts people who may have their own rate: %s",
+    (guests) => {
+      expect(partyOf({ specifics: [{ name: "guests", value: guests }], summary: "" })).toBeNull();
+    },
+  );
+});
+
+describe("a per-person quote is multiplied only when it applies to each person, once (Codex's review of #79)", () => {
+  it.each([
+    { name: "a person rate for anyone", text: "Dinner costs USD 150 per person.", adultsOnly: false, applies: true },
+    { name: "an adult rate for a party of adults", text: "Dinner costs USD 150 per adult.", adultsOnly: true, applies: true },
+    { name: "an adult rate for a party that may hold children", text: "Dinner costs USD 150 per adult.", adultsOnly: false, applies: false },
+    { name: "a person rate beside a child rate, for a party that may hold children", text: "USD 150 per person; children USD 75 per child.", adultsOnly: false, applies: false },
+    { name: "a person rate beside a child rate, for adults", text: "USD 150 per person; children USD 75 per child.", adultsOnly: true, applies: true },
+    { name: "a child's rate", text: "Kids club costs USD 150 per child.", adultsOnly: true, applies: false },
+    { name: "a monthly person rate", text: "Membership costs USD 150 per person per month.", adultsOnly: true, applies: false },
+    { name: "a nightly person rate", text: "Rooms from USD 150 per person per night.", adultsOnly: true, applies: false },
+    { name: "a person rate with the period first", text: "Per person: USD 150/month.", adultsOnly: true, applies: false },
+  ])("$name", ({ text, adultsOnly, applies }) => {
+    expect(perPersonApplies([text], 150, "USD", adultsOnly)).toBe(applies);
   });
 });
 
@@ -380,6 +422,12 @@ describe("party prices through actual research", () => {
       totals: { monthlyCents: 0, horizonCents: 120_000 },
       parts: [{ kind: "other", unit: "person", unitCents: 15_000, quantity: 8, totalCents: 120_000, status: "verified" }],
     });
+  });
+
+  it.each(CODEX_REPRO)("holds $name (Codex's repro of #79)", async ({ party, quote }) => {
+    const { result, steps } = await researchDinner({ quote, price: 150, party });
+    expect(result.options).toEqual([]);
+    expect(steps.filter((step) => step.type === "price")).toEqual([]);
   });
 
   it("preserves an explicit one-person part for a one-adult request", async () => {
@@ -471,6 +519,10 @@ describe("person-unit evidence through actual quickFind", () => {
   it("preserves the valid whole package beside a different unit quote, including bad primary markup", async () => {
     const result = await quickDinner({ quote: `${PARTY_QUOTE} ${UNIT_QUOTE}`, price: 1200, head: offerMarkup(150) });
     expect(result).toMatchObject({ upfrontCents: 120_000, source: { currency: "USD", price: 1200, rate: 1 } });
+  });
+
+  it.each(CODEX_REPRO)("holds $name (Codex's repro of #79)", async ({ party, quote }) => {
+    expect(await quickDinner({ quote, price: 150, party, snippet: quote })).toBeNull();
   });
 
   it("keeps an ordinary UnitPriceSpecification whole price", async () => {
