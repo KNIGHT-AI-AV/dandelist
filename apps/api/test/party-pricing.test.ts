@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { research, type Draft, type Meta, type Step } from "../src/agent/agent";
-import { personPrice } from "../src/agent/person-price";
+import { research, type Draft, type Meta, type PriceOption, type Step } from "../src/agent/agent";
+import { headcount, partyOf, personPrice } from "../src/agent/person-price";
 import { quickFind } from "../src/agent/quick";
 
 const isolation = vi.hoisted(() => ({
@@ -94,7 +94,8 @@ type ResearchFixture = {
   quote: string;
   price: number;
   head?: string;
-  guests?: 1 | 8;
+  /** 0: nothing says how many people. */
+  guests?: 0 | 1 | 8;
   evidence?: string;
   parts?: Record<string, unknown>[];
   recurring?: { label: string; amount: number; period: "week" | "month" | "year" }[];
@@ -105,8 +106,8 @@ async function researchDinner(fixture: ResearchFixture) {
   const steps: Step[] = [];
   const guests = fixture.guests ?? 8;
   const guestText = guests === 1 ? "1 adult" : "8 adults";
-  const label = guests === 1 ? "Private tasting dinner for one adult" : LABEL;
-  const requested: Draft = guests === 8 ? draft : {
+  const label = guests === 1 ? "Private tasting dinner for one adult" : guests === 0 ? draft.title : LABEL;
+  const requested: Draft = guests === 8 ? draft : guests === 0 ? { ...draft, summary: "A private tasting dinner.", specifics: [] } : {
     ...draft, summary: "A private tasting dinner for one adult.", specifics: [{ name: "guests", value: guestText }],
   };
   const meta: Meta = {
@@ -139,7 +140,7 @@ async function researchDinner(fixture: ResearchFixture) {
   const { fetched, fetcher } = pageFetcher(pageHtml(fixture.quote, fixture.head));
   const result = await research(meta, {
     draft: requested,
-    answers: [{ question: "Guests", answer: guestText }],
+    answers: guests ? [{ question: "Guests", answer: guestText }] : [],
     homeCurrency: "USD",
     now: () => new Date("2026-10-29T08:00:00Z"),
     fetcher,
@@ -147,8 +148,10 @@ async function researchDinner(fixture: ResearchFixture) {
   });
 
   expect(modelCalls).toHaveLength(result.options.length ? 4 : 3);
-  expect(modelCalls[0]!.input).toContain(`The person answered: Guests ${guestText}`);
-  expect(modelCalls[0]!.input).toContain(`guests: ${guestText}`);
+  if (guests) {
+    expect(modelCalls[0]!.input).toContain(`The person answered: Guests ${guestText}`);
+    expect(modelCalls[0]!.input).toContain(`guests: ${guestText}`);
+  }
   const toolTurn = modelCalls.find((body) => Array.isArray(body.input) && (body.input as ToolOutput[]).some((entry) => entry.call_id === "dinner-page"));
   const pageOutput = (toolTurn!.input as ToolOutput[]).find((entry) => entry.call_id === "dinner-page")!;
   const observedPage = JSON.parse(pageOutput.output!) as { title: string; text: string };
@@ -163,7 +166,8 @@ async function researchDinner(fixture: ResearchFixture) {
   return { result, steps };
 }
 
-async function quickDinner(fixture: { quote: string; price: number; head?: string; status?: number; snippet?: string; modelPicksPage?: boolean; shown?: string }) {
+async function quickDinner(fixture: { quote: string; price: number; head?: string; status?: number; snippet?: string; modelPicksPage?: boolean; shown?: string; party?: false }) {
+  const asked: Draft = fixture.party === false ? { ...draft, summary: "A private tasting dinner.", specifics: [] } : draft;
   const calls: Record<string, unknown>[] = [];
   const steps: Step[] = [];
   const meta: Meta = {
@@ -185,7 +189,7 @@ async function quickDinner(fixture: { quote: string; price: number; head?: strin
   };
   const { fetched, fetcher } = pageFetcher(pageHtml(fixture.quote, fixture.head), fixture.status);
   const result = await quickFind(meta, {
-    words: draft.summary, draft, details: ["Guests: 8 adults"], homeCurrency: "USD",
+    words: asked.summary, draft: asked, details: fixture.party === false ? [] : ["Guests: 8 adults"], homeCurrency: "USD",
   }, {
     fetcher,
     api: fetcher,
@@ -194,13 +198,26 @@ async function quickDinner(fixture: { quote: string; price: number; head?: strin
     onStep: (step) => { steps.push(step); },
   });
   expect(calls).toHaveLength(1);
-  expect(calls[0]!.input).toContain("Guests: 8 adults");
+  if (fixture.party !== false) expect(calls[0]!.input).toContain("Guests: 8 adults");
   expect(fetched).toEqual([PAGE]);
   expect(isolation.dns.length).toBeGreaterThan(0);
   expect(new Set(isolation.dns)).toEqual(new Set(["atlastable.example"]));
   expect(steps).toContainEqual(expect.objectContaining({ type: "open", url: PAGE, ok: !fixture.status || fixture.status === 200 }));
   if (result === null) expect(steps.filter((step) => step.type === "price")).toEqual([]);
   return result;
+}
+
+/** One option: eight guests at USD 150 each, as one per-person part; never one person's 150 as the whole price. */
+function expectEightGuests(options: (PriceOption | null)[]) {
+  expect(options).toHaveLength(1);
+  const option = options[0]!;
+  expect(option).toMatchObject({
+    upfrontCents: 120_000,
+    source: { currency: "USD", price: 1200, rate: 1 },
+    totals: { monthlyCents: 0, horizonCents: 120_000 },
+    parts: [{ kind: "other", unit: "person", unitCents: 15_000, quantity: 8, totalCents: 120_000 }],
+  });
+  expect(option.statusLabel).toMatch(/, 8 people at the per-person price$/);
 }
 
 beforeEach(() => {
@@ -260,6 +277,38 @@ describe("person-unit evidence belongs to its adjacent amount", () => {
   });
 });
 
+describe("how many people a wish is for", () => {
+  it.each([
+    ["2 adults", 2],
+    ["2 adults, 2 children", 4],
+    ["Who's going: two adults and one child", 3],
+    ["a couple", 2],
+    ["for two", 2],
+    ["dinner for 4", 4],
+    ["family of five", 5],
+    ["Just me", 1],
+    ["Solo", 1],
+    ["8 guests", 8],
+  ])("reads %s as %i", (text, n) => {
+    expect(headcount(text)).toBe(n);
+  });
+
+  it.each(["for 4 nights", "a 2 hour class", "the Leica Q3", "3 courses"])("finds no party in %s", (text) => {
+    expect(headcount(text)).toBeNull();
+  });
+
+  it("takes the people question's answer first, then a named detail, then the wish's words", () => {
+    const base = { specifics: [], summary: "" };
+    expect(partyOf({ ...base, questions: [{ id: "travellers", label: "Who's going?", picked: "2 adults" }] })).toBe(2);
+    expect(partyOf({ ...base, questions: [{ id: "format", label: "Which class?", picked: "Pasta for 6" }] }, "for two")).toBe(2);
+    expect(partyOf({ ...base, specifics: [{ name: "guests", value: "8 adults" }] })).toBe(8);
+    expect(partyOf({ ...base, specifics: [{ name: "people", value: "3" }] })).toBe(3);
+    expect(partyOf({ ...base, specifics: [{ name: "model", value: "2 door" }] }, "A balloon ride over Cappadocia for two")).toBe(2);
+    expect(partyOf({ ...base, summary: "A private tasting dinner." })).toBeNull();
+    expect(partyOf(null, "a pasta class")).toBeNull();
+  });
+});
+
 describe("party prices through actual research", () => {
   // Keep scalar calls separate from the parts control: the existing research pipeline filters scalar
   // siblings when any option has parts. The original diagnostic A/B/C receipt is preserved outside the repo.
@@ -267,17 +316,24 @@ describe("party prices through actual research", () => {
     { name: "A: a bare unit quote", head: "" },
     { name: "a generic Offer beside the unit quote", head: offerMarkup(150) },
     { name: "a product meta price beside the unit quote", head: metaMarkup(150) },
-  ])("excludes $name from the whole-request amount", async ({ head }) => {
+  ])("prices $name for the eight guests, never as the whole amount", async ({ head }) => {
     const { result, steps } = await researchDinner({ quote: UNIT_QUOTE, price: 150, head });
-    expect(result.options).toEqual([]);
-    expect(steps.filter((step) => step.type === "price")).toEqual([]);
-    expect(steps.filter((step) => step.type === "check" && step.verified)).toEqual([]);
+    expectEightGuests(result.options);
+    expect(steps.filter((step) => step.type === "price")).toEqual([expect.objectContaining({ upfrontCents: 120_000 })]);
   });
 
-  it("rejects the page's unit figure when the model omits its qualification from evidence", async () => {
-    const { result, steps } = await researchDinner({
+  it("prices the page's unit figure for the eight guests when the model omits its qualification from evidence", async () => {
+    const { result } = await researchDinner({
       quote: UNIT_QUOTE, price: 150, evidence: "A private tasting dinner quote from Atlas Table.",
     });
+    expectEightGuests(result.options);
+  });
+
+  it.each([
+    { name: "a bare unit quote", evidence: undefined },
+    { name: "a unit figure the model wrote without its qualification", evidence: "A private tasting dinner quote from Atlas Table." },
+  ])("holds $name when nothing says how many people", async ({ evidence }) => {
+    const { result, steps } = await researchDinner({ quote: UNIT_QUOTE, price: 150, guests: 0, evidence });
     expect(result.options).toEqual([]);
     expect(steps.filter((step) => step.type === "price")).toEqual([]);
     expect(steps.filter((step) => step.type === "check" && step.verified)).toEqual([]);
@@ -360,20 +416,33 @@ describe("party prices through actual research", () => {
 
 describe("person-unit evidence through actual quickFind", () => {
   it.each([
-    { name: "a bare scalar", price: 150, head: "" },
-    { name: "a generic Offer", price: 150, head: offerMarkup(150) },
-    { name: "a product meta price", price: 150, head: metaMarkup(150) },
-    { name: "markup selected when the model gives zero", price: 0, head: offerMarkup(150) },
-  ])("does not publish $name as the party total", async ({ price, head }) => {
-    expect(await quickDinner({ quote: UNIT_QUOTE, price, head })).toBeNull();
+    { name: "a bare scalar", head: "" },
+    { name: "a generic Offer", head: offerMarkup(150) },
+    { name: "a product meta price", head: metaMarkup(150) },
+  ])("prices $name for the eight guests, never as the party total", async ({ head }) => {
+    expectEightGuests([await quickDinner({ quote: UNIT_QUOTE, price: 150, head })]);
   });
 
-  it("does not let an unqualified search figure erase the readable page's per-adult qualification", async () => {
-    expect(await quickDinner({ quote: UNIT_QUOTE, price: 150, snippet: "Private tasting dinner USD 150." })).toBeNull();
+  it.each([
+    { name: "a bare scalar", head: "" },
+    { name: "a generic Offer", head: offerMarkup(150) },
+  ])("holds $name when nothing says how many people", async ({ head }) => {
+    expect(await quickDinner({ quote: UNIT_QUOTE, price: 150, head, party: false })).toBeNull();
   });
 
-  it("does not resurrect a snippet's unit figure through the one-site answer fallback", async () => {
-    expect(await quickDinner({ quote: "Access denied", price: 150, status: 403, snippet: UNIT_QUOTE })).toBeNull();
+  it("does not publish markup the page states per person when the model gives zero", async () => {
+    expect(await quickDinner({ quote: UNIT_QUOTE, price: 0, head: offerMarkup(150) })).toBeNull();
+  });
+
+  it("keeps the readable page's per-adult qualification over an unqualified search figure", async () => {
+    expectEightGuests([await quickDinner({ quote: UNIT_QUOTE, price: 150, snippet: "Private tasting dinner USD 150." })]);
+  });
+
+  it("prices a refused page's per-adult search result for the eight guests, as an estimate", async () => {
+    const option = await quickDinner({ quote: "Access denied", price: 150, status: 403, snippet: UNIT_QUOTE });
+    expectEightGuests([option]);
+    expect(option).toMatchObject({ status: "estimate", statusLabel: "Estimate: from search results for atlastable.example, 8 people at the per-person price" });
+    expect(await quickDinner({ quote: "Access denied", price: 150, status: 403, snippet: UNIT_QUOTE, party: false })).toBeNull();
   });
 
   it.each([

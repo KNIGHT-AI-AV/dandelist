@@ -2,11 +2,11 @@ import { equivalentMonthly } from "@dandelist/cost";
 import { toMediaImage as archiveImage, words as subjectWords, type Archive } from "../archive/archive";
 import { SEARCH_INCLUDE, searchResults } from "../dream/context";
 import { NOT_A_SOURCE, listingData } from "../dream/pages";
-import { HORIZON_YEARS, cleanUrl, hostOf, type Draft, type Meta, type PriceOption, type Step } from "./agent";
+import { HORIZON_YEARS, cleanUrl, hostOf, type Draft, type Meta, type PriceOption, type PricePart, type Step } from "./agent";
 import { clip, withLine } from "./lines";
 import { commonsImage, commonsPhotos, probeImage, type MediaImage, type MediaKind } from "./media";
 import { within } from "./time";
-import { personPrice } from "./person-price";
+import { partyOf, personPrice } from "./person-price";
 import { fxRate, htmlToText, pageShowsPrice, priceMentions, readCapped, safeGet, structuredPrices, type Fetcher, type MarkupPrice } from "./tools";
 
 /**
@@ -594,6 +594,23 @@ export async function quickFind(meta: Meta, input: QuickInput, ctx: QuickContext
       break;
     }
   }
+  // A per-person quote is never the whole price, but when the wish says how many people are going it is one
+  // person's part of it (owner, 2026-10-30): the page states the figure per person, or, when the page refused us,
+  // the search's own result for it does.
+  let people: number | null = null;
+  const party = chosen ? null : partyOf(draft, [input.words, ...(input.details ?? [])].join("; "));
+  if (party) {
+    for (const { c, page } of pages) {
+      if (!(c.amount > 0) || !/^[A-Z]{3}$/.test(c.currency)) continue;
+      const text = said.get(pageKey(c.url)) ?? c.resultTitle ?? "";
+      const onPage = page.ok && namesWish(page, words, loose) && personPrice(page.text, c.amount, c.currency);
+      const inResult = !page.ok && refused(page) && !!c.resultTitle && titleNames(c.resultTitle, words, loose) && personPrice(text, c.amount, c.currency);
+      if (!onPage && !inResult) continue;
+      chosen = { c, ...(onPage ? { page } : {}), price: { amount: c.amount, currency: c.currency, how: onPage ? "page" : "result" } };
+      people = party;
+      break;
+    }
+  }
   if (!chosen) return null;
 
   // The photo: the archive's curated one (or, for a trip, the place itself), else the page's own picture of the
@@ -615,23 +632,32 @@ export async function quickFind(meta: Meta, input: QuickInput, ctx: QuickContext
   const url = cleanUrl(chosen.page?.url ?? chosen.c.url);
   const host = hostOf(url);
   const checked = chosen.price.how !== "result" && !!chosen.page?.product;
-  const upfrontCents = Math.round(chosen.price.amount * fx.rate * 100);
+  const unitCents = Math.round(chosen.price.amount * fx.rate * 100);
+  const upfrontCents = unitCents * (people ?? 1);
   // The card's name is the page's own name for it, when that name says what was wished for; a business or area name
   // ("Cherry Hills Village" on a chef's page) gives way to the page's title, then to the wish's own title.
   const says = (s: string | undefined) => !!s && (!words.length || words.some((w) => squash(s).includes(squash(w))));
   // A figure the search found on its own is named for the wish: a result's title is often a site's headline.
   const titled = chosen.price.how === "answer" ? undefined : [chosen.page?.name, chosen.page ? bareName(chosen.page.title) : undefined, chosen.c.resultTitle ? bareName(chosen.c.resultTitle) : undefined].find(says);
   const label = (titled || draft?.title || input.words).slice(0, 120);
+  const where = checked ? `Checked on ${host}` : chosen.price.how === "result" || chosen.price.how === "answer" ? `Estimate: from search results for ${host}` : `Estimate: seen on ${host}`;
+  const evidence = chosen.price.how === "data" ? "The price in the page's product data" : chosen.price.how === "page" ? "The price shown on the page" : "The price in the search result";
+  const source = { currency, price: chosen.price.amount, rate: fx.rate, rateDate: fx.date };
+  const part: PricePart | null = people
+    ? { label, kind: "other", seller: chosen.page?.siteName || host, url, unitCents, quantity: people, unit: "person", totalCents: upfrontCents, source, status: checked ? "verified" : "estimate", statusLabel: where, evidence }
+    : null;
   const option: PriceOption = {
     label,
     seller: chosen.page?.siteName || host,
     url,
     upfrontCents,
     recurring: [],
-    source: { currency, price: chosen.price.amount, rate: fx.rate, rateDate: fx.date },
+    // A party's price is in the budget currency, as a trip's parts are; one thing keeps the page's own figure.
+    source: part ? { currency: home, price: upfrontCents / 100, rate: 1, rateDate: fx.date } : source,
     status: checked ? "verified" : "estimate",
-    statusLabel: checked ? `Checked on ${host}` : chosen.price.how === "result" || chosen.price.how === "answer" ? `Estimate: from search results for ${host}` : `Estimate: seen on ${host}`,
-    evidence: chosen.price.how === "data" ? "The price in the page's product data" : chosen.price.how === "page" ? "The price shown on the page" : "The price in the search result",
+    statusLabel: part ? `${where}, ${people === 1 ? "one person" : `${people} people`} at the per-person price` : where,
+    evidence,
+    ...(part ? { parts: [part] } : {}),
     confidence: checked ? "high" : chosen.price.how === "answer" ? "low" : "medium",
     ...(photo ? { imageUrl: photo.url, media: { kind: kinds[0]!, images: [photo] } } : {}),
     checkedAt: at(),

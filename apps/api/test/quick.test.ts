@@ -550,7 +550,11 @@ describe("price units and evidence (Codex R14)", () => {
 
   it("never makes a monthly, per-person or deposit figure the whole price", async () => {
     expect(await find(["https://seller.example/db11 | $450/mo | USD"], [{ url: "https://seller.example/db11", title: "Aston Martin DB11 lease, USD 450/mo" }])).toBeNull();
-    expect(await find(["https://trips.example/lisbon-week-for-two | From $1,299 pp | USD"], [{ url: "https://trips.example/lisbon-week-for-two", title: "Lisbon trip from USD 1,299 per person" }], trip)).toBeNull();
+    // A per-person figure is never the whole price: for the two travellers the wish names it is twice that, an
+    // estimate, and with no party named it is held.
+    const perPerson = (draft: Draft) => find(["https://trips.example/lisbon-week-for-two | From $1,299 pp | USD"], [{ url: "https://trips.example/lisbon-week-for-two", title: "Lisbon trip from USD 1,299 per person" }], draft);
+    expect(await perPerson(trip)).toMatchObject({ upfrontCents: 259_800, status: "estimate", parts: [{ unit: "person", quantity: 2, unitCents: 129_900 }] });
+    expect(await perPerson({ ...trip, title: "A week in Lisbon", summary: "Seven nights in Lisbon." })).toBeNull();
     expect(await find(["https://seller.example/db11 | $500 deposit | USD"], [{ url: "https://seller.example/db11", title: "Aston Martin DB11 reserve with USD 500 deposit" }])).toBeNull();
     // The model left the unit out, but the page says it: a lease page's monthly figure is not the car's price.
     expect(await find([`${LEASE} | $450 | USD`], [{ url: LEASE, title: "Aston Martin DB11 lease" }])).toBeNull();
