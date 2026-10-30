@@ -108,63 +108,90 @@ export function MadeStep({
   const photo = option?.imageUrl ?? wish.photo?.imageUrl;
   // The amount slider needs the room under the photo, so a money card's photo is wide (4:3) and gives way on a short
   // screen, where the step's other parts take about 520 pt; every other card keeps its tall 4:5.
-  const photoH = worth === "money" ? Math.max(120, Math.min(Math.round((cardW * 3) / 4), height - 520)) : Math.round((cardW * 5) / 4);
+  const full = worth === "money" ? Math.max(120, Math.min(Math.round((cardW * 3) / 4), height - 520)) : Math.round((cardW * 5) / 4);
+  // On a window too short for the whole step, the photo gives way by exactly what the step runs past it (live,
+  // 2026-10-30: under about 844 pt, a laptop's browser among them, the title met the top bar and "Keep going" sat below
+  // the bottom edge). Measured, so a long title, the best guesses or "Still hunting" count too.
+  const room = useRef(0);
+  const stepH = useRef(0);
+  const [trim, setTrim] = useState(0);
+  const least = worth === "money" ? 120 : 160;
+  const photoH = Math.max(least, full - trim);
+  const fit = () => {
+    if (!room.current || !stepH.current) return;
+    const over = Math.round(stepH.current - room.current);
+    if (Math.abs(over) > 1) setTrim((t) => Math.max(0, Math.min(full - least, t + over)));
+  };
   // An older server added the list sentence itself; it is said once, here.
   const why = (wish.failed ?? "Couldn't price that just now.").replace(/\s*It stays on your list\.?\s*$/i, "");
   return (
-    <View style={{ flex: 1, justifyContent: "center", paddingHorizontal: gutter, gap: layout.stack.section }}>
-      <View style={{ gap: layout.stack.tight, alignItems: "center" }}>
-        <Eyebrow>{landed ? "Your first card" : failed ? "Your first wish" : "Making your card"}</Eyebrow>
-        <Text accessibilityRole="header" style={[t.title1, { color: p.ink, textAlign: "center" }]} numberOfLines={3}>
-          {title}
-        </Text>
-        {wish.guess && !failed && onGuessConfirm && onGuessPick ? <GuessRow center others={wish.guess} onConfirm={onGuessConfirm} onPick={onGuessPick} onElse={onGuessElse} /> : null}
-      </View>
+    <View
+      onLayout={(e) => {
+        room.current = e.nativeEvent.layout.height;
+        fit();
+      }}
+      style={{ flex: 1, justifyContent: "center", paddingHorizontal: gutter }}
+    >
+      <View
+        onLayout={(e) => {
+          stepH.current = e.nativeEvent.layout.height;
+          fit();
+        }}
+        style={{ gap: layout.stack.section }}
+      >
+        <View style={{ gap: layout.stack.tight, alignItems: "center" }}>
+          <Eyebrow>{landed ? "Your first card" : failed ? "Your first wish" : "Making your card"}</Eyebrow>
+          <Text accessibilityRole="header" style={[t.title1, { color: p.ink, textAlign: "center" }]} numberOfLines={3}>
+            {title}
+          </Text>
+          {wish.guess && !failed && onGuessConfirm && onGuessPick ? <GuessRow center others={wish.guess} onConfirm={onGuessConfirm} onPick={onGuessPick} onElse={onGuessElse} /> : null}
+        </View>
 
-      <View style={{ width: cardW, alignSelf: "center" }}>
-        <Glass style={{ borderRadius: radius.lg, overflow: "hidden", padding: 0 }}>
-          <View style={{ width: "100%", height: photoH }}>
-            {/* Held: a soft glow breathing where the photo will land, light crossing it and motes drifting up. */}
-            <Animated.View style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, backgroundColor: p.surface, opacity: breathe.interpolate({ inputRange: [0, 1], outputRange: [0.35, 0.7] }) }} />
-            <WaitingLight active={!landed && !failed} />
-            {landed || failed ? (
-              <Animated.View style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, opacity: shown, transform: [{ scale: shown.interpolate({ inputRange: [0, 1], outputRange: [1.04, 1] }) }] }}>
-                <Photo uri={photo} glyph={glyphFor(worth, title, money.symbol)} style={{ width: "100%", height: "100%" }} />
-              </Animated.View>
-            ) : null}
-          </View>
-          <View style={{ padding: 18, gap: 8, minHeight: 104, justifyContent: "center" }}>
-            {worth === "money" || worth === "priceless" ? (
-              <Animated.View style={{ opacity: shown, gap: 4 }}>
-                {worth === "money" ? <AmountPicker cents={wish.amountCents ?? 0} namedCents={wish.namedCents} onChange={onAmount} /> : <PricelessPrice line={wish.line} />}
-                {/* The reading can be wrong ("a gold bar" is a thing to buy): hunt it as an ordinary wish instead. */}
-                <QuietButton label="Price it" onPress={onPrice} style={{ alignSelf: "flex-start" }} />
-              </Animated.View>
-            ) : option ? (
-              <Animated.View style={{ gap: 6, opacity: shown }}>
-                <Money cents={option.upfrontCents} size="card" rollOnMount="cinema" />
-                <Text style={[type.footnote, { color: p.ink2 }]} numberOfLines={2}>
-                  {option.statusLabel}
-                </Text>
-              </Animated.View>
-            ) : failed ? (
-              <Text style={[type.callout, { color: p.ink2 }]}>{`${why} ${STAYS_ON_LIST}`}</Text>
-            ) : (
-              <Working dandy={dandy} label={line || `Hunting for ${title}`} />
-            )}
-          </View>
-        </Glass>
-      </View>
+        <View style={{ width: cardW, alignSelf: "center" }}>
+          <Glass style={{ borderRadius: radius.lg, overflow: "hidden", padding: 0 }}>
+            <View style={{ width: "100%", height: photoH }}>
+              {/* Held: a soft glow breathing where the photo will land, light crossing it and motes drifting up. */}
+              <Animated.View style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, backgroundColor: p.surface, opacity: breathe.interpolate({ inputRange: [0, 1], outputRange: [0.35, 0.7] }) }} />
+              <WaitingLight active={!landed && !failed} />
+              {landed || failed ? (
+                <Animated.View style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, opacity: shown, transform: [{ scale: shown.interpolate({ inputRange: [0, 1], outputRange: [1.04, 1] }) }] }}>
+                  <Photo uri={photo} glyph={glyphFor(worth, title, money.symbol)} style={{ width: "100%", height: "100%" }} />
+                </Animated.View>
+              ) : null}
+            </View>
+            <View style={{ padding: 18, gap: 8, minHeight: 104, justifyContent: "center" }}>
+              {worth === "money" || worth === "priceless" ? (
+                <Animated.View style={{ opacity: shown, gap: 4 }}>
+                  {worth === "money" ? <AmountPicker cents={wish.amountCents ?? 0} namedCents={wish.namedCents} onChange={onAmount} /> : <PricelessPrice line={wish.line} />}
+                  {/* The reading can be wrong ("a gold bar" is a thing to buy): hunt it as an ordinary wish instead. */}
+                  <QuietButton label="Price it" onPress={onPrice} style={{ alignSelf: "flex-start" }} />
+                </Animated.View>
+              ) : option ? (
+                <Animated.View style={{ gap: 6, opacity: shown }}>
+                  <Money cents={option.upfrontCents} size="card" rollOnMount="cinema" />
+                  <Text style={[type.footnote, { color: p.ink2 }]} numberOfLines={2}>
+                    {option.statusLabel}
+                  </Text>
+                </Animated.View>
+              ) : failed ? (
+                <Text style={[type.callout, { color: p.ink2 }]}>{`${why} ${STAYS_ON_LIST}`}</Text>
+              ) : (
+                <Working dandy={dandy} label={line || `Hunting for ${title}`} />
+              )}
+            </View>
+          </Glass>
+        </View>
 
-      <View style={{ minHeight: layout.control.primary }}>
-        {landed || failed ? (
-          <PrimaryButton label="Keep going" onPress={onContinue} />
-        ) : patient ? (
-          <View style={{ gap: 8 }}>
-            <Text style={[type.footnote, { color: p.ink3, textAlign: "center" }]}>Still hunting. It lands on your list when it's ready.</Text>
+        <View style={{ minHeight: layout.control.primary }}>
+          {landed || failed ? (
             <PrimaryButton label="Keep going" onPress={onContinue} />
-          </View>
-        ) : null}
+          ) : patient ? (
+            <View style={{ gap: 8 }}>
+              <Text style={[type.footnote, { color: p.ink3, textAlign: "center" }]}>Still hunting. It lands on your list when it's ready.</Text>
+              <PrimaryButton label="Keep going" onPress={onContinue} />
+            </View>
+          ) : null}
+        </View>
       </View>
     </View>
   );
