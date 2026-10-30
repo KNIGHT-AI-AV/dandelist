@@ -5,7 +5,7 @@ vi.mock("node:dns/promises", async (importOriginal) => ({ ...(await importOrigin
 import type { Draft, Meta, PriceOption } from "../src/agent/agent";
 import { mergeFast } from "../src/agent/find";
 import { wikimediaRendering } from "../src/agent/media";
-import { checkPhoto, findPhoto, verifyPhoto, wikipediaLeadPhotos, type FoundPhoto, type PhotoPlan, type PhotoVerdict } from "../src/agent/photos";
+import { checkPhoto, findPhoto, gradeOf, openversePhotos, verifyPhoto, wikipediaLeadPhotos, type FoundPhoto, type PhotoPlan, type PhotoVerdict } from "../src/agent/photos";
 import { imageResponse, jpegHeader, pngHeader } from "./images";
 
 /**
@@ -175,13 +175,13 @@ describe("the two looks: a line-up, twice", () => {
    * A model that finds the photo fits what it is told in each look ("|" between options nothing visible tells apart;
    * the last option when none of them is in the line-up), rated as told.
    */
-  const looker = (sees: string[], rating: { quality?: string; clean?: boolean } = {}, calls: Record<string, unknown>[] = []): Meta => ({
+  const looker = (sees: string[], rating: { quality?: string; clean?: boolean; subject?: boolean } = {}, calls: Record<string, unknown>[] = []): Meta => ({
     responses: async (body) => {
       const n = calls.push(body) - 1;
       const options = lineUp(body);
       const seen = sees[n % sees.length]!;
       const fits = options.filter((o) => seen.split("|").includes(o.text)).map((o) => o.letter);
-      return { id: "r", text: JSON.stringify({ seen, fits: fits.length ? fits : [options.at(-1)!.letter], quality: rating.quality ?? "studio", clean: rating.clean ?? true }), citations: [], functionCalls: [], searchQueries: [], raw: {} } as never;
+      return { id: "r", text: JSON.stringify({ seen, fits: fits.length ? fits : [options.at(-1)!.letter], subject: rating.subject ?? true, quality: rating.quality ?? "studio", clean: rating.clean ?? true }), citations: [], functionCalls: [], searchQueries: [], raw: {} } as never;
     },
   });
   const plan = { identity: "Rolex Sky-Dweller, mint green dial", exact: true, lookalikes: ["Rolex Oyster Perpetual 41, green dial", "Rolex Sky-Dweller, blue dial"] };
@@ -215,6 +215,21 @@ describe("the two looks: a line-up, twice", () => {
   it("keeps a photo when nothing visible tells the wish from a lookalike (a Leica Q2 and a Q3 face on)", async () => {
     const same = `${WISH}|Rolex Sky-Dweller, blue dial`;
     expect(await verifyPhoto(looker([same]), BIG, plan)).toMatchObject({ ok: true });
+  });
+
+  it("holds the broad form beside the wish, so the model in another colour can stand in (owner, 2026-10-30)", async () => {
+    const pink = { identity: "Mercedes-Benz G-Class in pink", broad: "Mercedes-Benz G-Class in any colour", exact: true, lookalikes: ["Land Rover Defender 110"] };
+    const calls: Record<string, unknown>[] = [];
+    const silver = await verifyPhoto(looker([pink.broad], {}, calls), BIG, pink);
+    // The broad form is one more unmarked option in each look.
+    expect(lineUp(calls[0]!).map((o) => o.text).sort()).toEqual([pink.identity, pink.broad, ...pink.lookalikes, "None of these, or can't tell"].sort());
+    expect(silver).toMatchObject({ ok: false, exact: false, near: true });
+    expect(await verifyPhoto(looker([`${pink.identity}|${pink.broad}`]), BIG, pink)).toMatchObject({ ok: true, exact: true, near: true });
+    expect(await verifyPhoto(looker(["Land Rover Defender 110"]), BIG, pink)).toMatchObject({ exact: false, near: false });
+  });
+
+  it("never passes a photo whose subject is something else: a portrait of the owner, the back of a card", async () => {
+    expect(await verifyPhoto(looker([WISH], { subject: false }), BIG, plan)).toMatchObject({ ok: false, exact: false, near: false });
   });
 
   it("turns down an amateur snapshot or a crowded photo even when both looks pick the wish", async () => {
@@ -263,5 +278,62 @@ describe("a card always carries a photo", () => {
     const watch: Draft = { ...home, title: "A Rolex Submariner", kind: "buy" };
     const stand = { url: "https://archive.example/sub.jpg", source: "archive" };
     expect(mergeFast(watch, { options: [option()], explanation: "", note: "", horizonYears: 5 }, null, stand, found).options[0]!.imageUrl).toBe(stand.url);
+  });
+});
+
+describe("a photo for anything anyone wishes for (owner, 2026-10-30: 'it needs to work for literally anything')", () => {
+  const verdict = (o: Partial<PhotoVerdict>): PhotoVerdict => ({ seen: "", fits: [], quality: "editorial", clean: true, ok: false, ...o });
+
+  it("grades the very thing above its broad form, and a small photo below both", () => {
+    expect(gradeOf(verdict({ ok: true, exact: true, near: true, quality: "studio" }), 1200)).toBe(1);
+    // The very thing, but a snapshot, or 500 px: still shown, below a well-taken one.
+    expect(gradeOf(verdict({ exact: true, near: true, quality: "amateur" }), 1200)).toBe(2);
+    expect(gradeOf(verdict({ ok: true, exact: true, near: true }), 500)).toBe(2);
+    expect(gradeOf(verdict({ near: true }), 1200)).toBe(3);
+    expect(gradeOf(verdict({ near: true, quality: "amateur" }), 1200)).toBe(4);
+    expect(gradeOf(verdict({ ok: true, exact: true, near: true }), 260)).toBe(5);
+    // The wrong thing never shows, however well taken.
+    expect(gradeOf(verdict({ quality: "studio" }), 3000)).toBe(0);
+  });
+
+  const SILVER = "https://upload.wikimedia.org/wikipedia/commons/g/gc/G-Class_silver.jpg";
+  const PINK = "https://dealer.example/img/pink-g63.jpg";
+  const BOX = "https://upload.wikimedia.org/wikipedia/en/s/se/Stadium_Events_box.jpg";
+  const gClass = { title: "Mercedes-Benz G-Class", kind: "own" as const, summary: "The wish is for a pink Mercedes-Benz G-Class." };
+  const pinkPlan = leicaPlan({ identity: "Mercedes-Benz G-Class in pink", broad: "Mercedes-Benz G-Class in any colour", articles: ["Mercedes-Benz G-Class"], web: "pink G-Class", kind: "vehicle" });
+  const looks = (grades: Record<string, Partial<PhotoVerdict>>) => async (url: string) => verdict(grades[url] ?? {});
+
+  it("shows the model in another colour when no photo of the colour asked for passes, and the colour when one does", async () => {
+    const web = imagesAt({ [SILVER]: [3000, 2000], [PINK]: [1600, 1000] }, wikipedia({ "Mercedes-Benz G-Class": { source: SILVER, width: 3000, height: 2000 } }));
+    const silverOnly = await findPhoto(planMeta(pinkPlan), gClass, { fetcher: web, webPhotos: async () => [], verify: looks({ [SILVER]: { near: true } }) });
+    expect(silverOnly).toMatchObject({ how: "wikipedia", grade: 3, image: { url: SILVER } });
+    const both = await findPhoto(planMeta(pinkPlan), gClass, { fetcher: web, webPhotos: async () => [PINK], verify: looks({ [SILVER]: { near: true }, [PINK]: { ok: true, exact: true, near: true } }) });
+    expect(both).toMatchObject({ how: "web", grade: 1, image: { url: PINK } });
+  });
+
+  it("shows a game's small box art only when nothing larger passes", async () => {
+    const plan = leicaPlan({ identity: "Stadium Events for the NES, sealed", broad: "the Stadium Events NES game, its box or cartridge", articles: ["Stadium Events"], web: "Stadium Events box" });
+    const game = { title: "Stadium Events", kind: "buy" as const };
+    const web = imagesAt({ [BOX]: [260, 375], [MAKER]: [2400, 1600] }, wikipedia({ "Stadium Events": { source: BOX, width: 260, height: 375 } }));
+    expect(await findPhoto(planMeta(plan), game, { fetcher: web, webPhotos: async () => [], verify: looks({ [BOX]: { near: true } }) })).toMatchObject({ grade: 5, image: { url: BOX } });
+    expect(await findPhoto(planMeta(plan), game, { fetcher: web, webPhotos: async () => [MAKER], verify: looks({ [BOX]: { near: true }, [MAKER]: { near: true } }) })).toMatchObject({ grade: 3, image: { url: MAKER } });
+  });
+
+  it("reads Openverse's openly licensed photos with their credit, and gives nothing when it is down", async () => {
+    const api = (async (input: string | URL) => {
+      const u = new URL(String(input));
+      expect(u.origin + u.pathname).toBe("https://api.openverse.org/v1/images/");
+      expect(u.searchParams.get("q")).toBe("tiny house");
+      return Response.json({
+        results: [
+          { url: "https://live.staticflickr.com/1/tiny.jpg", title: "Tiny house", creator: "Ann", license: "by", license_version: "2.0", source: "flickr", foreign_landing_url: "https://flickr.com/p/1", width: 2048, height: 1365 },
+          { url: "https://live.staticflickr.com/2/thumb.jpg", width: 240, height: 160 },
+          { url: "http://insecure.example/a.jpg" },
+        ],
+      });
+    }) as unknown as typeof fetch;
+    expect(await openversePhotos("tiny house", api)).toEqual([{ url: "https://live.staticflickr.com/1/tiny.jpg", title: "Tiny house", credit: "Ann", license: "CC BY 2.0", page: "https://flickr.com/p/1" }]);
+    const down = (async () => new Response("<html>Server Error (500)</html>", { status: 500 })) as unknown as typeof fetch;
+    expect(await openversePhotos("tiny house", down)).toEqual([]);
   });
 });

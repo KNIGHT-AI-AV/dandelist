@@ -16,7 +16,7 @@ import { publicFetch, type Fetcher } from "./tools";
 import { pgArchive, type Archive } from "../archive/archive";
 import { MAX_CLIP_BYTES, TRANSCRIBES_PER_USER_PER_DAY, WISH_KEYWORDS, cleanTranscript, clipProblem, readWav } from "./transcribe";
 import { personaSchema, voiceLine } from "./persona";
-import { moneyPhoto, photoMedia } from "./worth";
+import { moneyPhoto, photoMedia, pricelessPhoto } from "./worth";
 import { stoppable } from "../sse";
 import { notesFor, withNotes } from "../notes";
 
@@ -87,6 +87,7 @@ const pendingDraft = (text: string): Draft => ({ title: text.slice(0, 120), kind
 const resultOf = (r: HuntResult) => ({ options: r.options, explanation: r.explanation, note: r.note, horizonYears: r.horizonYears, questions: r.questions, provisional: r.provisional, ...(r.worth ? { worth: r.worth } : {}) });
 /** How long a money run looks for its photo before it ends without one. */
 const MONEY_PHOTO_MS = 20_000;
+const PRICELESS_PHOTO_MS = 40_000;
 
 type RunRow = {
   id: string;
@@ -362,12 +363,15 @@ export function agentRoutes(deps: AgentDeps) {
         stop.abort(); // anything still running stops spending
         const done = (result: unknown) => db.query("update agent_runs set status = 'done', result = $1::jsonb, updated_at = $2 where id = $3", [JSON.stringify(result), touch(), run.id]);
         const hunted = outcome !== "late" && "r" in outcome ? outcome.r : null;
-        if (hunted?.worth?.worth === "money") {
-          // The amount is the person's to pick, so the card shows at once while the run looks for a checked photo.
+        if (hunted?.worth) {
+          // The amount is the person's to pick, so the card shows at once while the run looks for a checked photo:
+          // money's gold bars, or a priceless wish's own (owner, 2026-10-30: "own the moon" needs "a great image").
           const result = resultOf(hunted);
           await db.query("update agent_runs set result = $1::jsonb, updated_at = $2 where id = $3 and status = 'running'", [JSON.stringify({ ...result, provisional: true }), touch(), run.id]);
           const shot = new AbortController();
-          const photo = await moneyPhoto(metaFor(userId, "research", addCost, shot.signal), { fetcher: deps.webFetch ?? publicFetch, archive, by: Date.now() + MONEY_PHOTO_MS })
+          const looking = metaFor(userId, "research", addCost, shot.signal);
+          const fetcher = deps.webFetch ?? publicFetch;
+          const photo = await (hunted.worth.worth === "money" ? moneyPhoto(looking, { fetcher, archive, by: Date.now() + MONEY_PHOTO_MS }) : pricelessPhoto(looking, hunted.draft, { fetcher, by: Date.now() + PRICELESS_PHOTO_MS }))
             .catch(() => null)
             .finally(() => shot.abort());
           return done(photo ? { ...result, photo: photoMedia(photo) } : result);
