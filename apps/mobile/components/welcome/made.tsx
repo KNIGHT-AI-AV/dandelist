@@ -8,6 +8,7 @@ import { useWaitingMusic } from "../../lib/waiting";
 import type { FirstWish } from "../../lib/welcome";
 import { Working } from "../chat/working";
 import { Eyebrow, Glass, Money, Photo, PrimaryButton, QuietButton } from "../lux";
+import { GuessRow } from "../guess";
 import { WaitingLight } from "../waiting-light";
 import { AmountPicker, PricelessPrice, glyphFor } from "../worth";
 
@@ -30,7 +31,28 @@ export const STAYS_ON_LIST = "It stays on your list, and the Dandy prices it aft
  * wish named, with a checked photo when one is found; something priceless shows infinity and the Dandy's line. A card
  * without a photo never shows an empty box: the panel holds infinity, the currency's sign, or the wish's first letter.
  */
-export function MadeStep({ wish, pricing, line, onContinue, onAmount, onPrice }: { wish: FirstWish; pricing: "idle" | "pricing" | "priced" | "failed"; line: string; onContinue(): void; onAmount(cents: number): void; onPrice(): void }) {
+export function MadeStep({
+  wish,
+  pricing,
+  line,
+  onContinue,
+  onAmount,
+  onPrice,
+  onGuessConfirm,
+  onGuessPick,
+  onGuessElse,
+}: {
+  wish: FirstWish;
+  pricing: "idle" | "pricing" | "priced" | "failed";
+  line: string;
+  onContinue(): void;
+  onAmount(cents: number): void;
+  onPrice(): void;
+  /** The best-guess row (components/guess.tsx): keep the guess, hunt another likely name, or say more. */
+  onGuessConfirm?(): void;
+  onGuessPick?(name: string): void;
+  onGuessElse?(): void;
+}) {
   const p = usePalette();
   const t = useType();
   const dandy = useDandy();
@@ -91,6 +113,7 @@ export function MadeStep({ wish, pricing, line, onContinue, onAmount, onPrice }:
         <Text accessibilityRole="header" style={[t.title1, { color: p.ink, textAlign: "center" }]} numberOfLines={3}>
           {title}
         </Text>
+        {wish.guess && !failed && onGuessConfirm && onGuessPick ? <GuessRow center others={wish.guess} onConfirm={onGuessConfirm} onPick={onGuessPick} onElse={onGuessElse} /> : null}
       </View>
 
       <View style={{ width: cardW, alignSelf: "center" }}>

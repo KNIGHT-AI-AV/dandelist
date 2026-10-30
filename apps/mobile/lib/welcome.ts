@@ -2,7 +2,7 @@ import { entries as catalogue, type Entry } from "@dandelist/catalogue";
 import { recurringBreakdown, type Period } from "@dandelist/cost";
 import { fetch as streamingFetch } from "expo/fetch";
 import { Platform } from "react-native";
-import type { Media, PriceOption, Step, WishQuestion, WorthCard } from "./agent";
+import type { Draft, Media, PriceOption, Step, WishQuestion, WorthCard } from "./agent";
 import { API_URL } from "./auth";
 import type { WishPair } from "./pairs";
 import { getSecret, setSecret } from "./storage";
@@ -73,6 +73,11 @@ export interface FirstWish {
   line?: string;
   /** Money: a checked photo, when one was found. */
   photo?: { imageUrl: string; media?: Media };
+  /**
+   * The other likely names when the reading had to work out what was meant (lib/guess.ts). Null once they confirm the
+   * guess, so a draft that comes again doesn't bring the row back.
+   */
+  guess?: string[] | null;
 }
 
 /** A first wish that is on the list: priced, money with its amount, or priceless. */
@@ -281,7 +286,7 @@ async function readEvents<T>(path: string, body: unknown, onEvent: (e: T) => voi
  * (`provisional`, about 10 to 15 s in), then the full research's when it found better, by 60 s.
  */
 export type GuestEvent =
-  | { type: "draft"; title: string; kind: WishKind; questions?: WishQuestion[] }
+  | { type: "draft"; title: string; kind: WishKind; questions?: WishQuestion[]; draft?: Pick<Draft, "title" | "sure" | "others"> }
   | { type: "step"; step: Step }
   | { type: "priced"; title: string; kind: WishKind; option: PriceOption; explanation: string; questions?: WishQuestion[]; provisional?: boolean }
   /**
