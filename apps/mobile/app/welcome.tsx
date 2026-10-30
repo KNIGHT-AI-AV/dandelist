@@ -107,6 +107,8 @@ export default function Welcome() {
   const [result, setResult] = useState<Result | null>(null);
   const [sheet, setSheet] = useState(false);
   const [pricing, setPricing] = useState<Pricing>("idle");
+  // The hunt's stream is open: the fast card has a price, but its photo may still come (components/frosted-wait.tsx).
+  const [looking, setLooking] = useState(false);
   const [trail, setTrail] = useState<AgentStep[]>([]);
   const [found, setFound] = useState(false);
   const [flight, setFlight] = useState<{ text: string; from: { x: number; y: number }; to: { x: number; y: number } } | null>(null);
@@ -246,6 +248,7 @@ export default function Welcome() {
     setTrail([]);
     setFound(false);
     setPricing("pricing");
+    setLooking(true);
     patch((s) => ({ ...s, wish: { text } }));
     // Money or something priceless (owner, 2026-10-30): once its card has come, the error the server sends after it
     // for older apps, and a stream that drops later, are not failures.
@@ -293,7 +296,7 @@ export default function Welcome() {
       if (ctrl.signal.aborted || worthy) return;
       patchWish((w) => ({ ...w, failed: err instanceof TypeError ? "Couldn't reach Dandelist just now." : err.message }));
       setPricing("failed");
-    });
+    }).finally(() => run.current === ctrl && setLooking(false));
   };
 
   /**
@@ -444,6 +447,7 @@ export default function Welcome() {
         <MadeStep
           wish={state.wish}
           pricing={pricing}
+          looking={looking}
           waited={continued.current}
           line={thought?.text ?? ""}
           onAmount={(amountCents) => patchWish((w) => ({ ...w, amountCents }))}
