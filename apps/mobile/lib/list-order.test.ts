@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { changeApplied, ordered, undoOf } from "./list-order";
+import { changeApplied, changeSession, ordered, runChange, undoOf, type ChangeOps } from "./list-order";
 
 const list = [
   { id: "a", tier: "nice" },
@@ -33,5 +33,39 @@ describe("a list change the Dandy suggests (owner, 2026-10-30: the agent can reo
   it("puts the order and the moved tiers back, and leaves removals to the toast's own Undo", () => {
     const change = { order: ["c", "a"], tiers: [{ id: "a", tier: "must" as const }, { id: "d", tier: "nice" as const }], remove: ["b"] };
     expect(undoOf(change, list)).toEqual({ order: ["a", "c", "d"], tiers: [{ id: "a", tier: "nice" }, { id: "d", tier: "dream" }], remove: [] });
+  });
+
+  it("keeps the list as it was before the first try: a partial apply, a retry, then Undo puts it all back (#114 review)", async () => {
+    let wishes = list.map((w) => ({ ...w }));
+    let failTier = true;
+    const removed: string[] = [];
+    const ops: ChangeOps = {
+      reorder: async (ids) => void (wishes = ordered(wishes, ids)),
+      setTier: async (id, tier) => {
+        if (failTier) {
+          failTier = false;
+          throw new Error("Couldn't save the wish.");
+        }
+        wishes = wishes.map((w) => (w.id === id ? { ...w, tier } : w));
+      },
+      remove: (id) => void removed.push(id),
+    };
+    const session = changeSession({ order: ["c", "a"], tiers: [{ id: "a", tier: "must" }], remove: [] });
+    await expect(session.apply(wishes, ops)).rejects.toThrow("Couldn't save");
+    // The order went through, the tier didn't; Undo is already offered.
+    expect(wishes.map((w) => w.id)).toEqual(["c", "a", "b", "d"]);
+    expect(session.canUndo).toBe(true);
+    await session.apply(wishes, ops);
+    expect(wishes.find((w) => w.id === "a")?.tier).toBe("must");
+    await session.undo(ops);
+    expect(wishes.map((w) => `${w.id}:${w.tier}`)).toEqual(["a:nice", "b:must", "c:nice", "d:dream"]);
+    expect(session.canUndo).toBe(false);
+    expect(removed).toEqual([]);
+  });
+
+  it("starts at most one removal per change, since its toast can undo only one", async () => {
+    const removed: string[] = [];
+    await runChange({ order: [], tiers: [], remove: ["b", "c"] }, { reorder: async () => {}, setTier: async () => {}, remove: (id) => void removed.push(id) });
+    expect(removed).toEqual(["b"]);
   });
 });

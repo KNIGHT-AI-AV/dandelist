@@ -565,6 +565,18 @@ describe("dream turn", () => {
     expect(after.find((w) => w.id === rolex)?.tier).toBe("nice");
   });
 
+  it("puts one removal on a card and leaves the next for later, since the app can undo one at a time (#114 review)", async () => {
+    const t = await signIn("ada@example.com");
+    const add = async (name: string) => ((await (await call("POST", "/wishes", t, { name, kind: "buy", upfrontCents: 1000 })).json()) as { wish: { id: string } }).wish.id;
+    const peloton = await add("Peloton Bike+");
+    await add("Rimowa Cabin");
+    concierge = [[fc("edit_list", { sort: "keep", first: [], top: [], bottom: [], changes: [{ wish: "Peloton Bike+", to: "remove" }, { wish: "Rimowa Cabin", to: "remove" }] })], [message("The Peloton first.")]];
+    const { events } = await turn(t, { type: "message", text: "remove the peloton and the rimowa" });
+    expect(widgets(events, "list_change").map((w) => w.remove)).toEqual([[peloton]]);
+    const answer = (metaCalls.at(-1)!.input as { output?: string }[]).map((x) => x.output ?? "").join(" ");
+    expect(answer).toContain('suggest removing "Rimowa Cabin" next');
+  });
+
   it("asks which wish they mean instead of guessing, and says so when nothing would change", async () => {
     const t = await signIn("ada@example.com");
     await call("POST", "/wishes", t, { name: "Leica Q3", kind: "buy", upfrontCents: 599_500 });

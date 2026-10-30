@@ -928,7 +928,10 @@ async function editList(ctx: DreamCtx, t: TranscriptEntry[], state: DreamState, 
   if (unclear.length) return `Couldn't tell which wish ${unclear.map((u) => JSON.stringify(u)).join(" or ")} means. Ask them which one, naming the closest wishes on THEIR LIST.`;
   const sort = (SORTS as readonly string[]).includes(asStr(args.sort, 20)) ? (asStr(args.sort, 20) as Sort) : "keep";
   const first = (Array.isArray(args.first) ? args.first : []).map((g) => asStr(g, 10)).filter((g): g is Group => (GROUPS as readonly string[]).includes(g));
-  const remove = [...new Set(changes.filter((c) => c.to === "remove").map((c) => c.w.id))];
+  // One removal per card: the app's undo window holds one removal at a time, so a second would be deleted with no
+  // undo (Codex, #114 review). The rest wait for the next card.
+  const removals = [...new Set(changes.filter((c) => c.to === "remove").map((c) => c.w.id))];
+  const remove = removals.slice(0, 1);
   const tiers = changes.flatMap((c) => (c.to !== "remove" && c.to !== c.w.tier && !remove.includes(c.w.id) ? [{ id: c.w.id, tier: c.to as "must" | "nice" | "dream" }] : []));
   const kept = (ids: string[]) => ids.filter((id) => !remove.includes(id));
   const order = kept(arrange(list, { sort, first, top: top.map((w) => w.id), bottom: bottom.map((w) => w.id) }));
@@ -949,7 +952,8 @@ async function editList(ctx: DreamCtx, t: TranscriptEntry[], state: DreamState, 
     .slice(0, 200) || "New order";
   const w: Widget = { kind: "list_change", id: nextId(state, "list"), title, order: moved ? order : [], tiers, remove };
   await show(ctx, t, state, w, `Suggested a change to their list (${w.id}): ${title}.`);
-  return "The change is on a card and nothing has moved yet. Say in a few words what you suggested; they tap Apply.";
+  const later = removals.length > 1 ? ` Only one removal fits on a card: once they apply it, suggest removing ${removals.slice(1).map((id) => JSON.stringify(name(id))).join(" and ")} next.` : "";
+  return `The change is on a card and nothing has moved yet. Say in a few words what you suggested; they tap Apply.${later}`;
 }
 
 function modelInput(ctx: DreamCtx, t: TranscriptEntry[], state: DreamState, message: string): string {

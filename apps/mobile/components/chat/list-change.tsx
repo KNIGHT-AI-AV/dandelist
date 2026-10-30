@@ -1,10 +1,10 @@
 import type { Widget } from "@dandelist/catalogue/dream";
 import { useRef, useState } from "react";
 import { Text, View } from "react-native";
-import { changeApplied, ordered, undoOf, type ListChange as Change } from "../../lib/list-order";
+import { changeApplied, changeSession, ordered, type ChangeOps } from "../../lib/list-order";
 import { haptic } from "../../lib/motion";
 import { radius, type, usePalette } from "../../lib/theme";
-import { useWishes, type Wish } from "../../lib/wishes";
+import { useWishes } from "../../lib/wishes";
 import { useHomeRemovals } from "../home/removals";
 import { ErrorLine, Eyebrow, Glass, PrimaryButton, QuietButton } from "../lux";
 
@@ -13,8 +13,9 @@ const SHOWN = 5;
 
 /**
  * A change to their list that their Dandy suggests (owner, 2026-10-30): the new top of the list, tier moves and what
- * leaves it, then Apply. Nothing changes before the tap; after it, one Undo puts the order and tiers back (a removal
- * has its own Undo in the toast) and See list shows the result. A reopened chat shows it as done.
+ * leaves it, then Apply. Nothing changes before the tap; after it, one Undo puts the order and tiers back as they were
+ * before the first attempt, even after a partial failure and a retry (a removal has its own Undo in the toast), and See
+ * list shows the result. A reopened chat shows it as done.
  */
 export function ListChangeCard({ w, onShowOnList }: { w: Extract<Widget, { kind: "list_change" }>; onShowOnList?(wishId: string): void }) {
   const p = usePalette();
@@ -22,7 +23,8 @@ export function ListChangeCard({ w, onShowOnList }: { w: Extract<Widget, { kind:
   const removals = useHomeRemovals();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const undo = useRef<Change | null>(null);
+  const session = useRef(changeSession(w)).current;
+  const [, redraw] = useState(0);
   // A wish waiting out its removal's undo window is already gone from every page.
   const listed = wishes.filter((x) => x.id !== removals.pendingId);
   const done = changeApplied(w, listed);
@@ -30,39 +32,27 @@ export function ListChangeCard({ w, onShowOnList }: { w: Extract<Widget, { kind:
   const after = w.order.length ? ordered(listed, w.order) : listed;
   const top = after.filter((x) => !w.remove.includes(x.id)).slice(0, SHOWN);
   const moved = new Map(w.tiers.map((t) => [t.id, t.tier]));
-  const leaving = w.remove.map(name).filter(Boolean);
-
-  const run = async (change: Change, removing: Wish[]) => {
-    if (change.order.length) await reorder(change.order);
-    for (const t of change.tiers) await setTier(t.id, t.tier);
-    for (const x of removing) removals.remove(x, false);
+  const leaving = w.remove.slice(0, 1).map(name).filter(Boolean);
+  const ops: ChangeOps = {
+    reorder,
+    setTier,
+    remove: (id) => {
+      const x = wishes.find((y) => y.id === id);
+      if (x) removals.remove(x, false);
+    },
   };
 
-  const apply = async () => {
+  const act = async (step: () => Promise<void>, celebrate = false) => {
     setBusy(true);
     setError(null);
     try {
-      undo.current = undoOf(w, wishes);
-      await run(w, wishes.filter((x) => w.remove.includes(x.id)));
-      haptic.success();
+      await step();
+      if (celebrate) haptic.success();
     } catch (e) {
       setError((e as Error).message);
     } finally {
       setBusy(false);
-    }
-  };
-
-  const putBack = async () => {
-    if (!undo.current) return;
-    setBusy(true);
-    setError(null);
-    try {
-      await run(undo.current, []);
-      undo.current = null;
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
+      redraw((n) => n + 1);
     }
   };
 
@@ -92,12 +82,16 @@ export function ListChangeCard({ w, onShowOnList }: { w: Extract<Widget, { kind:
         <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
           <Text style={[type.label, { color: p.ink2 }]}>Done</Text>
           <View style={{ flexDirection: "row", gap: 4 }}>
-            {undo.current ? <QuietButton label="Undo" onPress={() => void putBack()} /> : null}
+            {session.canUndo && !busy ? <QuietButton label="Undo" onPress={() => void act(() => session.undo(ops))} /> : null}
             {top[0] ? <QuietButton label="See list" color={p.accentText} onPress={() => onShowOnList?.(top[0]!.id)} /> : null}
           </View>
         </View>
       ) : (
-        <PrimaryButton label="Apply" busy={busy} onPress={() => void apply()} />
+        <View style={{ gap: 4 }}>
+          <PrimaryButton label="Apply" busy={busy} onPress={() => void act(() => session.apply(listed, ops), true)} />
+          {/* After a part of it failed: put the list back as it was before the first try. */}
+          {session.canUndo && !busy ? <QuietButton label="Undo" onPress={() => void act(() => session.undo(ops))} /> : null}
+        </View>
       )}
     </Glass>
   );

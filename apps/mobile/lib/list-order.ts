@@ -33,6 +33,46 @@ export function changeApplied(change: ListChange, list: Listed[]): boolean {
   return want.every((id, i) => ids[i] === id);
 }
 
+/** What a change does to the list, as the store does it. */
+export interface ChangeOps {
+  reorder(ids: string[]): Promise<void>;
+  setTier(id: string, tier: "must" | "nice" | "dream"): Promise<void>;
+  /** Starts a removal with its own undo window (one at a time). */
+  remove(id: string): void;
+}
+
+/**
+ * Applies a change: the order, then each tier, then its one removal. Stops at the first failure and leaves what is
+ * done in place; running it again finishes it (a reorder is idempotent and a tier already set is skipped).
+ */
+export async function runChange(change: ListChange, ops: ChangeOps): Promise<void> {
+  if (change.order.length) await ops.reorder(change.order);
+  for (const t of change.tiers) await ops.setTier(t.id, t.tier);
+  for (const id of change.remove.slice(0, 1)) ops.remove(id);
+}
+
+/**
+ * One card's apply and undo (Codex, #114 review): the list as it was is kept from the first attempt, so a partial
+ * apply, a retry and then Undo still put back the original order and tiers. A removal keeps its own toast Undo.
+ */
+export function changeSession(change: ListChange) {
+  let original: ListChange | null = null;
+  return {
+    get canUndo() {
+      return original !== null;
+    },
+    async apply(current: Listed[], ops: ChangeOps) {
+      original ??= undoOf(change, current);
+      await runChange(change, ops);
+    },
+    async undo(ops: ChangeOps) {
+      if (!original) return;
+      await runChange(original, ops);
+      original = null;
+    },
+  };
+}
+
 /** What puts the list back as it was before the change: its old order and the old tier of every wish it moved. */
 export function undoOf(change: ListChange, before: Listed[]): ListChange {
   const tier = new Map(before.map((w) => [w.id, w.tier]));
