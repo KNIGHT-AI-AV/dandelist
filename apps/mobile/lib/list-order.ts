@@ -73,11 +73,15 @@ export function changeSession(change: ListChange) {
   };
 }
 
-/** What puts the list back as it was before the change: its old order and the old tier of every wish it moved. */
+/**
+ * What puts the list back as it was before the change: its whole old order and the old tier of every wish it moved.
+ * A wish the change removes keeps its place in that order (Codex, #114 review): if a failure stopped the card before
+ * its removal, or the toast undid the removal, it goes back where it was; once it is gone, the reorder skips it.
+ */
 export function undoOf(change: ListChange, before: Listed[]): ListChange {
   const tier = new Map(before.map((w) => [w.id, w.tier]));
   return {
-    order: before.map((w) => w.id).filter((id) => !change.remove.includes(id)),
+    order: before.map((w) => w.id),
     tiers: change.tiers.flatMap((t) => {
       const was = tier.get(t.id);
       return was === "must" || was === "nice" || was === "dream" ? [{ id: t.id, tier: was }] : [];

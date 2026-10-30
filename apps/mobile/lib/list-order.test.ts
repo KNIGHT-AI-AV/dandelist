@@ -30,9 +30,45 @@ describe("a list change the Dandy suggests (owner, 2026-10-30: the agent can reo
     expect(changeApplied({ order: ["c", "gone", "a"], tiers: [], remove: [] }, after)).toBe(true);
   });
 
-  it("puts the order and the moved tiers back, and leaves removals to the toast's own Undo", () => {
+  it("puts the whole old order and the moved tiers back, and leaves removals to the toast's own Undo", () => {
     const change = { order: ["c", "a"], tiers: [{ id: "a", tier: "must" as const }, { id: "d", tier: "nice" as const }], remove: ["b"] };
-    expect(undoOf(change, list)).toEqual({ order: ["a", "c", "d"], tiers: [{ id: "a", tier: "nice" }, { id: "d", tier: "dream" }], remove: [] });
+    expect(undoOf(change, list)).toEqual({ order: ["a", "b", "c", "d"], tiers: [{ id: "a", tier: "nice" }, { id: "d", tier: "dream" }], remove: [] });
+  });
+
+  it("puts a wish the card would remove back in its place when a failure stopped the card first (#114 review)", async () => {
+    let wishes = list.map((w) => ({ ...w }));
+    let failTier = true;
+    const removed: string[] = [];
+    const ops: ChangeOps = {
+      reorder: async (ids) => void (wishes = ordered(wishes, ids)),
+      setTier: async (id, tier) => {
+        if (failTier) {
+          failTier = false;
+          throw new Error("Couldn't save the wish.");
+        }
+        wishes = wishes.map((w) => (w.id === id ? { ...w, tier } : w));
+      },
+      remove: (id) => {
+        removed.push(id);
+        wishes = wishes.filter((w) => w.id !== id);
+      },
+    };
+    const change = { order: ["c", "b"], tiers: [{ id: "c", tier: "must" as const }], remove: ["a"] };
+    const session = changeSession(change);
+    await expect(session.apply(wishes, ops)).rejects.toThrow("Couldn't save");
+    // The order went through, the tier didn't, so the removal never started.
+    expect(wishes.map((w) => w.id)).toEqual(["c", "b", "a", "d"]);
+    expect(removed).toEqual([]);
+    await session.undo(ops);
+    expect(wishes.map((w) => `${w.id}:${w.tier}`)).toEqual(["a:nice", "b:must", "c:nice", "d:dream"]);
+
+    // Once the removal has run, Undo puts the rest back in their old order and skips the wish that's gone.
+    const again = changeSession(change);
+    await again.apply(wishes, ops);
+    expect(wishes.map((w) => `${w.id}:${w.tier}`)).toEqual(["c:must", "b:must", "d:dream"]);
+    await again.undo(ops);
+    expect(wishes.map((w) => `${w.id}:${w.tier}`)).toEqual(["b:must", "c:nice", "d:dream"]);
+    expect(removed).toEqual(["a"]);
   });
 
   it("keeps the list as it was before the first try: a partial apply, a retry, then Undo puts it all back (#114 review)", async () => {
