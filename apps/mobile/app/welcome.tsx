@@ -27,7 +27,7 @@ import { layout, type, usePalette, useTheme } from "../lib/theme";
 import { cataloguePool, emptyWelcome, fetchPool, keepsHunt, listTotal, listed, loadWelcome, markTitleSeen, saveWelcome, seenTitle, settled, streamGuestWish, type FirstWish, type PoolItem, type WelcomeState } from "../lib/welcome";
 import { startWelcome } from "../lib/welcome-start";
 import { welcomeSteps, type Fade } from "../lib/welcome-steps";
-import { guessOthers } from "../lib/guess";
+import { guessCandidates, guessOthers } from "../lib/guess";
 import { useMoney } from "../lib/currency";
 import { amountSteps, startAmount } from "../lib/worth";
 import { dollars } from "../components/odometer";
@@ -255,7 +255,7 @@ export default function Welcome() {
       (e) => {
         if (ctrl.signal.aborted) return;
         // A draft can come twice (again when its questions land); a guess they already confirmed stays confirmed.
-        if (e.type === "draft") patchWish((w) => ({ ...w, title: e.title, kind: e.kind, ...(w.guess === null ? {} : { guess: guessOthers(e.draft) ?? undefined }) }));
+        if (e.type === "draft") patchWish((w) => ({ ...w, title: e.title, kind: e.kind, ...(w.guess === null ? {} : { guess: guessOthers(e.draft) ?? undefined, pick: guessCandidates(e.draft) ?? undefined }) }));
         else if (e.type === "step") setTrail((t) => [...t, e.step]);
         else if (e.type === "worth") {
           worthy = true;
@@ -454,7 +454,7 @@ export default function Welcome() {
             continued.current = true;
             leave.to(nextVote(latest.current) ?? { kind: "when" });
           }}
-          onGuessConfirm={() => patchWish((w) => ({ ...w, guess: null }))}
+          onGuessConfirm={() => patchWish((w) => ({ ...w, guess: null, pick: null }))}
           onGuessPick={(name) => steps.is(here) && priceWish(name)}
           onGuessElse={() => steps.is(here) && goBack()}
         />

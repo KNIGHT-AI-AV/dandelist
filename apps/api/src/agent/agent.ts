@@ -5,7 +5,7 @@ import { eventStep, type AgentEvent } from "./events";
 import type { Archive } from "../archive/archive";
 import { huntMedia, shareImageFits, type MediaHint, type MediaOptions } from "./hunt";
 import { withLine } from "./lines";
-import { MEDIA_KINDS, type Media, type ModelCandidate } from "./media";
+import { MEDIA_KINDS, mediaSchema, type Media, type ModelCandidate } from "./media";
 import { matchOffer, type ShoppingOffer } from "./shopping";
 import { partyOf, perPersonApplies, personPrice } from "./person-price";
 import { within } from "./time";
@@ -62,6 +62,23 @@ export type Worth = (typeof WORTHS)[number];
 /** The longest priceless line shown; the model is asked for under 70 characters. */
 export const MAX_LINE = 70;
 
+/** The most specific things a vague wish is offered as, to pick the one meant. */
+export const MAX_CANDIDATES = 5;
+
+/**
+ * One specific thing a vague wish may mean (owner, 2026-10-30: "Images of multiple items up to 5 with make model sub
+ * names just in case so user can pick which one they meant if it was not specific enough"): its full name, as a hunt
+ * looks for it, its make, model and variant, and a photo once the hunt has one (candidates.ts).
+ */
+export const candidateSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  make: z.string().trim().max(60),
+  model: z.string().trim().min(1).max(80),
+  variant: z.string().trim().max(80),
+  image: mediaSchema.shape.images.element.optional(),
+});
+export type WishCandidate = z.infer<typeof candidateSchema>;
+
 export const draftSchema = z.object({
   title: z.string().trim().min(1).max(120),
   kind: z.enum(KINDS),
@@ -86,6 +103,11 @@ export const draftSchema = z.object({
   sure: z.boolean().optional(),
   /** Other things they may mean, when the reading wasn't sure, best first. */
   others: z.array(z.string().trim().min(1).max(120)).max(3).optional(),
+  /**
+   * When the wish names only a brand, a family or a kind of thing ("a Porsche", "a Rolex", "a gaming PC"): the specific
+   * things it may mean, the one being hunted first, to pick from. Missing on drafts read before 2026-10-30.
+   */
+  candidates: z.array(candidateSchema).max(MAX_CANDIDATES).optional(),
   /**
    * What the real thing typically costs, paid once, in US dollars, by the reading's own rough knowledge (150000 for a
    * G-Class). A price far from it is a toy, a part or a misread (see plausible). 0 or missing when the reading couldn't
@@ -133,6 +155,16 @@ const DRAFT_JSON = strictObject({
   },
   sure: { type: "boolean", description: "True when they named the thing or the name is plain from what they said. False when you had to work out what they mean from a description, or it could be one of several things." },
   others: { type: "array", items: { type: "string" }, description: "When not sure: up to 3 other things they may mean, named properly, best first. Empty when sure." },
+  candidates: {
+    type: "array",
+    items: strictObject({
+      name: { type: "string", description: "Its full name as a shop lists it, like 'Porsche 911 Carrera S'." },
+      make: { type: "string", description: "The maker or brand, like 'Porsche'. For something no maker makes, its kind, like 'Cat' for a breed." },
+      model: { type: "string", description: "The model, family or breed, like '911' or 'Maine Coon'." },
+      variant: { type: "string", description: "The trim, version, size or edition that sets it apart, like 'Carrera S'. Empty when there is none." },
+    }),
+    description: `When the wish names only a brand, a family or a kind of thing and not one specific model ('a Porsche', 'a Rolex', 'a gaming PC', 'an e-bike', 'a kitten'): up to ${MAX_CANDIDATES} specific things they may mean, the ones people most often buy, best first, the first being what the title names. Empty when the wish already names one specific thing, and for trips, places, services, experiences, money and priceless.`,
+  },
   kind: {
     type: "string",
     enum: [...KINDS],
@@ -229,7 +261,30 @@ export function readingOf(raw: unknown): unknown {
   const name = clean(r.name);
   const others = Array.isArray(r.others) ? r.others.map(clean).filter(Boolean).slice(0, 3) : [];
   const sure = typeof r.sure === "boolean" ? r.sure : true;
-  return { ...r, amount, typical, line, worth, ...(name ? { name } : { name: undefined }), sure, others: sure ? [] : others };
+  const candidates = worth === "priced" ? candidatesOf(r.candidates) : [];
+  return { ...r, amount, typical, line, worth, ...(name ? { name } : { name: undefined }), sure, others: sure ? [] : others, candidates };
+}
+
+/**
+ * A reading's candidates kept only when they make a choice: each needs a name and a model, the same name never twice,
+ * five at most, and two or more or none at all. Anything else in them is dropped, never a reason to fail the wish.
+ */
+export function candidatesOf(raw: unknown): WishCandidate[] {
+  if (!Array.isArray(raw)) return [];
+  const text = (v: unknown, max: number) => (typeof v === "string" ? v.replace(/\s+/g, " ").trim().slice(0, max) : "");
+  const seen = new Set<string>();
+  const out: WishCandidate[] = [];
+  for (const c of raw) {
+    if (!c || typeof c !== "object") continue;
+    const r = c as Record<string, unknown>;
+    const name = text(r.name, 120);
+    const model = text(r.model, 80);
+    if (!name || !model || seen.has(name.toLowerCase())) continue;
+    seen.add(name.toLowerCase());
+    out.push({ name, make: text(r.make, 60), model, variant: text(r.variant, 80) });
+    if (out.length === MAX_CANDIDATES) break;
+  }
+  return out.length >= 2 ? out : [];
 }
 
 const QUESTIONS_JSON = strictObject({
