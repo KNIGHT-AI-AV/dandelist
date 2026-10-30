@@ -7,7 +7,7 @@ import { huntMedia, shareImageFits, type MediaHint, type MediaOptions } from "./
 import { withLine } from "./lines";
 import { MEDIA_KINDS, type Media, type ModelCandidate } from "./media";
 import { matchOffer, type ShoppingOffer } from "./shopping";
-import { personPrice } from "./person-price";
+import { partyOf, personPrice } from "./person-price";
 import { within } from "./time";
 import { fxRate, getPage, pageNamesItem, pageShowsPrice, publicFetch, sellerOwnsHost, type Fetcher, type PageResult } from "./tools";
 
@@ -767,6 +767,8 @@ export async function research(meta: Meta, ctx: ResearchContext): Promise<Resear
     return { page, verified: shown && owned, elsewhere: shown && !owned ? hostOf(page!.url) : "" };
   };
 
+  // How many people the wish is for, when it says: a per-person quote is priced for them (owner, 2026-10-30).
+  const party = partyOf(ctx.draft, (ctx.answers ?? []).map((a) => `${a.question}: ${a.answer}`).join("; "));
   const priceOne = async (o: z.infer<typeof rawOptionSchema>): Promise<{ option: PriceOption; page?: PageResult; offSite: boolean } | null> => {
     const priceDate = at();
     let upfrontCents: number;
@@ -809,7 +811,13 @@ export async function research(meta: Meta, ctx: ResearchContext): Promise<Resear
       upfrontCents = parts.reduce((sum, p) => sum + p.totalCents, 0);
       const checked = parts.filter((p) => p.status === "verified").length;
       status = checked === parts.length ? "verified" : "estimate";
-      statusLabel = checked ? `${checked} of ${parts.length} parts checked on the sellers' sites` : "Estimate";
+      const only = parts.length === 1 ? parts[0]! : null;
+      statusLabel =
+        only?.unit === "person"
+          ? `${only.statusLabel}, ${only.quantity === 1 ? "one person" : `${only.quantity} people`} at the per-person price`
+          : checked
+            ? `${checked} of ${parts.length} parts checked on the sellers' sites`
+            : "Estimate";
       source = { currency: home, price: upfrontCents / 100, rate: 1, rateDate: priceDate.slice(0, 10) };
     } else {
       if (o.price <= 0 && !o.recurring.length) return null;
@@ -821,6 +829,12 @@ export async function research(meta: Meta, ctx: ResearchContext): Promise<Resear
       // A quoted person unit is not a scalar whole-request amount. Parts carry explicit quantities instead.
       // Hold it before price emission as well as aggregation; the UI can display provisional price events.
       if (o.price > 0 && (personPrice(o.evidence, o.price, currency) || (page?.ok && personPrice(page.text, o.price, currency)))) {
+        // With the party known, the quote is one person's part, times the people going. The page is kept, so the
+        // part's own check doesn't read it twice.
+        if (party) {
+          if (page && !pages.has(o.url)) pages.set(o.url, page);
+          return priceOne({ ...o, price: 0, recurring: [], parts: [{ label: o.label, kind: "other", seller: o.seller, url: o.url, currency: o.currency, unit_price: o.price, quantity: party, unit: "person", evidence: o.evidence }] });
+        }
         await onStep({ type: "check", url: page?.url ?? o.url, verified: false, at: at() });
         return null;
       }
