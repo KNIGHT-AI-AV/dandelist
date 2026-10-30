@@ -43,8 +43,8 @@
           "microphonePermission": false
         }
       ],
-      "expo-notifications",
-      "./plugins/without-push-entitlement.js"
+      "./plugins/without-push-entitlement.js",
+      "expo-notifications"
     ],
     "experiments": {
       "typedRoutes": false
