@@ -7,7 +7,8 @@ import { SearchField } from "../components/details/search-field";
 import { HomeBuilder } from "../components/dream/builders";
 import { PaletteButton } from "../components/home/chrome";
 import { Composer } from "../components/inputs";
-import { Chip, Glass, Icon, IconButton, Money, PrimaryButton, QuietButton, Wordmark, type IconName } from "../components/lux";
+import { Chip, Glass, Icon, IconButton, Money, Photo, PrimaryButton, QuietButton, Wordmark, type IconName } from "../components/lux";
+import { WaitingLight } from "../components/waiting-light";
 import { MediaHero, type Media } from "../components/media";
 import { dollars } from "../components/odometer";
 import { GlassReveal } from "../components/reveal";
@@ -295,17 +296,52 @@ function BuilderBench() {
   );
 }
 
+/** One photo frame as the screens hold it: the waiting light while the picture is made, then the picture over it. */
+function WaitFrame({ landed }: { landed: boolean }) {
+  const p = usePalette();
+  return (
+    <View style={{ aspectRatio: 4 / 3, borderRadius: radius.lg, overflow: "hidden", backgroundColor: p.bg }}>
+      <Photo />
+      <WaitingLight active={!landed} />
+      {landed ? <Photo uri={camera.images[0]!.url} /> : null}
+    </View>
+  );
+}
+
+/** The waiting light (owner, 2026-10-30): a picture being made for 8 s, then landing for 4, in a dark and a light theme. */
+function WaitBench() {
+  const p = usePalette();
+  const [landed, setLanded] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setLanded((v) => !v), landed ? 4000 : 8000);
+    return () => clearTimeout(t);
+  }, [landed]);
+  return (
+    <View testID="wait-bench" style={{ gap: 12, paddingHorizontal: 12 }}>
+      <Text style={[type.label, { color: p.ink2, paddingHorizontal: 4 }]}>{`Waiting light · ${landed ? "landed" : "making"}`}</Text>
+      {(["emerald", "ivory"] as const).map((id) => (
+        <ThemeScope key={id} id={id}>
+          <WaitFrame landed={landed} />
+        </ThemeScope>
+      ))}
+    </View>
+  );
+}
+
 export default function Lab() {
   const p = usePalette();
-  // /lab?only=icons shows the icon bench alone, without the photographs and the 3D viewer.
+  // /lab?only=icons shows the icon bench alone, without the photographs and the 3D viewer; /lab?only=wait the waiting light.
   const { only } = useLocalSearchParams<{ only?: string }>();
   if (!__DEV__) return <Redirect href="/" />;
   return (
     <ScrollView style={{ flex: 1, backgroundColor: p.bg }} contentContainerStyle={{ gap: 24, paddingVertical: 40, maxWidth: 520, width: "100%", alignSelf: "center" }}>
       {only === "icons" ? (
         <IconBench />
+      ) : only === "wait" ? (
+        <WaitBench />
       ) : (
         <>
+          <WaitBench />
           <BuilderBench />
           <IconBench />
           <OdometerBench />
