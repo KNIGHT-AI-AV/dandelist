@@ -129,6 +129,13 @@ if [ -d "$APP/PlugIns" ]; then say "app extensions found; this script signs the 
 codesign --force --sign "$SHA1" --keychain "$KC" --timestamp=none --entitlements "$ENT" --generate-entitlement-der "$APP"
 codesign --verify --deep --strict "$APP"
 
+# What the signed app really holds, read back from it, before anything leaves the Mac: STOP on a push entitlement, any
+# capability beyond Sign in with Apple, a missing microphone string or background modes (infra/mac/check-signed.py).
+say "check the signed app before upload"
+codesign -d --entitlements - --xml "$APP" > "$JOB/logs/signed-entitlements.plist" 2> /dev/null ||
+  codesign -d --entitlements :- "$APP" > "$JOB/logs/signed-entitlements.plist" 2> /dev/null
+python3 "$JOB/src/infra/mac/check-signed.py" "$JOB/logs/signed-entitlements.plist" "$APP/Info.plist" || { say "STOP before upload: see above"; exit 7; }
+
 say "pack the IPA"
 rm -rf "$JOB/ipa" && mkdir -p "$JOB/ipa/Payload"
 ditto "$APP" "$JOB/ipa/Payload/$(basename "$APP")"
