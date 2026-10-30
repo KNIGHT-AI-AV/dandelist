@@ -1,7 +1,7 @@
 import { toMediaImage, type Archive } from "../archive/archive";
 import { FALLBACK_LINE, cleanLine, type Draft, type Meta } from "./agent";
 import type { Media } from "./media";
-import { findPhoto, type FoundPhoto, type PhotoPlan, type PhotoSubject } from "./photos";
+import { findPhoto, subjectOf, type FoundPhoto, type PhotoPlan, type PhotoSubject } from "./photos";
 import { within } from "./time";
 import { fxRate, type Fetcher } from "./tools";
 
@@ -92,6 +92,15 @@ export async function moneyPhoto(meta: Meta, ctx: { fetcher: Fetcher; archive?: 
         return photo;
       }));
   return within(pending, ctx.by - Date.now());
+}
+
+/**
+ * A photograph for a priceless wish (owner, 2026-10-30: "If someone says they want to own the moon, we need a great
+ * image to make it nice"): the photo hunt's pick for what the wish names, planned and checked like any wish's photo.
+ * Null when none passes by `by`; the card keeps its glyph panel.
+ */
+export async function pricelessPhoto(meta: Meta, draft: Draft, ctx: { fetcher: Fetcher; by: number }): Promise<FoundPhoto | null> {
+  return within(findPhoto(meta, subjectOf(draft), { fetcher: ctx.fetcher, by: ctx.by }).catch(() => null), ctx.by - Date.now());
 }
 
 /** A found photo as the app saves it with a wish. */

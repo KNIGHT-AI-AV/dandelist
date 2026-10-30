@@ -7,7 +7,7 @@ vi.mock("node:dns/promises", async (importOriginal) => ({ ...(await importOrigin
 import { createApp } from "../src/app";
 import { imageResponse, jpegHeader } from "./images";
 import { migrate, type Db } from "../src/db";
-import { GUEST_WISHES_PER_IP_PER_HOUR, NOT_FOUND, NOT_PRICED } from "../src/guest";
+import { GUEST_DAILY_USD, GUEST_WISHES_PER_IP_PER_HOUR, NOT_FOUND, NOT_PRICED } from "../src/guest";
 import { forgetMoneyPhoto } from "../src/agent/worth";
 import { ARCHIVE_PREFIX, fromArchive } from "../src/pool";
 import { visionReply } from "./vision";
@@ -18,6 +18,8 @@ let db: Db;
 let metaCalls: Record<string, any>[];
 /** The research finds no way to buy the wish (a unicorn). */
 let noOptions: boolean;
+/** The last word's one search finds a typical price (estimate.ts). */
+let estimateFigure: boolean;
 
 const DRAFT = { title: "Peloton Bike+", kind: "buy", summary: "A Peloton Bike+ for home.", specifics: [], region: "US", currency: "usd", unknowns: [] };
 /** How the reading answers each wish these tests send: money, something priceless, a unicorn, gibberish, or the bike. */
@@ -40,6 +42,11 @@ const fakeMeta = (async (_url: string, init: RequestInit) => {
   const tools = (body.tools ?? []).map((t: { name?: string; type: string }) => t.name ?? t.type);
   const vision = visionReply(body);
   if (vision !== null) return reply([message(vision)]);
+  // The last word (estimate.ts): one search for a typical price, only when nothing else priced.
+  if (String(body.instructions ?? "").startsWith("You find, fast, what someone typically pays")) {
+    if (!estimateFigure) return reply([message("0")]);
+    return reply([{ type: "web_search_call", action: { query: "unicorn price" }, results: [{ url: "https://stables.example/unicorn", title: "Unicorns for sale" }] }, message("https://stables.example/unicorn | $95,000 | USD")]);
+  }
   // The fast find: one bounded web search that names the seller's page.
   if (String(body.instructions ?? "").startsWith("You find, fast")) {
     return reply([{ type: "web_search_call", action: { query: "peloton bike+ price" }, results: [{ url: SHOP, title: "Peloton Bike+" }] }, message(`${SHOP} | $2,495.00 | USD`)]);
@@ -110,6 +117,7 @@ beforeEach(async () => {
   await migrate(db);
   metaCalls = [];
   noOptions = false;
+  estimateFigure = false;
   forgetMoneyPhoto();
 });
 
@@ -193,7 +201,7 @@ describe("the pool", () => {
 
 describe("pricing the first wish before sign-in", () => {
   it("reserves guest voice against the same daily allowance before contacting Meta", async () => {
-    await db.query("insert into spend_ledger (user_id, model, kind, cost_usd, created_at) values (null, 'muse-spark-1.3', 'guest', 2.95, $1)", [clock.toISOString()]);
+    await db.query("insert into spend_ledger (user_id, model, kind, cost_usd, created_at) values (null, 'muse-spark-1.3', 'guest', $1, $2)", [GUEST_DAILY_USD - 0.05, clock.toISOString()]);
     const wav = new Uint8Array(44 + 32_000);
     const view = new DataView(wav.buffer);
     const text = (at: number, value: string) => wav.set(new TextEncoder().encode(value), at);
@@ -255,14 +263,14 @@ describe("pricing the first wish before sign-in", () => {
   });
 
   it("stops at the guest share of the day's spend", async () => {
-    await db.query("insert into spend_ledger (user_id, model, kind, cost_usd, created_at) values (null, 'muse-spark-1.3', 'guest', 3.5, $1)", [clock.toISOString()]);
+    await db.query("insert into spend_ledger (user_id, model, kind, cost_usd, created_at) values (null, 'muse-spark-1.3', 'guest', $1, $2)", [GUEST_DAILY_USD + 0.5, clock.toISOString()]);
     const res = await makeApp().request("/guest/wish", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: "a peloton bike" }) });
     expect(res.status).toBe(429);
     expect(metaCalls).toHaveLength(0);
   });
 
   it("reserves the next call against the guest allowance before calling Meta", async () => {
-    await db.query("insert into spend_ledger (user_id, model, kind, cost_usd, created_at) values (null, 'muse-spark-1.3', 'guest', 2.95, $1)", [clock.toISOString()]);
+    await db.query("insert into spend_ledger (user_id, model, kind, cost_usd, created_at) values (null, 'muse-spark-1.3', 'guest', $1, $2)", [GUEST_DAILY_USD - 0.05, clock.toISOString()]);
     const res = await makeApp().request("/guest/wish", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: "a peloton bike" }) });
     const evs = await events(res);
     expect(metaCalls).toHaveLength(0);
@@ -304,8 +312,12 @@ describe("pricing the first wish before sign-in", () => {
   it("shows infinity and the model's own line for something priceless, with no price hunt", async () => {
     const evs = await events(await ask("love", "203.0.113.23"));
     expect(evs.find((e) => e.type === "worth")).toEqual({ type: "worth", worth: "priceless", title: "Love", kind: "do", line: "Free to give, impossible to buy." });
-    expect(evs.some((e) => e.type === "priced" || e.type === "photo")).toBe(false);
+    expect(evs.some((e) => e.type === "priced")).toBe(false);
     expect(hunted()).toBe(false);
+    // It still gets a photo hunt of its own (owner, 2026-10-30: "own the moon" needs "a great image"); nothing passes
+    // here, so no photo is sent and the card keeps its glyph.
+    expect(metaCalls.some((c) => c.text?.format?.name === "photo_plan")).toBe(true);
+    expect(evs.some((e) => e.type === "photo")).toBe(false);
   });
 
   it("hunts a priceless or money wish as an ordinary one when the card's Price it asks", async () => {
@@ -315,6 +327,16 @@ describe("pricing the first wish before sign-in", () => {
     expect(evs.find((e) => e.type === "draft")).toMatchObject({ title: "Love", draft: { worth: "priced" } });
     expect(hunted()).toBe(true);
     expect(evs.some((e) => e.type === "priced")).toBe(true);
+  });
+
+  it("ends a wish nothing checks in time with a labelled estimate from one search, never an empty card", async () => {
+    noOptions = true;
+    estimateFigure = true;
+    const evs = await events(await ask("a unicorn", "203.0.113.27"));
+    expect(evs.filter((e) => e.type === "error")).toEqual([]);
+    expect(evs.filter((e) => e.type === "priced").at(-1)).toMatchObject({
+      option: { upfrontCents: 9_500_000, status: "estimate", statusLabel: "Estimate: from search results for stables.example", url: "https://stables.example/unicorn" },
+    });
   });
 
   it("says only why it couldn't price a wish, so the app's own words about the list follow it once", async () => {

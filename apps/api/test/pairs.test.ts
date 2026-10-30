@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("node:dns/promises", async (importOriginal) => ({ ...(await importOriginal<object>()), lookup: async () => [{ address: "93.184.215.14", family: 4 }] }));
 import { createApp } from "../src/app";
 import { migrate, type Db } from "../src/db";
+import { GUEST_DAILY_USD } from "../src/guest";
 import { NOTES_HEADING } from "../src/notes";
 import { MAX_ADJACENT, PAIRS_EFFORT, PAIRS_FORMAT, isTheWish, leadFileOk, leadFits, roughCents, tidyPlan, typicalFor } from "../src/pairs";
 import { visionReply } from "./vision";
@@ -430,7 +431,7 @@ describe("this or that from the first wish", () => {
   });
 
   it("is refused with the rest once the guest allowance is spent", async () => {
-    await db.query("insert into spend_ledger (user_id, model, kind, cost_usd, created_at) values (null, 'muse-spark-1.3', 'guest', 2.95, $1)", [clock.toISOString()]);
+    await db.query("insert into spend_ledger (user_id, model, kind, cost_usd, created_at) values (null, 'muse-spark-1.3', 'guest', $2, $1)", [clock.toISOString(), (GUEST_DAILY_USD - 0.05).toFixed(2)]);
     const evs = await events(await wish("I want a Rolls Royce", "203.0.113.62"));
     expect(calls).toHaveLength(0);
     expect(evs.some((e) => e.type === "pairs")).toBe(false);
