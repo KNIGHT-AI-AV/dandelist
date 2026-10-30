@@ -50,6 +50,9 @@ export function TitleSequence({ hero, short, onDone }: { hero: Entry; short: boo
   const out = useRef(new Animated.Value(0)).current;
   const [stage, setStage] = useState<Stage>("hunting");
   const [price, setPrice] = useState(false);
+  // The photo credit's links take a touch only while the price block shows them; the rest of the title, touching
+  // anywhere skips (UI audit, 2026-10-30: the invisible links caught taps and opened Unsplash mid-intro).
+  const [creditLive, setCreditLive] = useState(false);
   const [skippable, setSkippable] = useState(false);
   const [from, setFrom] = useState<{ x: number; y: number } | null>(null);
   const finished = useRef(false);
@@ -100,6 +103,8 @@ export function TitleSequence({ hero, short, onDone }: { hero: Entry; short: boo
     const anim = Animated.timing(t, { toValue: TITLE_MS, duration: total, easing: Easing.linear, useNativeDriver: false });
     anim.start(({ finished: ok }) => ok && setTimeout(() => finish(), short || reduced ? 150 : 500));
     const timers = short || reduced ? [] : [setTimeout(() => setStage("found"), 800 * PACE), setTimeout(() => setStage("clear"), 1600 * PACE), setTimeout(() => setPrice(true), 2200 * PACE)];
+    // While the price block is mostly visible (it fades in over 2200-2900 and out over 4300-4900 of the timeline).
+    if (!short && !reduced) timers.push(setTimeout(() => setCreditLive(true), 2600 * PACE), setTimeout(() => setCreditLive(false), 4500 * PACE));
     if (short || reduced) setStage("clear");
     timers.push(setTimeout(() => setSkippable(true), 600));
     return () => {
@@ -158,7 +163,7 @@ export function TitleSequence({ hero, short, onDone }: { hero: Entry; short: boo
 
         {/* The checked price, its source and the photo's credit, centred, then what it would take in the same place.
             The credit's links take a touch; anywhere else still ends the title. */}
-        <View pointerEvents="box-none" style={centre}>
+        <View pointerEvents={creditLive ? "box-none" : "none"} style={centre}>
           <Animated.View style={{ alignItems: "center", gap: 8, opacity: Animated.multiply(priceIn, priceOut), transform: [{ translateY: priceLift }] }}>
             {price ? <Odometer cents={hero.upfrontCents} format={dollars} size={52} family="bodoni" smallPrefix tracking={-1.04} rollOnMount="cinema" /> : <View style={{ height: Math.round(52 * 1.18) }} />}
             <Text style={[type.callout, { color: p.ink, textAlign: "center" }]} numberOfLines={1}>{hero.name}</Text>
