@@ -25,6 +25,7 @@ import { play, preloadSounds } from "../lib/sound";
 import { layout, type, usePalette, useTheme } from "../lib/theme";
 import { cataloguePool, emptyWelcome, fetchPool, listTotal, listed, loadWelcome, markTitleSeen, saveWelcome, seenTitle, settled, streamGuestWish, type FirstWish, type PoolItem, type WelcomeState } from "../lib/welcome";
 import { startWelcome } from "../lib/welcome-start";
+import { guessOthers } from "../lib/guess";
 import { useMoney } from "../lib/currency";
 import { amountSteps, startAmount } from "../lib/worth";
 import { dollars } from "../components/odometer";
@@ -214,7 +215,8 @@ export default function Welcome() {
       text,
       (e) => {
         if (ctrl.signal.aborted) return;
-        if (e.type === "draft") patchWish((w) => ({ ...w, title: e.title, kind: e.kind }));
+        // A draft can come twice (again when its questions land); a guess they already confirmed stays confirmed.
+        if (e.type === "draft") patchWish((w) => ({ ...w, title: e.title, kind: e.kind, ...(w.guess === null ? {} : { guess: guessOthers(e.draft) ?? undefined }) }));
         else if (e.type === "step") setTrail((t) => [...t, e.step]);
         else if (e.type === "worth") {
           worthy = true;
@@ -364,6 +366,9 @@ export default function Welcome() {
           onAmount={(amountCents) => patchWish((w) => ({ ...w, amountCents }))}
           onPrice={() => state.wish && priceWish(state.wish.text, true)}
           onContinue={() => go(nextVote(latest.current) ?? { kind: "when" })}
+          onGuessConfirm={() => patchWish((w) => ({ ...w, guess: null }))}
+          onGuessPick={(name) => priceWish(name)}
+          onGuessElse={goBack}
         />
       ) : null;
       break;
