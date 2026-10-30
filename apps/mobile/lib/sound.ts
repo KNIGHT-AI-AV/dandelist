@@ -25,16 +25,26 @@ let ready: Promise<void> | null = null;
 const players = new Map<SoundId, AudioPlayer>();
 const listeners = new Set<(on: boolean) => void>();
 
+/** How the sounds play: under whatever else is playing, following the silent switch, never in the background. */
+const MODE = { playsInSilentMode: false, interruptionMode: "mixWithOthers", shouldPlayInBackground: false, allowsRecording: false } as const;
+
 function prepare(): Promise<void> {
   ready ??= (async () => {
     try {
       enabled = (await getSecret(KEY)) !== "off";
     } catch {}
     try {
-      await setAudioModeAsync({ playsInSilentMode: false, interruptionMode: "mixWithOthers", shouldPlayInBackground: false, allowsRecording: false });
+      await setAudioModeAsync(MODE);
     } catch {}
   })();
   return ready;
+}
+
+/** Puts the phone's audio back the way the sounds play, after the microphone has set it up for recording. */
+export async function resumeSounds(): Promise<void> {
+  try {
+    await setAudioModeAsync(MODE);
+  } catch {}
 }
 
 function playerOf(id: SoundId): AudioPlayer | null {

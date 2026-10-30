@@ -40,7 +40,16 @@
         {
           "photosPermission": "Dandelist uses your photo library only when you choose a profile picture.",
           "cameraPermission": false,
-          "microphonePermission": false
+          "microphonePermission": "Dandelist listens only while you say a wish, to write it down."
+        }
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Dandelist listens only while you say a wish, to write it down.",
+          "recordAudioAndroid": true,
+          "enableBackgroundPlayback": false,
+          "enableBackgroundRecording": false
         }
       ],
       "./plugins/without-push-entitlement.js",

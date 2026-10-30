@@ -73,3 +73,40 @@ export function shouldStop(now: number, startedAt: number, spokeAt: number | nul
   if (spokeAt === null) return now - startedAt >= NOTHING_MS ? "silent" : null;
   return now - spokeAt >= PAUSE_MS ? "done" : null;
 }
+
+/**
+ * A phone records without the browser's automatic gain, so a fixed line can miss a soft voice. There the line between
+ * speech and the room follows the room: three times the quietest moment heard so far, never under QUIET_LEVEL and
+ * never stricter than the browser's SPEECH_LEVEL.
+ */
+export const QUIET_LEVEL = 0.002;
+export function speechBar(quietest: number): number {
+  return Math.max(QUIET_LEVEL, Math.min(SPEECH_LEVEL, quietest * 3));
+}
+
+/** Interleaved samples as one channel, the channels averaged; always a copy. */
+export function monoOf(samples: Float32Array, channels: number): Float32Array {
+  if (channels <= 1) return samples.slice();
+  const out = new Float32Array(Math.floor(samples.length / channels));
+  for (let i = 0; i < out.length; i++) {
+    let sum = 0;
+    for (let c = 0; c < channels; c++) sum += samples[i * channels + c]!;
+    out[i] = sum / channels;
+  }
+  return out;
+}
+
+/**
+ * A quiet clip brought up to a clear level for transcription, since a phone's has no automatic gain: its loudest
+ * sample to 0.9, by at most MAX_GAIN, and never turned down.
+ */
+export const MAX_GAIN = 20;
+export function louder(samples: Float32Array): Float32Array {
+  let peak = 0;
+  for (let i = 0; i < samples.length; i++) peak = Math.max(peak, Math.abs(samples[i]!));
+  const gain = peak > 0 ? Math.min(MAX_GAIN, 0.9 / peak) : 1;
+  if (gain <= 1) return samples;
+  const out = new Float32Array(samples.length);
+  for (let i = 0; i < samples.length; i++) out[i] = samples[i]! * gain;
+  return out;
+}
