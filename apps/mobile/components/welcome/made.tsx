@@ -111,8 +111,9 @@ export function MadeStep({
   const title = wish.title ?? wish.text;
   const cardW = Math.min(width - 2 * gutter, 420);
   const photo = option?.imageUrl ?? wish.photo?.imageUrl;
-  // The candidate being hunted, when the wish had them: its photo, blurred, is what waits under the glass.
-  const pickPhoto = wish.pick?.candidates[Math.max(0, wish.pick.current)]?.image?.url;
+  // The candidate being hunted, when the wish had them and it is one of them: its photo, blurred, waits under the glass.
+  // When the hunted thing is none of them (current -1), the house backdrop does instead (Codex, #120 review).
+  const pickPhoto = wish.pick && wish.pick.current >= 0 ? wish.pick.candidates[wish.pick.current]?.image?.url : undefined;
   // The amount slider needs the room under the photo, so a money card's photo is wide (4:3) and gives way on a short
   // screen, where the step's other parts take about 520 pt; every other card keeps its tall 4:5.
   const full = worth === "money" ? Math.max(120, Math.min(Math.round((cardW * 3) / 4), height - 520)) : Math.round((cardW * 5) / 4);
