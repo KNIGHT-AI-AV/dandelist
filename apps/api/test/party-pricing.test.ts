@@ -359,6 +359,17 @@ describe("a per-person quote is multiplied only when it applies to each person, 
     expect(partyOf({ specifics: [{ name: "adults", value: "2 adults" }, { name: "children", value: "none" }], summary: "" })).toEqual({ count: 2, adultsOnly: true });
     expect(partyOf({ specifics: [{ name: "guests", value: "2 adults" }], summary: "" }, "Guests: 2 adults; Kids: 2 kids")).toBeNull();
   });
+
+  it.each(["seven", "eight", "twelve", "a few", "several", "3 (ages 4-9)"])(
+    "holds any nonzero children's field, here %s (Codex, #87 review)",
+    (children) => {
+      expect(partyOf({ specifics: [{ name: "adults", value: "2 adults" }, { name: "children", value: children }], summary: "A group activity" })).toBeNull();
+    },
+  );
+
+  it.each(["0", "none", "No", "zero"])("keeps an adults-only party when the children's field says %s", (children) => {
+    expect(partyOf({ specifics: [{ name: "adults", value: "2 adults" }, { name: "children", value: children }], summary: "" })).toEqual({ count: 2, adultsOnly: true });
+  });
 });
 
 describe("party prices through actual research", () => {

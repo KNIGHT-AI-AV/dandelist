@@ -133,8 +133,9 @@ function partyIn(text: string): Party | "mixed" | null {
  */
 export function partyOf(draft: { questions?: { id: string; label: string; picked: string }[]; specifics: { name: string; value: string }[]; summary?: string } | null | undefined, words = ""): Party | null {
   const fromField = (name: string, value: string): Party | "mixed" | null => {
-    // A field of its own for children or seniors ("children: 2") mixes the party unless it says none.
-    if (OWN_RATE_FIELD.test(name) && !/^\s*(?:0|none|no|zero)\b/i.test(value)) return /\d|one|two|three|four|five|six|some|yes/i.test(value) ? "mixed" : null;
+    // A field of its own for children or seniors ("children: 2", "kids: seven") mixes the party unless it plainly says
+    // none: any other value holds the quote (Codex, #87 review: the count words one to twelve and anything unforeseen).
+    if (OWN_RATE_FIELD.test(name)) return !value.trim() || /^\s*(?:0|none|no|zero|nobody|n\/a)\b/i.test(value) ? null : "mixed";
     if (!PEOPLE_FIELD.test(name)) return null;
     return partyIn(value) ?? (/^\s*\d{1,2}\s*$/.test(value) ? { count: Number(value), adultsOnly: false } : null);
   };
