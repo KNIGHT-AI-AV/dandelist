@@ -64,7 +64,8 @@ describe("archive matching", () => {
 
   it("admits only API-licensed real photos of 3000 px or more", () => {
     expect(admissible(photo(1))).toBe(true);
-    expect(admissible(photo(2, { license: "Unsplash License", source: "unsplash" }))).toBe(true);
+    expect(admissible(photo(2, { license: "Unsplash License", source: "unsplash" }))).toBe(false);
+    expect(admissible(photo(2, { url: "https://images.unsplash.com/photo-fixture?ixid=fixture", sourcePage: "https://unsplash.com/photos/fixture", license: "Unsplash License", source: "unsplash" }))).toBe(true);
     expect(admissible(photo(3, { width: 2400, height: 1600 }))).toBe(false);
     expect(admissible(photo(4, { license: "CC BY-ND 4.0" }))).toBe(false);
     expect(admissible(photo(5, { license: "All rights reserved" }))).toBe(false);

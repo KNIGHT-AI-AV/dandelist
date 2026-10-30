@@ -2,7 +2,7 @@ import { entries as catalogue, heroOf, type Entry } from "@dandelist/catalogue";
 import type { Period } from "@dandelist/cost";
 import type { Db } from "./db";
 import type { ArchiveEntity } from "./archive/archive";
-import { selectHeroPhotos } from "./archive/photo-selection";
+import { selectDeliverablePhotos } from "./archive/photo-delivery";
 
 /**
  * The pool the pre-login this-or-that draws from (owner, 2026-10-28: "random items, changes every time, from our
@@ -125,7 +125,7 @@ export function typicalOf(row: Pick<ArchiveRow, "kind" | "price_model" | "domain
 
 export function fromArchive(row: ArchiveRow, checkedAt: string): PoolItem | null {
   const price = typicalOf(row);
-  const photos = selectHeroPhotos(parse(row.photos) ?? []);
+  const photos = selectDeliverablePhotos(parse(row.photos) ?? []);
   if (!price || !photos) return null;
   const hero = photos[0]!;
   return {
