@@ -147,7 +147,8 @@ describe("the fast card", () => {
     expect(calls[0]).toMatchObject({ tools: [{ type: "web_search" }], max_tool_calls: 1 });
     expect(calls[0]!.input).toContain("Wish: A Rolex Submariner date in steel");
     // The working row gets a short line for every step.
-    expect(steps.map((s) => s.line)).toEqual(["Hunting for A Rolex Submariner date in steel", "Searching for rolex submariner date price", "Reading rolex.com", "Found it on rolex.com"]);
+    // The raw words never show: the hunt names the understood wish once it is read (find.ts).
+    expect(steps.map((s) => s.line)).toEqual(["Reading your wish", "Searching for rolex submariner date price", "Reading rolex.com", "Found it on rolex.com"]);
   });
 
   it("skips a page about another model, and goes without a photo rather than show a logo", async () => {

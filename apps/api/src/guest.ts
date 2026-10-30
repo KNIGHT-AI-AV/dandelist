@@ -9,7 +9,7 @@ import { HUNT_STOP_MS, huntWish, type HuntResult } from "./agent/find";
 import type { AgentDeps } from "./agent/routes";
 import { publicFetch } from "./agent/tools";
 import { MAX_CLIP_BYTES, WISH_KEYWORDS, cleanTranscript, clipProblem, readWav } from "./agent/transcribe";
-import { moneyPhoto, photoMedia } from "./agent/worth";
+import { moneyPhoto, photoMedia, pricelessPhoto } from "./agent/worth";
 import { pgArchive } from "./archive/archive";
 import type { PoolItem } from "./pool";
 import { ipOf } from "./preview";
@@ -40,12 +40,15 @@ import { heartbeat, stoppable } from "./sse";
  * priceless card's "Price it": the same body plus `price: true`, which hunts it as an ordinary priced wish.
  */
 
-export const GUEST_WISHES_PER_IP_PER_HOUR = 6;
+// Raised 2026-10-30: one person re-running the intro (and judges sharing a network) hit 6 in minutes.
+export const GUEST_WISHES_PER_IP_PER_HOUR = 15;
 export const GUEST_WISHES_PER_DAY = 150;
 export const GUEST_VOICE_PER_IP_PER_HOUR = 20;
 export const GUEST_VOICE_PER_DAY = 400;
 /** Every guest wish and voice clip together, a day. Signed-in people have their own caps. */
-export const GUEST_DAILY_USD = 3;
+// Raised 2026-10-30 from 3: a guest run averages about $0.20, so 3 a day ran out after some 15 runs. The app's own
+// daily and all-time caps (spend.ts) still bound everything.
+export const GUEST_DAILY_USD = 6;
 const MAX_TRACKED_IPS = 5000;
 
 /**
@@ -56,6 +59,8 @@ export const NOT_FOUND = "Couldn't find a price for that just now.";
 export const NOT_PRICED = "Couldn't price that just now.";
 /** How long a money wish's stream stays open for its photo, at most. */
 export const MONEY_PHOTO_MS = 20_000;
+/** How long a priceless wish's stream stays open for its photo, at most: a whole hunt for it, not one held photo. */
+export const PRICELESS_PHOTO_MS = 40_000;
 
 /** Calls per address in the last hour, and per day for everyone, kept in memory like the preview's. */
 function limiter(perHour: number, perDay: number) {
@@ -193,6 +198,10 @@ export function guestRoutes(deps: AgentDeps & { pool: () => Promise<PoolItem[]> 
           if (worth.worth === "money") {
             const by = Math.min(Date.now() + MONEY_PHOTO_MS, startedAt + HUNT_STOP_MS);
             const photo = await moneyPhoto(guestMeta(shot.signal), { fetcher: deps.webFetch ?? publicFetch, archive, by }).catch(() => null);
+            if (photo) await send({ type: "photo", ...photoMedia(photo) });
+          } else {
+            const by = Math.min(Date.now() + PRICELESS_PHOTO_MS, startedAt + HUNT_STOP_MS);
+            const photo = await pricelessPhoto(guestMeta(shot.signal), outcome.r.draft, { fetcher: deps.webFetch ?? publicFetch, by }).catch(() => null);
             if (photo) await send({ type: "photo", ...photoMedia(photo) });
           }
         } else {

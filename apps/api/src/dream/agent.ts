@@ -249,13 +249,52 @@ function deckSummary(d: DeckState): string {
     .join("; ")}`;
 }
 
-async function runSearch(ctx: DreamCtx, t: TranscriptEntry[], state: DreamState, criteria: Criteria, round: number): Promise<string> {
-  const found = await searchListings(ctx, criteria, state.seen);
+/**
+ * Wider briefs to try, in order, when a search finds nothing (owner, 2026-10-30, after "I couldn't find live listings
+ * for pink Mercedes-Benz G-Wagon AMG": a dead end is a failure). A car drops its colour first (a custom paint or wrap
+ * no listing names), then its trim, then new-only; a home drops its style and features, then its bedrooms, then its
+ * price cap. At most two wider searches, since each one costs a search.
+ */
+export function widerBriefs(c: Criteria): { criteria: Criteria; dropped: "colour" | "trim" | "condition" | "style" | "bedrooms" | "price" }[] {
+  const out: ReturnType<typeof widerBriefs> = [];
+  if (c.kind === "car") {
+    let w = c;
+    if (w.colour.trim()) out.push({ criteria: (w = { ...w, colour: "" }), dropped: "colour" });
+    if (w.trim.trim()) out.push({ criteria: (w = { ...w, trim: "" }), dropped: "trim" });
+    if (w.condition !== "any") out.push({ criteria: (w = { ...w, condition: "any" }), dropped: "condition" });
+  } else {
+    let w = c;
+    if (w.styles.length || w.features.length) out.push({ criteria: (w = { ...w, styles: [], features: [] }), dropped: "style" });
+    if (w.bedrooms) out.push({ criteria: (w = { ...w, bedrooms: null }), dropped: "bedrooms" });
+    if (w.maxPrice) out.push({ criteria: (w = { ...w, maxPrice: null }), dropped: "price" });
+  }
+  return out.slice(0, 2);
+}
+
+async function runSearch(ctx: DreamCtx, t: TranscriptEntry[], state: DreamState, asked: Criteria, round: number): Promise<string> {
+  let criteria = asked;
+  let found = await searchListings(ctx, criteria, state.seen);
+  let dropped: ReturnType<typeof widerBriefs>[number]["dropped"] | null = null;
+  for (const wider of found.length ? [] : widerBriefs(asked)) {
+    found = await searchListings(ctx, wider.criteria, state.seen);
+    if (found.length) {
+      criteria = wider.criteria;
+      dropped = wider.dropped;
+      break;
+    }
+  }
   if (!found.length) {
-    const msg = `I couldn't find live listings for ${describe(criteria)} just now. Try a wider brief or another area.`;
+    const msg = `I couldn't find live listings for ${describe(asked)} just now, even searching wider. Tell me another model or area and I'll look again.`;
     await say(ctx, msg);
     log(t, { role: "agent", text: msg, at: ctx.now().toISOString() });
     return "No listings found.";
+  }
+  if (dropped) {
+    // Say what was widened, so the deck is never mistaken for the exact brief.
+    const paint = dropped === "colour" && asked.kind === "car" ? ` ${capital(asked.colour.trim())} is usually a custom paint or a wrap on top.` : "";
+    const msg = `Nothing listed matches ${describe(asked)} right now, so here are ${describe(criteria)}.${paint}`;
+    await say(ctx, msg);
+    log(t, { role: "agent", text: msg, at: ctx.now().toISOString() });
   }
   const d: DeckState = {
     id: nextId(state, "deck"),

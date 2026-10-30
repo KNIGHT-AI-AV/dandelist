@@ -2,7 +2,7 @@ import { PGlite } from "@electric-sql/pglite";
 import { beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../src/app";
 import { migrate, type Db } from "../src/db";
-import { userCapUsd } from "../src/spend";
+import { isJudge, userCapUsd } from "../src/spend";
 import { brief, fallbackReason, honest, keepNote, swipeSignal, tidy } from "../src/dream/agent";
 import { MAX_TOOL_CALLS_PER_TURN, TurnBudget, TurnLimitError, searchResults } from "../src/dream/context";
 import { looksLikeListing, namesCar, priceIn } from "../src/dream/hunt";
@@ -882,6 +882,21 @@ describe("spend caps", () => {
     expect(await userCapUsd(d, await id("judge@dandelist.com"), 2, judge, caps)).toBe(6);
     expect(await userCapUsd(d, await id("ada@example.com"), 2, judge, caps)).toBe(2);
     expect(await userCapUsd(d, await id("bo@example.com"), 2, undefined, caps)).toBe(2);
+  });
+
+  it("gives a team account the judge account's allowance, set by hand, with or without a judge configured", async () => {
+    const pg = new PGlite();
+    const d: Db = { query: async (sql, params) => (await pg.query(sql, params)) as never, exec: async (sql) => void (await pg.exec(sql)) } as Db;
+    await migrate(d);
+    const id = async (email: string) => (await d.query<{ id: string }>("insert into users (email) values ($1) returning id", [email])).rows[0]!.id;
+    const caps = { dailyUsd: 10, totalUsd: 120 };
+    const owner = await id("owner@example.com");
+    expect(await userCapUsd(d, owner, 2, undefined, caps)).toBe(2);
+    await d.query("update users set team = true where id = $1", [owner]);
+    expect(await userCapUsd(d, owner, 2, undefined, caps)).toBe(6);
+    expect(await userCapUsd(d, owner, 2, { email: "judge@dandelist.com" }, caps)).toBe(6);
+    expect(await isJudge(d, owner, undefined)).toBe(true);
+    expect(await isJudge(d, await id("cy@example.com"), undefined)).toBe(false);
   });
 });
 
