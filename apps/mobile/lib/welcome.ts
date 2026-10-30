@@ -4,6 +4,7 @@ import { fetch as streamingFetch } from "expo/fetch";
 import { Platform } from "react-native";
 import type { Draft, Media, PriceOption, Step, WishQuestion, WorthCard } from "./agent";
 import { API_URL } from "./auth";
+import type { CandidatePick } from "./guess";
 import type { WishPair } from "./pairs";
 import { getSecret, setSecret } from "./storage";
 import type { NewWish, WishDetails, WishKind } from "./wishes";
@@ -78,6 +79,11 @@ export interface FirstWish {
    * guess, so a draft that comes again doesn't bring the row back.
    */
   guess?: string[] | null;
+  /**
+   * A vague wish's candidates as photos to pick from (lib/guess.ts guessCandidates). Null once they confirm the one
+   * being hunted, as the guess is.
+   */
+  pick?: CandidatePick | null;
 }
 
 /** A first wish that is on the list: priced, money with its amount, or priceless. */

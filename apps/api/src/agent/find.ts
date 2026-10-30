@@ -18,6 +18,7 @@ import {
   type WishQuestion,
 } from "./agent";
 import { SpendLimitError } from "../spend";
+import { CANDIDATE_PHOTOS_MS, candidatePhotos } from "./candidates";
 import { estimateCard } from "./estimate";
 import { clip, withLine } from "./lines";
 import type { MediaImage } from "./media";
@@ -178,6 +179,19 @@ export async function huntWish(meta: Meta, ctx: HuntContext): Promise<HuntResult
   await ctx.onDraft?.(draft);
   // The live line names what the wish was understood as, not the words as typed (owner, 2026-10-30).
   await ctx.onStep?.(withLine({ type: "note", text: `Hunting for ${clip(draft.title, 48)}`, at: ctx.now().toISOString() }));
+  // A vague wish's candidates get a photo each, so the person can pick the one they meant by sight (owner, 2026-10-30:
+  // "Images of multiple items up to 5 with make model sub names"); the draft goes out again with them. The hunt goes
+  // on pricing the first meanwhile, and nothing waits on this.
+  if (draft.candidates?.length) {
+    const kind = mediaKindOf(draft)[0] ?? "product";
+    void candidatePhotos(draft.candidates, { archive: ctx.archive, api: fetcher, kind, by: Date.now() + CANDIDATE_PHOTOS_MS })
+      .then(async (candidates) => {
+        if (!candidates.some((c) => c.image)) return;
+        draft = { ...draft, candidates };
+        await ctx.onDraft?.(draft);
+      })
+      .catch((e: unknown) => console.warn("candidate photos failed", (e as Error).message));
+  }
   // The last word, should nothing else price in time (owner, 2026-10-30: "It needs to work every single time"): when
   // the fast card hasn't landed by its own deadline, one search for the understood name's typical price, shown as an
   // estimate with its source. It costs one search, and only on hunts that would otherwise come back empty.

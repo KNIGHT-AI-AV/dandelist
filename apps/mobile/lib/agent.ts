@@ -25,6 +25,20 @@ export interface Draft {
   /** False when the reading had to work out what was meant; `others` then holds up to three other likely names. */
   sure?: boolean;
   others?: string[];
+  /**
+   * When the wish named only a brand, a family or a kind of thing: up to five specific things it may mean, the one being
+   * hunted first, each with a photo once the hunt has one (lib/guess.ts guessCandidates).
+   */
+  candidates?: WishCandidate[];
+}
+
+/** One specific thing a vague wish may mean: "Porsche 911 Carrera S" is make Porsche, model 911, variant Carrera S. */
+export interface WishCandidate {
+  name: string;
+  make: string;
+  model: string;
+  variant: string;
+  image?: MediaImage;
 }
 
 /**

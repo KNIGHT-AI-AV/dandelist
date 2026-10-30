@@ -8,7 +8,7 @@ import { useWaitingMusic } from "../../lib/waiting";
 import type { FirstWish } from "../../lib/welcome";
 import { Working } from "../chat/working";
 import { Eyebrow, Glass, Money, Photo, PrimaryButton, QuietButton } from "../lux";
-import { GuessRow } from "../guess";
+import { CandidateRow, GuessRow } from "../guess";
 import { WaitingLight } from "../waiting-light";
 import { AmountPicker, PricelessPrice, glyphFor } from "../worth";
 
@@ -144,7 +144,14 @@ export function MadeStep({
           <Text accessibilityRole="header" style={[t.title1, { color: p.ink, textAlign: "center" }]} numberOfLines={3}>
             {title}
           </Text>
-          {wish.guess && !failed && onGuessConfirm && onGuessPick ? <GuessRow center others={wish.guess} onConfirm={onGuessConfirm} onPick={onGuessPick} onElse={onGuessElse} /> : null}
+          {/* Photos to pick from when the wish named only a brand or a kind; else the names when the reading had to guess. */}
+          {!failed && onGuessConfirm && onGuessPick ? (
+            wish.pick ? (
+              <CandidateRow center pick={wish.pick} onConfirm={onGuessConfirm} onPick={onGuessPick} onElse={onGuessElse} />
+            ) : wish.guess ? (
+              <GuessRow center others={wish.guess} onConfirm={onGuessConfirm} onPick={onGuessPick} onElse={onGuessElse} />
+            ) : null
+          ) : null}
         </View>
 
         <View style={{ width: cardW, alignSelf: "center" }}>

@@ -168,6 +168,14 @@ export function guestRoutes(deps: AgentDeps & { pool: () => Promise<PoolItem[]>;
       // This or that from the wish itself, made beside the hunt (owner, 2026-10-30): one model call of its own, then
       // photo and price lookups that call no model (pairs.ts). Never for a hunt again with changed answers.
       const pairing = new AbortController();
+      // A visitor who leaves, or picks another of a vague wish's candidates (which starts a hunt of its own), ends this
+      // one: its model calls stop at once instead of spending the shared guest budget until the hunt's own stop.
+      stream.onAbort(() => {
+        open = false;
+        stop.abort();
+        shot.abort();
+        pairing.abort();
+      });
       const paired: Promise<unknown> =
         wantPairs && !draft
           ? makePairs(guestMeta(pairing.signal, "guest-pairs"), { wish: text }, { pool: deps.pool, typicals: deps.typicals ?? (async () => []), archive, api: deps.webFetch ?? publicFetch, now: deps.now, by: startedAt + PAIRS_MS })
@@ -212,7 +220,8 @@ export function guestRoutes(deps: AgentDeps & { pool: () => Promise<PoolItem[]>;
           if (!shown.card) await send({ type: "error", message: NOT_FOUND });
         } else if ("e" in outcome) {
           const e = outcome.e;
-          if (!(e instanceof SpendLimitError)) console.error("guest wish failed", e instanceof MetaApiError ? `${e.status} ${e.body.slice(0, 200)}` : (e as Error).message);
+          // A hunt the visitor ended (see onAbort) is no failure.
+          if (!(e instanceof SpendLimitError) && !stop.signal.aborted) console.error("guest wish failed", e instanceof MetaApiError ? `${e.status} ${e.body.slice(0, 200)}` : (e as Error).message);
           if (!shown.card) await send({ type: "error", message: e instanceof SpendLimitError ? busy("day") : NOT_PRICED });
         } else if (outcome.r.worth) {
           // Money or priceless: nothing to hunt, so the fast find and the questions that started beside the reading
