@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import type { Db } from "../db";
 import type { MediaImage, MediaKind } from "../agent/media";
-import { selectHeroPhotos } from "./photo-selection";
+import { providerDeliveryAllowed, selectDeliverablePhotos } from "./photo-delivery";
 
 /**
  * The shared archive (owner, 2026-10-27). It supplies approved photos when a matching entity has exactly one
@@ -127,7 +127,8 @@ export function admissible(p: ArchivePhoto): boolean {
     !/\bnd\b|-nd/i.test(p.license) &&
     Math.max(p.width, p.height) >= 3000 &&
     /^https:\/\//.test(p.url) &&
-    /^https:\/\//.test(p.sourcePage)
+    /^https:\/\//.test(p.sourcePage) &&
+    providerDeliveryAllowed(p)
   );
 }
 
@@ -164,7 +165,7 @@ export function pgArchive(db: Db, now: () => Date = () => new Date()): Archive {
     async lookup(subject, kind) {
       const e = matchEntity(subject, kind, await entities());
       if (!e) return null;
-      const photos = selectHeroPhotos(await photosOf(e.id));
+      const photos = selectDeliverablePhotos(await photosOf(e.id));
       return photos ? { entity: e, photos } : null;
     },
     async contribute(subject, kind, photos, by) {
