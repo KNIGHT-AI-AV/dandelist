@@ -204,7 +204,22 @@ export function TitleSequence({ hero, short, onDone }: { hero: Entry; short: boo
           than the last, feather its edge, so the title gives way from that point instead of cutting. */}
       {from ? (
         <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-          {FEATHER.map(([grow, alpha]) => (
+          {Platform.OS === "web" ? (
+            // On the web one disc with a radial gradient feathers the edge for real: the three solid discs below showed
+            // as hard rings through the wordmark (UI audit, 2026-10-30).
+            <Animated.View
+              style={{
+                position: "absolute",
+                left: from.x - reach / 2,
+                top: from.y - reach / 2,
+                width: reach,
+                height: reach,
+                borderRadius: reach / 2,
+                backgroundImage: `radial-gradient(circle closest-side, ${p.bg} 78%, rgba(${p.bgRgb}, 0) 100%)`,
+                transform: [{ scale: out.interpolate({ inputRange: [0, 1], outputRange: [0, 1.3] }) }],
+              } as object}
+            />
+          ) : FEATHER.map(([grow, alpha]) => (
             <Animated.View
               key={grow}
               style={{ position: "absolute", left: from.x - reach / 2, top: from.y - reach / 2, width: reach, height: reach, borderRadius: reach / 2, backgroundColor: p.bg, opacity: alpha, transform: [{ scale: out.interpolate({ inputRange: [0, 1], outputRange: [0, grow] }) }] }}

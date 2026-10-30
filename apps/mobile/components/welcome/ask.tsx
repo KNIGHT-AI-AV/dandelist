@@ -43,7 +43,7 @@ export function Ask({ ideas, initial, bottomInset, onSubmit }: { ideas: string[]
 
   return (
     <View style={{ flex: 1 }}>
-      <KeyboardScroll dock={dock} contentContainerStyle={{ paddingHorizontal: gutter, paddingTop: layout.stack.section, paddingBottom: dockRoom(dock, bottomInset), gap: layout.stack.section, width: "100%", maxWidth: layout.column + 2 * gutter, alignSelf: "center" }}>
+      <KeyboardScroll dock={dock} contentContainerStyle={{ paddingHorizontal: gutter, paddingBottom: dockRoom(dock, bottomInset), gap: layout.stack.section, width: "100%", maxWidth: layout.column + 2 * gutter, alignSelf: "center" }}>
         <Rise style={{ gap: layout.stack.tight }}>
           <Eyebrow>Your first wish</Eyebrow>
           <Text accessibilityRole="header" style={[t.title1, { color: p.ink }]}>

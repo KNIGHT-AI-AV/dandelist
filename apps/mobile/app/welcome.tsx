@@ -1,7 +1,7 @@
 import { entry, type Entry } from "@dandelist/catalogue";
 import { router } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Animated, BackHandler, Platform, Pressable, Text, View, useWindowDimensions } from "react-native";
+import { Animated, BackHandler, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Grain, IconButton, PrimaryButton, Wordmark } from "../components/lux";
 import { SignInOptions } from "../components/sign-in-options";
@@ -111,6 +111,10 @@ export default function Welcome() {
   const [flight, setFlight] = useState<{ text: string; from: { x: number; y: number }; to: { x: number; y: number } } | null>(null);
   const fly = useRef(new Animated.Value(0)).current;
   const stage = useRef(new Animated.Value(1)).current;
+  // The page's textured background and its header, faded in with the first step after the title, so neither cuts in
+  // over the title's flat dissolve (UI audit, 2026-10-30). `fromTitle` is set as the title hands over.
+  const chrome = useRef(new Animated.Value(1)).current;
+  const fromTitle = useRef(false);
   const shift = useRef(new Animated.Value(0)).current;
   // Behind the save sheet the page settles back a little (UI audit P1-13).
   const behind = useRef(new Animated.Value(1)).current;
@@ -135,13 +139,20 @@ export default function Welcome() {
    * back on a step is the list, the pairs shown and the counts as they are when an action on it starts.
    */
   const [steps] = useState(() => {
-    const fade: Fade = (to, done) =>
-      Animated.timing(stage, {
-        toValue: to,
-        duration: to ? (calm.current ? 160 : FADE_IN_MS) : calm.current ? 100 : FADE_OUT_MS,
-        easing: to ? ease.cinema : ease.inOut,
-        useNativeDriver: native,
-      }).start(({ finished }) => finished && done());
+    const fade: Fade = (to, done) => {
+      // The title has already dissolved to the bare page: nothing is left to fade out, so no dark pause.
+      if (!to && fromTitle.current) {
+        stage.setValue(0);
+        done();
+        return;
+      }
+      const duration = to ? (calm.current ? 160 : FADE_IN_MS) : calm.current ? 100 : FADE_OUT_MS;
+      if (to && fromTitle.current) {
+        fromTitle.current = false;
+        Animated.timing(chrome, { toValue: 1, duration, easing: ease.cinema, useNativeDriver: native }).start();
+      }
+      Animated.timing(stage, { toValue: to, duration, easing: to ? ease.cinema : ease.inOut, useNativeDriver: native }).start(({ finished }) => finished && done());
+    };
     return welcomeSteps<Step, Snap>({
       fade,
       // The stage is dark here (the old step has faded out), or still lit for the first step, which shows at once.
@@ -153,8 +164,15 @@ export default function Welcome() {
       keepsHistory: (s) => s.kind !== "title" && s.kind !== "theme",
     });
   });
-  // Ideas are drawn once per pool, so typing doesn't reshuffle the chips under a finger.
-  const ideas = useMemo(() => [...pool].sort(() => Math.random() - 0.5).slice(0, 4).map(ideaOf), [pool]);
+  // Ideas are drawn once per pool, so typing doesn't reshuffle the chips under a finger: two things and two places,
+  // since the pool is mostly places and four trips in a row read as a travel app (UI audit, 2026-10-30).
+  const ideas = useMemo(() => {
+    const shuffled = [...pool].sort(() => Math.random() - 0.5);
+    const places = shuffled.filter((e) => e.kind === "visit");
+    const things = shuffled.filter((e) => e.kind !== "visit");
+    const two = (a: PoolItem[], b: PoolItem[]) => [...a.slice(0, 2), ...b].slice(0, 4);
+    return (things.length >= 2 ? [things[0]!, places[0], things[1]!, places[1]].filter((e): e is PoolItem => !!e).concat(two(things.slice(2), places.slice(2))).slice(0, 4) : two(places, things)).map(ideaOf);
+  }, [pool]);
 
   useEffect(() => {
     const stop = startWelcome({
@@ -404,7 +422,18 @@ export default function Welcome() {
   let body: React.ReactNode;
   switch (step.kind) {
     case "title":
-      body = <TitleSequence hero={HERO} short={short} onDone={() => { void markTitleSeen(); steps.leave(here)?.to({ kind: "ask" }); }} />;
+      body = (
+        <TitleSequence
+          hero={HERO}
+          short={short}
+          onDone={() => {
+            void markTitleSeen();
+            chrome.setValue(0);
+            fromTitle.current = true;
+            steps.leave(here)?.to({ kind: "ask" });
+          }}
+        />
+      );
       break;
     case "ask":
       body = <Ask ideas={ideas} initial={state.wish?.text ?? ""} bottomInset={insets.bottom} onSubmit={(text) => startVoting(here, text)} />;
@@ -512,14 +541,16 @@ export default function Welcome() {
 
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
-      <Atmosphere />
+      <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { opacity: chrome }]}>
+        <Atmosphere />
+      </Animated.View>
       <Animated.View style={{ flex: 1, opacity: stage, borderRadius: sheet ? 24 : 0, overflow: sheet ? "hidden" : "visible", transform: [{ translateX: shift }, { scale: behind }], paddingTop: framed ? insets.top + layout.contentTop : 0, paddingBottom: metered ? insets.bottom + pillSpace : step.kind === "made" ? insets.bottom + layout.stack.base : 0 }}>
         {body}
       </Animated.View>
 
       {framed ? (
         // A 44 pt header bar from the top inset, then the segments at +50, both on the content column (UI audit P0-3).
-        <View pointerEvents="box-none" style={{ position: "absolute", top: insets.top, left: 0, right: 0, alignItems: "center", paddingHorizontal: gutter }}>
+        <Animated.View pointerEvents="box-none" style={{ position: "absolute", top: insets.top, left: 0, right: 0, alignItems: "center", paddingHorizontal: gutter, opacity: chrome }}>
           <View pointerEvents="box-none" style={{ width: "100%", maxWidth: headerColumn }}>
             <View pointerEvents="box-none" style={{ height: layout.headerBar, flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
               <View pointerEvents="box-none" style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
@@ -532,7 +563,7 @@ export default function Welcome() {
             </View>
             {segmented ? <Segments count={SEGMENTS} done={done} style={{ marginTop: layout.segmentsTop - layout.headerBar }} /> : null}
           </View>
-        </View>
+        </Animated.View>
       ) : null}
 
       {metered ? (

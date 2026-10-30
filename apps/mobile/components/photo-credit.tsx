@@ -13,14 +13,14 @@ export interface CreditedImage {
 }
 
 /** A link inside a credit: an anchor to a new tab on the web, the browser on a phone; it never also presses a card. */
-function Link({ url, children, color }: { url: string; children: string; color: string }) {
+function Link({ url, children, color, roomy }: { url: string; children: string; color: string; roomy?: boolean }) {
   const web = Platform.OS === "web" ? ({ href: url, hrefAttrs: { target: "_blank", rel: "noopener noreferrer" } } as object) : {};
   const press = (e: GestureResponderEvent) => {
     e.stopPropagation();
     if (Platform.OS !== "web") void Linking.openURL(url);
   };
   return (
-    <Text accessibilityRole="link" onPress={press} style={{ color }} {...web}>
+    <Text accessibilityRole="link" onPress={press} style={{ color, ...(roomy ? { paddingVertical: 12 } : null) }} {...web}>
       {children}
     </Text>
   );
@@ -32,7 +32,7 @@ function Link({ url, children, color }: { url: string; children: string; color: 
  * (safeAuthor), since saved wishes come back from clients. Any other photo gives its credit, licence and source.
  * Nothing for a generated image or one with no credit at all.
  */
-export function PhotoCredit({ image, style, lines = 1 }: { image?: CreditedImage | null; style?: StyleProp<TextStyle>; lines?: number }) {
+export function PhotoCredit({ image, style, lines = 1, roomy = false }: { image?: CreditedImage | null; style?: StyleProp<TextStyle>; lines?: number; roomy?: boolean }) {
   const p = usePalette();
   if (!image || image.generated) return null;
   const base = [type.figure, { color: p.ink3 }, style];
@@ -41,11 +41,11 @@ export function PhotoCredit({ image, style, lines = 1 }: { image?: CreditedImage
     return (
       <Text numberOfLines={lines} style={base}>
         {"Photo by "}
-        <Link url={author.url} color={p.ink2}>
+        <Link url={author.url} color={p.ink2} roomy={roomy}>
           {author.name}
         </Link>
         {" on "}
-        <Link url={UNSPLASH_HOME} color={p.ink2}>
+        <Link url={UNSPLASH_HOME} color={p.ink2} roomy={roomy}>
           Unsplash
         </Link>
       </Text>

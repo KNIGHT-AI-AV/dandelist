@@ -44,7 +44,10 @@ export function LegalPage({ eyebrow, title, documents, focus, after }: { eyebrow
   };
   const jump = (id: string, animated = true) => {
     const y = yOf(id);
-    if (y !== null) scroll.current?.scrollTo({ y: Math.max(0, y - top), animated });
+    // A section's heading lands clear of the Back button and the fade under it, where a document's own heading lands
+    // (UI audit, 2026-10-30: the deletion link put it flush under Back).
+    const clear = docAt.current.has(id) ? 0 : layout.stack.section;
+    if (y !== null) scroll.current?.scrollTo({ y: Math.max(0, y - top - clear), animated });
     return y !== null;
   };
   const tryFocus = () => {
