@@ -1,6 +1,5 @@
 // First, so every later read of the window, a measure or a gesture is in the page's units on a zoomed web page.
 import "../lib/viewport";
-import { BodoniModa_400Regular, BodoniModa_400Regular_Italic } from "@expo-google-fonts/bodoni-moda";
 import { DMMono_400Regular } from "@expo-google-fonts/dm-mono";
 import { InstrumentSerif_400Regular, InstrumentSerif_400Regular_Italic } from "@expo-google-fonts/instrument-serif";
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold } from "@expo-google-fonts/inter";
@@ -28,15 +27,9 @@ export default function RootLayout() {
 function Root() {
   const p = usePalette();
   const [loaded, error] = useFonts({
-    // Bodoni Moda's optical cuts (OFL; assets/fonts/OFL-BodoniModa.txt): Display (opsz 72) for 28 px and up, Title
-    // (opsz 28) for 18–27 px, and the package's 11 pt text cut below that (UI audit P1-9).
-    BodoniDisplay: require("../assets/fonts/BodoniModaDisplay-Regular.ttf"),
-    BodoniDisplay_Italic: require("../assets/fonts/BodoniModaDisplay-Italic.ttf"),
-    BodoniTitle: require("../assets/fonts/BodoniModaTitle-Regular.ttf"),
-    BodoniTitle_Italic: require("../assets/fonts/BodoniModaTitle-Italic.ttf"),
-    BodoniModa_400Regular,
-    BodoniModa_400Regular_Italic,
-    // Instrument Serif (OFL), the logo's face, sets every serif role since the readability pass of 2026-10-27.
+    // Only the faces lib/palette.ts sets. Instrument Serif (OFL), the logo's face, sets every serif role since the
+    // readability pass of 2026-10-27; Bodoni Moda's six cuts stayed loaded after it, set by nothing, and the first
+    // frame waited for them (Lighthouse, 2026-10-30).
     InstrumentSerif_400Regular,
     InstrumentSerif_400Regular_Italic,
     Inter_400Regular,
