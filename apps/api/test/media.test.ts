@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import jpeg from "jpeg-js";
 import { PNG } from "pngjs";
 import { describe, expect, it, vi } from "vitest";
+import { UNSPLASH_IMAGE } from "./unsplash";
 import { composeCutout, cutoutSource, decodeImage, makeCutout, parseSam, pickMask, plainPng } from "../src/agent/cutout";
 import {
   allowsCutout,
@@ -188,6 +189,25 @@ describe("Wikimedia Commons and Sketchfab", () => {
     expect(mediaSchema.safeParse(good).success).toBe(true);
     expect(mediaSchema.safeParse({ ...good, images: [{ url: "javascript:alert(1)", source: "x" }] }).success).toBe(false);
     expect(mediaSchema.safeParse({ ...good, model3d: { ...good.model3d, embedUrl: "https://evil.example.com/models/d01b254483794de3819786d93e0e1ebf/embed?x=1" } }).success).toBe(false);
+  });
+
+  it("keeps an Unsplash photo's credit links only when they are Unsplash's own (#112 review)", () => {
+    const ok = (image: object) => mediaSchema.safeParse({ kind: "vehicle", images: [image] }).success;
+    expect(ok(UNSPLASH_IMAGE)).toBe(true);
+    for (const url of [
+      "javascript:alert(1)",
+      "https://evil.example/@noirmedia?utm_source=dandelist&utm_medium=referral",
+      "http://unsplash.com/@noirmedia?utm_source=dandelist&utm_medium=referral",
+      "https://unsplash.com.evil.example/@noirmedia?utm_source=dandelist&utm_medium=referral",
+      "https://unsplash.com/@noir/../../evil?utm_source=dandelist&utm_medium=referral",
+      "https://unsplash.com/@noirmedia",
+    ]) {
+      expect(ok({ ...UNSPLASH_IMAGE, author: { ...UNSPLASH_IMAGE.author, url } }), url).toBe(false);
+    }
+    expect(ok({ ...UNSPLASH_IMAGE, author: { name: " ", url: UNSPLASH_IMAGE.author.url } })).toBe(false);
+    expect(ok({ ...UNSPLASH_IMAGE, page: "https://evil.example/photos/x?utm_source=dandelist&utm_medium=referral" })).toBe(false);
+    expect(ok({ ...UNSPLASH_IMAGE, variants: [{ width: 8, height: 8, url: "javascript:alert(1)" }] })).toBe(false);
+    expect(ok({ ...UNSPLASH_IMAGE, unsplash: { ...UNSPLASH_IMAGE.unsplash, id: "../../x" } })).toBe(false);
   });
 });
 

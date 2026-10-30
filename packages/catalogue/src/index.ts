@@ -83,6 +83,22 @@ export function heroImageFor(e: Pick<Entry, "media">, aspect: number): MediaImag
 export const UNSPLASH_HOME = "https://unsplash.com/?utm_source=dandelist&utm_medium=referral";
 
 /**
+ * The only credit links a photo may carry: an Unsplash photographer's profile and an Unsplash photo page, each tagged.
+ * Saved wishes come back from clients, so the API checks these on save and the app again before it links anything.
+ */
+export const UNSPLASH_PROFILE = /^https:\/\/unsplash\.com\/@[A-Za-z0-9_-]{1,64}\?utm_source=dandelist&utm_medium=referral$/;
+export const UNSPLASH_PAGE = /^https:\/\/unsplash\.com\/photos\/[A-Za-z0-9_-]{1,200}\?utm_source=dandelist&utm_medium=referral$/;
+
+/** The photographer to link, or nothing when the name or the link isn't one this app made. */
+export function safeAuthor(author: unknown): { name: string; url: string } | undefined {
+  if (!author || typeof author !== "object") return undefined;
+  const { name, url } = author as { name?: unknown; url?: unknown };
+  if (typeof name !== "string" || typeof url !== "string") return undefined;
+  const trimmed = name.trim();
+  return trimmed && trimmed.length <= 120 && UNSPLASH_PROFILE.test(url) ? { name: trimmed, url } : undefined;
+}
+
+/**
  * The smallest copy of a photo at least `need` pixels wide, else its widest: a phone isn't sent a 4K crop to show at a
  * third of the size (Lighthouse, 2026-10-30: the title photo was 924 KB, about 690 KB more than a phone shows).
  */

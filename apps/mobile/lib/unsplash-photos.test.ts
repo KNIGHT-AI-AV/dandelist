@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { entries, heroFor, heroImageFor, UNSPLASH_HOME } from "@dandelist/catalogue";
+import { entries, heroFor, heroImageFor, safeAuthor, UNSPLASH_HOME } from "@dandelist/catalogue";
 
 const fromUnsplash = entries.flatMap((e) => (e.media?.images ?? []).filter((i) => /unsplash/i.test(i.source)).map((i) => ({ e, i })));
 const UTM = "utm_source=dandelist&utm_medium=referral";
@@ -35,6 +35,19 @@ describe("Unsplash photos come from Unsplash (owner, 2026-10-30: 'Keep the hotli
       expect(i.unsplash?.tracked, e.id).toBeTruthy();
     }
     expect(UNSPLASH_HOME).toContain(UTM);
+  });
+
+  it("links a credit only to a real, tagged Unsplash profile (saved wishes come back from clients)", () => {
+    const url = "https://unsplash.com/@noirmedia?utm_source=dandelist&utm_medium=referral";
+    expect(safeAuthor({ name: " noir. ", url })).toEqual({ name: "noir.", url });
+    for (const bad of ["javascript:alert(1)", "https://evil.example/@noirmedia?utm_source=dandelist&utm_medium=referral", "http://unsplash.com/@noirmedia?utm_source=dandelist&utm_medium=referral", "https://unsplash.com.evil.example/@x?utm_source=dandelist&utm_medium=referral", "https://unsplash.com/@noirmedia"]) {
+      expect(safeAuthor({ name: "noir.", url: bad }), bad).toBeUndefined();
+    }
+    expect(safeAuthor({ name: "", url })).toBeUndefined();
+    expect(safeAuthor({ name: "x".repeat(121), url })).toBeUndefined();
+    expect(safeAuthor("noir.")).toBeUndefined();
+    expect(safeAuthor(null)).toBeUndefined();
+    for (const { e, i } of fromUnsplash) expect(safeAuthor(i.author), e.id).toEqual(i.author);
   });
 
   it("credits the very photo a frame shows", () => {

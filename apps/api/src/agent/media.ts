@@ -1,3 +1,4 @@
+import { UNSPLASH_PAGE, UNSPLASH_PROFILE } from "@dandelist/catalogue";
 import { z } from "zod";
 import { readCapped, safeGet, type Fetcher } from "./tools";
 
@@ -22,6 +23,10 @@ export interface MediaImage {
   clean?: boolean;
   /** Made or reworked by Muse Image, so the app can label it honestly. */
   generated?: boolean;
+  /** A catalogue photo served from Unsplash (packages/catalogue): its photographer, its page and smaller copies. */
+  author?: { name: string; url: string };
+  page?: string;
+  variants?: { width: number; height: number; url: string }[];
 }
 
 export interface Model3d {
@@ -66,6 +71,18 @@ export const mediaSchema = z.object({
         license: z.string().max(80).optional(),
         clean: z.boolean().optional(),
         generated: z.boolean().optional(),
+        // An Unsplash photo's credit links the app makes, and nothing else: they are shown as links (#112 review).
+        author: z.object({ name: z.string().trim().min(1).max(120), url: z.string().max(300).regex(UNSPLASH_PROFILE) }).optional(),
+        page: z.string().max(400).regex(UNSPLASH_PAGE).optional(),
+        variants: z.array(z.object({ width: px, height: px, url: webUrl })).max(8).optional(),
+        unsplash: z
+          .object({
+            id: z.string().regex(/^[A-Za-z0-9_-]{11}$/),
+            rect: z.array(z.number().int().min(0).max(100_000)).length(4),
+            size: z.array(px).length(2),
+            tracked: z.string().max(40).optional(),
+          })
+          .optional(),
       }),
     )
     .max(8),
