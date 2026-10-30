@@ -6,7 +6,7 @@ import { WRAP_UP_MS, explainFacts, research, tidyQuestions, type Draft, type Met
 import { estimateCard } from "../src/agent/estimate";
 import { huntWish, mergeFast, type HuntResult } from "../src/agent/find";
 import { lineFor } from "../src/agent/lines";
-import { closestPage, mediaKindOf, namesWish, parseAmount, photoCandidates, quickFind, readCandidates, wholeMention, wishWords, type ProductPage } from "../src/agent/quick";
+import { bareName, closestPage, mediaKindOf, namesWish, parseAmount, photoCandidates, quickFind, readCandidates, wholeMention, wishWords, type ProductPage } from "../src/agent/quick";
 import { priceBasis, priceMentions, structuredPrices } from "../src/agent/tools";
 import { listingData } from "../src/dream/pages";
 import { imageResponse, jpegHeader, pngHeader } from "./images";
@@ -289,6 +289,21 @@ describe("reading the fast find's answer and the pages", () => {
     expect(parseAmount("$12,500 MSRP")).toBe(12500);
     expect(parseAmount("0")).toBe(0);
     expect(parseAmount("none")).toBe(0);
+  });
+
+  it("names a card without the site's name or the price a listing adds after it", () => {
+    expect(bareName("Super Mario Bros. - NES Nintendo Game (5-screw variant) • $14.47")).toBe("Super Mario Bros. - NES Nintendo Game (5-screw variant)");
+    expect(bareName("Submariner Date - Oystersteel | Rolex")).toBe("Submariner Date - Oystersteel");
+    expect(bareName("Leica Q3 · eBay")).toBe("Leica Q3");
+    expect(bareName("Rolex Cosmograph Daytona - $15,100")).toBe("Rolex Cosmograph Daytona");
+    expect(bareName("Stadium Events: £9,999.99")).toBe("Stadium Events");
+    // A figure inside the name stays.
+    expect(bareName("The $100,000 Pyramid Board Game")).toBe("The $100,000 Pyramid Board Game");
+    // A hostile title can't stall the server: long runs of spaces and separators read in linear time.
+    const started = Date.now();
+    expect(bareName(`Leica${" ".repeat(200_000)}- $5`)).toBe("Leica");
+    expect(bareName(` -${" :".repeat(100_000)}$1`).length).toBeLessThanOrEqual(140);
+    expect(Date.now() - started).toBeLessThan(500);
   });
 
   it("reads the model's lines, links in its own order", () => {

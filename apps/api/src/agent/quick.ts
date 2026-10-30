@@ -93,7 +93,19 @@ const absolute = (raw: string | undefined, base: string): string | undefined => 
 };
 
 /** A title without its site suffix: "Submariner Date | Rolex" is "Submariner Date". */
-const bareName = (s: string) => htmlToText(s).split(/\s[|–—]\s/)[0]!.replace(/\s+/g, " ").trim().slice(0, 140);
+/**
+ * A page's or result's name for the thing, without the site name or the price a listing adds after it (live,
+ * 2026-10-30: a card named "Super Mario Bros. - NES Nintendo Game (5-screw variant) • $14.47").
+ */
+export const bareName = (s: string) =>
+  // Page text is untrusted: capped and its whitespace collapsed first, so no pattern below can backtrack on it.
+  htmlToText(s.slice(0, 1_000))
+    .replace(/\s+/g, " ")
+    .split(/ [|–—•·] /)[0]!
+    .trim()
+    .replace(/(?: -|:) ?[$£€¥] ?\d[\d,]*(?:\.\d{1,2})?$/, "")
+    .trim()
+    .slice(0, 140);
 
 export async function readProduct(raw: string, fetcher: Fetcher, timeoutMs = PAGE_MS): Promise<ProductPage> {
   const empty: ProductPage = { ok: false, url: raw, status: 0, name: "", title: "", siteName: "", text: "", prices: [], productImages: [], product: false };
