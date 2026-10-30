@@ -4,6 +4,7 @@ import { fetch as streamingFetch } from "expo/fetch";
 import { Platform } from "react-native";
 import type { Media, PriceOption, Step, WishQuestion, WorthCard } from "./agent";
 import { API_URL } from "./auth";
+import type { WishPair } from "./pairs";
 import { getSecret, setSecret } from "./storage";
 import type { NewWish, WishDetails, WishKind } from "./wishes";
 import { photoOnly, wholeCents, type Worth } from "./worth";
@@ -18,7 +19,10 @@ import { photoOnly, wholeCents, type Worth } from "./worth";
 
 export type PoolGroup = "travel" | "things" | "home";
 
-/** One card from the pool (GET /guest/pool): a catalogue entry checked on its seller's page, or an archive subject. */
+/**
+ * One card from the pool (GET /guest/pool): a catalogue entry checked on its seller's page, or an archive subject; or a
+ * card made from the first wish for this or that (id starting PAIR_PREFIX), priced typical like the archive's.
+ */
 export interface PoolItem {
   id: string;
   name: string;
@@ -40,6 +44,11 @@ export interface PoolItem {
   /** The first wish when no shop prices it: money (the amount picked) or priceless (zero, left out of every total). */
   worth?: Worth;
 }
+
+/** Ids of cards made from the first wish (the server's pairs.ts), which the pool doesn't hold. */
+export const PAIR_PREFIX = "p:";
+/** A card made from the first wish: the preview can't look it up in the pool, so it goes with its price. */
+export const madeFromWish = (e: Pick<PoolItem, "id">) => e.id.startsWith(PAIR_PREFIX);
 
 /** The first wish as the guest agent priced it: the best option, with where the price came from. */
 export type GuestOption = Pick<PriceOption, "label" | "seller" | "url" | "upfrontCents" | "recurring" | "status" | "statusLabel" | "checkedAt" | "imageUrl" | "media" | "source">;
@@ -281,14 +290,17 @@ export type GuestEvent =
   | ({ type: "worth" } & WorthCard)
   /** A money wish's checked photo, when one is found in time. */
   | { type: "photo"; imageUrl: string; media?: Media }
+  /** This or that made from the wish, when asked for: it can come before or after the card, or not at all. */
+  | { type: "pairs"; pairs: WishPair[] }
   | { type: "error"; message: string };
 
 /**
  * Prices the first wish for real, before sign-in: what it is, the agent's live trail, then the best option. `price` is
- * a money or priceless card's "Price it": the words are hunted as an ordinary priced wish.
+ * a money or priceless card's "Price it": the words are hunted as an ordinary priced wish. `pairs` asks for this or
+ * that made from the same words, on the same stream, while the wish is priced.
  */
-export const streamGuestWish = (text: string, onEvent: (e: GuestEvent) => void, signal?: AbortSignal, price = false) =>
-  readEvents<GuestEvent>("/guest/wish", { text, ...(price ? { price: true } : {}) }, onEvent, signal);
+export const streamGuestWish = (text: string, onEvent: (e: GuestEvent) => void, signal?: AbortSignal, price = false, pairs = false) =>
+  readEvents<GuestEvent>("/guest/wish", { text, ...(price ? { price: true } : {}), ...(pairs ? { pairs: true } : {}) }, onEvent, signal);
 
 export type PreviewEvent =
   | { type: "row"; id: string; state: "running" | "done"; text: string }
@@ -308,7 +320,10 @@ export function previewExtra(w: FirstWish | null): { name: string; upfrontCents:
   return o ? { name, upfrontCents: whole(o.upfrontCents), recurring: o.recurring.slice(0, 6).map((r) => ({ label: r.label.slice(0, 60), amountCents: r.amountCents, period: r.period })) } : null;
 }
 
-/** Streams the agent's real work on the whole list: the pool picks by id, the first wish as priced. */
+/**
+ * Streams the agent's real work on the whole list: the pool picks by id, the first wish as priced, and the cards made
+ * from it with their prices (the pool doesn't hold those, so by id they would be left out of the sum).
+ */
 export function streamPreview(s: WelcomeState, onEvent: (e: PreviewEvent) => void, signal?: AbortSignal): Promise<void> {
   const extra = previewExtra(s.wish);
   // Nothing on the list has a price (a priceless first wish, nothing picked): the list comes to nothing to add up.
@@ -316,10 +331,12 @@ export function streamPreview(s: WelcomeState, onEvent: (e: PreviewEvent) => voi
     onEvent({ type: "result", upfrontCents: 0, monthlyRunningCents: 0, everythingBy: "", largest: null });
     return Promise.resolve();
   }
+  const made = s.items.filter(madeFromWish);
   return readEvents<PreviewEvent>(
     "/preview",
     {
-      picks: s.items.map((e) => e.id),
+      picks: s.items.filter((e) => !madeFromWish(e)).map((e) => e.id),
+      ...(made.length ? { extras: made.map((e) => ({ name: e.name.slice(0, 120), upfrontCents: Math.max(1, Math.round(e.upfrontCents)), recurring: e.recurring.slice(0, 6).map((r) => ({ label: r.label.slice(0, 60), amountCents: r.amountCents, period: r.period })) })) } : {}),
       ...(extra ? { extra } : {}),
       monthlyCents: s.monthlyCents,
       horizonYears: s.when ? WHEN_YEARS[s.when] : null,
