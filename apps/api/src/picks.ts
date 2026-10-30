@@ -333,8 +333,9 @@ export function pickRoutes(deps: AgentDeps) {
     const stop = new AbortController();
     const client = new MetaClient({ ...deps.meta, fetch: stoppable(deps.meta.fetch ?? fetch, stop.signal), onUsage: (usage, cost) => recordSpend(db, userId, "pick", usage, cost, deps.now()) });
     // Every call holds its own share of the caps while it runs, as the agent's do (agent/routes.ts): a look at one
-    // photo a fifth of a full call, and past the person's in-flight slots a call waits its turn (spend.ts).
-    const meta: Meta = { responses: (b) => withHold(guard, () => client.responses(b), userId, holdFor(b)) };
+    // photo a fifth of a full call, and past the person's in-flight slots a call waits its turn (spend.ts). The stop
+    // reaches the queue too, so no call starts once this pick has answered.
+    const meta: Meta = { responses: (b) => withHold(guard, () => client.responses(b), userId, holdFor(b), stop.signal) };
     try {
       const [life, notes, past] = await Promise.all([
         readLife(db, userId),
