@@ -3,13 +3,14 @@ import { Image } from "expo-image";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Animated, Easing, PanResponder, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { useReducedMotion } from "../lib/motion";
+import { cutoutSourceImage } from "../lib/photo-credit";
 import { type, usePalette } from "../lib/theme";
 import { Embed } from "./embed";
 import { Photo } from "./lux";
 import { PhotoCredit } from "./photo-credit";
 
 /** What the agent found to show a wish: real photographs first, a 3D model when a true match exists. */
-export type MediaImage = { url: string; width?: number; height?: number; source: string; credit?: string; license?: string; clean?: boolean; generated?: boolean; author?: { name: string; url: string } };
+export type MediaImage = { url: string; width?: number; height?: number; source: string; credit?: string; license?: string; sourcePage?: string; clean?: boolean; generated?: boolean; author?: { name: string; url: string } };
 export type Model3d = { provider: "sketchfab"; uid: string; name: string; author: string; license: string; embedUrl: string; thumbnail: string };
 export type Media = {
   kind: "product" | "vehicle" | "place" | "experience" | "other";
@@ -121,7 +122,7 @@ export function Slideshow({ images, interval = 5200, style, children }: { images
           ))}
         </View>
       ) : null}
-      {current.author ? (
+      {!current.generated ? (
         <View style={{ position: "absolute", right: 12, bottom: 10, maxWidth: "70%" }}>
           <PhotoCredit image={current} />
         </View>
@@ -192,7 +193,7 @@ export function TiltObject({ uri, style, credit, image }: { uri: string; style?:
       <Text pointerEvents="none" style={[type.eyebrow, { position: "absolute", bottom: 40, color: p.ink3 }]}>
         Drag to turn
       </Text>
-      {image?.author ? (
+      {image && !image.generated ? (
         <View style={{ position: "absolute", right: 12, bottom: 10, maxWidth: "70%" }}>
           <PhotoCredit image={image} />
         </View>
@@ -213,7 +214,10 @@ export function MediaHero({ media, fallbackUri, kind, style, glyph, children }: 
       </Slideshow>
     );
   }
-  if (media?.cutout) return <TiltObject uri={media.cutout.url} style={style} credit={media.images[0] ? creditFor(media.images[0]) : undefined} image={media.images[0]} />;
+  if (media?.cutout) {
+    const original = cutoutSourceImage(media.images, media.cutout.from);
+    return <TiltObject uri={media.cutout.url} style={style} credit={original ? creditFor(original) : undefined} image={original} />;
+  }
   return (
     <View style={style}>
       <Photo uri={media?.images[0]?.url ?? fallbackUri} kind={kind} glyph={glyph} />

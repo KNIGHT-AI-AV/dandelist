@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { safeCommonsSourcePage } from "@dandelist/catalogue";
 import type { Db } from "../db";
 import type { MediaImage, MediaKind } from "../agent/media";
 import { providerDeliveryAllowed, selectDeliverablePhotos } from "./photo-delivery";
@@ -132,14 +133,18 @@ export function admissible(p: ArchivePhoto): boolean {
   );
 }
 
-export const toMediaImage = (p: ArchivePhoto): MediaImage => ({
-  url: p.url,
-  width: p.width,
-  height: p.height,
-  source: p.source === "commons" ? "commons.wikimedia.org" : `${p.source}.com`,
-  credit: p.photographer ?? undefined,
-  license: p.license,
-});
+export const toMediaImage = (p: ArchivePhoto): MediaImage => {
+  const sourcePage = safeCommonsSourcePage(p);
+  return {
+    url: p.url,
+    width: p.width,
+    height: p.height,
+    source: p.source === "commons" ? "commons.wikimedia.org" : `${p.source}.com`,
+    credit: p.photographer ?? undefined,
+    license: p.license,
+    ...(sourcePage ? { sourcePage } : {}),
+  };
+};
 
 const slug = (s: string) => words(s).join("-").slice(0, 80);
 

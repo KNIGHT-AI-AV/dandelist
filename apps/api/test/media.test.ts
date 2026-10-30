@@ -6,6 +6,7 @@ import { UNSPLASH_IMAGE } from "./unsplash";
 import { composeCutout, cutoutSource, decodeImage, makeCutout, parseSam, pickMask, plainPng } from "../src/agent/cutout";
 import {
   allowsCutout,
+  commonsImage,
   commonsPhotos,
   embedUrlFor,
   huntImages,
@@ -145,6 +146,14 @@ describe("Wikimedia Commons and Sketchfab", () => {
     ]);
     expect(photos[1]).toMatchObject({ url: "https://upload.wikimedia.org/thumb/Alfama%20at%20dusk/3840px.jpg", credit: "Ana Lima", license: "CC BY-SA 4.0", description: "View of Alfama", quality: true });
     expect(photos[0]!.url).toBe("https://upload.wikimedia.org/Lisbon%20from%20Graca.jpg");
+    const image = commonsImage(photos[0]!);
+    expect(image).toMatchObject({ source: "commons.wikimedia.org", sourcePage: "https://commons.wikimedia.org/wiki/File%3ALisbon_from_Graca.jpg", credit: "Ana Lima", license: "CC BY-SA 4.0" });
+    expect(mediaSchema.safeParse({ kind: "place", images: [image] }).success).toBe(true);
+    expect(image).not.toHaveProperty("page");
+    const withoutPage = commonsImage({ ...photos[0]!, page: "https://evil.example/wiki/File:Lisbon.jpg" });
+    expect(withoutPage).not.toHaveProperty("sourcePage");
+    expect(withoutPage.url).toBe(image.url);
+    expect(withoutPage.credit).toBe(image.credit);
     expect(seen[0]!.ua).toMatch(/^Dandelist\//);
     expect(new URL(seen[0]!.url).searchParams.get("gsrsearch")).toBe('intitle:"Lisbon" incategory:Featured_pictures_on_Wikimedia_Commons|Quality_images filetype:bitmap');
   });
@@ -208,6 +217,33 @@ describe("Wikimedia Commons and Sketchfab", () => {
     expect(ok({ ...UNSPLASH_IMAGE, page: "https://evil.example/photos/x?utm_source=dandelist&utm_medium=referral" })).toBe(false);
     expect(ok({ ...UNSPLASH_IMAGE, variants: [{ width: 8, height: 8, url: "javascript:alert(1)" }] })).toBe(false);
     expect(ok({ ...UNSPLASH_IMAGE, unsplash: { ...UNSPLASH_IMAGE.unsplash, id: "../../x" } })).toBe(false);
+  });
+
+  it("accepts an optional Commons File page without accepting a page for another provider", () => {
+    const image = { url: "https://api.dandelist.test/media/commons.jpg", source: "commons.wikimedia.org", credit: "Ana", license: "CC BY-SA 4.0" };
+    const ok = (photo: object) => mediaSchema.safeParse({ kind: "place", images: [photo] }).success;
+    expect(ok(image)).toBe(true);
+    for (const sourcePage of ["https://commons.wikimedia.org/wiki/File:Lisboa.jpg", "https://commons.wikimedia.org/wiki/File%3ALisboa_%28Tejo%29.jpg"]) {
+      expect(ok({ ...image, sourcePage }), sourcePage).toBe(true);
+      expect(ok({ ...image, source: "commons", sourcePage })).toBe(true);
+      expect(ok({ ...UNSPLASH_IMAGE, sourcePage })).toBe(false);
+      expect(ok({ ...image, source: "pexels.com", sourcePage })).toBe(false);
+    }
+    for (const sourcePage of [
+      "javascript:alert(1)",
+      "https://evil.example/wiki/File:Lisboa.jpg",
+      "https://commons.wikimedia.org.evil.example/wiki/File:Lisboa.jpg",
+      "http://commons.wikimedia.org/wiki/File:Lisboa.jpg",
+      "https://user@commons.wikimedia.org/wiki/File:Lisboa.jpg",
+      "https://commons.wikimedia.org:444/wiki/File:Lisboa.jpg",
+      "https://commons.wikimedia.org/wiki/User:Ana",
+      "https://commons.wikimedia.org/wiki/File:",
+      "https://commons.wikimedia.org/wiki/File:Lisboa.jpg?redirect=https://evil.example",
+      "https://commons.wikimedia.org/wiki/File:%ZZ.jpg",
+    ]) expect(ok({ ...image, sourcePage }), sourcePage).toBe(false);
+    // Existing Unsplash page/author/variant metadata and Commons images without a page are unchanged.
+    expect(ok(UNSPLASH_IMAGE)).toBe(true);
+    expect(ok({ ...image, page: "https://commons.wikimedia.org/wiki/File:Lisboa.jpg" })).toBe(false);
   });
 });
 

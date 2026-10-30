@@ -3,12 +3,13 @@ import { mkdtemp, readFile, rm, rmdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PGlite } from "@electric-sql/pglite";
+import { entries as catalogue, type Entry } from "@dandelist/catalogue";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { admissible, pgArchive, type ArchivePhoto } from "../src/archive/archive";
+import { admissible, pgArchive, toMediaImage, type ArchivePhoto } from "../src/archive/archive";
 import { providerDeliveryAllowed, selectDeliverablePhotos } from "../src/archive/photo-delivery";
 import { loadSeed, type SeedEntity } from "../src/archive/seed";
 import { migrate, type Db } from "../src/db";
-import { ARCHIVE_PREFIX, poolSource, typicalOf, type ArchiveRow } from "../src/pool";
+import { ARCHIVE_PREFIX, fromCatalogue, poolSource, typicalOf, type ArchiveRow } from "../src/pool";
 
 // Synthetic metadata only: these checks make no provider/model requests and establish neither rights nor visual approval.
 const HOTLINK = "https://images.unsplash.com/photo-fixture?ixid=fixture-id&rect=12%2C34%2C4000%2C3000&w=3840&h=2560";
@@ -92,6 +93,24 @@ describe("provider-specific archive delivery", () => {
 
   it("does not invent a hero when all remaining photos are safe", () => {
     expect(selectDeliverablePhotos([commons("unselected")])).toBeNull();
+  });
+
+  it("transports a valid catalogue Commons page and preserves Unsplash credit metadata", () => {
+    const photo = commons("catalogue", { hero: true });
+    const entry: Entry = { ...catalogue[0]!, media: { kind: "place", images: [toMediaImage(photo)] } };
+    const image = fromCatalogue(entry).media!.images[0]!;
+    expect(image).toMatchObject({ url: photo.url, sourcePage: photo.sourcePage, source: "commons.wikimedia.org", credit: photo.photographer, license: photo.license });
+    expect(image).not.toHaveProperty("page");
+    const invalid = { ...entry, media: { ...entry.media!, images: [{ ...entry.media!.images[0]!, sourcePage: "https://evil.example/wiki/File:Fixture.jpg" }] } };
+    expect(fromCatalogue(invalid).media!.images[0]).not.toHaveProperty("sourcePage");
+    expect(fromCatalogue(invalid).media!.images[0]!.url).toBe(photo.url);
+    const unsplashEntry = catalogue.find((e) => e.media?.images.some((p) => p.source === "unsplash.com" && p.author))!;
+    expect(unsplashEntry).toBeDefined();
+    const input = unsplashEntry.media!.images[0]!;
+    const output = fromCatalogue(unsplashEntry).media!.images[0]!;
+    expect(output.url).toBe(input.url);
+    expect(output.author).toEqual(input.author);
+    expect(output).not.toHaveProperty("sourcePage");
   });
 });
 
@@ -241,6 +260,27 @@ describe("legacy approval is checked again by archive and pool readers", () => {
     const result = await observe(entity);
     expect(result.hit).toBeNull();
     expect(result.card).toBeUndefined();
+    expect(await storedPhotos(entity.id)).toEqual(before);
+  });
+
+  it("carries each Commons File page through real archive and pool reads without repairing legacy rows", async () => {
+    const hero = commons("source-page", { hero: true, url: SELF_HOSTED, sourcePage: "https://commons.wikimedia.org/wiki/File%3AFixture_%28Harbor%29.jpg" });
+    const badPage = commons("bad-page", { sourcePage: "https://evil.example/wiki/File:Fixture.jpg" });
+    const wrongProvider = unsplash(HOTLINK, { sourcePage: hero.sourcePage });
+    const entity = await legacySeed("provenance", [hero, badPage, wrongProvider]);
+    const before = await storedPhotos(entity.id);
+    const result = await observe(entity);
+    expect(result.hit?.photos[0]).toMatchObject({ url: SELF_HOSTED, hero: true, sourcePage: hero.sourcePage });
+    const archiveImages = result.hit!.photos.map(toMediaImage);
+    expect(archiveImages[0]).toMatchObject({ sourcePage: hero.sourcePage, source: "commons.wikimedia.org", credit: hero.photographer, license: hero.license });
+    expect(result.card!.media!.images[0]).toMatchObject({ url: SELF_HOSTED, sourcePage: hero.sourcePage, credit: hero.photographer, license: hero.license });
+    for (const images of [archiveImages, result.card!.media!.images]) {
+      expect(images).toHaveLength(3);
+      expect(images.find((p) => p.url === badPage.url)).not.toHaveProperty("sourcePage");
+      expect(images.find((p) => p.url === HOTLINK)).not.toHaveProperty("sourcePage");
+      expect(images.every((p) => !("page" in p))).toBe(true);
+    }
+    // Invalid links are omitted from transport, not rewritten in stored provenance or photo approvals.
     expect(await storedPhotos(entity.id)).toEqual(before);
   });
 

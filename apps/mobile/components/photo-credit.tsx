@@ -1,16 +1,9 @@
-import { safeAuthor, UNSPLASH_HOME } from "@dandelist/catalogue";
+import { UNSPLASH_HOME } from "@dandelist/catalogue";
 import { Linking, Platform, Text, type GestureResponderEvent, type StyleProp, type TextStyle } from "react-native";
-import { photoCredit } from "../lib/gallery";
+import { photoCreditContent, type CreditedImage } from "../lib/photo-credit";
 import { type, usePalette } from "../lib/theme";
 
-/** What a credit needs to know about a photo: catalogue images and saved wish media both fit. */
-export interface CreditedImage {
-  credit?: string;
-  license?: string;
-  source?: string;
-  generated?: boolean;
-  author?: unknown;
-}
+export type { CreditedImage } from "../lib/photo-credit";
 
 /** A link inside a credit: an anchor to a new tab on the web, the browser on a phone; it never also presses a card. */
 function Link({ url, children, color, roomy }: { url: string; children: string; color: string; roomy?: boolean }) {
@@ -29,15 +22,17 @@ function Link({ url, children, color, roomy }: { url: string; children: string; 
 /**
  * A photo's credit beside the photo. An Unsplash photo reads "Photo by <name> on Unsplash", the name linked to the
  * photographer and Unsplash to its home page, as Unsplash's API guidelines ask; it links only a real Unsplash profile
- * (safeAuthor), since saved wishes come back from clients. Any other photo gives its credit, licence and source.
+ * (safeAuthor), since saved wishes come back from clients. Commons photos link their validated File page beside
+ * the photographer and licence, without inventing a photographer profile. Other photos keep their plain credit.
  * Nothing for a generated image or one with no credit at all.
  */
-export function PhotoCredit({ image, style, lines = 1, roomy = false }: { image?: CreditedImage | null; style?: StyleProp<TextStyle>; lines?: number; roomy?: boolean }) {
+export function PhotoCredit({ image, fallback, style, lines = 1, roomy = false }: { image?: CreditedImage | null; fallback?: string; style?: StyleProp<TextStyle>; lines?: number; roomy?: boolean }) {
   const p = usePalette();
-  if (!image || image.generated) return null;
+  const content = photoCreditContent(image, fallback);
+  if (!content) return null;
   const base = [type.figure, { color: p.ink3 }, style];
-  const author = safeAuthor(image.author);
-  if (author) {
+  if (content.kind === "unsplash") {
+    const { author } = content;
     return (
       <Text numberOfLines={lines} style={base}>
         {"Photo by "}
@@ -51,10 +46,19 @@ export function PhotoCredit({ image, style, lines = 1, roomy = false }: { image?
       </Text>
     );
   }
-  const plain = photoCredit({ url: "", source: "", ...image } as Parameters<typeof photoCredit>[0]);
-  return plain ? (
+  if (content.kind === "commons") {
+    return (
+      <Text numberOfLines={lines} style={base}>
+        <Link url={content.url} color={p.ink2} roomy={roomy}>
+          Wikimedia Commons
+        </Link>
+        {content.text ? ` · ${content.text}` : ""}
+      </Text>
+    );
+  }
+  return (
     <Text numberOfLines={lines} style={base}>
-      {plain}
+      {content.text}
     </Text>
-  ) : null;
+  );
 }

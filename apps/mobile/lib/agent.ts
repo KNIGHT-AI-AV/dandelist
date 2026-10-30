@@ -99,6 +99,8 @@ export interface MediaImage {
   source: string;
   credit?: string;
   license?: string;
+  /** A Commons File page for this exact photograph; other providers keep their existing fields. */
+  sourcePage?: string;
   /** Transparent or cut-out background. */
   clean?: boolean;
   /** Made or reworked by Muse Image: label it as generated. */
