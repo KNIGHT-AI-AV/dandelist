@@ -5,10 +5,11 @@ separate release histories when a runner is copied to a different directory. It
 also makes a recorded review hold or changed mailbox invalidate mutation clearance.
 It adds no SDK, credential, resource, account or billing configuration.
 
-**Status: integration component. Existing standalone deployment scripts do not
-automatically use it. Both lanes must adopt the common control location and adapter
-before claiming coordinated releases.** Do not alter a runner during an active
-release, or use the legacy provisioning helper to integrate this component.
+**Status: coordinator, existing-resource AWS adapter and launcher are implemented.
+Existing standalone deployment scripts do not automatically use them. Both lanes
+must adopt this launcher and the common control location before claiming coordinated
+releases.** Offline tests are not a live deployment or an adoption receipt. Do not
+alter a runner during an active release, or use the legacy provisioning helper.
 
 ## First adoption
 
@@ -22,10 +23,10 @@ release, or use the legacy provisioning helper to integrate this component.
 3. Explicitly initialize the new service with `cli.mjs init SERVICE owner.json`.
    The JSON file contains `{"owner":"Codex"}` or the corresponding actor. Do not
    initialize over lost state or use a new service identifier to evade an attempt.
-4. Integrate the existing, independently reviewed configuration-preserving runner
-   using the callbacks below. Preserve its exact-source/buildspec/digest checks,
-   protected configuration verification, resource gate and permission boundaries.
-   Do not change live credentials, IAM or provision infrastructure.
+4. Adopt `aws-runner.mjs` using the existing-resource adapter described below.
+   Preserve the separate resource gate, release claim and permission boundaries.
+   Do not change live credentials, IAM or provision infrastructure. The earlier
+   copied runners are reconciliation evidence, not alternative mutation paths.
 5. Both lanes register holds here as well as in the mailbox. Before each mutation,
    actually read the mailbox and board, then record the exact reviewed fingerprints.
    A fingerprint proves the snapshot is unchanged, not that anyone understood it.
@@ -36,9 +37,10 @@ Import `ReleaseControl` from `control.mjs`. Its default root is the same as the 
 Construct it with the service and the actual shared `inbox`/`outbox` paths. The root
 must exist; missing registration/journal/checkpoint state fails closed.
 
-- `begin({sha, owner, configurationHash})` reserves an exact 40-character source and
+- `begin({sha, owner, configurationHash, planHash?})` reserves an exact 40-character source and
   hash of the protected preflight configuration. It returns an attempt with `id`.
-  The same owner/source/configuration resumes that attempt; another one is blocked.
+  The same owner/source/configuration/adapter-plan resumes that attempt; another
+  one is blocked. An adapter plan cannot disappear or change during resume.
 - `fingerprints()` reads both files. Pass the hashes from the snapshot actually
   reviewed to `grant({attemptId, owner, phase, requestHash, fingerprints})`.
   `phase` is `build` or `deploy`; `requestHash` is the SHA-256 of the canonical,

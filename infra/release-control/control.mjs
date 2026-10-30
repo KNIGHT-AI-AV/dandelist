@@ -112,17 +112,18 @@ export class ReleaseControl {
 
   async inspect() { return this.#locked((state) => clone(state)); }
 
-  async begin({ sha, owner, configurationHash }) {
+  async begin({ sha, owner, configurationHash, planHash }) {
     need(sourceSha(sha) && text(owner) && fingerprint(configurationHash), "Exact source, owner and configuration hash required");
+    need(planHash === undefined || fingerprint(planHash), "Adapter plan hash must be a SHA-256 fingerprint");
     return this.#locked((state) => {
       if (state.active) {
-        need(state.active.sha === sha && state.active.owner === owner && state.active.configurationHash === configurationHash && !state.active.transferTo, "Another attempt is active; reconcile or transfer it");
+        need(state.active.sha === sha && state.active.owner === owner && state.active.configurationHash === configurationHash && state.active.planHash === planHash && !state.active.transferTo, "Another attempt or adapter plan is active; reconcile or transfer it");
         return clone(state.active);
       }
       need(!state.completed[sha], "Completed source exists; verify alreadyDeployed instead of rebuilding");
       need(!state.holds.length, "Unresolved review hold");
       state.revision++;
-      state.active = { id: randomUUID(), sha, owner, configurationHash, build: null, deploy: null, clearance: null };
+      state.active = { id: randomUUID(), sha, owner, configurationHash, ...(planHash === undefined ? {} : { planHash }), build: null, deploy: null, clearance: null };
       this.#save(state, "attempt_started");
       return clone(state.active);
     });

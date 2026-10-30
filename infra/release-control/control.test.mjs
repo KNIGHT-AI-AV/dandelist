@@ -38,6 +38,20 @@ async function fixture(t, { initialize = true } = {}) {
 }
 
 const begin = (control, owner = OWNER, sha = SHA) => control.begin({ sha, owner, configurationHash: CONFIG });
+test("adapter preflight identity cannot change or disappear on resumed attempts", options, async (t) => {
+  const { control, config } = await fixture(t);
+  const planHash = "9".repeat(64);
+  const attempt = await control.begin({ sha: SHA, owner: OWNER, configurationHash: CONFIG, planHash });
+  const reopened = new ReleaseControl(config);
+  assert.equal((await reopened.begin({ sha: SHA, owner: OWNER, configurationHash: CONFIG, planHash })).id, attempt.id);
+  await assert.rejects(reopened.begin({ sha: SHA, owner: OWNER, configurationHash: CONFIG }), /adapter plan/);
+  await assert.rejects(reopened.begin({ sha: SHA, owner: OWNER, configurationHash: CONFIG, planHash: "8".repeat(64) }), /adapter plan/);
+});
+test("invalid adapter preflight hashes cannot create an attempt", options, async (t) => {
+  const { control } = await fixture(t);
+  await assert.rejects(control.begin({ sha: SHA, owner: OWNER, configurationHash: CONFIG, planHash: "not-a-fingerprint" }), /SHA-256/);
+  assert.equal((await control.inspect()).active, null);
+});
 const input = (attempt, phase = "build", owner = OWNER) => ({
   attemptId: attempt.id, owner, phase, requestHash: phase === "build" ? BUILD_REQUEST : DEPLOY_REQUEST,
 });
