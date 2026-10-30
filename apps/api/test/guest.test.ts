@@ -1,6 +1,6 @@
 import { PGlite } from "@electric-sql/pglite";
 import { gunzipSync, inflateSync } from "node:zlib";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Shop hostnames resolve to a public documentation address, so no test touches real DNS.
 vi.mock("node:dns/promises", async (importOriginal) => ({ ...(await importOriginal<object>()), lookup: async () => [{ address: "93.184.215.14", family: 4 }] }));
@@ -14,7 +14,6 @@ import { visionReply } from "./vision";
 const clock = new Date("2026-10-28T12:00:00Z");
 const SHOP = "https://www.onepeloton.com/bike-plus";
 let db: Db;
-let pg: PGlite | undefined;
 let metaCalls: Record<string, any>[];
 
 const reply = (output: unknown[]) => new Response(JSON.stringify({ id: `resp_${metaCalls.length}`, output, usage: { input_tokens: 1000, output_tokens: 200 } }), { status: 200 });
@@ -92,14 +91,10 @@ async function events(res: Response) {
 }
 
 beforeEach(async () => {
-  const instance = new PGlite();
-  pg = instance;
-  db = { query: (t, p) => instance.query(t, p) as never, exec: (s) => instance.exec(s) } as Db;
+  const pg = new PGlite();
+  db = { query: (t, p) => pg.query(t, p) as never, exec: (s) => pg.exec(s) } as Db;
   await migrate(db);
   metaCalls = [];
-});
-afterEach(async () => {
-  await pg?.close();
 });
 
 describe("the pool", () => {
