@@ -64,6 +64,36 @@ describe("spend holds", () => {
     }
   });
 
+  it("never starts a queued call whose caller has given up, and still starts the live one behind it", async () => {
+    let open!: () => void;
+    const gate = new Promise<void>((r) => (open = r));
+    const mine = Array.from({ length: MAX_INFLIGHT_PER_USER }, () => withHold(async () => {}, () => gate, "user-e"));
+    const stop = new AbortController();
+    let late = false;
+    const abandoned = withHold(async () => {}, async () => ((late = true), "late"), "user-e", HOLD_USD, stop.signal);
+    let live = false;
+    const waiting = withHold(async () => {}, async () => ((live = true), "ok"), "user-e");
+    stop.abort();
+    await expect(abandoned).rejects.toThrow();
+    open();
+    await Promise.all(mine);
+    await expect(waiting).resolves.toBe("ok");
+    expect(live).toBe(true);
+    expect(late).toBe(false);
+    // Nothing is left held or queued.
+    expect(heldFor("user-e")).toBe(0);
+    await expect(withHold(async () => {}, async () => "ok", "user-e")).resolves.toBe("ok");
+  });
+
+  it("checks the caller once more after the hold, before the call starts", async () => {
+    const stop = new AbortController();
+    let ran = false;
+    const call = withHold(async () => void stop.abort(), async () => ((ran = true), "ok"), "user-f", HOLD_USD, stop.signal);
+    await expect(call).rejects.toThrow();
+    expect(ran).toBe(false);
+    expect(heldFor("user-f")).toBe(0);
+  });
+
   it("holds what a call can cost: a photo look holds a fifth of a full call", async () => {
     let open!: () => void;
     const gate = new Promise<void>((r) => (open = r));

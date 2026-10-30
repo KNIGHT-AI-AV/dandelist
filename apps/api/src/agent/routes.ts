@@ -139,7 +139,7 @@ export function agentRoutes(deps: AgentDeps) {
       await assertUserBudget(db, userId, await userCapUsd(db, userId, USER_DAILY_USD, deps.judge, caps), deps.now());
     };
     return {
-      responses: (body) => withHold(guard, () => client.responses(body), userId, holdFor(body)),
+      responses: (body) => withHold(guard, () => client.responses(body), userId, holdFor(body), stop),
       images: (op, body) => withHold(guard, () => client.images(op, body), userId),
     };
   };
@@ -208,7 +208,9 @@ export function agentRoutes(deps: AgentDeps) {
       // stupidly picked this photo for 1 of 1000 reasons like not the right watch"): every new photo is held up against
       // the one turned down, and the hunt looks wider.
       const { exclude, page, ...subject } = body.data;
-      const found = await findPhoto(metaFor(userId, "photo"), subject, { fetcher: deps.webFetch ?? publicFetch, exclude, deep: true, pages: page ? [page] : [], by: Date.now() + RETAKE_MS });
+      // The retake's calls stop with it: none starts after its 35 s, even one still waiting for a slot.
+      const stop = AbortSignal.timeout(RETAKE_MS);
+      const found = await findPhoto(metaFor(userId, "photo", undefined, stop), subject, { fetcher: deps.webFetch ?? publicFetch, exclude, deep: true, pages: page ? [page] : [], by: Date.now() + RETAKE_MS });
       if (!found) return c.json({ error: "No better photo turned up this time. Try again in a moment." }, 404);
       return c.json({ photo: { imageUrl: found.image.url, media: { kind: found.kind, images: [found.image] }, how: found.how } });
     } catch (e) {
