@@ -23,16 +23,19 @@ export const PREVIEWS_PER_DAY = 400;
 const CHECK_TIMEOUT_MS = 6000;
 
 const recurringSchema = z.object({ label: z.string().max(60), amountCents: z.number().int().min(0).max(1_000_000_000), period: z.enum(["month", "year"]) });
+const priced = z.object({ name: z.string().trim().min(1).max(120), upfrontCents: z.number().int().min(1).max(100_000_000_000), recurring: z.array(recurringSchema).max(6).default([]) });
 const body = z
   .object({
     // Pool items from this-or-that: a few rounds, each "Both" adds two.
     picks: z.array(z.string().max(80)).max(12).default([]),
     // The wish someone typed or said, as the guest agent priced it. Shown only to them, before they save anything.
-    extra: z.object({ name: z.string().trim().min(1).max(120), upfrontCents: z.number().int().min(1).max(100_000_000_000), recurring: z.array(recurringSchema).max(6).default([]) }).optional(),
+    extra: priced.optional(),
+    // This-or-that cards made from that wish (pairs.ts), as they were shown: not in the pool, so they come with their prices.
+    extras: z.array(priced).max(12).default([]),
     monthlyCents: z.number().int().min(1000).max(10_000_000),
     horizonYears: z.number().int().min(1).max(30).nullable().default(null),
   })
-  .refine((b) => b.picks.length > 0 || !!b.extra);
+  .refine((b) => b.picks.length > 0 || !!b.extra || b.extras.length > 0);
 
 /** Something on the list, as the plan sums it: a pool item or the priced wish. */
 interface ListItem {
@@ -101,8 +104,8 @@ export function previewRoutes(deps: AgentDeps & { webFetch?: Fetcher; pool?: () 
     const parsed = body.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: "Check your picks and try again." }, 400);
     const pool = deps.pool ? await deps.pool() : catalogue.map(fromCatalogue);
-    const { extra } = parsed.data;
-    const picks: ListItem[] = [...(extra ? [{ id: "wish", ...extra }] : []), ...resolvePicks(parsed.data.picks, pool)];
+    const { extra, extras } = parsed.data;
+    const picks: ListItem[] = [...(extra ? [{ id: "wish", ...extra }] : []), ...resolvePicks(parsed.data.picks, pool), ...extras.map((e, i) => ({ id: `extra-${i}`, ...e }))];
     if (!picks.length) return c.json({ error: "Pick something first." }, 400);
 
     const now = deps.now();

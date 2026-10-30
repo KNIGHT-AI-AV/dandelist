@@ -10,6 +10,7 @@ import { Recheck } from "../../components/detail/recheck";
 import { RetakePhoto } from "../../components/detail/retake";
 import { Swap } from "../../components/detail/swap";
 import { PhotoViewer, type ViewerFrom } from "../../components/detail/viewer";
+import { WaitingLight } from "../../components/waiting-light";
 import { AgentDot, Breathing, EdgeFade, ErrorLine, Eyebrow, Grain, IconButton, Protect, QuietButton, Shade } from "../../components/lux";
 import { MediaHero } from "../../components/media";
 import { Statement, Take } from "../../components/statement";
@@ -77,6 +78,8 @@ export default function WishDetail() {
   const [settled, setSettled] = useState(!zoom);
   const [photoIndex, setPhotoIndex] = useState(0);
   const [viewing, setViewing] = useState<(ViewerFrom & { key: number }) | null>(null);
+  // A retake is looking for a better photo: light crosses the one there until the new one lands.
+  const [retaking, setRetaking] = useState(false);
   const scrollY = useRef(new Animated.Value(0)).current;
   // The offset is also kept in JS: the pull gesture only claims at the top, and the viewer's flight starts from where
   // the parallax has carried the photo (a measured rect would not include a native-driven transform).
@@ -255,6 +258,7 @@ export default function WishDetail() {
                 <Shade from={HERO_SHADE} />
               </>
             )}
+            <WaitingLight active={retaking} />
           </Animated.View>
         </View>
 
@@ -274,7 +278,7 @@ export default function WishDetail() {
               </Text>
             </Swap>
           ) : null}
-          <RetakePhoto wish={w} />
+          <RetakePhoto wish={w} onBusy={setRetaking} />
         </Animated.View>
 
         <View style={[column, { marginTop: layout.stack.section, gap: layout.stack.section }]}>

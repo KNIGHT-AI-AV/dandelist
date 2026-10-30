@@ -1,6 +1,6 @@
 import { requestRecordingPermissionsAsync, useAudioStream } from "expo-audio";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { resumeSounds } from "../../lib/sound";
+import { holdSounds, resumeSounds } from "../../lib/sound";
 import { CLIP_RATE, SPEECH_LEVEL, downsample, encodeWav, levelOf, louder, monoOf, shouldStop, speechBar } from "../../lib/wav";
 import { BARS, MAX_LISTEN_MS, type Recorder, type RecorderOptions, type StopReason } from "./recorder-types";
 
@@ -88,6 +88,8 @@ export function useRecorder({ onClip, onError, maxMs = MAX_LISTEN_MS }: Recorder
     if (live.current) return;
     const l: Live = { chunks: [], rate: CLIP_RATE, startedAt: Date.now(), spokeAt: null, quietest: Infinity, loudest: 0, ring: [] };
     live.current = l;
+    // Nothing the app plays may go into the recording: the waiting music stops at once, until resumeSounds.
+    holdSounds();
     try {
       await stream.start();
     } catch {

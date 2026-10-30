@@ -16,6 +16,9 @@ import {
   type ResearchResult,
   type WishQuestion,
 } from "./agent";
+import { SpendLimitError } from "../spend";
+import { estimateCard } from "./estimate";
+import { clip, withLine } from "./lines";
 import type { MediaImage } from "./media";
 import { fallbackPlan, findPhoto, photoPlan, subjectOf, verifyPhoto, type FoundPhoto } from "./photos";
 import { QUICK_MS, mediaKindOf, quickFind, subjectPhoto } from "./quick";
@@ -130,7 +133,11 @@ export async function huntWish(meta: Meta, ctx: HuntContext): Promise<HuntResult
   const given = ctx.answers ?? [];
   const priced = (d: Draft) => (ctx.price ? asPriced(d) : d);
   const known = ctx.draft ? withAnswers(priced(ctx.draft), given) : null;
-  const reading: Promise<{ draft: Draft; extra: Answer[] }> = known ? Promise.resolve(known) : interpret(meta, ctx.text ?? "").then((d) => withAnswers(priced(d), given));
+  // A reading that fails on the network ("fetch failed", twice in ten live hunts on 2026-10-30) is tried once more
+  // before the wish fails; a spend cap is final.
+  const readWish = () => interpret(meta, ctx.text ?? "");
+  const readTwice = () => readWish().catch((e: unknown) => (e instanceof SpendLimitError ? Promise.reject(e) : new Promise<void>((r) => setTimeout(r, 800)).then(readWish)));
+  const reading: Promise<{ draft: Draft; extra: Answer[] }> = known ? Promise.resolve(known) : readTwice().then((d) => withAnswers(priced(d), given));
   reading.catch(() => undefined);
   // The questions start at once from the person's own words, beside reading the wish, so they are usually in hand
   // before the research starts and it prices their picks; nothing ever waits for them. A re-hunt brings its own.
@@ -168,6 +175,13 @@ export async function huntWish(meta: Meta, ctx: HuntContext): Promise<HuntResult
   // Questions already in hand go on the draft before the research reads it, so the hunt prices their picks.
   if (held.questions?.length) draft = { ...draft, questions: held.questions };
   await ctx.onDraft?.(draft);
+  // The live line names what the wish was understood as, not the words as typed (owner, 2026-10-30).
+  await ctx.onStep?.(withLine({ type: "note", text: `Hunting for ${clip(draft.title, 48)}`, at: ctx.now().toISOString() }));
+  // The last word, should nothing else price in time (owner, 2026-10-30: "It needs to work every single time"): when
+  // the fast card hasn't landed by its own deadline, one search for the understood name's typical price, shown as an
+  // estimate with its source. It costs one search, and only on hunts that would otherwise come back empty.
+  const lastWord = quick.then((q) => (q ? null : estimateCard(meta, draft, { home, fetcher, by: t0 + HUNT_STOP_MS - 4_000 }))).catch(() => null);
+  lastWord.catch(() => undefined);
 
   // The questions are their own small call beside the research, so nothing waits on them; a re-hunt brings its own.
   const asked: Promise<WishQuestion[]> = known
@@ -198,9 +212,8 @@ export async function huntWish(meta: Meta, ctx: HuntContext): Promise<HuntResult
   };
   searched.then((f) => f && passed.set(f.image.url, Promise.resolve(true)));
 
-  const card: { fast: PriceOption | null; settled: boolean; told: Promise<void> } = { fast: null, settled: false, told: Promise.resolve() };
-  const early = quick.then((q) => {
-    if (!q || card.settled) return;
+  const card: { fast: PriceOption | null; estimate: boolean; settled: boolean; told: Promise<void> } = { fast: null, estimate: false, settled: false, told: Promise.resolve() };
+  const tell = (q: PriceOption) => {
     card.fast = q;
     card.told = (async () => {
       // The hunt's checked pick first; else the card's own photo (its page's, or a stand-in) once it passes the
@@ -224,6 +237,16 @@ export async function huntWish(meta: Meta, ctx: HuntContext): Promise<HuntResult
       () => undefined,
       (e) => console.error("could not send the fast card", e),
     );
+  };
+  const early = quick.then((q) => {
+    if (q && !card.settled) tell(q);
+  });
+  // The last word shows the moment it lands, rather than after the research gives up a minute in.
+  void lastWord.then((e) => {
+    if (e && !card.settled && !card.fast) {
+      card.estimate = true;
+      tell(e);
+    }
   });
 
   let researched: ResearchResult | null = null;
@@ -237,11 +260,20 @@ export async function huntWish(meta: Meta, ctx: HuntContext): Promise<HuntResult
   await within(early, t0 + QUICK_MS - Date.now());
   card.settled = true;
   await card.told;
+  // Nothing else priced: the last word stands in, labelled an estimate with its source, rather than no card at all.
+  if (!card.fast && (failure || !researched?.options.length)) {
+    const estimate = await within(lastWord, Math.max(0, t0 + HUNT_STOP_MS - 3_000 - Date.now()));
+    if (estimate) {
+      card.fast = estimate;
+      card.estimate = true;
+    }
+  }
   if (failure && !card.fast) throw failure;
-  if (failure) console.warn("research failed; the fast card stands", (failure as Error).message);
+  if (failure) console.warn(`research failed; the ${card.estimate ? "estimate" : "fast card"} stands`, (failure as Error).message);
   const questions = await questionsBy(Math.max(0, t0 + HUNT_STOP_MS - 2_000 - Date.now()));
   const [photo, found] = await Promise.all([within(standIn, Math.max(0, t0 + HUNT_STOP_MS - 2_000 - Date.now())), within(searched, Math.max(0, t0 + HUNT_STOP_MS - 2_000 - Date.now()))]);
-  const merged = mergeFast(draft, researched, card.fast, photo, found);
+  // The last word only stands in: research that priced the wish replaces it rather than sitting beside it.
+  const merged = mergeFast(draft, researched, card.estimate && researched?.options.length ? null : card.fast, photo, found);
   // The full card's photo passes the checks too: the hunt's pick for a thing or a trip (one model looks the same from
   // any seller); a listing's own photo for a home or a service, when it passes; otherwise none.
   const best = merged.options[0];
