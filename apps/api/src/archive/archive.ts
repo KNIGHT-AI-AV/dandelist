@@ -1,12 +1,12 @@
 import { createHash } from "node:crypto";
 import type { Db } from "../db";
 import type { MediaImage, MediaKind } from "../agent/media";
+import { selectHeroPhotos } from "./photo-selection";
 
 /**
- * The shared archive (owner, 2026-10-27). Before the agent hunts photos for a wish, it asks the archive: a match
- * with approved photos skips the hunt. After a hunt, freely licensed photos it found are offered back; one goes live
- * when two different people's agents offered it, and new subjects wait for review. Seeded from the master list
- * (src/archive/seed.ts).
+ * The shared archive (owner, 2026-10-27). It supplies approved photos when a matching entity has exactly one
+ * designated hero. Two contributors' offers can approve a photo, but do not select its hero; new subjects
+ * still wait for review. Seeded from the master list (src/archive/seed.ts).
  */
 
 export interface ArchiveEntity {
@@ -35,7 +35,7 @@ export interface ArchiveHit {
 }
 
 export interface Archive {
-  /** The entity a subject names, with its approved photos (hero first), or null. */
+  /** The entity a subject names, with its approved photos and one designated hero first, or null. */
   lookup(subject: string, kind: MediaKind): Promise<ArchiveHit | null>;
   /** Offers photos the agent found for a subject; returns how many were recorded (pending until vouched for). */
   contribute(subject: string, kind: MediaKind, photos: ArchivePhoto[], by: string): Promise<number>;
@@ -151,6 +151,7 @@ export function pgArchive(db: Db, now: () => Date = () => new Date()): Archive {
     cache = { at: now().getTime(), entities: rows };
     return rows;
   };
+  // Hero-first ordering keeps any second approved hero inside the limit, so ambiguity cannot be hidden.
   const photosOf = async (id: string) =>
     (
       await db.query<ArchivePhoto>(
@@ -163,8 +164,8 @@ export function pgArchive(db: Db, now: () => Date = () => new Date()): Archive {
     async lookup(subject, kind) {
       const e = matchEntity(subject, kind, await entities());
       if (!e) return null;
-      const photos = await photosOf(e.id);
-      return photos.length >= 2 ? { entity: e, photos } : null;
+      const photos = selectHeroPhotos(await photosOf(e.id));
+      return photos ? { entity: e, photos } : null;
     },
     async contribute(subject, kind, photos, by) {
       // Only a signed-in person's agent may offer photos, and only real API-licensed 4K ones.
@@ -189,8 +190,8 @@ export function pgArchive(db: Db, now: () => Date = () => new Date()): Archive {
         if (!row || row.origin !== "agent" || row.status !== "pending" || plain(row.name) !== key) return 0;
         e = { id, name: subject, aliases: [], kind, tier: 3, subcategory: "proposed" };
       }
-      // A photo goes live only once two different people's agents offered it for the same thing, so one account
-      // can't put pictures in front of everyone. Rejected photos stay rejected; seed photos are never touched.
+      // Two contributors' offers approve a photo for this entity; hero selection is a separate review.
+      // Rejected photos stay rejected; seed photos are never touched.
       let kept = 0;
       for (const p of ok.slice(0, 6)) {
         const r = await db.query(

@@ -1,6 +1,6 @@
 import { PGlite } from "@electric-sql/pglite";
 import { gunzipSync, inflateSync } from "node:zlib";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Shop hostnames resolve to a public documentation address, so no test touches real DNS.
 vi.mock("node:dns/promises", async (importOriginal) => ({ ...(await importOriginal<object>()), lookup: async () => [{ address: "93.184.215.14", family: 4 }] }));
@@ -14,6 +14,7 @@ import { visionReply } from "./vision";
 const clock = new Date("2026-10-28T12:00:00Z");
 const SHOP = "https://www.onepeloton.com/bike-plus";
 let db: Db;
+let pg: PGlite | undefined;
 let metaCalls: Record<string, any>[];
 
 const reply = (output: unknown[]) => new Response(JSON.stringify({ id: `resp_${metaCalls.length}`, output, usage: { input_tokens: 1000, output_tokens: 200 } }), { status: 200 });
@@ -91,10 +92,14 @@ async function events(res: Response) {
 }
 
 beforeEach(async () => {
-  const pg = new PGlite();
-  db = { query: (t, p) => pg.query(t, p) as never, exec: (s) => pg.exec(s) } as Db;
+  const instance = new PGlite();
+  pg = instance;
+  db = { query: (t, p) => instance.query(t, p) as never, exec: (s) => instance.exec(s) } as Db;
   await migrate(db);
   metaCalls = [];
+});
+afterEach(async () => {
+  await pg?.close();
 });
 
 describe("the pool", () => {
@@ -107,6 +112,7 @@ describe("the pool", () => {
     const dublin = items.find((i) => i.id === `${ARCHIVE_PREFIX}dublin`);
     expect(dublin).toMatchObject({ name: "Dublin", kind: "visit", group: "travel", upfrontCents: 350_000, status: "estimate", url: "", note: "Typical price · 7 nights for two incl. economy flights", credit: "Photo: Diliff, CC BY-SA 4.0" });
     expect(dublin.media.images.map((i: any) => i.url)).toEqual(["https://upload.wikimedia.org/dublin-1.jpg", "https://upload.wikimedia.org/dublin-2.jpg"]);
+    expect(dublin.media.images[0]).not.toHaveProperty("hero");
     // A monthly price isn't an upfront cost, and a subject without photos can't be a card.
     expect(items.some((i) => i.id === `${ARCHIVE_PREFIX}gym-membership` || i.id === `${ARCHIVE_PREFIX}no-photos`)).toBe(false);
   });
@@ -167,8 +173,9 @@ describe("the pool", () => {
   });
 
   it("keeps only shapes it can price honestly", () => {
-    const row = { id: "x", name: "X", kind: "stay", price_model: "per-night", domain: "Travel & places", typical: { low: 300, currency: "USD", unit: "a night" }, photos: [{ url: "u", width: 1, height: 1, source: "commons", photographer: null, license: "CC0" }] };
+    const row = { id: "x", name: "X", kind: "stay", price_model: "per-night", domain: "Travel & places", typical: { low: 300, currency: "USD", unit: "a night" }, photos: [{ url: "u", width: 1, height: 1, source: "commons", photographer: null, license: "CC0", hero: true }] };
     expect(fromArchive(row, clock.toISOString())).toBeNull();
+    expect(fromArchive({ ...row, kind: "place", price_model: "trip" }, clock.toISOString())).toMatchObject({ id: `${ARCHIVE_PREFIX}x`, status: "estimate", upfrontCents: 30_000 });
     expect(fromArchive({ ...row, kind: "place", price_model: "trip", typical: { low: 300, currency: "EUR", unit: "" } }, clock.toISOString())).toBeNull();
   });
 });
