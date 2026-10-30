@@ -40,13 +40,30 @@ const first = `<meta name="theme-color" content="${BG.emerald}"><style>html,body
 copyFileSync(new URL("../assets/apple-touch-icon.png", import.meta.url), new URL("../dist/apple-touch-icon.png", import.meta.url));
 const touch = `<link rel="apple-touch-icon" href="/apple-touch-icon.png">`;
 // What search results and link previews show (passed aitextclean.com, 2026-10-29).
-const description = `<meta name="description" content="List the things you want. An AI agent looks up their real prices, and Dandelist shows what they cost and what it takes to keep them.">`;
+const SUMMARY = "List the things you want. An AI agent looks up their real prices, and Dandelist shows what they cost and what it takes to keep them.";
+const description = `<meta name="description" content="${SUMMARY}">`;
+// The card a shared link opens into: the glass D at 1200x630 (public/og.jpg, which the export copies to the root).
+const SITE = "https://dandelist.knightaiav.com";
+const card =
+  [
+    ["og:type", "website"],
+    ["og:site_name", "Dandelist"],
+    ["og:title", "Dandelist"],
+    ["og:description", SUMMARY],
+    ["og:url", `${SITE}/`],
+    ["og:image", `${SITE}/og.jpg`],
+    ["og:image:width", "1200"],
+    ["og:image:height", "630"],
+    ["og:image:alt", "Dandelist"],
+  ]
+    .map(([property, content]) => `<meta property="${property}" content="${content}">`)
+    .join("") + `<meta name="twitter:card" content="summary_large_image">`;
 // Open the API's connections while the bundle loads (Lighthouse: about 410 ms on a phone). Fetches use the anonymous
 // CORS pool and photos the plain one, so both get a preconnect.
 const api = env.EXPO_PUBLIC_API_URL;
 const preconnect = `<link rel="preconnect" href="${api}" crossorigin><link rel="preconnect" href="${api}">`;
 const index = new URL("../dist/index.html", import.meta.url);
-writeFileSync(index, readFileSync(index, "utf8").replace("<head>", `<head>${first}${touch}${description}${preconnect}`));
+writeFileSync(index, readFileSync(index, "utf8").replace("<head>", `<head>${first}${touch}${description}${card}${preconnect}`));
 // A real robots file: without one, /robots.txt answered with the app's page.
 writeFileSync(new URL("../dist/robots.txt", import.meta.url), "User-agent: *\nAllow: /\n");
 // Files under these paths are named by their content hash, so browsers may keep them for a year. Any file without a
