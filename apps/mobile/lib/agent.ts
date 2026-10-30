@@ -20,6 +20,11 @@ export interface Draft {
   amount?: number;
   /** Priceless: the Dandy's line for it. */
   line?: string;
+  /** The bare name shops use, without a colour or touch the maker doesn't offer ("Mercedes-Benz G-Class"). */
+  name?: string;
+  /** False when the reading had to work out what was meant; `others` then holds up to three other likely names. */
+  sure?: boolean;
+  others?: string[];
 }
 
 /**
