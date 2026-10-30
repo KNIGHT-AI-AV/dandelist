@@ -92,6 +92,7 @@ def woff2(path, points):
     font = TTFont(path)
     options = subset.Options()
     options.layout_features = ["*"]  # keeps tabular figures and every other feature the type roles use
+    options.name_IDs = ["*"]  # every cut keeps the font's copyright and OFL licence records, as OFL 1.1 asks
     options.notdef_outline = True
     sub = subset.Subsetter(options)
     sub.populate(unicodes=points)
