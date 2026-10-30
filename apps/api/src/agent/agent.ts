@@ -482,7 +482,22 @@ export const hostOf = (raw: string) => {
   }
 };
 
-const json = (text: string) => JSON.parse(text.replace(/^```(?:json)?\s*|\s*```$/g, ""));
+/**
+ * The model's JSON answer. A json_schema format beside tools is not always kept: an answer can open with a sentence
+ * ("I've gathered the prices...") before the object, which failed a live hunt's research on 2026-10-30. The outermost
+ * object in the text is read then; text with none still throws, as before.
+ */
+export const json = (text: string): unknown => {
+  const bare = text.replace(/^```(?:json)?\s*|\s*```$/g, "");
+  try {
+    return JSON.parse(bare);
+  } catch (e) {
+    const start = bare.indexOf("{");
+    const end = bare.lastIndexOf("}");
+    if (start < 0 || end <= start) throw e;
+    return JSON.parse(bare.slice(start, end + 1));
+  }
+};
 
 /** How hard the model thinks when it reads a wish (see interpret). */
 export const INTERPRET_EFFORT = "low";
