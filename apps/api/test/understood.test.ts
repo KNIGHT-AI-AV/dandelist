@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { nameOf, readingOf } from "../src/agent/agent";
+import { nameOf, plausible, readingOf } from "../src/agent/agent";
 import { subjectOf } from "../src/agent/photos";
 import { widerBriefs } from "../src/dream/agent";
 import { resultFor, titleFigure, withScheme } from "../src/agent/estimate";
@@ -48,6 +48,35 @@ describe("a listings search that finds nothing looks wider instead of stopping",
 
   it("has nothing wider for a bare brief", () => {
     expect(widerBriefs({ ...car, colour: "", trim: "", condition: "any" })).toEqual([]);
+  });
+});
+
+/** The owner, 2026-10-30: a pink G-Wagon came back as a $79 ride-on toy. */
+describe("a price far from the real thing's typical price", () => {
+  const gWagon = { typical: 150_000 };
+
+  it("passes the thing's own price, used or built up, and refuses a toy, a monthly payment or a misread", () => {
+    expect(plausible(gWagon, 7_900)).toBe(false);
+    expect(plausible(gWagon, 250_000)).toBe(false);
+    expect(plausible(gWagon, 3_000_000)).toBe(true);
+    expect(plausible(gWagon, 15_000_000)).toBe(true);
+    expect(plausible(gWagon, 90_000_000)).toBe(true);
+    expect(plausible(gWagon, 2_000_000_000)).toBe(false);
+  });
+
+  it("judges nothing without a typical price, or with nothing to pay upfront", () => {
+    expect(plausible({}, 7_900)).toBe(true);
+    expect(plausible({ typical: 0 }, 7_900)).toBe(true);
+    expect(plausible(gWagon, 0)).toBe(true);
+  });
+
+  it("reads the typical price as a plain amount, or none", () => {
+    const typical = (v: unknown) => (readingOf({ title: "x", typical: v }) as { typical: number }).typical;
+    expect(typical(150_000)).toBe(150_000);
+    expect(typical(-5)).toBe(0);
+    expect(typical("lots")).toBe(0);
+    expect(typical(Number.NaN)).toBe(0);
+    expect(typical(undefined)).toBe(0);
   });
 });
 
