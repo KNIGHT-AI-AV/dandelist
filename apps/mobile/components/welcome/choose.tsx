@@ -29,7 +29,7 @@ function Source({ e, image }: { e: PoolItem; image?: MediaImage }) {
   return (
     <View style={{ gap: 2 }}>
       <Text numberOfLines={1} style={[type.figure, { color: p.ink2 }]}>{e.note ?? `${where} · ${e.status === "verified" ? "checked" : "estimate"} ${shortDate(e.checkedAt)}`}</Text>
-      {e.credit && !image?.author ? <Text numberOfLines={1} style={[type.figure, { color: p.ink3 }]}>{e.credit}</Text> : <PhotoCredit image={image} />}
+      <PhotoCredit image={image} fallback={e.credit} />
     </View>
   );
 }

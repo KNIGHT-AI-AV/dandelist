@@ -107,6 +107,36 @@ describe("wishes", () => {
     expect((await call("POST", "/wishes", t, media(hostile))).status).toBe(400);
   });
 
+  it("round-trips a Commons source page separately from Unsplash metadata and rejects hostile POST and PATCH pages", async () => {
+    const t = await signIn("ada@example.com");
+    const photo = { url: "https://api.dandelist.test/media/commons-fixture.jpg", source: "commons.wikimedia.org", sourcePage: "https://commons.wikimedia.org/wiki/File:Lisboa.jpg", credit: "Ana", license: "CC BY-SA 4.0" };
+    const details = (image: object) => ({ agent: { media: { kind: "place", images: [image, UNSPLASH_IMAGE] } } });
+    const created = await call("POST", "/wishes", t, { name: "Lisbon", kind: "visit", details: details(photo) });
+    expect(created.status).toBe(201);
+    const { wish } = (await created.json()) as { wish: { id: string } };
+    const savedImages = async () => {
+      const list = (await (await call("GET", "/wishes", t)).json()) as { wishes: { id: string; details: { agent: { media: { images: unknown[] } } } }[] };
+      return list.wishes.find((w) => w.id === wish.id)!.details.agent.media.images;
+    };
+    expect(await savedImages()).toEqual([photo, UNSPLASH_IMAGE]);
+    const changed = { ...photo, sourcePage: "https://commons.wikimedia.org/wiki/File%3ALisboa_%28Tejo%29.jpg" };
+    expect((await call("PATCH", `/wishes/${wish.id}`, t, { details: details(changed) })).status).toBe(200);
+    expect(await savedImages()).toEqual([changed, UNSPLASH_IMAGE]);
+
+    for (const bad of [
+      { ...photo, sourcePage: "javascript:alert(1)" },
+      { ...photo, sourcePage: "https://evil.example/wiki/File:Lisboa.jpg" },
+      { ...photo, sourcePage: "https://commons.wikimedia.org/wiki/User:Ana" },
+      { ...photo, sourcePage: "https://commons.wikimedia.org/wiki/File:Lisboa.jpg?redirect=elsewhere" },
+      { ...photo, source: "pexels.com" },
+      { ...UNSPLASH_IMAGE, sourcePage: photo.sourcePage },
+    ]) {
+      expect((await call("POST", "/wishes", t, { name: "Invalid source page", kind: "visit", details: details(bad) })).status).toBe(400);
+      expect((await call("PATCH", `/wishes/${wish.id}`, t, { details: details(bad) })).status).toBe(400);
+    }
+    expect(await savedImages()).toEqual([changed, UNSPLASH_IMAGE]);
+  });
+
   it("needs a signed-in person", async () => {
     expect((await app.request("/wishes")).status).toBe(401);
   });

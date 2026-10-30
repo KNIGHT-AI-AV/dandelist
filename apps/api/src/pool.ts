@@ -1,4 +1,4 @@
-import { entries as catalogue, heroOf, type Entry } from "@dandelist/catalogue";
+import { entries as catalogue, heroOf, safeCommonsSourcePage, type Entry } from "@dandelist/catalogue";
 import type { Period } from "@dandelist/cost";
 import type { Db } from "./db";
 import type { ArchiveEntity } from "./archive/archive";
@@ -20,6 +20,8 @@ export interface PoolImage {
   source: string;
   credit?: string;
   license?: string;
+  /** The validated Commons File page for this photo. */
+  sourcePage?: string;
   /** An Unsplash photo's photographer, with the tagged link its credit carries. */
   author?: { name: string; url: string };
 }
@@ -64,7 +66,16 @@ export function fromCatalogue(e: Entry): PoolItem {
     url: e.url,
     checkedAt: e.checkedAt,
     // The photographer travels with an Unsplash photo, so the card can credit it as Unsplash's guidelines ask.
-    ...(e.media ? { media: { kind: e.media.kind, images: e.media.images.map(({ url, width, height, source, credit, license, author }) => ({ url, width, height, source, credit, license, ...(author ? { author } : {}) })) } } : heroOf(e) ? { media: { kind: "other", images: [{ url: heroOf(e)!, source: e.seller }] } } : {}),
+    ...(e.media ? {
+      media: {
+        kind: e.media.kind,
+        images: e.media.images.map((image) => {
+          const { url, width, height, source, credit, license, author } = image;
+          const sourcePage = safeCommonsSourcePage(image);
+          return { url, width, height, source, credit, license, ...(author ? { author } : {}), ...(sourcePage ? { sourcePage } : {}) };
+        }),
+      },
+    } : heroOf(e) ? { media: { kind: "other", images: [{ url: heroOf(e)!, source: e.seller }] } } : {}),
   };
 }
 
@@ -92,7 +103,7 @@ export interface ArchiveRow {
   price_model: string;
   domain: string;
   typical: { low?: number; high?: number; currency?: string; unit?: string } | string | null;
-  photos: { url: string; width: number; height: number; source: string; photographer: string | null; license: string; hero: boolean }[] | string;
+  photos: { url: string; width: number; height: number; source: string; sourcePage?: string; photographer: string | null; license: string; hero: boolean }[] | string;
 }
 
 const SOURCE_SITE: Record<string, string> = { commons: "commons.wikimedia.org", unsplash: "unsplash.com", pexels: "pexels.com" };
@@ -144,7 +155,10 @@ export function fromArchive(row: ArchiveRow, checkedAt: string): PoolItem | null
     ...(hero.photographer ? { credit: `Photo: ${hero.photographer}, ${hero.license}` } : {}),
     media: {
       kind: price.group === "travel" ? "place" : price.group === "home" ? "place" : "product",
-      images: photos.slice(0, 4).map((p) => ({ url: p.url, width: p.width, height: p.height, source: SOURCE_SITE[p.source] ?? p.source, ...(p.photographer ? { credit: p.photographer } : {}), license: p.license })),
+      images: photos.slice(0, 4).map((p) => {
+        const sourcePage = safeCommonsSourcePage(p);
+        return { url: p.url, width: p.width, height: p.height, source: SOURCE_SITE[p.source] ?? p.source, ...(p.photographer ? { credit: p.photographer } : {}), license: p.license, ...(sourcePage ? { sourcePage } : {}) };
+      }),
     },
   };
 }
@@ -161,7 +175,7 @@ export function poolSource(db: Db, now: () => Date = () => new Date()) {
     try {
       const { rows } = await db.query<ArchiveRow>(
         `select e.id, e.name, e.kind, e.price_model, e.domain, e.typical,
-                json_agg(json_build_object('url', p.url, 'width', p.width, 'height', p.height, 'source', p.source, 'photographer', p.photographer, 'license', p.license, 'hero', p.hero) order by p.hero desc, p.created_at) as photos
+                json_agg(json_build_object('url', p.url, 'width', p.width, 'height', p.height, 'source', p.source, 'sourcePage', p.source_page, 'photographer', p.photographer, 'license', p.license, 'hero', p.hero) order by p.hero desc, p.created_at) as photos
            from archive_entities e
            join archive_photos p on p.entity_id = e.id and p.status = 'approved'
           where e.status = 'live' and e.typical is not null

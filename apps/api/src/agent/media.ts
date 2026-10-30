@@ -1,4 +1,4 @@
-import { UNSPLASH_PAGE, UNSPLASH_PROFILE } from "@dandelist/catalogue";
+import { safeCommonsSourcePage, UNSPLASH_PAGE, UNSPLASH_PROFILE } from "@dandelist/catalogue";
 import { z } from "zod";
 import { readCapped, safeGet, type Fetcher } from "./tools";
 
@@ -19,6 +19,8 @@ export interface MediaImage {
   source: string;
   credit?: string;
   license?: string;
+  /** The Commons File page for this photo, separate from Unsplash's `page`. */
+  sourcePage?: string;
   /** A transparent or cut-out background, ready to float on the app's dark stage. */
   clean?: boolean;
   /** Made or reworked by Muse Image, so the app can label it honestly. */
@@ -69,6 +71,7 @@ export const mediaSchema = z.object({
         source: z.string().max(120),
         credit: z.string().max(200).optional(),
         license: z.string().max(80).optional(),
+        sourcePage: z.string().max(2048).optional(),
         clean: z.boolean().optional(),
         generated: z.boolean().optional(),
         // An Unsplash photo's credit links the app makes, and nothing else: they are shown as links (#112 review).
@@ -83,7 +86,7 @@ export const mediaSchema = z.object({
             tracked: z.string().max(40).optional(),
           })
           .optional(),
-      }),
+      }).refine((image) => image.sourcePage === undefined || safeCommonsSourcePage(image) !== undefined, "A source page must be this Commons photo's File page."),
     )
     .max(8),
   model3d: z
@@ -479,7 +482,11 @@ export async function commonsPhotos(subject: string, fetcher: Fetcher, opts: { m
 /** Licenses that allow a cutout (a derivative) without passing on share-alike terms: CC0, public domain, CC BY. */
 export const allowsCutout = (license: string) => /^(cc0|public domain|pd\b|cc[ -]by[ -]\d)/i.test(license.trim()) && !/\b(sa|nd)\b|-sa|-nd/i.test(license);
 
-export const commonsImage = (p: CommonsPhoto): MediaImage => ({ url: p.url, width: p.width, height: p.height, source: "commons.wikimedia.org", credit: p.credit, license: p.license });
+export const commonsImage = (p: CommonsPhoto): MediaImage => {
+  const source = "commons.wikimedia.org";
+  const sourcePage = safeCommonsSourcePage({ source, sourcePage: p.page });
+  return { url: p.url, width: p.width, height: p.height, source, credit: p.credit, license: p.license, ...(sourcePage ? { sourcePage } : {}) };
+};
 
 /* ---------- Sketchfab ---------- */
 

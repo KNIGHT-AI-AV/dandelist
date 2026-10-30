@@ -1,5 +1,6 @@
 import type { Item, Period } from "@dandelist/cost";
 import checked from "./catalogue.json";
+export { safeCommonsSourcePage } from "./photo-source";
 
 /**
  * The pre-login catalogue: real things with real prices. Each entry was priced by the Meta wish agent on the
@@ -34,6 +35,8 @@ export interface MediaImage {
   /** The photographer and the photo's page, for the credit (links carry Unsplash's utm parameters). */
   author?: { name: string; url: string };
   page?: string;
+  /** Existing Commons file-description page; separate from the Unsplash-only page field. */
+  sourcePage?: string;
 }
 
 export interface Entry extends Seed {
@@ -83,7 +86,7 @@ export function heroImageFor(e: Pick<Entry, "media">, aspect: number): MediaImag
 export const UNSPLASH_HOME = "https://unsplash.com/?utm_source=dandelist&utm_medium=referral";
 
 /**
- * The only credit links a photo may carry: an Unsplash photographer's profile and an Unsplash photo page, each tagged.
+ * Unsplash credit links: a photographer's profile and a photo page, each tagged.
  * Saved wishes come back from clients, so the API checks these on save and the app again before it links anything.
  */
 export const UNSPLASH_PROFILE = /^https:\/\/unsplash\.com\/@[A-Za-z0-9_-]{1,64}\?utm_source=dandelist&utm_medium=referral$/;
