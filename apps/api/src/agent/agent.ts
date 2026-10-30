@@ -7,7 +7,7 @@ import { huntMedia, shareImageFits, type MediaHint, type MediaOptions } from "./
 import { withLine } from "./lines";
 import { MEDIA_KINDS, type Media, type ModelCandidate } from "./media";
 import { matchOffer, type ShoppingOffer } from "./shopping";
-import { partyOf, personPrice } from "./person-price";
+import { partyOf, perPersonApplies, personPrice } from "./person-price";
 import { within } from "./time";
 import { fxRate, getPage, pageNamesItem, pageShowsPrice, publicFetch, sellerOwnsHost, type Fetcher, type PageResult } from "./tools";
 
@@ -932,11 +932,12 @@ export async function research(meta: Meta, ctx: ResearchContext): Promise<Resear
       // A quoted person unit is not a scalar whole-request amount. Parts carry explicit quantities instead.
       // Hold it before price emission as well as aggregation; the UI can display provisional price events.
       if (o.price > 0 && (personPrice(o.evidence, o.price, currency) || (page?.ok && personPrice(page.text, o.price, currency)))) {
-        // With the party known, the quote is one person's part, times the people going. The page is kept, so the
-        // part's own check doesn't read it twice.
-        if (party) {
+        // With the party known, a one-time quote for each of them is one person's part, times the people going; a
+        // monthly or child's rate, or an adult's rate for a party that may hold children, stays held. The page is
+        // kept, so the part's own check doesn't read it twice.
+        if (party && perPersonApplies([o.evidence, page?.ok ? page.text : ""], o.price, currency, party.adultsOnly)) {
           if (page && !pages.has(o.url)) pages.set(o.url, page);
-          return priceOne({ ...o, price: 0, recurring: [], parts: [{ label: o.label, kind: "other", seller: o.seller, url: o.url, currency: o.currency, unit_price: o.price, quantity: party, unit: "person", evidence: o.evidence }] });
+          return priceOne({ ...o, price: 0, recurring: [], parts: [{ label: o.label, kind: "other", seller: o.seller, url: o.url, currency: o.currency, unit_price: o.price, quantity: party.count, unit: "person", evidence: o.evidence }] });
         }
         await onStep({ type: "check", url: page?.url ?? o.url, verified: false, at: at() });
         return null;
