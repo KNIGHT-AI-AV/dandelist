@@ -16,9 +16,15 @@ trustPolicy: no-downgrade
 # Checked 2026-10-29: expo-asset 57.0.19 is Expo's own asset loader, already in the tree through expo ~57.0.19. It was
 # published 2026-10-06 by an Expo maintainer without the provenance earlier releases carried, and has no install
 # scripts. expo-audio (the app's sounds) needs it as a peer. The owner approved this one exception on 2026-10-29.
+# Checked 2026-10-30: expo-notifications 57.0.22 (the version Expo SDK 57 expects; it shares expo-constants 57.0.21
+# with the app) and its dependency expo-application 57.0.3 are Expo's own packages, published without the provenance
+# their next line carries, like expo-asset above. The owner approved both on 2026-10-30 ("DO IT ALL", answering
+# whether to approve them so notifications could switch on).
 trustPolicyExclude:
   - "undici-types@6.21.0"
   - "expo-asset@57.0.19"
+  - "expo-notifications@57.0.22"
+  - "expo-application@57.0.3"
 
 # Only these dependencies may run install scripts.
 # Skia (checked 2026-10-27): scripts/install-libs.js only copies its prebuilt binaries from its own

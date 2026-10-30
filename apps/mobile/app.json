@@ -42,7 +42,9 @@
           "cameraPermission": false,
           "microphonePermission": false
         }
-      ]
+      ],
+      "expo-notifications",
+      "./plugins/without-push-entitlement.js"
     ],
     "experiments": {
       "typedRoutes": false
