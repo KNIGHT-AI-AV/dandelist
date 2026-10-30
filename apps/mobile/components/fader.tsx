@@ -9,6 +9,14 @@ const THUMB = 30;
 /** Room for a figure under the track, centred on its notch. */
 const LABEL_W = 64;
 
+/** When a fader was last touched. */
+let touchedAt = 0;
+/**
+ * A tap that lands just after a fader was dragged is a finger coming off the track, not a choice (owner's list,
+ * 2026-10-29: an account ended up priced in yen, most likely from a currency chip tapped by accident under the fader).
+ */
+export const faderJustMoved = (ms = 700) => Date.now() - touchedAt < ms;
+
 /**
  * The one fader: a 3 pt track lit in the accent up to a 30 pt ink thumb, on a log scale of round notches. It lands
  * only on `steps` (US cents), each with a tick (a haptic on phones); `firm` says which moves deserve the firmer one.
@@ -65,13 +73,23 @@ export function Fader({
       onMoveShouldSetPanResponderCapture: () => true,
       onPanResponderTerminationRequest: () => false,
       onPanResponderGrant: (e) => {
+        touchedAt = Date.now();
         measure();
         Animated.spring(hold, { toValue: 1, ...spring.press, useNativeDriver: native }).start();
         act.current.setFromPage(e.nativeEvent.pageX);
       },
-      onPanResponderMove: (e) => act.current.setFromPage(e.nativeEvent.pageX),
-      onPanResponderRelease: () => Animated.spring(hold, { toValue: 0, ...spring.press, useNativeDriver: native }).start(),
-      onPanResponderTerminate: () => Animated.spring(hold, { toValue: 0, ...spring.press, useNativeDriver: native }).start(),
+      onPanResponderMove: (e) => {
+        touchedAt = Date.now();
+        act.current.setFromPage(e.nativeEvent.pageX);
+      },
+      onPanResponderRelease: () => {
+        touchedAt = Date.now();
+        Animated.spring(hold, { toValue: 0, ...spring.press, useNativeDriver: native }).start();
+      },
+      onPanResponderTerminate: () => {
+        touchedAt = Date.now();
+        Animated.spring(hold, { toValue: 0, ...spring.press, useNativeDriver: native }).start();
+      },
     }),
   ).current;
 

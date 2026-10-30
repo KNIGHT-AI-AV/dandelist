@@ -6,7 +6,7 @@ import { CURRENCIES, useMoney } from "../../lib/currency";
 import { symbolOf } from "../../lib/fx";
 import { ease, native, useReducedMotion } from "../../lib/motion";
 import { fonts, layout, type, usePalette, useType } from "../../lib/theme";
-import { Fader } from "../fader";
+import { Fader, faderJustMoved } from "../fader";
 import { Chip, Eyebrow, PrimaryButton } from "../lux";
 import { Odometer } from "../odometer";
 import { Rise } from "./kit";
@@ -65,14 +65,15 @@ function Face({ index, size: FACE = 112 }: { index: number; size?: number }) {
 
 /**
  * The five currencies as a quiet row of chips (owner, recording 03: "selectable in the onboarding money fader and in
- * settings"). Choosing one re-prices every figure in the app.
+ * settings"). Choosing one re-prices every figure in the app, so a tap that lands just after the fader above was
+ * dragged doesn't count, and the row sits a little apart from the fader's figures.
  */
 export function CurrencyChips() {
   const money = useMoney();
   return (
-    <View accessibilityRole="radiogroup" accessibilityLabel="Currency" style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 6 }}>
+    <View accessibilityRole="radiogroup" accessibilityLabel="Currency" style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 6, marginTop: layout.stack.base }}>
       {CURRENCIES.map((c) => (
-        <Chip key={c.code} label={`${symbolOf(c.code)} ${c.code}`} selected={money.code === c.code} onPress={() => money.choose(c.code)} />
+        <Chip key={c.code} label={`${symbolOf(c.code)} ${c.code}`} selected={money.code === c.code} onPress={() => !faderJustMoved() && money.choose(c.code)} />
       ))}
     </View>
   );
