@@ -20,6 +20,8 @@ export interface PoolImage {
   source: string;
   credit?: string;
   license?: string;
+  /** An Unsplash photo's photographer, with the tagged link its credit carries. */
+  author?: { name: string; url: string };
 }
 
 export interface PoolItem {
@@ -61,7 +63,8 @@ export function fromCatalogue(e: Entry): PoolItem {
     seller: e.seller,
     url: e.url,
     checkedAt: e.checkedAt,
-    ...(e.media ? { media: { kind: e.media.kind, images: e.media.images.map(({ url, width, height, source, credit, license }) => ({ url, width, height, source, credit, license })) } } : heroOf(e) ? { media: { kind: "other", images: [{ url: heroOf(e)!, source: e.seller }] } } : {}),
+    // The photographer travels with an Unsplash photo, so the card can credit it as Unsplash's guidelines ask.
+    ...(e.media ? { media: { kind: e.media.kind, images: e.media.images.map(({ url, width, height, source, credit, license, author }) => ({ url, width, height, source, credit, license, ...(author ? { author } : {}) })) } } : heroOf(e) ? { media: { kind: "other", images: [{ url: heroOf(e)!, source: e.seller }] } } : {}),
   };
 }
 

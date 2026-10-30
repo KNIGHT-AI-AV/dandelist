@@ -1,4 +1,4 @@
-import { heroFor } from "@dandelist/catalogue";
+import { heroFor, heroImageFor, type MediaImage } from "@dandelist/catalogue";
 import { useEffect, useRef, useState } from "react";
 import { LinearGradient } from "expo-linear-gradient";
 import { Animated, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions, type LayoutChangeEvent } from "react-native";
@@ -7,6 +7,7 @@ import { formatCents } from "../../lib/money";
 import { fonts, layout, radius, type, usePalette, useType } from "../../lib/theme";
 import { hostOf, monthlyOf, shortDate, type PoolItem, type When } from "../../lib/welcome";
 import { Eyebrow, Glass, Money, PrimaryButton, QuietButton, Shade } from "../lux";
+import { PhotoCredit } from "../photo-credit";
 import { GlassReveal } from "../reveal";
 import { Chip, Rise } from "./kit";
 
@@ -19,16 +20,16 @@ const standbyFor = (e: PoolItem) => STANDBY[e.category] ?? require("../../assets
 
 /**
  * The source line every card carries: where the price was checked, and when; estimates say so. A typical price
- * from the archive says what it covers instead, and a photo whose licence asks for credit gets it.
+ * from the archive says what it covers instead, and the photo on the card gets its credit ("Photo by ... on Unsplash").
  */
-function Source({ e }: { e: PoolItem }) {
+function Source({ e, image }: { e: PoolItem; image?: MediaImage }) {
   const p = usePalette();
   // A shopping-search link names Google, not the shop, so the seller's name stands in for it.
   const where = /(^|\.)google\./.test(hostOf(e.url)) ? e.seller : hostOf(e.url);
   return (
     <View style={{ gap: 2 }}>
       <Text numberOfLines={1} style={[type.figure, { color: p.ink2 }]}>{e.note ?? `${where} · ${e.status === "verified" ? "checked" : "estimate"} ${shortDate(e.checkedAt)}`}</Text>
-      {e.credit ? <Text numberOfLines={1} style={[type.figure, { color: p.ink3 }]}>{e.credit}</Text> : null}
+      {e.credit && !image?.author ? <Text numberOfLines={1} style={[type.figure, { color: p.ink3 }]}>{e.credit}</Text> : <PhotoCredit image={image} />}
     </View>
   );
 }
@@ -63,7 +64,7 @@ export function PhotoCard({ e, onPress, style, big = false }: { e: PoolItem; onP
             {e.name}
           </Text>
           <Price e={e} />
-          <Source e={e} />
+          <Source e={e} image={heroImageFor(e, aspect)} />
         </View>
       </Animated.View>
     </Pressable>

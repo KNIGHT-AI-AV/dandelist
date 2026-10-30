@@ -6,9 +6,10 @@ import { useReducedMotion } from "../lib/motion";
 import { type, usePalette } from "../lib/theme";
 import { Embed } from "./embed";
 import { Photo } from "./lux";
+import { PhotoCredit } from "./photo-credit";
 
 /** What the agent found to show a wish: real photographs first, a 3D model when a true match exists. */
-export type MediaImage = { url: string; width?: number; height?: number; source: string; credit?: string; license?: string; clean?: boolean; generated?: boolean };
+export type MediaImage = { url: string; width?: number; height?: number; source: string; credit?: string; license?: string; clean?: boolean; generated?: boolean; author?: { name: string; url: string } };
 export type Model3d = { provider: "sketchfab"; uid: string; name: string; author: string; license: string; embedUrl: string; thumbnail: string };
 export type Media = {
   kind: "product" | "vehicle" | "place" | "experience" | "other";
@@ -120,7 +121,13 @@ export function Slideshow({ images, interval = 5200, style, children }: { images
           ))}
         </View>
       ) : null}
-      <Credit>{creditFor(current)}</Credit>
+      {current.author ? (
+        <View style={{ position: "absolute", right: 12, bottom: 10, maxWidth: "70%" }}>
+          <PhotoCredit image={current} />
+        </View>
+      ) : (
+        <Credit>{creditFor(current)}</Credit>
+      )}
     </View>
   );
 }

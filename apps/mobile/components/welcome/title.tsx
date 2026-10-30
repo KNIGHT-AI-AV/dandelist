@@ -1,5 +1,5 @@
 import type { Entry } from "@dandelist/catalogue";
-import { heroFor } from "@dandelist/catalogue";
+import { heroFor, heroImageFor } from "@dandelist/catalogue";
 import { Image as ExpoImage } from "expo-image";
 import { useEffect, useRef, useState } from "react";
 import { Animated, Easing, PixelRatio, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions, type GestureResponderEvent } from "react-native";
@@ -13,6 +13,7 @@ import { comfortableIncome } from "../../lib/comfort";
 import { hostOf, shortDate } from "../../lib/welcome";
 import { Grain, Shade, Wordmark } from "../lux";
 import { Odometer, dollars } from "../odometer";
+import { PhotoCredit } from "../photo-credit";
 import { GlassReveal } from "../reveal";
 import type { Stage } from "../reveal-clock";
 
@@ -61,6 +62,7 @@ export function TitleSequence({ hero, short, onDone }: { hero: Entry; short: boo
     return { width: width * density, height: height * density };
   });
   const heroUri = heroFor(hero, width / height, frame) ?? null;
+  const heroImage = heroImageFor(hero, width / height);
   const [ready, setReady] = useState(short || reduced || !heroUri);
   useEffect(() => {
     if (ready || !heroUri) return;
@@ -154,12 +156,14 @@ export function TitleSequence({ hero, short, onDone }: { hero: Entry; short: boo
         </Animated.View>
         <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: p.bg, opacity: dim }]} />
 
-        {/* The checked price and its source, centred, then what it would take in the same place. */}
-        <View pointerEvents="none" style={centre}>
+        {/* The checked price, its source and the photo's credit, centred, then what it would take in the same place.
+            The credit's links take a touch; anywhere else still ends the title. */}
+        <View pointerEvents="box-none" style={centre}>
           <Animated.View style={{ alignItems: "center", gap: 8, opacity: Animated.multiply(priceIn, priceOut), transform: [{ translateY: priceLift }] }}>
             {price ? <Odometer cents={hero.upfrontCents} format={dollars} size={52} family="bodoni" smallPrefix tracking={-1.04} rollOnMount="cinema" /> : <View style={{ height: Math.round(52 * 1.18) }} />}
             <Text style={[type.callout, { color: p.ink, textAlign: "center" }]} numberOfLines={1}>{hero.name}</Text>
             <Text style={[type.figure, { color: p.ink2, textAlign: "center" }]} numberOfLines={1}>{`${hostOf(hero.url)} · checked ${shortDate(hero.checkedAt)}`}</Text>
+            <PhotoCredit image={heroImage} style={{ textAlign: "center" }} />
           </Animated.View>
         </View>
         <View pointerEvents="none" style={centre}>

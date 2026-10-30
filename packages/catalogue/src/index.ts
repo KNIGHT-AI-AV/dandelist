@@ -64,13 +64,23 @@ export function heroOf(e: Pick<Entry, "media" | "imageUrl">): string | undefined
  * frame in pixels, the smallest copy of it that still covers the frame (sizedFor).
  */
 export function heroFor(e: Pick<Entry, "media" | "imageUrl">, aspect: number, framePx?: { width: number; height: number }): string | undefined {
-  const real = (e.media?.images ?? []).filter((i) => !i.generated && i.width && i.height);
-  if (!real.length || !(aspect > 0)) return heroOf(e);
-  const off = (i: MediaImage) => Math.abs(Math.log(i.width! / i.height! / aspect));
-  const best = real.reduce((b, i) => (off(i) < off(b) - 0.05 ? i : b));
+  const best = heroImageFor(e, aspect);
+  if (!best?.width || !best.height || !(aspect > 0)) return heroOf(e);
   // Covering the frame, the photo is as wide as the frame or as its height at the photo's own shape, whichever is more.
-  return framePx ? sizedFor(best, Math.max(framePx.width, (framePx.height * best.width!) / best.height!)) : best.url;
+  return framePx ? sizedFor(best, Math.max(framePx.width, (framePx.height * best.width) / best.height)) : best.url;
 }
+
+/** The image heroFor shows for a frame of this shape, so its credit can sit beside it. */
+export function heroImageFor(e: Pick<Entry, "media">, aspect: number): MediaImage | undefined {
+  const real = (e.media?.images ?? []).filter((i) => !i.generated && i.width && i.height);
+  if (!real.length) return undefined;
+  if (!(aspect > 0)) return real[0];
+  const off = (i: MediaImage) => Math.abs(Math.log(i.width! / i.height! / aspect));
+  return real.reduce((b, i) => (off(i) < off(b) - 0.05 ? i : b));
+}
+
+/** Unsplash's home page with the referral tags its API guidelines ask every credit link to carry. */
+export const UNSPLASH_HOME = "https://unsplash.com/?utm_source=dandelist&utm_medium=referral";
 
 /**
  * The smallest copy of a photo at least `need` pixels wide, else its widest: a phone isn't sent a 4K crop to show at a
