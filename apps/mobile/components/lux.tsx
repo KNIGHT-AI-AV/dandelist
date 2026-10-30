@@ -7,7 +7,8 @@ import { Animated, Easing, Image as RNImage, Platform, Pressable, StyleSheet, Te
 import Svg, { Circle, Path } from "react-native-svg";
 import { useMoney } from "../lib/currency";
 import { ease, haptic, native, usePress, useReducedMotion } from "../lib/motion";
-import { layout, radius, type, usePalette, useTheme, useType, type ThemeId } from "../lib/theme";
+import { fonts, layout, radius, type, usePalette, useTheme, useType, type ThemeId } from "../lib/theme";
+import { INFINITY } from "../lib/worth";
 import { Odometer, type OdometerProps } from "./odometer";
 
 /** The luxury kit: photographs, glass, Bodoni figures and the agent's champagne dot. Screens compose these. */
@@ -47,19 +48,21 @@ type MoneySize = "hero" | "title" | "card" | "ledger" | "ledger15";
 /**
  * One money system (UI audit P1-12). Hero: Bodoni Display, tabular, the `$` at half size in ink2 with its top on
  * the digits, rolling as an odometer. Title: the statement's headline figure. Card: Bodoni Title, tabular, 22/24,
- * full-size `$`. Ledger: DM Mono 13/18 or 15/20. DM Mono never goes above 20 px.
+ * full-size `$`. Ledger: DM Mono 13/18 or 15/20. DM Mono never goes above 20 px. A `priceless` wish (lib/worth.ts)
+ * shows infinity in the same role instead of a figure.
  */
-export function Money({ cents, size = "card", color, style, format: given, align, ...roll }: { cents: number; size?: MoneySize; color?: string; style?: StyleProp<TextStyle>; format?: (c: number) => string; align?: "left" | "right" } & Pick<OdometerProps, "mode" | "rollOnMount" | "onLand" | "pulse" | "announce" | "live">) {
+export function Money({ cents, size = "card", color, style, format: given, align, priceless = false, ...roll }: { cents: number; size?: MoneySize; color?: string; style?: StyleProp<TextStyle>; format?: (c: number) => string; align?: "left" | "right"; priceless?: boolean } & Pick<OdometerProps, "mode" | "rollOnMount" | "onLand" | "pulse" | "announce" | "live">) {
   const p = usePalette();
   const t = useType();
   // Every figure follows the chosen currency unless a screen passes its own format.
   const money = useMoney();
   const format = given ?? money.format;
-  if (size === "hero") {
+  if (size === "hero" && !priceless) {
     const s = t.hero.fontSize ?? 56;
     return <Odometer cents={cents} format={format} size={s} family="bodoni" smallPrefix tracking={-0.02 * s} color={color} align={align} style={style as StyleProp<ViewStyle>} {...roll} />;
   }
-  const role = size === "title" ? { ...t.title1, fontVariant: ["tabular-nums", "lining-nums"] as TextStyle["fontVariant"], letterSpacing: 0 } : size === "card" ? type.cardPrice : size === "ledger15" ? type.figure15 : type.figure13;
+  const role = size === "hero" ? t.hero : size === "title" ? { ...t.title1, fontVariant: ["tabular-nums", "lining-nums"] as TextStyle["fontVariant"], letterSpacing: 0 } : size === "card" ? type.cardPrice : size === "ledger15" ? type.figure15 : type.figure13;
+  if (priceless) return <Text accessibilityLabel="Priceless" style={[role, { color: color ?? p.ink, textAlign: align }, style]}>{INFINITY}</Text>;
   return <Text style={[role, { color: color ?? p.ink, textAlign: align }, style]}>{format(cents)}</Text>;
 }
 
@@ -175,16 +178,63 @@ function GrainTiles() {
   );
 }
 
-/** A wish photograph, or a quiet gradient when the agent found none. */
-export function Photo({ uri, style, contentPosition }: { uri?: string | null; kind?: string; style?: StyleProp<ViewStyle>; contentPosition?: ImageContentPosition }) {
+/**
+ * A wish photograph, or a quiet gradient when the agent found none. With `glyph`, the GlyphPanel stands under the
+ * photograph instead (infinity for something priceless, the currency's sign for money): it shows while there is no
+ * photo or it fails, and a photo that arrives later dissolves in over it.
+ */
+export function Photo({ uri, style, contentPosition, glyph }: { uri?: string | null; kind?: string; style?: StyleProp<ViewStyle>; contentPosition?: ImageContentPosition; glyph?: string }) {
   const p = usePalette();
   const [failed, setFailed] = useState(false);
   return (
     // Photographs never take the pointer: on the web a drag over an <img> starts the browser's own image drag, which
     // cancels whatever swipe was under way (a card removal, a page turn). Presses go to the parent control.
     <View pointerEvents="none" style={[StyleSheet.absoluteFill, style]}>
-      <LinearGradient colors={[p.surface, p.bg]} start={{ x: 0.2, y: 0 }} end={{ x: 0.8, y: 1 }} style={StyleSheet.absoluteFill} />
+      {glyph ? <GlyphPanel glyph={glyph} /> : <LinearGradient colors={[p.surface, p.bg]} start={{ x: 0.2, y: 0 }} end={{ x: 0.8, y: 1 }} style={StyleSheet.absoluteFill} />}
       {uri && !failed ? <Image source={{ uri }} style={StyleSheet.absoluteFill} contentFit="cover" contentPosition={contentPosition ?? "center"} transition={{ duration: 300, effect: "cross-dissolve" }} onError={() => setFailed(true)} accessibilityIgnoresInvertColors /> : null}
+    </View>
+  );
+}
+
+/**
+ * Where a photograph would be when there is none (owner, 2026-10-30: never an empty dark box). The same surface
+ * falling into the background that stood in for a missing photo, now holding one figure in the display face, in
+ * champagne with a soft glow: infinity for something priceless, the currency's sign for money, or the wish's first
+ * letter (components/worth.tsx glyphFor). It scales with the panel. Purely visual; the card around it has the words.
+ */
+export function GlyphPanel({ glyph, style }: { glyph: string; style?: StyleProp<ViewStyle> }) {
+  const p = usePalette();
+  const [h, setH] = useState(0);
+  // A wide sign (infinity, CN¥) is set smaller than a letter, so it never runs to the edges.
+  const size = Math.round(h * (glyph.length > 1 || glyph === INFINITY ? 0.4 : 0.5));
+  return (
+    <View
+      pointerEvents="none"
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+      // Sized to the panel's shorter side (a wide card's height, a tall card's three-quarter width), so the figure
+      // keeps clear of a list card's title at its foot.
+      onLayout={(e) => setH(Math.min(e.nativeEvent.layout.height, e.nativeEvent.layout.width * 0.75))}
+      style={[StyleSheet.absoluteFill, { alignItems: "center", justifyContent: "center", overflow: "hidden" }, style]}
+    >
+      <LinearGradient colors={[p.surface, p.bg]} start={{ x: 0.2, y: 0 }} end={{ x: 0.8, y: 1 }} style={StyleSheet.absoluteFill} />
+      {size > 0 ? (
+        <Text
+          numberOfLines={1}
+          style={{
+            fontFamily: fonts.displayItalic,
+            fontSize: size,
+            lineHeight: Math.round(size * 1.15),
+            color: p.accentText,
+            opacity: 0.92,
+            textShadowColor: p.accent,
+            textShadowRadius: Math.round(size * 0.12),
+            textShadowOffset: { width: 0, height: 0 },
+          }}
+        >
+          {glyph}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -381,7 +431,7 @@ export function Chip({ label, selected = false, onPress, style }: { label: strin
 }
 
 /** One line of a price statement: label with an optional hint, figure on the right; tabular so decimals align. */
-export function StatementRow({ label, hint, cents, big = false }: { label: string; hint?: string; cents: number; big?: boolean }) {
+export function StatementRow({ label, hint, cents, big = false, priceless = false }: { label: string; hint?: string; cents: number; big?: boolean; priceless?: boolean }) {
   const p = usePalette();
   return (
     <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "baseline", gap: 12 }}>
@@ -389,7 +439,7 @@ export function StatementRow({ label, hint, cents, big = false }: { label: strin
         {big ? <Eyebrow>{label}</Eyebrow> : <Text style={[type.callout, { color: p.ink }]}>{label}</Text>}
         {hint ? <Text style={[type.footnote, { color: p.ink3, marginTop: 2 }]}>{hint}</Text> : null}
       </View>
-      <Money cents={cents} size={big ? "title" : "card"} align="right" />
+      <Money cents={cents} priceless={priceless} size={big ? "title" : "card"} align="right" />
     </View>
   );
 }

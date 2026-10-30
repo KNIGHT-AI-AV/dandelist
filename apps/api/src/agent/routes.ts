@@ -6,7 +6,7 @@ import { z } from "zod";
 import { requireAuth, type AuthDeps, type AuthVars } from "../auth";
 import type { MediaStore } from "../media-store";
 import { HOLD_USD, SpendLimitError, TOOL_MODEL_PREFIX, assertBudget, assertUserBudget, callsToday, recordSpend, recordToolSpend, spentToday, userCapUsd, isJudge, withHold, type SpendCaps } from "../spend";
-import { answerSchema, clarify, draftSchema, interpret, type Draft, type Meta, type Step } from "./agent";
+import { answerSchema, clarify, draftSchema, interpret, unpriced, type Draft, type Meta, type Step } from "./agent";
 import { HUNT_STOP_MS, huntWish, type HuntResult } from "./find";
 import { SAM_MODEL } from "./cutout";
 import type { MediaOptions } from "./hunt";
@@ -16,6 +16,7 @@ import { publicFetch, type Fetcher } from "./tools";
 import { pgArchive, type Archive } from "../archive/archive";
 import { MAX_CLIP_BYTES, TRANSCRIBES_PER_USER_PER_DAY, WISH_KEYWORDS, cleanTranscript, clipProblem, readWav } from "./transcribe";
 import { personaSchema, voiceLine } from "./persona";
+import { moneyPhoto, photoMedia } from "./worth";
 import { stoppable } from "../sse";
 import { notesFor, withNotes } from "../notes";
 
@@ -77,8 +78,13 @@ const CALLS_PER_RETAKE = 28;
 /** A run started from words alone holds this until the draft is read, a few seconds in. */
 const pendingDraft = (text: string): Draft => ({ title: text.slice(0, 120), kind: "buy", summary: text.slice(0, 400), specifics: [], region: "US", currency: "USD", unknowns: [] });
 
-/** What a run's result holds: the options, and while it runs the fast card marked provisional. */
-const resultOf = (r: HuntResult) => ({ options: r.options, explanation: r.explanation, note: r.note, horizonYears: r.horizonYears, questions: r.questions, provisional: r.provisional });
+/**
+ * What a run's result holds: the options, and while it runs the fast card marked provisional. Money or a priceless
+ * wish has no options and carries its `worth` card instead; a money one may add its checked `photo` a little later.
+ */
+const resultOf = (r: HuntResult) => ({ options: r.options, explanation: r.explanation, note: r.note, horizonYears: r.horizonYears, questions: r.questions, provisional: r.provisional, ...(r.worth ? { worth: r.worth } : {}) });
+/** How long a money run looks for its photo before it ends without one. */
+const MONEY_PHOTO_MS = 20_000;
 
 type RunRow = {
   id: string;
@@ -190,7 +196,8 @@ export function agentRoutes(deps: AgentDeps) {
       // The person's own notes on their wishes join the reading and the questions (notes.ts).
       const meta = withNotes(metaFor(c.get("userId"), "interpret"), await notesFor(db, c.get("userId")));
       const draft = await interpret(meta, body.data.text);
-      const questions = await clarify(meta, draft);
+      // Money or something priceless has no price to narrow down, so there is nothing to ask.
+      const questions = unpriced(draft) ? [] : await clarify(meta, draft);
       return c.json({ draft, questions });
     } catch (e) {
       return c.json({ error: friendly(e) }, e instanceof SpendLimitError ? 429 : 502);
@@ -348,7 +355,18 @@ export function agentRoutes(deps: AgentDeps) {
         clearTimeout(timer);
         stop.abort(); // anything still running stops spending
         const done = (result: unknown) => db.query("update agent_runs set status = 'done', result = $1::jsonb, updated_at = $2 where id = $3", [JSON.stringify(result), touch(), run.id]);
-        if (outcome !== "late" && "r" in outcome) return done(resultOf(outcome.r));
+        const hunted = outcome !== "late" && "r" in outcome ? outcome.r : null;
+        if (hunted?.worth?.worth === "money") {
+          // The amount is the person's to pick, so the card shows at once while the run looks for a checked photo.
+          const result = resultOf(hunted);
+          await db.query("update agent_runs set result = $1::jsonb, updated_at = $2 where id = $3 and status = 'running'", [JSON.stringify({ ...result, provisional: true }), touch(), run.id]);
+          const shot = new AbortController();
+          const photo = await moneyPhoto(metaFor(userId, "research", addCost, shot.signal), { fetcher: deps.webFetch ?? publicFetch, archive, by: Date.now() + MONEY_PHOTO_MS })
+            .catch(() => null)
+            .finally(() => shot.abort());
+          return done(photo ? { ...result, photo: photoMedia(photo) } : result);
+        }
+        if (hunted) return done(resultOf(hunted));
         // Out of time, or the research failed: the fast card, if there was one, is the answer.
         if (fast.result) return done({ ...fast.result, provisional: false });
         const e: unknown = outcome === "late" ? null : "e" in outcome ? outcome.e : null;

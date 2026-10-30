@@ -191,7 +191,7 @@ export function TiltObject({ uri, style, credit }: { uri: string; style?: StyleP
 }
 
 /** Picks the richest way to show a wish: a 3D model, a slideshow of a place, a turnable cutout, or the photo. */
-export function MediaHero({ media, fallbackUri, kind, style, children }: { media?: Media; fallbackUri?: string | null; kind?: string; style?: StyleProp<ViewStyle>; children?: ReactNode }) {
+export function MediaHero({ media, fallbackUri, kind, style, glyph, children }: { media?: Media; fallbackUri?: string | null; kind?: string; style?: StyleProp<ViewStyle>; glyph?: string; children?: ReactNode }) {
   if (media?.model3d) return <Model3D model={media.model3d} style={style} />;
   if (media && (media.kind === "place" || media.kind === "experience") && media.images.length > 1) {
     return (
@@ -203,7 +203,7 @@ export function MediaHero({ media, fallbackUri, kind, style, children }: { media
   if (media?.cutout) return <TiltObject uri={media.cutout.url} style={style} credit={media.images[0] ? creditFor(media.images[0]) : undefined} />;
   return (
     <View style={style}>
-      <Photo uri={media?.images[0]?.url ?? fallbackUri} kind={kind} />
+      <Photo uri={media?.images[0]?.url ?? fallbackUri} kind={kind} glyph={glyph} />
       {children}
     </View>
   );

@@ -83,6 +83,17 @@ describe("wishes", () => {
     expect((await call("PATCH", `/wishes/${wish.id}`, t, {})).status).toBe(400);
   });
 
+  it("keeps what a wish no shop prices is worth: money's amount, and a priceless one's line at zero upfront", async () => {
+    const t = await signIn("ada@example.com");
+    const money = await call("POST", "/wishes", t, { name: "Money", kind: "buy", upfrontCents: 100_000_000, details: { worth: "money" } });
+    expect(money.status).toBe(201);
+    expect(((await money.json()) as { wish: unknown }).wish).toMatchObject({ upfrontCents: 100_000_000, details: { worth: "money" } });
+    const love = await call("POST", "/wishes", t, { name: "Love", kind: "do", upfrontCents: 0, details: { worth: "priceless", line: "Free to give, impossible to buy." } });
+    expect(((await love.json()) as { wish: unknown }).wish).toMatchObject({ upfrontCents: 0, details: { worth: "priceless", line: "Free to give, impossible to buy." } });
+    expect((await call("POST", "/wishes", t, { name: "Love", kind: "do", details: { worth: "free" } })).status).toBe(400);
+    expect((await call("POST", "/wishes", t, { name: "Love", kind: "do", details: { worth: "priceless", line: "x".repeat(121) } })).status).toBe(400);
+  });
+
   it("needs a signed-in person", async () => {
     expect((await app.request("/wishes")).status).toBe(401);
   });

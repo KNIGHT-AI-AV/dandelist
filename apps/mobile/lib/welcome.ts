@@ -2,10 +2,11 @@ import { entries as catalogue, type Entry } from "@dandelist/catalogue";
 import { recurringBreakdown, type Period } from "@dandelist/cost";
 import { fetch as streamingFetch } from "expo/fetch";
 import { Platform } from "react-native";
-import type { Media, PriceOption, Step, WishQuestion } from "./agent";
+import type { Media, PriceOption, Step, WishQuestion, WorthCard } from "./agent";
 import { API_URL } from "./auth";
 import { getSecret, setSecret } from "./storage";
-import type { NewWish, WishKind } from "./wishes";
+import type { NewWish, WishDetails, WishKind } from "./wishes";
+import { photoOnly, type Worth } from "./worth";
 
 /**
  * The pre-login experience, rebuilt from the owner's walkthrough (2026-10-28): what Dandelist is, then the first
@@ -36,6 +37,8 @@ export interface PoolItem {
   credit?: string;
   media?: Entry["media"];
   imageUrl?: string;
+  /** The first wish when no shop prices it: money (the amount picked) or priceless (zero, left out of every total). */
+  worth?: Worth;
 }
 
 /** The first wish as the guest agent priced it: the best option, with where the price came from. */
@@ -51,7 +54,20 @@ export interface FirstWish {
   explanation?: string;
   /** Why it couldn't be priced; it still goes on the list to price after saving. */
   failed?: string;
+  /** Money itself or something priceless (lib/worth.ts): no shop prices it, so there is no option. */
+  worth?: Worth;
+  /** Money: the amount picked on the slider, in US cents. It starts at what the wish named. */
+  amountCents?: number;
+  /** Money: the amount the wish named, in US cents, when it named one; the slider reaches at least that far. */
+  namedCents?: number;
+  /** Priceless: the Dandy's line for it. */
+  line?: string;
+  /** Money: a checked photo, when one was found. */
+  photo?: { imageUrl: string; media?: Media };
 }
+
+/** A first wish that is on the list: priced, money with its amount, or priceless. */
+export const settled = (w: FirstWish | null | undefined): boolean => !!w && (!!w.option || w.worth === "priceless" || (w.worth === "money" && !!w.amountCents));
 
 /** When they'd most want all of it (owner: not years; now, soon, in time, not sure). */
 export type When = "now" | "soon" | "time" | "unsure";
@@ -94,11 +110,31 @@ export const markTitleSeen = () => setSecret(SEEN, "1");
 
 const STANDBY_CATEGORY: Record<WishKind, string> = { visit: "travel", do: "travel", own: "live", buy: "capture" };
 
-/** The first wish as a card, once priced: its title, the agent's price and photos. */
+/**
+ * The first wish as a card, once it is on the list: its title, the agent's price and photos; or for money, the amount
+ * picked and its photo; or for something priceless, zero, marked so every total leaves it out.
+ */
 export function wishCard(w: FirstWish | null): PoolItem | null {
-  if (!w?.option) return null;
-  const o = w.option;
+  if (!w || !settled(w)) return null;
   const kind = w.kind ?? "buy";
+  if (w.worth === "money" || w.worth === "priceless") {
+    return {
+      id: "wish",
+      name: w.title ?? w.text,
+      kind,
+      category: STANDBY_CATEGORY[kind],
+      group: kind === "visit" || kind === "do" ? "travel" : "things",
+      upfrontCents: w.worth === "money" ? w.amountCents! : 0,
+      recurring: [],
+      status: "estimate",
+      seller: "",
+      url: "",
+      checkedAt: "",
+      worth: w.worth,
+      ...(w.photo ? { imageUrl: w.photo.imageUrl, ...(w.photo.media ? { media: w.photo.media as Entry["media"] } : {}) } : {}),
+    };
+  }
+  const o = w.option!;
   return {
     id: "wish",
     name: w.title ?? w.text,
@@ -118,14 +154,33 @@ export function wishCard(w: FirstWish | null): PoolItem | null {
 
 /** Everything on the list so far, the first wish first. */
 export const listed = (s: Pick<WelcomeState, "items" | "wish">): PoolItem[] => [...(wishCard(s.wish) ? [wishCard(s.wish)!] : []), ...s.items];
-export const listTotal = (s: Pick<WelcomeState, "items" | "wish">) => listed(s).reduce((n, e) => n + e.upfrontCents, 0);
+/** What the list adds up to; a priceless wish is never in it. */
+export const listTotal = (s: Pick<WelcomeState, "items" | "wish">) => listed(s).reduce((n, e) => (e.worth === "priceless" ? n : n + e.upfrontCents), 0);
+
+/** A wish no shop prices, as the list keeps it: what it is worth, and a priceless one's line. */
+const worthDetails = (w: FirstWish): WishDetails => ({
+  worth: w.worth,
+  ...(w.worth === "priceless" && w.line ? { line: w.line.slice(0, 120) } : {}),
+  ...(w.worth === "money" && w.photo ? { agent: photoOnly(w.photo.imageUrl, w.photo.media) } : {}),
+});
 export const monthlyOf = (e: Pick<PoolItem, "id" | "upfrontCents" | "recurring">) => recurringBreakdown([{ id: e.id, upfrontCents: e.upfrontCents, recurring: e.recurring }]).perMonth;
 
 /** Turns the kept list into wishes on the new account: the first wish is a must, the rest nice to have. */
 export function toWishes(s: WelcomeState): NewWish[] {
   const out: NewWish[] = [];
   const w = s.wish;
-  if (w?.option) {
+  if (w && settled(w) && (w.worth === "money" || w.worth === "priceless")) {
+    out.push({
+      name: w.title ?? w.text,
+      kind: w.kind ?? "buy",
+      tier: s.last === "wish" ? "dream" : "must",
+      upfrontCents: w.worth === "money" ? w.amountCents! : 0,
+      recurringCents: 0,
+      period: "month",
+      recurring: [],
+      details: worthDetails(w),
+    });
+  } else if (w?.option) {
     const o = w.option;
     out.push({
       name: w.title ?? w.text,
@@ -219,6 +274,13 @@ export type GuestEvent =
   | { type: "draft"; title: string; kind: WishKind; questions?: WishQuestion[] }
   | { type: "step"; step: Step }
   | { type: "priced"; title: string; kind: WishKind; option: PriceOption; explanation: string; questions?: WishQuestion[]; provisional?: boolean }
+  /**
+   * Money itself or something priceless: no hunt. The server follows it with an error event for apps that predate
+   * it; once this has come, that error is not a failure.
+   */
+  | ({ type: "worth" } & WorthCard)
+  /** A money wish's checked photo, when one is found in time. */
+  | { type: "photo"; imageUrl: string; media?: Media }
   | { type: "error"; message: string };
 
 /** Prices the first wish for real, before sign-in: what it is, the agent's live trail, then the best option. */
@@ -229,14 +291,32 @@ export type PreviewEvent =
   | { type: "note"; text: string }
   | { type: "result"; upfrontCents: number; monthlyRunningCents: number; everythingBy: string; largest: { name: string; share: number; restBy: string } | null };
 
+/**
+ * The first wish as the preview prices it: as priced, or money at the amount picked. A priceless one is left out of
+ * the sums, so it sends nothing.
+ */
+export function previewExtra(w: FirstWish | null): { name: string; upfrontCents: number; recurring: { label: string; amountCents: number; period: Period }[] } | null {
+  if (!w || w.worth === "priceless") return null;
+  const name = (w.title ?? w.text).slice(0, 120);
+  const whole = (cents: number) => Math.max(100, Math.round(cents / 100) * 100);
+  if (w.worth === "money") return w.amountCents ? { name, upfrontCents: whole(w.amountCents), recurring: [] } : null;
+  const o = w.option;
+  return o ? { name, upfrontCents: whole(o.upfrontCents), recurring: o.recurring.slice(0, 6).map((r) => ({ label: r.label.slice(0, 60), amountCents: r.amountCents, period: r.period })) } : null;
+}
+
 /** Streams the agent's real work on the whole list: the pool picks by id, the first wish as priced. */
 export function streamPreview(s: WelcomeState, onEvent: (e: PreviewEvent) => void, signal?: AbortSignal): Promise<void> {
-  const o = s.wish?.option;
+  const extra = previewExtra(s.wish);
+  // Nothing on the list has a price (a priceless first wish, nothing picked): the list comes to nothing to add up.
+  if (!s.items.length && !extra) {
+    onEvent({ type: "result", upfrontCents: 0, monthlyRunningCents: 0, everythingBy: "", largest: null });
+    return Promise.resolve();
+  }
   return readEvents<PreviewEvent>(
     "/preview",
     {
       picks: s.items.map((e) => e.id),
-      ...(o ? { extra: { name: (s.wish!.title ?? s.wish!.text).slice(0, 120), upfrontCents: Math.max(100, Math.round(o.upfrontCents / 100) * 100), recurring: o.recurring.slice(0, 6).map((r) => ({ label: r.label.slice(0, 60), amountCents: r.amountCents, period: r.period })) } } : {}),
+      ...(extra ? { extra } : {}),
       monthlyCents: s.monthlyCents,
       horizonYears: s.when ? WHEN_YEARS[s.when] : null,
     },

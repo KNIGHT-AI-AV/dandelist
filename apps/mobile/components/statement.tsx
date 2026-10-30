@@ -5,10 +5,20 @@ import { Glass, Hairline, StatementRow } from "./lux";
 
 export const HORIZON_YEARS = 5;
 
-/** The price, set like a private bank statement. Every figure comes from the cost engine. */
-export function Statement({ item, years = HORIZON_YEARS, monthlyHint }: { item: Item; years?: number; monthlyHint?: string }) {
+/**
+ * The price, set like a private bank statement. Every figure comes from the cost engine. Something priceless
+ * (lib/worth.ts) has one line, infinity, and nothing to add up over the years.
+ */
+export function Statement({ item, years = HORIZON_YEARS, monthlyHint, priceless = false }: { item: Item; years?: number; monthlyHint?: string; priceless?: boolean }) {
   const monthly = recurringBreakdown([item]).perMonth;
   const total = horizonCashOutlay([item], years);
+  if (priceless) {
+    return (
+      <Glass style={{ borderRadius: radius.lg, padding: layout.cardPad, gap: 12 }}>
+        <StatementRow label="Upfront" cents={0} priceless big />
+      </Glass>
+    );
+  }
   return (
     <Glass style={{ borderRadius: radius.lg, padding: layout.cardPad, gap: 12 }}>
       <StatementRow label="Upfront" cents={item.upfrontCents} big />

@@ -1,6 +1,7 @@
 import type { NewWish, Wish } from "./wishes";
 import { getRun, startHunt } from "./agent";
 import type { FirstWish, WelcomeState } from "./welcome";
+import { amountSteps, startAmount } from "./worth";
 
 /**
  * Turning the list someone kept before sign-in into their first wishes, without losing any (Codex R01). Each wish
@@ -10,12 +11,15 @@ import type { FirstWish, WelcomeState } from "./welcome";
 
 /** The saved list's shape, as far as adoption needs it. */
 export interface Kept {
-  wish: { option?: unknown } | null;
+  wish: { option?: unknown; worth?: string; amountCents?: number } | null;
   items: { id: string }[];
 }
 
-/** Where each wish toWishes makes sits in the kept list: "wish" for a priced first wish, then each pick's id. */
-export const adoptionKeys = (s: Kept): string[] => [...(s.wish?.option ? ["wish"] : []), ...s.items.map((e) => e.id)];
+/** The first wish is ready to save: priced, money with the amount picked, or priceless (lib/welcome.ts settled). */
+const ready = (w: Kept["wish"]) => !!w && (!!w.option || w.worth === "priceless" || (w.worth === "money" && !!w.amountCents));
+
+/** Where each wish toWishes makes sits in the kept list: "wish" for a first wish ready to save, then each pick's id. */
+export const adoptionKeys = (s: Kept): string[] => [...(ready(s.wish) ? ["wish"] : []), ...s.items.map((e) => e.id)];
 
 /** The saved list without one wish the server now has. */
 export function withoutAdopted<S extends Kept>(s: S, key: string): S {
@@ -53,9 +57,9 @@ export async function adoptWelcome(kept: WelcomeState, deps: Adoption): Promise<
     kept = withoutAdopted(kept, keys[i]!);
     await deps.save(adoptionDone(kept) ? null : kept);
   }
-  if (kept.wish && !kept.wish.option) {
+  if (kept.wish && !ready(kept.wish)) {
     const priced = await deps.price(kept.wish.text).catch(() => null);
-    if (!priced?.option) return;
+    if (!ready(priced)) return;
     kept = { ...kept, wish: priced };
     await deps.save(kept);
     const wish = deps.toWishes(kept)[0]!;
@@ -73,6 +77,13 @@ export async function priceFirstWish(api: Parameters<typeof startHunt>[0], text:
     await new Promise((r) => setTimeout(r, 2_000));
     run = await getRun(api, run.id);
   }
+  // Money itself or something priceless: no price to find. Money goes on at the amount the wish named, else a million.
+  const worth = run.result?.worth;
+  if (worth?.worth === "money") {
+    const photo = run.result?.photo;
+    return { text, title: worth.title, kind: worth.kind, worth: "money", amountCents: startAmount(amountSteps(1, 1, worth.amountCents), worth.amountCents), ...(worth.amountCents ? { namedCents: worth.amountCents } : {}), ...(photo ? { photo } : {}), runId: run.id };
+  }
+  if (worth?.worth === "priceless") return { text, title: worth.title, kind: worth.kind, worth: "priceless", line: worth.line, runId: run.id };
   const option = run.result?.options[0];
   if (!option || !run.draft) return null;
   return { text, title: run.draft.title, kind: run.draft.kind, option, runId: run.id, explanation: run.result?.explanation ?? "" };

@@ -23,8 +23,10 @@ import { recurringBreakdown } from "@dandelist/cost";
 import { thoughtOf } from "../lib/reveal";
 import { play, preloadSounds } from "../lib/sound";
 import { layout, type, usePalette, useTheme } from "../lib/theme";
-import { cataloguePool, emptyWelcome, fetchPool, listTotal, listed, loadWelcome, markTitleSeen, saveWelcome, seenTitle, streamGuestWish, type FirstWish, type PoolItem, type WelcomeState } from "../lib/welcome";
+import { cataloguePool, emptyWelcome, fetchPool, listTotal, listed, loadWelcome, markTitleSeen, saveWelcome, seenTitle, settled, streamGuestWish, type FirstWish, type PoolItem, type WelcomeState } from "../lib/welcome";
 import { startWelcome } from "../lib/welcome-start";
+import { useMoney } from "../lib/currency";
+import { amountSteps, startAmount } from "../lib/worth";
 import { dollars } from "../components/odometer";
 import { Atmosphere } from "../components/atmosphere";
 
@@ -89,6 +91,7 @@ export default function Welcome() {
   const reduced = useReducedMotion();
   const auth = useAuth();
   const theme = useTheme();
+  const money = useMoney();
   const [step, setStep] = useState<Step | null>(null);
   const [short, setShort] = useState(false);
   const [pool, setPool] = useState<PoolItem[]>(cataloguePool);
@@ -126,8 +129,9 @@ export default function Welcome() {
       fetchPool,
       onLocal: (seenBefore, saved) => {
         setShort(seenBefore);
-        // A first wish that was still being priced when they left is asked again rather than half-shown.
-        if (saved) setState({ ...saved, wish: saved.wish?.option ? saved.wish : null });
+        // A first wish that was still being priced when they left is asked again rather than half-shown; one that
+        // landed (priced, money with its amount, or priceless) stays.
+        if (saved) setState({ ...saved, wish: settled(saved.wish) ? saved.wish : null });
         setStep({ kind: "title" });
       },
       onPool: setPool,
@@ -196,12 +200,24 @@ export default function Welcome() {
     setFound(false);
     setPricing("pricing");
     patch((s) => ({ ...s, wish: { text } }));
+    // Money or something priceless (owner, 2026-10-30): once its card has come, the error the server sends after it
+    // for older apps, and a stream that drops later, are not failures.
+    let worthy = false;
     streamGuestWish(
       text,
       (e) => {
         if (ctrl.signal.aborted) return;
         if (e.type === "draft") patchWish((w) => ({ ...w, title: e.title, kind: e.kind }));
         else if (e.type === "step") setTrail((t) => [...t, e.step]);
+        else if (e.type === "worth") {
+          worthy = true;
+          if (e.worth === "money") {
+            // The slider starts at what the wish named, else a million of the shown currency.
+            const amountCents = startAmount(amountSteps(money.rate, money.unit, e.amountCents), e.amountCents);
+            patchWish((w) => ({ ...w, title: e.title, kind: e.kind, worth: "money", amountCents, ...(e.amountCents ? { namedCents: e.amountCents } : {}), failed: undefined }));
+          } else patchWish((w) => ({ ...w, title: e.title, kind: e.kind, worth: "priceless", line: e.line, failed: undefined }));
+          setPricing("priced");
+        } else if (e.type === "photo") patchWish((w) => ({ ...w, photo: { imageUrl: e.imageUrl, ...(e.media ? { media: e.media } : {}) } }));
         else if (e.type === "priced") {
           const { label, seller, url, upfrontCents, recurring, status, statusLabel, checkedAt, imageUrl, media, source } = e.option;
           // The fast card lands first; a better one from the full research replaces it quietly, with no second "found".
@@ -212,14 +228,14 @@ export default function Welcome() {
             setFound(true);
             setTimeout(() => setFound(false), FOUND_HOLD_MS);
           }
-        } else if (e.type === "error") {
+        } else if (e.type === "error" && !worthy) {
           patchWish((w) => ({ ...w, failed: e.message }));
           setPricing("failed");
         }
       },
       ctrl.signal,
     ).catch((err: Error) => {
-      if (ctrl.signal.aborted) return;
+      if (ctrl.signal.aborted || worthy) return;
       patchWish((w) => ({ ...w, failed: err instanceof TypeError ? "Couldn't reach Dandelist just now." : err.message }));
       setPricing("failed");
     });
@@ -322,7 +338,15 @@ export default function Welcome() {
       body = <Ask ideas={ideas} initial={state.wish?.text ?? ""} bottomInset={insets.bottom} onSubmit={startVoting} />;
       break;
     case "made":
-      body = state.wish ? <MadeStep wish={state.wish} pricing={pricing} line={thought?.text ?? ""} onContinue={() => go(nextVote(latest.current) ?? { kind: "when" })} /> : null;
+      body = state.wish ? (
+        <MadeStep
+          wish={state.wish}
+          pricing={pricing}
+          line={thought?.text ?? ""}
+          onAmount={(amountCents) => patchWish((w) => ({ ...w, amountCents }))}
+          onContinue={() => go(nextVote(latest.current) ?? { kind: "when" })}
+        />
+      ) : null;
       break;
     case "vote": {
       const [a, b] = step.pair;
@@ -334,7 +358,16 @@ export default function Welcome() {
       body = <WhenStep value={state.when} onPick={(when) => { patch((s) => ({ ...s, when })); setDone(2 + ANSWERED_ROUNDS); setTimeout(() => go({ kind: "comfort" }), 220); }} />;
       break;
     case "comfort":
-      body = <Comfort incomeCents={faderIncome({ totalCents: total, keepPerYearCents: keepPerYear, selectedIncomeCents: state.incomeCents, hasPricedItems: items.length > 0 })} totalCents={Math.max(total, 1)} keepPerYearCents={keepPerYear} onChange={(c) => patch((s) => ({ ...s, incomeCents: c }))} onDone={() => { setDone(3 + ANSWERED_ROUNDS); go({ kind: "agent" }); }} />;
+      body = (
+        <Comfort
+          incomeCents={faderIncome({ totalCents: total, keepPerYearCents: keepPerYear, selectedIncomeCents: state.incomeCents, hasPricedItems: items.some((e) => e.worth !== "priceless") })}
+          totalCents={Math.max(total, 1)}
+          keepPerYearCents={keepPerYear}
+          note={state.wish?.worth === "priceless" ? `${wishTitle} is priceless, so it isn't in the total.` : undefined}
+          onChange={(c) => patch((s) => ({ ...s, incomeCents: c }))}
+          onDone={() => { setDone(3 + ANSWERED_ROUNDS); go({ kind: "agent" }); }}
+        />
+      );
       break;
     case "agent":
       body = (

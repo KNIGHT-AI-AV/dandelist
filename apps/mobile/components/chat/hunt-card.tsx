@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Text, View } from "react-native";
-import { getRun, retakePhoto, startHunt, type Answer, type Draft, type FoundPhoto, type PriceOption, type Run, type Step, type WishQuestion } from "../../lib/agent";
+import { getRun, retakePhoto, startHunt, type Answer, type Draft, type FoundPhoto, type PriceOption, type Run, type Step, type WishQuestion, type WorthCard } from "../../lib/agent";
 import { useAuth } from "../../lib/auth";
+import { useMoney } from "../../lib/currency";
 import { useDandy } from "../../lib/dandy";
 import { haptic } from "../../lib/motion";
 import { stepLine } from "../../lib/recheck";
@@ -9,8 +10,10 @@ import { play } from "../../lib/sound";
 import { answersFrom, refineChanged, withGiven } from "../../lib/refine";
 import { fonts, radius, type, usePalette } from "../../lib/theme";
 import { useWishes, type NewWish } from "../../lib/wishes";
+import { amountSteps, photoOnly, startAmount } from "../../lib/worth";
 import { ErrorLine, Glass, Money, Photo, PrimaryButton, QuietButton } from "../lux";
 import { RefinePanel } from "../refine";
+import { AmountPicker, PricelessPrice, glyphFor } from "../worth";
 import { Working } from "./working";
 
 /**
@@ -32,6 +35,8 @@ interface Hunt {
   shot?: FoundPhoto;
   /** Photos this card has shown, never offered again by a retake. */
   shown?: string[];
+  /** A money wish's amount as the person set it on the slider (US cents). */
+  amount?: number;
 }
 
 // One hunt per chat item, kept across remounts (the feed re-renders, the pager moves) so nothing starts twice.
@@ -63,6 +68,7 @@ export function HuntCard({ id, text, already }: { id: string; text: string; alre
   const p = usePalette();
   const { api } = useAuth();
   const dandy = useDandy();
+  const money = useMoney();
   const { add } = useWishes();
   const [h, setH] = useState<Hunt>(() => hunts.get(id) ?? fresh());
   const [refining, setRefining] = useState(false);
@@ -109,7 +115,8 @@ export function HuntCard({ id, text, already }: { id: string; text: string; alre
         const cur = hunts.get(id) ?? h;
         if (cur.run?.id !== run.id) return; // a newer hunt replaced this one
         keep({ ...cur, run: next });
-        if (!cur.run?.result?.options.length && next.result?.options.length) {
+        const landedNow = (!cur.run?.result?.options.length && !!next.result?.options.length) || (!cur.run?.result?.worth && !!next.result?.worth);
+        if (landedNow) {
           haptic.success();
           play("land");
         }
@@ -204,6 +211,51 @@ export function HuntCard({ id, text, already }: { id: string; text: string; alre
       setSaving(false);
     }
   };
+
+  // Money itself or something priceless (owner, 2026-10-30): nothing was hunted. Money asks how much, starting at any
+  // amount the wish named; something priceless shows infinity and the Dandy's line. Neither shows an empty photo box.
+  const worth = h.run?.result?.worth;
+  if (worth) {
+    const named = worth.worth === "money" ? worth.amountCents : undefined;
+    const amountCents = h.amount ?? startAmount(amountSteps(money.rate, money.unit, named), named);
+    const shot = h.run?.result?.photo;
+    const saveWorth = async (w: WorthCard) => {
+      setSaving(true);
+      try {
+        await add({
+          name: w.title,
+          kind: w.kind,
+          tier: "nice",
+          upfrontCents: w.worth === "money" ? amountCents : 0,
+          recurringCents: 0,
+          period: "month",
+          recurring: [],
+          details: w.worth === "money" ? { worth: "money", ...(shot ? { agent: photoOnly(shot.imageUrl, shot.media) } : {}) } : { worth: "priceless", line: w.line.slice(0, 120) },
+        });
+        haptic.success();
+        setSaved(true);
+      } catch (e) {
+        keep({ ...(hunts.get(id) ?? h), error: sorry(e) });
+      } finally {
+        setSaving(false);
+      }
+    };
+    return (
+      <Glass style={{ padding: 0, gap: 0, borderRadius: radius.lg, overflow: "hidden" }}>
+        <View style={{ width: "100%", aspectRatio: 4 / 3 }}>
+          <Photo uri={shot?.imageUrl} glyph={glyphFor(worth.worth, worth.title, money.symbol)} />
+        </View>
+        <View style={{ padding: 18, gap: 10 }}>
+          <Text style={[type.title2, { color: p.ink }]} numberOfLines={2}>
+            {worth.title}
+          </Text>
+          {worth.worth === "money" ? <AmountPicker cents={amountCents} namedCents={named} onChange={(c) => keep({ ...(hunts.get(id) ?? h), amount: c })} /> : <PricelessPrice line={worth.line} />}
+          {h.error ? <ErrorLine>{h.error}</ErrorLine> : null}
+          <PrimaryButton label={saved || already ? "On your list" : "Add to my list"} busy={saving} disabled={saved || already} onPress={() => void saveWorth(worth)} />
+        </View>
+      </Glass>
+    );
+  }
 
   // Hunting with nothing to show yet: the wish, and one line of what the Dandy is doing.
   if (!option && !done && !h.error) {

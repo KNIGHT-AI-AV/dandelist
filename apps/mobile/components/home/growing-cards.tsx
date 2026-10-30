@@ -7,8 +7,10 @@ import { ease, haptic, native, spring, usePress, useReducedMotion } from "../../
 import { layout, space, type, usePalette } from "../../lib/theme";
 import type { Wish } from "../../lib/wishes";
 import { TIER_LABEL, agentLine } from "../../lib/words";
+import { isPriceless, priceWords } from "../../lib/worth";
 import type { Rect } from "../../lib/zoom";
 import { AgentDot, Money, Photo, Shade } from "../lux";
+import { savedGlyph } from "../worth";
 import { cardRanges, listHeight, type CardGeometry } from "./card-metrics";
 
 /** A swipe past this share of the width removes the card; a flick this fast (px/ms) does too. */
@@ -39,7 +41,7 @@ interface CardProps extends CardHandlers {
 /** What a screen reader says for a card. */
 export function useCardLabel() {
   const money = useMoney();
-  return (w: Wish) => `${w.name}, ${money.format(w.item.upfrontCents)}, ${TIER_LABEL[w.tier]}`;
+  return (w: Wish) => `${w.name}, ${priceWords(w, money.format)}, ${TIER_LABEL[w.tier]}`;
 }
 
 function Card({ w, index, g, scrollY, listTop, focus, width, fresh, onOpen, onQuick, onRemove }: CardProps) {
@@ -152,7 +154,7 @@ function Card({ w, index, g, scrollY, listTop, focus, width, fresh, onOpen, onQu
           <Animated.View style={{ flex: 1, transform: [{ scale: press.scale }] }}>
             <Animated.View ref={windowRef} collapsable={false} style={{ height: tall, overflow: "hidden", transform: [{ translateY: shape.top }, { scaleY: shape.s }] }}>
               <Animated.View style={{ flex: 1, transform: [{ scaleY: shape.inverse }] }}>
-                <Photo uri={w.details.agent?.imageUrl} />
+                <Photo uri={w.details.agent?.imageUrl} glyph={savedGlyph(w, money.symbol)} />
               </Animated.View>
             </Animated.View>
             <Animated.View pointerEvents="none" style={{ position: "absolute", left: 0, right: 0, top: 0, height: foot, transform: [{ translateY: shape.foot }] }}>
@@ -170,7 +172,7 @@ function Card({ w, index, g, scrollY, listTop, focus, width, fresh, onOpen, onQu
                   </View>
                   <View style={{ alignItems: "flex-end" }}>
                     <Text style={[type.figure, { color: p.ink3, textTransform: "uppercase" }]}>{TIER_LABEL[w.tier]}</Text>
-                    <Money cents={w.item.upfrontCents} size="card" />
+                    <Money cents={w.item.upfrontCents} priceless={isPriceless(w)} size="card" />
                   </View>
                 </View>
               </View>

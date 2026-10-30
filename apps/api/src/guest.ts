@@ -7,7 +7,9 @@ import { z } from "zod";
 import { answerSchema, draftSchema, type Meta, type PriceOption } from "./agent/agent";
 import { HUNT_STOP_MS, huntWish, type HuntResult } from "./agent/find";
 import type { AgentDeps } from "./agent/routes";
+import { publicFetch } from "./agent/tools";
 import { MAX_CLIP_BYTES, WISH_KEYWORDS, cleanTranscript, clipProblem, readWav } from "./agent/transcribe";
+import { moneyPhoto, photoMedia } from "./agent/worth";
 import { pgArchive } from "./archive/archive";
 import type { PoolItem } from "./pool";
 import { ipOf } from "./preview";
@@ -25,7 +27,15 @@ import { heartbeat, stoppable } from "./sse";
  *   {type:"priced", title, kind, option, explanation, questions, provisional?: true}
  *                                                     the card: first the fast one (provisional, about 10 to 15 s),
  *                                                     then the full research's when it is better, by 60 s
- *   {type:"error", message}                           only when no card was sent
+ *   {type:"worth", worth:"money", title, kind, amountCents?}
+ *   {type:"worth", worth:"priceless", title, kind, line}
+ *                                                     money itself or something priceless (owner, 2026-10-30): no
+ *                                                     hunt; the app asks how much, or shows infinity and the line.
+ *                                                     An error event follows for apps that predate it; apps that
+ *                                                     know this event ignore that error.
+ *   {type:"photo", imageUrl, media}                   a money wish's checked photo, when one is found in time
+ *   {type:"error", message}                           only when no card was sent. Only the reason: the app adds
+ *                                                     that the wish stays on the list.
  * Hunting again with changed answers: the same body plus `draft` (from the draft event) and `answers`.
  */
 
@@ -36,6 +46,15 @@ export const GUEST_VOICE_PER_DAY = 400;
 /** Every guest wish and voice clip together, a day. Signed-in people have their own caps. */
 export const GUEST_DAILY_USD = 3;
 const MAX_TRACKED_IPS = 5000;
+
+/**
+ * Why a first wish has no card: the reason alone. Every app, old builds included, adds after it that the wish stays
+ * on the list and is priced after saving (made.tsx), so saying that here too printed it twice (owner, 2026-10-30).
+ */
+export const NOT_FOUND = "Couldn't find a price for that just now.";
+export const NOT_PRICED = "Couldn't price that just now.";
+/** How long a money wish's stream stays open for its photo, at most. */
+export const MONEY_PHOTO_MS = 20_000;
 
 /** Calls per address in the last hour, and per day for everyone, kept in memory like the preview's. */
 function limiter(perHour: number, perDay: number) {
@@ -120,6 +139,8 @@ export function guestRoutes(deps: AgentDeps & { pool: () => Promise<PoolItem[]> 
       // Research can take a minute; a comment line keeps proxies from closing a quiet stream.
       const stopBeat = heartbeat(stream);
       const stop = new AbortController();
+      // A money wish's photo hunt runs after the hunt's own calls are stopped, so it has its own stop.
+      const shot = new AbortController();
       const shown: { card: PriceOption | null } = { card: null };
       const card = (r: HuntResult, provisional: boolean) => ({
         type: "priced",
@@ -151,21 +172,36 @@ export function guestRoutes(deps: AgentDeps & { pool: () => Promise<PoolItem[]> 
       try {
         const outcome = await Promise.race([hunt.then((r) => ({ r }), (e: unknown) => ({ e })), late]);
         if (outcome === "late") {
-          if (!shown.card) await send({ type: "error", message: "Couldn't find a price for that just now. It stays on your list." });
+          if (!shown.card) await send({ type: "error", message: NOT_FOUND });
         } else if ("e" in outcome) {
           const e = outcome.e;
           if (!(e instanceof SpendLimitError)) console.error("guest wish failed", e instanceof MetaApiError ? `${e.status} ${e.body.slice(0, 200)}` : (e as Error).message);
-          if (!shown.card) await send({ type: "error", message: e instanceof SpendLimitError ? busy("day") : "Couldn't price that just now. It stays on your list." });
+          if (!shown.card) await send({ type: "error", message: e instanceof SpendLimitError ? busy("day") : NOT_PRICED });
+        } else if (outcome.r.worth) {
+          // Money or priceless: nothing to hunt, so the fast find and the questions that started beside the reading
+          // stop now. The card is the worth itself.
+          const worth = outcome.r.worth;
+          stop.abort();
+          await send({ type: "worth", ...worth });
+          // An app from before 2026-10-30 has no worth card and would wait on a price forever; it ends on this line,
+          // as it did for these wishes before. Apps that know the worth event ignore it.
+          await send({ type: "error", message: NOT_PRICED });
+          if (worth.worth === "money") {
+            const by = Math.min(Date.now() + MONEY_PHOTO_MS, startedAt + HUNT_STOP_MS);
+            const photo = await moneyPhoto(guestMeta(shot.signal), { fetcher: deps.webFetch ?? publicFetch, archive, by }).catch(() => null);
+            if (photo) await send({ type: "photo", ...photoMedia(photo) });
+          }
         } else {
           const best = outcome.r.options[0];
           if (best && !sameCard(best, shown.card)) await send(card(outcome.r, false));
-          else if (!best && !shown.card) await send({ type: "error", message: "Couldn't find a price for that just now. It stays on your list." });
+          else if (!best && !shown.card) await send({ type: "error", message: NOT_FOUND });
         }
       } finally {
         clearTimeout(timer);
         // Whatever is still running stops here and spends nothing more; its late steps are not sent.
         open = false;
         stop.abort();
+        shot.abort();
         stopBeat();
       }
     });

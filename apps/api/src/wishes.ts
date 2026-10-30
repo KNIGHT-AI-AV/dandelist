@@ -15,6 +15,13 @@ export function webLinksOnly(details: Record<string, unknown>): boolean {
 export const MAX_WISHES_PER_USER = 500;
 const MAX_CENTS = 1_000_000_000_000; // ten billion dollars; anything bigger is a typo
 
+/**
+ * A wish no shop prices (owner, 2026-10-30), kept in its details: `worth` "money" (an amount the person picked, the
+ * wish's upfront cost) or "priceless" (shown as infinity and left out of every sum, upfront 0), and a priceless
+ * wish's `line`. Shown as plain text, so only a short string.
+ */
+const worthDetails = z.object({ worth: z.enum(["money", "priceless"]).optional(), line: z.string().max(120).optional() });
+
 const recurring = z
   .array(
     z.object({
@@ -42,6 +49,7 @@ const createBody = z.object({
       const media = (d.agent as { media?: unknown } | undefined)?.media;
       return media === undefined || mediaSchema.safeParse(media).success;
     }, "Check the pictures.")
+    .refine((d) => worthDetails.safeParse(d).success, "Check what the wish is worth.")
     .optional(),
   // Why it matters to the person, in their words (notes.ts). Tidied here; empty or null clears it.
   note: z
