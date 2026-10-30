@@ -299,6 +299,11 @@ describe("reading the fast find's answer and the pages", () => {
     expect(bareName("Stadium Events: £9,999.99")).toBe("Stadium Events");
     // A figure inside the name stays.
     expect(bareName("The $100,000 Pyramid Board Game")).toBe("The $100,000 Pyramid Board Game");
+    // A hostile title can't stall the server: long runs of spaces and separators read in linear time.
+    const started = Date.now();
+    expect(bareName(`Leica${" ".repeat(200_000)}- $5`)).toBe("Leica");
+    expect(bareName(` -${" :".repeat(100_000)}$1`).length).toBeLessThanOrEqual(140);
+    expect(Date.now() - started).toBeLessThan(500);
   });
 
   it("reads the model's lines, links in its own order", () => {

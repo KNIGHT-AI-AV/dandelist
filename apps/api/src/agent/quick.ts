@@ -98,10 +98,12 @@ const absolute = (raw: string | undefined, base: string): string | undefined => 
  * 2026-10-30: a card named "Super Mario Bros. - NES Nintendo Game (5-screw variant) • $14.47").
  */
 export const bareName = (s: string) =>
-  htmlToText(s)
-    .split(/\s[|–—•·]\s/)[0]!
-    .replace(/\s*(?:\s-|:)\s*[$£€¥]\s?\d[\d,]*(?:\.\d{1,2})?\s*$/, "")
+  // Page text is untrusted: capped and its whitespace collapsed first, so no pattern below can backtrack on it.
+  htmlToText(s.slice(0, 1_000))
     .replace(/\s+/g, " ")
+    .split(/ [|–—•·] /)[0]!
+    .trim()
+    .replace(/(?: -|:) ?[$£€¥] ?\d[\d,]*(?:\.\d{1,2})?$/, "")
     .trim()
     .slice(0, 140);
 
