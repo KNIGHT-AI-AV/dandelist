@@ -346,8 +346,18 @@ describe("a per-person quote is multiplied only when it applies to each person, 
     { name: "a monthly person rate", text: "Membership costs USD 150 per person per month.", adultsOnly: true, applies: false },
     { name: "a nightly person rate", text: "Rooms from USD 150 per person per night.", adultsOnly: true, applies: false },
     { name: "a person rate with the period first", text: "Per person: USD 150/month.", adultsOnly: true, applies: false },
+    { name: "a compound unit with a period (Codex, #84 review)", text: "Club dinners cost USD 150 per adult guest per month.", adultsOnly: true, applies: false },
+    { name: "a person rate that includes daily breakfast", text: "The tour costs USD 150 per person including daily breakfast.", adultsOnly: true, applies: true },
   ])("$name", ({ text, adultsOnly, applies }) => {
     expect(perPersonApplies([text], 150, "USD", adultsOnly)).toBe(applies);
+  });
+
+  it("reads every place the wish states its people: children in a field of their own hold the quote (Codex, #84 review)", () => {
+    expect(partyOf({ specifics: [{ name: "adults", value: "2 adults" }, { name: "children", value: "2 children" }], summary: "" })).toBeNull();
+    expect(partyOf({ specifics: [{ name: "adults", value: "2" }, { name: "kids", value: "2" }], summary: "" })).toBeNull();
+    expect(partyOf({ questions: [{ id: "travellers", label: "Who's going?", picked: "2 adults" }], specifics: [{ name: "children", value: "1" }], summary: "" })).toBeNull();
+    expect(partyOf({ specifics: [{ name: "adults", value: "2 adults" }, { name: "children", value: "none" }], summary: "" })).toEqual({ count: 2, adultsOnly: true });
+    expect(partyOf({ specifics: [{ name: "guests", value: "2 adults" }], summary: "" }, "Guests: 2 adults; Kids: 2 kids")).toBeNull();
   });
 });
 
@@ -428,6 +438,11 @@ describe("party prices through actual research", () => {
     const { result, steps } = await researchDinner({ quote, price: 150, party });
     expect(result.options).toEqual([]);
     expect(steps.filter((step) => step.type === "price")).toEqual([]);
+  });
+
+  it("holds a compound unit with a period, per adult guest per month (Codex, #84 review)", async () => {
+    const { result } = await researchDinner({ quote: "Private tasting dinner club costs USD 150 per adult guest per month.", price: 150 });
+    expect(result.options).toEqual([]);
   });
 
   it("preserves an explicit one-person part for a one-adult request", async () => {
@@ -523,6 +538,13 @@ describe("person-unit evidence through actual quickFind", () => {
 
   it.each(CODEX_REPRO)("holds $name (Codex's repro of #79)", async ({ party, quote }) => {
     expect(await quickDinner({ quote, price: 150, party, snippet: quote })).toBeNull();
+  });
+
+  it("holds a page's person rate when the search's own result for it says per month (Codex, #84 review)", async () => {
+    expect(await quickDinner({
+      quote: "Private tasting dinner costs USD 150 per person.", price: 150,
+      snippet: "Private tasting dinner costs USD 150 per person per month.",
+    })).toBeNull();
   });
 
   it("keeps an ordinary UnitPriceSpecification whole price", async () => {
