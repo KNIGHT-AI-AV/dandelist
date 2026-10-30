@@ -1,10 +1,5 @@
 // First, so every later read of the window, a measure or a gesture is in the page's units on a zoomed web page.
 import "../lib/viewport";
-import { DMMono_400Regular } from "@expo-google-fonts/dm-mono";
-import { InstrumentSerif_400Regular, InstrumentSerif_400Regular_Italic } from "@expo-google-fonts/instrument-serif";
-import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold } from "@expo-google-fonts/inter";
-import { InterTight_400Regular } from "@expo-google-fonts/inter-tight";
-import { useFonts } from "expo-font";
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider as NavigationTheme } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { View } from "react-native";
@@ -13,6 +8,7 @@ import { Reminders } from "../components/home/reminders";
 import { UpdatePrompt } from "../components/update-prompt";
 import { AuthProvider } from "../lib/auth";
 import { CurrencyProvider } from "../lib/currency";
+import { useAppFonts } from "../lib/fonts";
 import { ThemeProvider, usePalette } from "../lib/theme";
 import { WishProvider } from "../lib/wishes";
 
@@ -26,18 +22,7 @@ export default function RootLayout() {
 
 function Root() {
   const p = usePalette();
-  const [loaded, error] = useFonts({
-    // Only the faces lib/palette.ts sets. Instrument Serif (OFL), the logo's face, sets every serif role since the
-    // readability pass of 2026-10-27; Bodoni Moda's six cuts stayed loaded after it, set by nothing, and the first
-    // frame waited for them (Lighthouse, 2026-10-30).
-    InstrumentSerif_400Regular,
-    InstrumentSerif_400Regular_Italic,
-    Inter_400Regular,
-    Inter_500Medium,
-    Inter_600SemiBold,
-    InterTight_400Regular,
-    DMMono_400Regular,
-  });
+  const [loaded, error] = useAppFonts();
   // Hold the first frame until the type is ready (or failed, in which case system fonts take over).
   if (!loaded && !error) return <View style={{ flex: 1, backgroundColor: p.bg }} />;
   return (
