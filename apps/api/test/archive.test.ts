@@ -2,7 +2,7 @@ import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PGlite } from "@electric-sql/pglite";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { admissible, exactEntity, matchEntity, pgArchive, words, type ArchiveEntity, type ArchivePhoto } from "../src/archive/archive";
 import { loadSeed } from "../src/archive/seed";
 import { migrate, type Db } from "../src/db";
@@ -74,10 +74,15 @@ describe("archive matching", () => {
 
 describe("archive store", () => {
   let db: Db;
+  let lite: PGlite | undefined;
   beforeEach(async () => {
-    const lite = new PGlite();
-    db = { query: (t, p) => lite.query(t, p) as never, exec: (s) => lite.exec(s) };
+    const instance = new PGlite();
+    lite = instance;
+    db = { query: (t, p) => instance.query(t, p) as never, exec: (s) => instance.exec(s) };
     await migrate(db);
+  });
+  afterEach(async () => {
+    await lite?.close();
   });
 
   async function seed(entities: unknown[]) {
@@ -85,6 +90,13 @@ describe("archive store", () => {
     const path = join(dir, "seed.json");
     await writeFile(path, JSON.stringify({ entities }));
     return path;
+  }
+
+  async function storedPhotos(id: string) {
+    const { rows } = await db.query<{ url: string; status: string; hero: boolean; vouchers: string[] }>(
+      "select url, status, hero, vouchers from archive_photos where entity_id = $1 order by url", [id],
+    );
+    return rows.map((row) => ({ ...row, vouchers: row.vouchers.sort() }));
   }
 
   it("loads the master list once per version and serves its photos", async () => {
@@ -129,11 +141,21 @@ describe("archive store", () => {
     await archive.contribute("Amalfi Coast", "place", photos, "user-b");
     expect(await archive.lookup("Positano", "place")).toBeNull();
     expect(await archive.lookup("Amalfi Coast", "place")).toBeNull();
+    expect(await storedPhotos("positano")).toEqual(photos.map((p) => ({ url: p.url, status: "pending", hero: false, vouchers: ["user-a"] })));
+    expect(await storedPhotos("amalfi-coast")).toEqual(photos.map((p) => ({ url: p.url, status: "pending", hero: false, vouchers: ["user-b"] })));
 
     await archive.contribute("Positano", "place", photos, "user-c");
+    expect(await storedPhotos("positano")).toEqual(photos.map((p) => ({ url: p.url, status: "approved", hero: false, vouchers: ["user-a", "user-c"] })));
+    expect(await storedPhotos("amalfi-coast")).toEqual(photos.map((p) => ({ url: p.url, status: "pending", hero: false, vouchers: ["user-b"] })));
+    expect(await archive.lookup("Positano", "place")).toBeNull();
+    // Explicit review designates a hero; contribution votes alone cannot choose one.
+    await db.query("update archive_photos set hero = true where entity_id = $1 and url = $2 and status = 'approved'", ["positano", photo(60).url]);
     expect((await archive.lookup("Positano", "place"))?.photos).toHaveLength(2);
     expect(await archive.lookup("Amalfi Coast", "place")).toBeNull();
     await archive.contribute("Amalfi Coast", "place", photos, "user-a");
+    expect(await storedPhotos("amalfi-coast")).toEqual(photos.map((p) => ({ url: p.url, status: "approved", hero: false, vouchers: ["user-a", "user-b"] })));
+    expect(await archive.lookup("Amalfi Coast", "place")).toBeNull();
+    await db.query("update archive_photos set hero = true where entity_id = $1 and url = $2 and status = 'approved'", ["amalfi-coast", photo(61).url]);
     expect((await archive.lookup("Amalfi Coast", "place"))?.photos).toHaveLength(2);
     const { rows } = await db.query<{ entity_id: string; vouchers: string[] }>("select entity_id, vouchers from archive_photos");
     expect(rows).toHaveLength(4);
@@ -174,19 +196,24 @@ describe("archive store", () => {
     await loadSeed(db, await seed([{ ...entity, photos: [photo(80, { hero: true })] }]));
     const row = (await db.query("select id, width, photographer, hero, status, contributed_by, vouchers from archive_photos where url = $1", [photo(80).url])).rows[0];
     expect(row).toMatchObject({ id: before?.id, width: 3840, photographer: "A. Photographer", hero: true, status: "approved", contributed_by: "seed", vouchers: [] });
+    expect((await archive.lookup("Lisbon", "place"))?.photos.map((p) => p.url)).toEqual([photo(80).url]);
     expect(await archive.contribute("Lisbon", "place", [photo(80)], "user-b")).toBe(0);
   });
 
-  it("puts an agent's finds live only when a second person's agent offers the same photos", async () => {
+  it("approves finds after two accounts offer them but displays them only after hero selection", async () => {
     await loadSeed(db, await seed([{ id: "kyoto", domain: "Travel", category: "City breaks", subcategory: "Japan", name: "Kyoto", kind: "place", priceModel: "trip", tier: 1 }]));
     const archive = pgArchive(db);
-    expect(await archive.contribute("Kyoto", "place", [photo(10), photo(11), photo(12, { license: "All rights reserved" })], "user-a")).toBe(2);
+    expect(await archive.contribute("Kyoto", "place", [photo(10, { hero: true }), photo(11), photo(12, { license: "All rights reserved" })], "user-a")).toBe(2);
     expect(await archive.lookup("Kyoto", "place")).toBeNull();
     await archive.contribute("Kyoto", "place", [photo(10), photo(11)], "user-a");
     expect(await archive.lookup("Kyoto", "place")).toBeNull();
     await archive.contribute("Kyoto temples at dusk", "place", [photo(10), photo(11)], "user-b");
     expect(await archive.lookup("Kyoto", "place")).toBeNull();
+    expect(await storedPhotos("kyoto")).toEqual([10, 11].map((n) => ({ url: photo(n).url, status: "pending", hero: false, vouchers: ["user-a"] })));
     await archive.contribute("Kyoto", "place", [photo(10), photo(11)], "user-b");
+    expect(await storedPhotos("kyoto")).toEqual([10, 11].map((n) => ({ url: photo(n).url, status: "approved", hero: false, vouchers: ["user-a", "user-b"] })));
+    expect(await archive.lookup("Kyoto", "place")).toBeNull();
+    await db.query("update archive_photos set hero = true where entity_id = $1 and url = $2 and status = 'approved'", ["kyoto", photo(10).url]);
     expect((await archive.lookup("Kyoto", "place"))?.photos).toHaveLength(2);
     expect(await archive.contribute("Kyoto", "place", [photo(13)], "anonymous")).toBe(0);
   });
@@ -202,6 +229,9 @@ describe("archive store", () => {
     const before = (await db.query("select id, url, source_page, photographer, license from archive_photos where entity_id = 'kyoto' and contributed_by = 'seed' order by url")).rows;
     const revised = await seed([{ ...entity, photos: [] }, { ...other, photos: reviewed }]);
     expect(await loadSeed(db, revised)).toMatchObject({ entities: 2, photos: 3 });
+    expect(await archive.lookup("Kyoto", "place")).toBeNull();
+    expect((await storedPhotos("kyoto")).filter((p) => p.status === "approved")).toEqual([93, 94].map((n) => ({ url: photo(n).url, status: "approved", hero: false, vouchers: ["user-a", "user-b"] })));
+    await db.query("update archive_photos set hero = true where entity_id = $1 and url = $2 and status = 'approved'", ["kyoto", photo(93).url]);
     expect((await archive.lookup("Kyoto", "place"))?.photos.map((p) => p.url).sort()).toEqual([photo(93).url, photo(94).url].sort());
     expect((await archive.lookup("Japan trip", "place"))?.photos).toHaveLength(3);
     const after = (await db.query("select id, url, source_page, photographer, license from archive_photos where entity_id = 'kyoto' and contributed_by = 'seed' order by url")).rows;

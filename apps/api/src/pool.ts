@@ -1,10 +1,11 @@
 import { entries as catalogue, heroOf, type Entry } from "@dandelist/catalogue";
 import type { Period } from "@dandelist/cost";
 import type { Db } from "./db";
+import { selectHeroPhotos } from "./archive/photo-selection";
 
 /**
  * The pool the pre-login this-or-that draws from (owner, 2026-10-28: "random items, changes every time, from our
- * giant pool"): the priced catalogue, plus every archive subject with approved photos and a typical price paid once
+ * giant pool"): the priced catalogue, plus archive subjects with one approved hero and a typical price paid once
  * (a trip, a car, a home). Monthly and yearly subjects stay out, because their typical price isn't an upfront cost.
  * Archive prices are the low end of the master list's typical range and always say "typical", never "checked".
  */
@@ -87,7 +88,7 @@ export interface ArchiveRow {
   price_model: string;
   domain: string;
   typical: { low?: number; high?: number; currency?: string; unit?: string } | string | null;
-  photos: { url: string; width: number; height: number; source: string; photographer: string | null; license: string }[] | string;
+  photos: { url: string; width: number; height: number; source: string; photographer: string | null; license: string; hero: boolean }[] | string;
 }
 
 const SOURCE_SITE: Record<string, string> = { commons: "commons.wikimedia.org", unsplash: "unsplash.com", pexels: "pexels.com" };
@@ -96,8 +97,8 @@ const parse = <T>(v: T | string): T => (typeof v === "string" ? (JSON.parse(v) a
 export function fromArchive(row: ArchiveRow, checkedAt: string): PoolItem | null {
   const shape = SHAPE[`${row.kind}/${row.price_model}`];
   const typical = row.typical ? parse(row.typical) : null;
-  const photos = parse(row.photos) ?? [];
-  if (!shape || !typical || typical.currency !== "USD" || !(Number(typical.low) > 0) || !photos.length) return null;
+  const photos = selectHeroPhotos(parse(row.photos) ?? []);
+  if (!shape || !typical || typical.currency !== "USD" || !(Number(typical.low) > 0) || !photos) return null;
   const hero = photos[0]!;
   // "7 nights for two incl. economy flights; mid-range hotel (low) to luxury hotel (high)" -> the part before the range.
   const unit = (typical.unit ?? "").split(";")[0]!.trim();
@@ -134,7 +135,7 @@ export function poolSource(db: Db, now: () => Date = () => new Date()) {
     try {
       const { rows } = await db.query<ArchiveRow>(
         `select e.id, e.name, e.kind, e.price_model, e.domain, e.typical,
-                json_agg(json_build_object('url', p.url, 'width', p.width, 'height', p.height, 'source', p.source, 'photographer', p.photographer, 'license', p.license) order by p.hero desc, p.created_at) as photos
+                json_agg(json_build_object('url', p.url, 'width', p.width, 'height', p.height, 'source', p.source, 'photographer', p.photographer, 'license', p.license, 'hero', p.hero) order by p.hero desc, p.created_at) as photos
            from archive_entities e
            join archive_photos p on p.entity_id = e.id and p.status = 'approved'
           where e.status = 'live' and e.typical is not null

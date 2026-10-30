@@ -123,6 +123,7 @@ describe("the pool", () => {
     const dublin = items.find((i) => i.id === `${ARCHIVE_PREFIX}dublin`);
     expect(dublin).toMatchObject({ name: "Dublin", kind: "visit", group: "travel", upfrontCents: 350_000, status: "estimate", url: "", note: "Typical price · 7 nights for two incl. economy flights", credit: "Photo: Diliff, CC BY-SA 4.0" });
     expect(dublin.media.images.map((i: any) => i.url)).toEqual(["https://upload.wikimedia.org/dublin-1.jpg", "https://upload.wikimedia.org/dublin-2.jpg"]);
+    expect(dublin.media.images[0]).not.toHaveProperty("hero");
     // A monthly price isn't an upfront cost, and a subject without photos can't be a card.
     expect(items.some((i) => i.id === `${ARCHIVE_PREFIX}gym-membership` || i.id === `${ARCHIVE_PREFIX}no-photos`)).toBe(false);
   });
@@ -183,8 +184,9 @@ describe("the pool", () => {
   });
 
   it("keeps only shapes it can price honestly", () => {
-    const row = { id: "x", name: "X", kind: "stay", price_model: "per-night", domain: "Travel & places", typical: { low: 300, currency: "USD", unit: "a night" }, photos: [{ url: "u", width: 1, height: 1, source: "commons", photographer: null, license: "CC0" }] };
+    const row = { id: "x", name: "X", kind: "stay", price_model: "per-night", domain: "Travel & places", typical: { low: 300, currency: "USD", unit: "a night" }, photos: [{ url: "u", width: 1, height: 1, source: "commons", photographer: null, license: "CC0", hero: true }] };
     expect(fromArchive(row, clock.toISOString())).toBeNull();
+    expect(fromArchive({ ...row, kind: "place", price_model: "trip" }, clock.toISOString())).toMatchObject({ id: `${ARCHIVE_PREFIX}x`, status: "estimate", upfrontCents: 30_000 });
     expect(fromArchive({ ...row, kind: "place", price_model: "trip", typical: { low: 300, currency: "EUR", unit: "" } }, clock.toISOString())).toBeNull();
   });
 });
