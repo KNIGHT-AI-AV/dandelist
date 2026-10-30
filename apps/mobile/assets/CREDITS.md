@@ -14,6 +14,7 @@
 # Font credits
 
 - `fonts/BodoniModa*.ttf`: static optical-size cuts (opsz 72 "Display", opsz 28 "Title") made with fontTools from Google Fonts' Bodoni Moda variable font, Copyright 2020 The Bodoni Moda Project Authors, SIL Open Font License 1.1 (`fonts/OFL-BodoniModa.txt`; no Reserved Font Name).
+- `../public/assets/fonts/`: the web's WOFF2 cuts of Inter, Inter Tight, Instrument Serif and DM Mono, made with fontTools by `scripts/web-fonts.py` from the @expo-google-fonts TTF files. Copyright 2016 and 2022 The Inter Project Authors, 2022 The Instrument Serif Project Authors, 2020 The DM Mono Project Authors; SIL Open Font License 1.1 (no Reserved Font Name). Every cut keeps its font's copyright and licence records.
 
 - `faces/*.png`: the five comfort faces on the welcome fader, generated for Dandelist with image generation (OpenAI image_gen via Codex), 2026-10-28. Source sheet and prompts: Desktop\Dandelist Designaces.
 - `themes/cognac.jpg`, `themes/amethyst.jpg`, `themes/riviera.jpg`: mood backgrounds for the Cognac, Amethyst and Riviera themes, generated for Dandelist with image generation (OpenAI image_gen via Codex), 2026-10-28. Prompts: Desktop\Dandelist Design	hemes-new\make-moods.sh.
