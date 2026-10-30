@@ -239,7 +239,7 @@ export function GlyphPanel({ glyph, style }: { glyph: string; style?: StyleProp<
   );
 }
 
-export type IconName = "back" | "forward" | "arrow" | "close" | "plus" | "check" | "send" | "mic" | "search" | "heart" | "palette";
+export type IconName = "back" | "forward" | "arrow" | "close" | "plus" | "check" | "send" | "mic" | "search" | "heart" | "palette" | "music" | "musicOff";
 
 /** `d` is stroked; `dots` are small solid circles, [cx, cy, r]. */
 type Glyph = { d: string; dots?: readonly (readonly [number, number, number])[] };
@@ -274,6 +274,12 @@ const GLYPHS: Record<IconName, Glyph> = {
       [9.59, 8.07, 1.25],
     ],
   },
+  // An eighth note: an open head, its stem rising from the head's right side, and a flag that swells out and turns
+  // back down. The stem sits on the centre line, so the note is optically centred however narrow it is.
+  music: { d: "M12 17 A2.75 2.75 0 1 1 6.5 17 A2.75 2.75 0 1 1 12 17 Z M12 17 V4.25 C12 6.75 18 7.25 17.25 12.5" },
+  // The note struck through corner to corner. The stem stops a full unit clear of the slash on both sides and gives
+  // up its stub at the head, so nothing crosses and the head stays a whole circle.
+  musicOff: { d: "M12 17 A2.75 2.75 0 1 1 6.5 17 A2.75 2.75 0 1 1 12 17 Z M12 8.46 V4.25 C12 6.75 18 7.25 17.25 12.5 M4.25 4.25 L19.75 19.75" },
 };
 
 /**

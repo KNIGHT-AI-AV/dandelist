@@ -73,6 +73,9 @@ export function soundsNow(): { soundsOn: boolean; micOpen: boolean } {
   return { soundsOn: loaded && enabled, micOpen };
 }
 
+/** False once sounds are turned off: for the web fader's tick, which is synthesised rather than played from a file. */
+export const soundsEnabled = (): boolean => enabled;
+
 /** Calls `fn` whenever soundsNow() may have changed. */
 export function watchSounds(fn: () => void): () => void {
   watchers.add(fn);

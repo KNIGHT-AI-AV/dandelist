@@ -5,6 +5,7 @@ import { Animated, BackHandler, Platform, Pressable, StyleSheet, Text, View, use
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Grain, IconButton, PrimaryButton, Wordmark } from "../components/lux";
 import { SignInOptions } from "../components/sign-in-options";
+import { SoundButton } from "../components/sound-button";
 import { AgentWork, Appear, type Result } from "../components/welcome/agent-work";
 import { Ask } from "../components/welcome/ask";
 import { VotePair, WhenStep } from "../components/welcome/choose";
@@ -557,9 +558,13 @@ export default function Welcome() {
                 {canGoBack ? <IconButton icon="back" label="Back" onPress={goBack} /> : null}
                 <Wordmark />
               </View>
-              <Pressable accessibilityRole="link" onPress={() => router.push("/sign-in")} style={{ minHeight: 44, minWidth: 44, justifyContent: "center", alignItems: "flex-end" }}>
-                <Text style={[type.label, { color: p.ink2 }]}>Log in</Text>
-              </Pressable>
+              <View pointerEvents="box-none" style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                {/* Sound on and off where the music plays (owner, 2026-10-30). */}
+                <SoundButton />
+                <Pressable accessibilityRole="link" onPress={() => router.push("/sign-in")} style={{ minHeight: 44, minWidth: 44, justifyContent: "center", alignItems: "flex-end" }}>
+                  <Text style={[type.label, { color: p.ink2 }]}>Log in</Text>
+                </Pressable>
+              </View>
             </View>
             {segmented ? <Segments count={SEGMENTS} done={done} style={{ marginTop: layout.segmentsTop - layout.headerBar }} /> : null}
           </View>
