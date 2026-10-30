@@ -54,21 +54,36 @@ export function pricelessAside(wishes: readonly Worthy[]): string {
 /** The slider runs from about 1,000 to 100 million of the shown currency (counted in its own cents). */
 export const AMOUNT_LOW = 100_000;
 export const AMOUNT_HIGH = 10_000_000_000;
-/** The furthest it reaches for a wish that names more: a billion dollars, the most a wish's preview takes (US cents). */
+/**
+ * The furthest it ever reaches, in any currency: a billion dollars (US cents), the most a wish's preview takes. A wish
+ * that names more sits at it.
+ */
 export const AMOUNT_CEILING = 100_000_000_000;
 
 /**
  * The slider's notches in US cents: 1, 1.5, 2, 2.5, 3, 4, 5 and 7.5 in each decade of the shown currency (`rate` of it
  * to the dollar; yen and yuan count in hundreds and tens, `unit`), so every stop reads as a round number there. It
- * reaches further up when the wish names more ("a billion dollars").
+ * reaches further up when the wish names more ("a billion dollars"), but never past a billion dollars: there the top
+ * stop is a billion dollars itself, whatever that comes to in the shown currency.
  */
 export function amountSteps(rate = 1, unit = 1, namedCents?: number): number[] {
   const low = AMOUNT_LOW * unit;
+  const ceiling = AMOUNT_CEILING * rate; // a billion dollars in the shown currency's cents
   let top = AMOUNT_HIGH * unit;
-  const named = namedCents && namedCents > 0 ? Math.min(namedCents, AMOUNT_CEILING) * rate : 0;
+  const named = namedCents && namedCents > 0 ? Math.min(namedCents * rate, ceiling) : 0;
   while (top < named * 0.999) top *= 10;
-  return ladderSteps(rate, low, top);
+  if (top <= ceiling * 1.0001) return ladderSteps(rate, low, top);
+  return [...ladderSteps(rate, low, top).filter((s) => s * rate < ceiling * 0.999), AMOUNT_CEILING];
 }
+
+/** An amount as a wish keeps it: whole US cents (a stop in another currency falls between two). */
+export const wholeCents = (cents: number) => Math.round(cents);
+
+/**
+ * What the slider shows for an amount: the stop it was rounded from, when it was one, so the figure reads exactly
+ * round in the shown currency (a US cent is more than a yen, so whole cents can land a yen either side of it).
+ */
+export const shownAmount = (cents: number, steps: readonly number[]) => steps.find((s) => Math.abs(s - cents) <= 0.5) ?? cents;
 
 const isPowerOfTen = (n: number) => n > 0 && 10 ** Math.round(Math.log10(n)) === n;
 
@@ -78,14 +93,14 @@ export function amountMarks(steps: readonly number[], rate = 1): number[] {
 }
 
 /**
- * Where the slider starts: the amount the wish named, exactly, kept inside the slider's ends ("a million dollars" sits
- * at 1M); else a million of the shown currency (a hundred million yen), three fifths of the way along.
+ * Where the slider starts, in whole US cents: the amount the wish named, kept inside the slider's ends ("a million
+ * dollars" sits at 1M); else a million of the shown currency (a hundred million yen), three fifths of the way along.
  */
 export function startAmount(steps: readonly number[], namedCents?: number): number {
   const lo = steps[0]!;
   const hi = steps[steps.length - 1]!;
-  if (namedCents && namedCents > 0) return Math.max(lo, Math.min(hi, namedCents));
-  return amountAt(fractionOf(lo * 1000, steps), steps);
+  if (namedCents && namedCents > 0) return wholeCents(Math.max(lo, Math.min(hi, namedCents)));
+  return wholeCents(amountAt(fractionOf(lo * 1000, steps), steps));
 }
 
 /** The slider's position for an amount, 0 to 1, on a log scale so $5,000 and $50 million both get room. */

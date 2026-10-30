@@ -301,6 +301,25 @@ describe("wish agent", () => {
     expect(metaCalls.some((c) => (c.tools as { name?: string }[] | undefined)?.some((x) => x.name === "ask_user"))).toBe(false);
   });
 
+  it("prices a money wish when its card's Price it asks, never serving the money run from the cache", async () => {
+    const t = await signIn("ada@example.com");
+    const id = async (res: Response) => ((await res.json()) as { run: { id: string } }).run.id;
+    const money = await finished(t, await id(await call("POST", "/agent/runs", t, { text: "a million dollars" })));
+    expect(money.result.worth).toMatchObject({ worth: "money" });
+
+    const asked = await call("POST", "/agent/runs", t, { text: "a million dollars", price: true });
+    expect(asked.status).toBe(202); // a new hunt, not the cached money run
+    const priced = await finished(t, await id(asked));
+    expect(priced.result.worth).toBeUndefined();
+    expect(priced.draft).toMatchObject({ worth: "priced" });
+    expect(priced.result.options.length).toBeGreaterThan(0);
+
+    // The same words without "Price it" still get the money card, from the cache.
+    const again = await call("POST", "/agent/runs", t, { text: "a million dollars" });
+    expect(again.status).toBe(200);
+    expect(((await again.json()) as { run: { id: string; result: { worth?: unknown } } }).run).toMatchObject({ id: money.id, result: { worth: { worth: "money" } } });
+  });
+
   it("keeps thoughts to one short plain line", () => {
     expect(cleanThought(42)).toBeNull();
     expect(cleanThought("ok")).toBeNull();

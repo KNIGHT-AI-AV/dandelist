@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { adoptionKeys } from "./adopt";
 import { emptyWelcome, listTotal, listed, previewExtra, settled, streamPreview, toWishes, wishCard, type FirstWish, type PoolItem, type PreviewEvent, type WelcomeState } from "./welcome";
+import { amountSteps } from "./worth";
 
 const fetched = vi.hoisted(() => ({ calls: 0 }));
 vi.mock("expo/fetch", () => ({ fetch: vi.fn(async () => { fetched.calls++; throw new Error("no network in tests"); }) }));
@@ -28,6 +29,19 @@ describe("a first wish no shop prices", () => {
     expect(previewExtra(money)).toEqual({ name: "Money", upfrontCents: 1_000_000_000, recurring: [] });
     const [first] = toWishes({ ...state(money), last: "wish" });
     expect(first).toMatchObject({ name: "Money", tier: "dream", upfrontCents: 1_000_000_000, recurring: [], details: { worth: "money", agent: { imageUrl: GOLD, media: money.photo!.media } } });
+  });
+
+  it("saves whole US cents for an amount picked in euros or yen, which the API requires", () => {
+    for (const [rate, unit] of [[0.92, 1], [152, 100]] as const) {
+      const stop = amountSteps(rate, unit)[9]!; // a round figure there, a fraction of a US cent here
+      expect(Number.isInteger(stop)).toBe(false);
+      const picked: FirstWish = { ...money, amountCents: stop };
+      const [first] = toWishes(state(picked));
+      expect(Number.isInteger(first!.upfrontCents)).toBe(true);
+      expect(first!.upfrontCents).toBe(Math.round(stop));
+      expect(Number.isInteger(wishCard(picked)!.upfrontCents)).toBe(true);
+      expect(Number.isInteger(previewExtra(picked)!.upfrontCents)).toBe(true);
+    }
   });
 
   it("puts something priceless on the list at infinity: in the count, never in a total", () => {

@@ -306,6 +306,15 @@ describe("pricing the first wish before sign-in", () => {
     expect(hunted()).toBe(false);
   });
 
+  it("hunts a priceless or money wish as an ordinary one when the card's Price it asks", async () => {
+    const res = await makeApp().request("/guest/wish", { method: "POST", headers: { "Content-Type": "application/json", "x-forwarded-for": "203.0.113.26" }, body: JSON.stringify({ text: "love", price: true }) });
+    const evs = await events(res);
+    expect(evs.some((e) => e.type === "worth")).toBe(false);
+    expect(evs.find((e) => e.type === "draft")).toMatchObject({ title: "Love", draft: { worth: "priced" } });
+    expect(hunted()).toBe(true);
+    expect(evs.some((e) => e.type === "priced")).toBe(true);
+  });
+
   it("says only why it couldn't price a wish, so the app's own words about the list follow it once", async () => {
     noOptions = true;
     const none = await events(await ask("a unicorn", "203.0.113.24"));

@@ -7,7 +7,7 @@ import { play, preloadSounds } from "../../lib/sound";
 import { layout, radius, type, usePalette, useType } from "../../lib/theme";
 import type { FirstWish } from "../../lib/welcome";
 import { Working } from "../chat/working";
-import { Eyebrow, Glass, Money, Photo, PrimaryButton } from "../lux";
+import { Eyebrow, Glass, Money, Photo, PrimaryButton, QuietButton } from "../lux";
 import { AmountPicker, PricelessPrice, glyphFor } from "../worth";
 
 /** After this long the person can move on; the hunt keeps going and lands on their list. */
@@ -29,7 +29,7 @@ export const STAYS_ON_LIST = "It stays on your list, and the Dandy prices it aft
  * wish named, with a checked photo when one is found; something priceless shows infinity and the Dandy's line. A card
  * without a photo never shows an empty box: the panel holds infinity, the currency's sign, or the wish's first letter.
  */
-export function MadeStep({ wish, pricing, line, onContinue, onAmount }: { wish: FirstWish; pricing: "idle" | "pricing" | "priced" | "failed"; line: string; onContinue(): void; onAmount(cents: number): void }) {
+export function MadeStep({ wish, pricing, line, onContinue, onAmount, onPrice }: { wish: FirstWish; pricing: "idle" | "pricing" | "priced" | "failed"; line: string; onContinue(): void; onAmount(cents: number): void; onPrice(): void }) {
   const p = usePalette();
   const t = useType();
   const dandy = useDandy();
@@ -106,13 +106,11 @@ export function MadeStep({ wish, pricing, line, onContinue, onAmount }: { wish: 
             ) : null}
           </View>
           <View style={{ padding: 18, gap: 8, minHeight: 104, justifyContent: "center" }}>
-            {worth === "money" ? (
-              <Animated.View style={{ opacity: shown }}>
-                <AmountPicker cents={wish.amountCents ?? 0} namedCents={wish.namedCents} onChange={onAmount} />
-              </Animated.View>
-            ) : worth === "priceless" ? (
-              <Animated.View style={{ opacity: shown }}>
-                <PricelessPrice line={wish.line} />
+            {worth === "money" || worth === "priceless" ? (
+              <Animated.View style={{ opacity: shown, gap: 4 }}>
+                {worth === "money" ? <AmountPicker cents={wish.amountCents ?? 0} namedCents={wish.namedCents} onChange={onAmount} /> : <PricelessPrice line={wish.line} />}
+                {/* The reading can be wrong ("a gold bar" is a thing to buy): hunt it as an ordinary wish instead. */}
+                <QuietButton label="Price it" onPress={onPrice} style={{ alignSelf: "flex-start" }} />
               </Animated.View>
             ) : option ? (
               <Animated.View style={{ gap: 6, opacity: shown }}>

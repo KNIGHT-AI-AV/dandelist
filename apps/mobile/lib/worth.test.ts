@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { formatIn } from "./fx";
 import { biggest, tierTotals } from "./money-summary";
 import type { Wish } from "./wishes";
-import { AMOUNT_CEILING, INFINITY, amountAt, amountFraction, amountMarks, amountSteps, countLine, counted, isPriceless, priceWords, pricelessAside, startAmount, worthOf } from "./worth";
+import { AMOUNT_CEILING, INFINITY, amountAt, amountFraction, amountMarks, amountSteps, countLine, counted, isPriceless, priceWords, pricelessAside, shownAmount, startAmount, wholeCents, worthOf } from "./worth";
 
 const MILLION = 100_000_000; // $1,000,000 in US cents
 
@@ -43,6 +43,39 @@ describe("the money slider", () => {
     const tooMuch = amountSteps(1, 1, 500_000_000_000);
     expect(tooMuch.at(-1)).toBe(AMOUNT_CEILING);
     expect(startAmount(tooMuch, 500_000_000_000)).toBe(AMOUNT_CEILING);
+  });
+
+  it("hands out whole US cents in every currency, and the slider still shows the round figure", () => {
+    // A stop is a round figure in its own currency but falls between two US cents: why every amount is rounded.
+    expect(Number.isInteger(amountSteps(0.92)[1]!)).toBe(false);
+    for (const [code, rate, unit] of [["EUR", 0.92, 1], ["JPY", 152, 100], ["GBP", 0.78, 1], ["CNY", 7.2, 10]] as const) {
+      const steps = amountSteps(rate, unit);
+      expect(Number.isInteger(startAmount(steps)), code).toBe(true);
+      expect(Number.isInteger(startAmount(amountSteps(rate, unit, 123_456_789), 123_456_789)), code).toBe(true);
+      for (const s of steps) {
+        const kept = wholeCents(s);
+        expect(Number.isInteger(kept)).toBe(true);
+        // The slider shows the stop itself, so it reads round in every currency, yen included.
+        expect(formatIn(code, rate, shownAmount(kept, steps)), `${code} ${s}`).toBe(formatIn(code, rate, s));
+        // A cent is less than a euro, pound or yuan's last shown unit, so the kept amount reads the same anywhere.
+        if (code !== "JPY") expect(formatIn(code, rate, kept), `${code} ${s}`).toBe(formatIn(code, rate, s));
+      }
+    }
+    // A named amount that isn't a stop shows as itself.
+    expect(shownAmount(123_456_789, amountSteps())).toBe(123_456_789);
+  });
+
+  it("never reaches past a billion dollars, whatever the currency", () => {
+    for (const [code, rate, unit] of [["USD", 1, 1], ["EUR", 0.92, 1], ["JPY", 152, 100], ["GBP", 0.78, 1], ["CNY", 7.2, 10]] as const) {
+      const steps = amountSteps(rate, unit, 900_000_000_000); // a wish for nine billion dollars
+      expect(steps.at(-1), code).toBe(AMOUNT_CEILING);
+      expect(Math.max(...steps), code).toBe(AMOUNT_CEILING);
+      expect([...steps].sort((a, b) => a - b), code).toEqual(steps);
+      expect(startAmount(steps, 900_000_000_000), code).toBe(AMOUNT_CEILING);
+      // Without a named amount the slider stays well under it.
+      expect(amountSteps(rate, unit).at(-1)!, code).toBeLessThan(AMOUNT_CEILING);
+    }
+    expect(formatIn("EUR", 0.92, amountSteps(0.92, 1, 900_000_000_000).at(-1)!)).toBe("€920,000,000");
   });
 
   it("counts round numbers in the shown currency", () => {

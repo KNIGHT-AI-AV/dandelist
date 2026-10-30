@@ -36,7 +36,8 @@ import { heartbeat, stoppable } from "./sse";
  *   {type:"photo", imageUrl, media}                   a money wish's checked photo, when one is found in time
  *   {type:"error", message}                           only when no card was sent. Only the reason: the app adds
  *                                                     that the wish stays on the list.
- * Hunting again with changed answers: the same body plus `draft` (from the draft event) and `answers`.
+ * Hunting again with changed answers: the same body plus `draft` (from the draft event) and `answers`. A money or
+ * priceless card's "Price it": the same body plus `price: true`, which hunts it as an ordinary priced wish.
  */
 
 export const GUEST_WISHES_PER_IP_PER_HOUR = 6;
@@ -81,6 +82,8 @@ const wishBody = z.object({
   draft: draftSchema.optional(),
   /** Answers by question id (or the question's words); free text is fine. */
   answers: z.array(answerSchema).max(6).default([]),
+  /** "Price it" on a money or priceless card: hunt it as an ordinary priced wish, whatever it reads as. */
+  price: z.boolean().optional(),
 });
 
 /** The same card: nothing new to show (price, running costs, photo, source), so a second priced event would only repeat the first. */
@@ -129,7 +132,7 @@ export function guestRoutes(deps: AgentDeps & { pool: () => Promise<PoolItem[]> 
     } catch {
       return c.json({ error: busy("day") }, 429);
     }
-    const { text, draft, answers } = parsed.data;
+    const { text, draft, answers, price } = parsed.data;
     const startedAt = Date.now();
     return streamSSE(c, async (stream) => {
       let open = true;
@@ -155,6 +158,7 @@ export function guestRoutes(deps: AgentDeps & { pool: () => Promise<PoolItem[]> 
         text,
         draft,
         answers,
+        price,
         startedAt,
         onStep: (step) => send({ type: "step", step }),
         fetcher: deps.webFetch,

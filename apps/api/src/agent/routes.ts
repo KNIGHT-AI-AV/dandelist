@@ -59,6 +59,8 @@ const runBody = z
     text: z.string().trim().min(2).max(1000).optional(),
     answers: z.array(answerSchema).max(6).default([]),
     persona: personaSchema,
+    /** "Price it" on a money or priceless card: hunt it as an ordinary priced wish, whatever it reads as. */
+    price: z.boolean().optional(),
   })
   .refine((b) => !!b.draft || !!b.text, { message: "Describe the wish." });
 
@@ -278,13 +280,16 @@ export function agentRoutes(deps: AgentDeps) {
     if (!body.success) return c.json({ error: "Check the wish and try again." }, 400);
     const userId = c.get("userId");
     const now = deps.now();
-    const { draft, text, answers } = body.data;
+    const { draft, text, answers, price } = body.data;
+    // "Price it" and a draft read as money or priceless are other hunts than the same words or draft read as priced, so
+    // neither is ever served the other's run from the cache.
+    const worth = price ? ["price"] : draft && unpriced(draft) ? [draft.worth] : [];
     const key = createHash("sha256")
       .update(
         JSON.stringify(
           draft
-            ? [draft.title.toLowerCase(), draft.kind, draft.region, draft.currency, [...draft.specifics].sort((a, b) => a.name.localeCompare(b.name)), answers]
-            : ["text", text!.toLowerCase().replace(/\s+/g, " ").trim(), answers],
+            ? [draft.title.toLowerCase(), draft.kind, draft.region, draft.currency, [...draft.specifics].sort((a, b) => a.name.localeCompare(b.name)), answers, ...worth]
+            : ["text", text!.toLowerCase().replace(/\s+/g, " ").trim(), answers, ...worth],
         ),
       )
       .digest("hex");
@@ -333,6 +338,7 @@ export function agentRoutes(deps: AgentDeps) {
       text,
       draft,
       answers,
+      price,
       startedAt,
       onStep,
       fetcher: deps.webFetch,

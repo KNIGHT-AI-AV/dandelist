@@ -6,7 +6,7 @@ import type { Media, PriceOption, Step, WishQuestion, WorthCard } from "./agent"
 import { API_URL } from "./auth";
 import { getSecret, setSecret } from "./storage";
 import type { NewWish, WishDetails, WishKind } from "./wishes";
-import { photoOnly, type Worth } from "./worth";
+import { photoOnly, wholeCents, type Worth } from "./worth";
 
 /**
  * The pre-login experience, rebuilt from the owner's walkthrough (2026-10-28): what Dandelist is, then the first
@@ -124,7 +124,7 @@ export function wishCard(w: FirstWish | null): PoolItem | null {
       kind,
       category: STANDBY_CATEGORY[kind],
       group: kind === "visit" || kind === "do" ? "travel" : "things",
-      upfrontCents: w.worth === "money" ? w.amountCents! : 0,
+      upfrontCents: w.worth === "money" ? wholeCents(w.amountCents!) : 0,
       recurring: [],
       status: "estimate",
       seller: "",
@@ -174,7 +174,7 @@ export function toWishes(s: WelcomeState): NewWish[] {
       name: w.title ?? w.text,
       kind: w.kind ?? "buy",
       tier: s.last === "wish" ? "dream" : "must",
-      upfrontCents: w.worth === "money" ? w.amountCents! : 0,
+      upfrontCents: w.worth === "money" ? wholeCents(w.amountCents!) : 0,
       recurringCents: 0,
       period: "month",
       recurring: [],
@@ -283,8 +283,12 @@ export type GuestEvent =
   | { type: "photo"; imageUrl: string; media?: Media }
   | { type: "error"; message: string };
 
-/** Prices the first wish for real, before sign-in: what it is, the agent's live trail, then the best option. */
-export const streamGuestWish = (text: string, onEvent: (e: GuestEvent) => void, signal?: AbortSignal) => readEvents<GuestEvent>("/guest/wish", { text }, onEvent, signal);
+/**
+ * Prices the first wish for real, before sign-in: what it is, the agent's live trail, then the best option. `price` is
+ * a money or priceless card's "Price it": the words are hunted as an ordinary priced wish.
+ */
+export const streamGuestWish = (text: string, onEvent: (e: GuestEvent) => void, signal?: AbortSignal, price = false) =>
+  readEvents<GuestEvent>("/guest/wish", { text, ...(price ? { price: true } : {}) }, onEvent, signal);
 
 export type PreviewEvent =
   | { type: "row"; id: string; state: "running" | "done"; text: string }

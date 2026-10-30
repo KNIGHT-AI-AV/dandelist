@@ -53,9 +53,12 @@ export const MONEY_PLAN: PhotoPlan = {
   kind: "product",
 };
 
-/** How long a found money photo serves every money wish; a hunt that found none is not repeated for a while. */
+/**
+ * How long a found money photo serves every money wish. A hunt that found none (or failed: a busy model, a spent
+ * allowance) is only held for a minute and a half, so one bad moment doesn't leave everyone without a photo.
+ */
 const KEEP_MS = 12 * 60 * 60_000;
-const MISS_MS = 30 * 60_000;
+export const MISS_MS = 90_000;
 
 let held: { photo: FoundPhoto | null; at: number } | null = null;
 let hunting: Promise<FoundPhoto | null> | null = null;

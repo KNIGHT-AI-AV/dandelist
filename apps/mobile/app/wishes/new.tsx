@@ -24,6 +24,9 @@ import { Rise } from "../../components/welcome/kit";
 import { haptic } from "../../lib/motion";
 import { play } from "../../lib/sound";
 import { clarityOf, deckFor, thoughtOf } from "../../lib/reveal";
+import { useMoney } from "../../lib/currency";
+import { amountSteps, photoOnly, startAmount, wholeCents } from "../../lib/worth";
+import { AmountPicker, PricelessPrice, glyphFor } from "../../components/worth";
 
 /** The research hero's height, and its shape as the aspect the shuffle picks catalogue crops for. */
 const HERO_HEIGHT = 440;
@@ -87,6 +90,11 @@ export default function NewWish() {
   const [showTrail, setShowTrail] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  // A money wish's amount as set on its slider (US cents); null until it moves.
+  const [amount, setAmount] = useState<number | null>(null);
+  const money = useMoney();
+  // The last hunt was a money or priceless card's "Price it", so trying again prices it too.
+  const priceAsked = useRef(false);
   const field = useRef<TextInput>(null);
   // The docked button's height, reported by KeyboardDock, so the scroll leaves room for it above the keyboard.
   const [askDock, setAskDock] = useState<number>(layout.control.primary);
@@ -111,8 +119,9 @@ export default function NewWish() {
   }, [working, draft?.title]);
   const clock = useClock(working ? startedAt : null);
 
-  // The first card landing is the moment that matters: one success tick, paired with the photo coming into focus.
-  const landed = !!run?.result?.options.length;
+  // The first card landing is the moment that matters: one success tick, paired with the photo coming into focus. Money
+  // and the priceless land with their own card.
+  const landed = !!run?.result?.options.length || !!run?.result?.worth;
   useEffect(() => {
     if (!landed) return;
     haptic.success();
@@ -143,9 +152,10 @@ export default function NewWish() {
 
   // The hunt starts from the words at once (owner, 2026-10-29: no button to find the price after sending, no questions
   // first). The agent picks the likely answer to each question; "Refine it" changes them and hunts again.
-  async function hunt(wish: { text: string } | { draft: Draft; answers: Answer[] }) {
+  async function hunt(wish: { text: string; price?: boolean } | { draft: Draft; answers: Answer[] }) {
     setError(null);
     setReading(true);
+    priceAsked.current = "text" in wish && !!wish.price;
     try {
       const next = await startHunt(api, wish);
       setStartedAt(Date.now());
@@ -154,6 +164,7 @@ export default function NewWish() {
       setEdits({});
       setRefining(false);
       setChosen(0);
+      setAmount(null);
       setShowTrail(false);
       setStage("research");
     } catch (e) {
@@ -174,10 +185,42 @@ export default function NewWish() {
     void hunt({ draft: { ...draft, questions: withGiven(questions, answers) }, answers });
   }
 
-  // A hunt from the words starts over from them; a hunt again keeps the wish as read and the answers given.
-  const retry = () => void (asked ? hunt({ draft: asked, answers: answersFrom(asked.questions ?? [], {}) }) : hunt({ text: text.trim() }));
+  // A hunt from the words starts over from them (still priced, after "Price it"); a hunt again keeps the wish as read
+  // and the answers given.
+  const retry = () => void (asked ? hunt({ draft: asked, answers: answersFrom(asked.questions ?? [], {}) }) : hunt({ text: text.trim(), ...(priceAsked.current ? { price: true } : {}) }));
+
+  /** Money at the amount picked, or something priceless at infinity (lib/worth.ts), saved the way the chat card saves them. */
+  async function saveWorth() {
+    const w = run?.result?.worth;
+    if (!w) return;
+    const shot = run?.result?.photo;
+    setSaving(true);
+    setError(null);
+    try {
+      await add({
+        name: w.title,
+        kind: w.kind,
+        tier,
+        upfrontCents: w.worth === "money" ? wholeCents(amount ?? startAmount(amountSteps(money.rate, money.unit, w.amountCents), w.amountCents)) : 0,
+        recurringCents: 0,
+        period: "month",
+        recurring: [],
+        details: w.worth === "money" ? { worth: "money", ...(shot ? { agent: photoOnly(shot.imageUrl, shot.media) } : {}) } : { worth: "priceless", line: w.line.slice(0, 120) },
+      });
+      if (fromPick) {
+        pickAdded(fromPick);
+        void answerPick(api, fromPick, "added").catch(() => {});
+      }
+      router.replace("/wishes");
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  }
 
   async function save() {
+    if (run?.result?.worth) return saveWorth();
     const option = run?.result?.options[chosen];
     if (!draft || !run?.result || !option) return;
     setSaving(true);
@@ -293,6 +336,10 @@ export default function NewWish() {
   // real thing; its reasoning reads live. When it's done, the real photo lands in focus and the price statement follows.
   const result = run?.result;
   const option = result?.options[chosen];
+  // Money itself or something priceless: no hunt ran, so there is no research to watch (a money photo may still come).
+  const worth = result?.worth;
+  const named = worth?.worth === "money" ? worth.amountCents : undefined;
+  const amountCents = amount ?? startAmount(amountSteps(money.rate, money.unit, named), named);
   const steps = run?.steps ?? [];
   const settled = !!run && run.status !== "running";
   // The hero is the chosen option's photo, else the last page the agent opened that had one. Never another wish's photo.
@@ -306,30 +353,34 @@ export default function NewWish() {
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
       <Atmosphere />
-      <ScrollView contentContainerStyle={{ paddingBottom: result?.options.length ? dock : insets.bottom + 40 }} style={{ scrollbarWidth: "thin", scrollbarColor: `rgba(${p.inkRgb},0.2) transparent` } as object}>
+      <ScrollView contentContainerStyle={{ paddingBottom: result?.options.length || worth ? dock : insets.bottom + 40 }} style={{ scrollbarWidth: "thin", scrollbarColor: `rgba(${p.inkRgb},0.2) transparent` } as object}>
         <View style={{ height: HERO_HEIGHT, width: "100%" }}>
-          <RevealPhoto deck={deckFor(steps, draft?.kind, width / HERO_HEIGHT)} final={heroImage} clarity={clarityOf(steps, settled)} done={settled} />
+          {worth ? (
+            <Photo uri={result?.photo?.imageUrl} glyph={glyphFor(worth.worth, worth.title, money.symbol)} />
+          ) : (
+            <RevealPhoto deck={deckFor(steps, draft?.kind, width / HERO_HEIGHT)} final={heroImage} clarity={clarityOf(steps, settled)} done={settled} />
+          )}
           <Shade from={0.15} />
         </View>
         <View style={[column, { marginTop: -150, gap: layout.stack.tight }]}>
           {/* Text protection over the photo: a 35% dimming layer behind the title block (HIG Materials, P1-22). */}
           <Protect />
           <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-            {working ? <AgentDot busy /> : null}
-            <Eyebrow>{working ? `Researching · ${clock}` : run?.status === "error" ? "Research stopped" : `${KIND_LABEL[draft?.kind ?? "buy"]} · what it costs`}</Eyebrow>
+            {working && !worth ? <AgentDot busy /> : null}
+            <Eyebrow>{worth ? KIND_LABEL[worth.kind] : working ? `Researching · ${clock}` : run?.status === "error" ? "Research stopped" : `${KIND_LABEL[draft?.kind ?? "buy"]} · what it costs`}</Eyebrow>
           </View>
-          <Text accessibilityRole="header" style={[t.title1, { color: p.ink }]}>{draft?.title}</Text>
+          <Text accessibilityRole="header" style={[t.title1, { color: p.ink }]}>{worth?.title ?? draft?.title}</Text>
           {option ? (
             <Rise delay={LAND_AT.seller}>
               <Text style={[type.footnote, { color: p.ink2 }]}>{`${option.seller} · ${hostOf(option.url)} · ${option.status === "verified" ? "price checked on the page" : "estimate"}`}</Text>
             </Rise>
-          ) : working ? (
+          ) : working && !worth ? (
             <Carve width="62%" height={type.footnote.lineHeight ?? 0} />
           ) : null}
         </View>
 
         <View style={[column, { marginTop: layout.stack.section - 8, gap: layout.stack.base + 4 }]}>
-          {working ? (
+          {working && !worth ? (
             <>
               <ThoughtLine thought={thoughtOf(steps)} tally={tally} />
               <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", minHeight: layout.control.primary }}>
@@ -392,6 +443,24 @@ export default function NewWish() {
               {showTrail ? <Ledger steps={run!.steps} startedAt={run!.createdAt} working={false} /> : null}
               <QuietButton label="Start over" onPress={startOver} style={{ alignSelf: "flex-start" }} />
             </>
+          ) : worth ? (
+            <>
+              <Glass style={{ padding: layout.cardPad, gap: 12 }}>
+                {worth.worth === "money" ? <AmountPicker cents={amountCents} namedCents={named} onChange={setAmount} /> : <PricelessPrice line={worth.line} />}
+              </Glass>
+              <View style={{ gap: 8 }}>
+                <Eyebrow>How much you want it</Eyebrow>
+                <View style={{ flexDirection: "row", gap: 8 }}>
+                  {TIERS.map((tr) => (
+                    <Chip key={tr.value} label={tr.label} selected={tier === tr.value} onPress={() => setTier(tr.value)} />
+                  ))}
+                </View>
+              </View>
+              <ErrorLine>{error}</ErrorLine>
+              {/* The reading can be wrong ("a gold bar" is a thing to buy): hunt it as an ordinary wish instead. */}
+              <QuietButton label="Price it" onPress={() => void hunt({ text: text.trim() || worth.title, price: true })} style={{ alignSelf: "flex-start" }} />
+              <QuietButton label="Start over" onPress={startOver} style={{ alignSelf: "flex-start" }} />
+            </>
           ) : result && !result.options.length ? (
             <Glass style={{ padding: layout.cardPad, gap: 12 }}>
               <Text style={[type.callout, { color: p.ink }]}>No price we could stand behind turned up for this one. You can add it with your own price.</Text>
@@ -401,7 +470,7 @@ export default function NewWish() {
         </View>
       </ScrollView>
       {close}
-      {result?.options.length ? (
+      {result?.options.length || worth ? (
         <>
           <EdgeFade height={dock} />
           <View pointerEvents="box-none" style={{ position: "absolute", left: gutter, right: gutter, bottom: insets.bottom + 20, alignItems: "center" }}>

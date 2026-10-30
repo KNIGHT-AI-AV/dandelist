@@ -10,7 +10,7 @@ import { play } from "../../lib/sound";
 import { answersFrom, refineChanged, withGiven } from "../../lib/refine";
 import { fonts, radius, type, usePalette } from "../../lib/theme";
 import { useWishes, type NewWish } from "../../lib/wishes";
-import { amountSteps, photoOnly, startAmount } from "../../lib/worth";
+import { amountSteps, photoOnly, startAmount, wholeCents } from "../../lib/worth";
 import { ErrorLine, Glass, Money, Photo, PrimaryButton, QuietButton } from "../lux";
 import { RefinePanel } from "../refine";
 import { AmountPicker, PricelessPrice, glyphFor } from "../worth";
@@ -37,12 +37,14 @@ interface Hunt {
   shown?: string[];
   /** A money wish's amount as the person set it on the slider (US cents). */
   amount?: number;
+  /** Hunted as an ordinary priced wish after "Price it" on its money or priceless card. */
+  price?: boolean;
 }
 
 // One hunt per chat item, kept across remounts (the feed re-renders, the pager moves) so nothing starts twice.
 const hunts = new Map<string, Hunt>();
 const POLL_MS = 1500;
-const fresh = (draft: Draft | null = null): Hunt => ({ run: null, draft, edits: {}, error: null });
+const fresh = (draft: Draft | null = null, price = false): Hunt => ({ run: null, draft, edits: {}, error: null, ...(price ? { price } : {}) });
 
 /** What the Dandy is doing right now, in one short line: the server's own line for the newest step. */
 function doing(h: Hunt): string {
@@ -86,14 +88,15 @@ export function HuntCard({ id, text, already }: { id: string; text: string; alre
   );
 
   const start = useCallback(
-    async (wish: { text: string } | { draft: Draft; answers: Answer[] }) => {
+    async (wish: { text: string; price?: boolean } | { draft: Draft; answers: Answer[] }) => {
       const draft = "draft" in wish ? wish.draft : null;
-      keep(fresh(draft));
+      const price = "text" in wish && !!wish.price;
+      keep(fresh(draft, price));
       try {
         const run = await startHunt(api, wish);
-        keep({ ...fresh(draft), run });
+        keep({ ...fresh(draft, price), run });
       } catch (e) {
-        keep({ ...fresh(draft), error: sorry(e) });
+        keep({ ...fresh(draft, price), error: sorry(e) });
       }
     },
     [api, keep],
@@ -174,7 +177,7 @@ export function HuntCard({ id, text, already }: { id: string; text: string; alre
   };
 
   // A hunt from the words starts over from them; a hunt again keeps the wish as read and the answers given.
-  const retry = () => void (h.draft ? start({ draft: h.draft, answers: answersFrom(h.draft.questions ?? [], {}) }) : start({ text }));
+  const retry = () => void (h.draft ? start({ draft: h.draft, answers: answersFrom(h.draft.questions ?? [], {}) }) : start({ text, ...(h.price ? { price: true } : {}) }));
 
   const save = async () => {
     if (!draft || !h.run?.result || !option) return;
@@ -226,7 +229,7 @@ export function HuntCard({ id, text, already }: { id: string; text: string; alre
           name: w.title,
           kind: w.kind,
           tier: "nice",
-          upfrontCents: w.worth === "money" ? amountCents : 0,
+          upfrontCents: w.worth === "money" ? wholeCents(amountCents) : 0,
           recurringCents: 0,
           period: "month",
           recurring: [],
@@ -252,6 +255,8 @@ export function HuntCard({ id, text, already }: { id: string; text: string; alre
           {worth.worth === "money" ? <AmountPicker cents={amountCents} namedCents={named} onChange={(c) => keep({ ...(hunts.get(id) ?? h), amount: c })} /> : <PricelessPrice line={worth.line} />}
           {h.error ? <ErrorLine>{h.error}</ErrorLine> : null}
           <PrimaryButton label={saved || already ? "On your list" : "Add to my list"} busy={saving} disabled={saved || already} onPress={() => void saveWorth(worth)} />
+          {/* The reading can be wrong ("a gold bar" is a thing to buy): hunt it as an ordinary wish instead. */}
+          {saved || already ? null : <QuietButton label="Price it" onPress={() => void start({ text, price: true })} style={{ alignSelf: "flex-start" }} />}
         </View>
       </Glass>
     );

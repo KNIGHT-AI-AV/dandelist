@@ -4,7 +4,7 @@ import { useMoney } from "../lib/currency";
 import { useReducedMotion } from "../lib/motion";
 import { fonts, layout, type, usePalette } from "../lib/theme";
 import type { Wish } from "../lib/wishes";
-import { INFINITY, amountMarks, amountSteps, worthOf } from "../lib/worth";
+import { INFINITY, amountMarks, amountSteps, shownAmount, wholeCents, worthOf } from "../lib/worth";
 import { Fader } from "./fader";
 import { Eyebrow } from "./lux";
 import { Odometer } from "./odometer";
@@ -32,16 +32,19 @@ export function AmountPicker({ cents, namedCents, onChange, size = 40 }: { cents
   const reduced = useReducedMotion();
   const steps = useMemo(() => amountSteps(money.rate, money.unit, namedCents), [money.rate, money.unit, namedCents]);
   const marks = useMemo(() => amountMarks(steps, money.rate), [steps, money.rate]);
+  // The wish keeps whole US cents; the figure shows the round stop they came from.
+  const shown = shownAmount(cents, steps);
   return (
     <View style={{ gap: layout.stack.tight }}>
       <Eyebrow>How much?</Eyebrow>
-      <Odometer cents={cents} format={money.format} size={size} family="bodoni" smallPrefix tracking={-0.02 * size} mode={reduced ? "instant" : "ui"} />
+      <Odometer cents={shown} format={money.format} size={size} family="bodoni" smallPrefix tracking={-0.02 * size} mode={reduced ? "instant" : "ui"} />
       <Fader
-        value={cents}
+        value={shown}
         steps={steps}
-        onChange={onChange}
+        // A stop in another currency falls between two US cents; the wish keeps whole ones.
+        onChange={(c) => onChange(wholeCents(c))}
         label="How much money"
-        valueText={money.format(cents)}
+        valueText={money.format(shown)}
         labels={marks.map((c) => ({ cents: c, text: money.compact(c) }))}
         firm={(_from, to) => marks.includes(to)}
       />

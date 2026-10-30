@@ -232,9 +232,10 @@ export async function startResearch(api: Api, draft: Draft, answers: Answer[]) {
 
 /**
  * Hunts one wish straight from the person's words, with no separate read first; or again from a run's draft with
- * changed answers, given by question id. Poll it with getRun.
+ * changed answers, given by question id. `price` is a money or priceless card's "Price it": hunt the words as an
+ * ordinary priced wish. Poll it with getRun.
  */
-export async function startHunt(api: Api, wish: { text: string } | { draft: Draft; answers: Answer[] }) {
+export async function startHunt(api: Api, wish: { text: string; price?: boolean } | { draft: Draft; answers: Answer[] }) {
   return (await read<{ run: Run }>(await api("/agent/runs", json({ ...wish, persona: currentPersona() })).catch(() => null), "Couldn't start the research.")).run;
 }
 

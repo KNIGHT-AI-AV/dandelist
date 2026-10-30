@@ -191,8 +191,11 @@ export default function Welcome() {
     );
   };
 
-  /** Starts the agent on the first wish; it keeps working while this or that goes on. */
-  const priceWish = (text: string) => {
+  /**
+   * Starts the agent on the first wish; it keeps working while this or that goes on. `price` is the money or priceless
+   * card's "Price it": the words are hunted as an ordinary priced wish.
+   */
+  const priceWish = (text: string, price = false) => {
     run.current?.abort();
     const ctrl = new AbortController();
     run.current = ctrl;
@@ -234,6 +237,7 @@ export default function Welcome() {
         }
       },
       ctrl.signal,
+      price,
     ).catch((err: Error) => {
       if (ctrl.signal.aborted || worthy) return;
       patchWish((w) => ({ ...w, failed: err instanceof TypeError ? "Couldn't reach Dandelist just now." : err.message }));
@@ -344,6 +348,7 @@ export default function Welcome() {
           pricing={pricing}
           line={thought?.text ?? ""}
           onAmount={(amountCents) => patchWish((w) => ({ ...w, amountCents }))}
+          onPrice={() => state.wish && priceWish(state.wish.text, true)}
           onContinue={() => go(nextVote(latest.current) ?? { kind: "when" })}
         />
       ) : null;

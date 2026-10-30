@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { FALLBACK_LINE, INTERPRET_EFFORT, cleanLine, interpret, settleWorth, unpriced, type Draft, type Meta } from "../src/agent/agent";
-import { namedCents, worthCard } from "../src/agent/worth";
+import { FALLBACK_LINE, INTERPRET_EFFORT, asPriced, bookable, cleanLine, interpret, settleWorth, unpriced, type Draft, type Meta } from "../src/agent/agent";
+import { MISS_MS, namedCents, worthCard } from "../src/agent/worth";
 
 const base: Draft = { title: "Money", kind: "buy", summary: "Money.", specifics: [], region: "US", currency: "USD", unknowns: [] };
 
@@ -43,6 +43,57 @@ describe("what a wish is worth", () => {
     expect(priced.amount).toBeUndefined();
     expect(priced.line).toBeUndefined();
     expect(unpriced(priced)).toBe(false);
+  });
+
+  it("prices anything with a trip, a place or time off, whoever it is with, even when a reading calls it priceless", async () => {
+    // The model is told the rule in the one reading call.
+    const told = reading({ ...base, title: "A week in Bali with my wife", kind: "visit", worth: "priced", amount: 0, line: "" });
+    expect((await interpret(told.meta, "a week in Bali with my wife")).worth).toBe("priced");
+    expect(told.asked[0]!.instructions).toContain("time off");
+    expect(told.asked[0]!.text.format.schema.properties.worth.description).toContain("'a week in Bali with my wife', 'a year off to travel' and 'dinner with my mom in Paris' are priced");
+
+    // Readings that call these priceless anyway are overruled by what they say about the wish itself.
+    const misread = [
+      { said: "a week in Bali with my wife", kind: "visit", specifics: [{ name: "destination", value: "Bali" }, { name: "duration", value: "one week" }, { name: "travellers", value: "2 adults" }] },
+      { said: "a year off to travel", kind: "do", specifics: [{ name: "duration", value: "one year" }, { name: "activity", value: "travel" }] },
+      { said: "dinner with my mom in Paris", kind: "do", specifics: [{ name: "city", value: "Paris" }, { name: "who", value: "mom" }] },
+    ] as const;
+    for (const m of misread) {
+      const r = reading({ ...base, title: m.said, kind: m.kind, specifics: m.specifics, worth: "priceless", amount: 0, line: "Worth every second." });
+      const read = await interpret(r.meta, m.said);
+      expect(read.worth, m.said).toBe("priced");
+      expect(read.line, m.said).toBeUndefined();
+    }
+
+    // What nothing can buy or book stays priceless.
+    for (const [said, specifics] of [["love", []], ["time with my dad", [{ name: "who", value: "dad" }]]] as const) {
+      const r = reading({ ...base, title: said, kind: "do", specifics, worth: "priceless", amount: 0, line: "Free to give, impossible to buy." });
+      expect((await interpret(r.meta, said)).worth, said).toBe("priceless");
+    }
+    expect(bookable({ kind: "do", specifics: [{ name: "feeling", value: "calm" }] })).toBe(false);
+  });
+
+  it("never fails a wish over a reading's amount or line out of bounds", async () => {
+    const huge = await interpret(reading({ ...base, worth: "money", amount: 1e17, line: "" }).meta, "all the money");
+    expect(huge).toMatchObject({ worth: "money", amount: 1e13 });
+    const negative = await interpret(reading({ ...base, worth: "money", amount: -5, line: "" }).meta, "money");
+    expect(negative.amount).toBeUndefined();
+    const words = await interpret(reading({ ...base, worth: "money", amount: "lots", line: "" }).meta, "money");
+    expect(words).toMatchObject({ worth: "money" });
+    const long = await interpret(reading({ ...base, title: "Love", worth: "priceless", amount: 0, line: "x ".repeat(300) }).meta, "love");
+    expect(long).toMatchObject({ worth: "priceless", line: FALLBACK_LINE });
+    const odd = await interpret(reading({ ...base, worth: "free", amount: 0, line: "" }).meta, "a bike");
+    expect(odd.worth).toBe("priced");
+  });
+
+  it("prices it anyway when asked, whatever the reading said", () => {
+    expect(asPriced({ ...base, worth: "money", amount: 5 })).toEqual({ ...base, worth: "priced" });
+    expect(asPriced({ ...base, worth: "priceless", line: "Free to give, impossible to buy." })).toEqual({ ...base, worth: "priced" });
+    expect(unpriced(asPriced({ ...base, worth: "money" }))).toBe(false);
+  });
+
+  it("looks for a money photo again soon after one couldn't be found", () => {
+    expect(MISS_MS).toBeLessThanOrEqual(2 * 60_000);
   });
 
   it("is priced whenever the model says nothing about it", () => {

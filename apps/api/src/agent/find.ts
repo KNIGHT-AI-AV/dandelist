@@ -1,6 +1,7 @@
 import {
   HORIZON_YEARS,
   applyAnswers,
+  asPriced,
   explainFacts,
   fallbackExplanation,
   interpret,
@@ -60,6 +61,8 @@ export interface HuntContext extends Omit<ResearchContext, "draft" | "answers" |
   onDraft?: (draft: Draft) => Promise<void> | void;
   /** The fast card, as soon as it is ready, while the full research carries on. */
   onProvisional?: (result: HuntResult) => Promise<void> | void;
+  /** Price it anyway (a money or priceless card's "Price it"): hunt it as an ordinary priced wish, whatever it reads as. */
+  price?: boolean;
 }
 
 /** The draft with every question answered, by the person or by the agent's pick, and the answers left over. */
@@ -125,8 +128,9 @@ export async function huntWish(meta: Meta, ctx: HuntContext): Promise<HuntResult
   const home = (ctx.homeCurrency ?? "USD").toUpperCase();
   const fetcher = ctx.fetcher ?? publicFetch;
   const given = ctx.answers ?? [];
-  const known = ctx.draft ? withAnswers(ctx.draft, given) : null;
-  const reading: Promise<{ draft: Draft; extra: Answer[] }> = known ? Promise.resolve(known) : interpret(meta, ctx.text ?? "").then((d) => withAnswers(d, given));
+  const priced = (d: Draft) => (ctx.price ? asPriced(d) : d);
+  const known = ctx.draft ? withAnswers(priced(ctx.draft), given) : null;
+  const reading: Promise<{ draft: Draft; extra: Answer[] }> = known ? Promise.resolve(known) : interpret(meta, ctx.text ?? "").then((d) => withAnswers(priced(d), given));
   reading.catch(() => undefined);
   // The questions start at once from the person's own words, beside reading the wish, so they are usually in hand
   // before the research starts and it prices their picks; nothing ever waits for them. A re-hunt brings its own.
