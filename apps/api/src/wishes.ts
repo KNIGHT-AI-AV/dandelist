@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { mediaSchema } from "./agent/media";
 import { requireAuth, type AuthVars } from "./auth";
+import type { Db } from "./db";
 import { describeRoutes, type DescribeDeps } from "./describe";
 import { NOTE_MAX, cleanNote } from "./notes";
 
@@ -81,6 +82,16 @@ type Row = {
 
 const COLUMNS = "id, name, kind, tier, upfront_cents, recurring, resale_cents, details, image_key, note, created_at, updated_at";
 
+/** The list's one order everywhere: the person's own arrangement, with wishes they never arranged (new ones) on top. */
+const ORDER = "list_position asc nulls first, created_at desc";
+const orderBody = z.object({ ids: z.array(idParam).min(1).max(MAX_WISHES_PER_USER).refine((ids) => new Set(ids).size === ids.length) });
+
+/** A person's wishes in their list's order. */
+export async function listWishes(db: Db, userId: string) {
+  const { rows } = await db.query<Row>(`select ${COLUMNS} from wishes where user_id = $1 order by ${ORDER}`, [userId]);
+  return rows.map(toWish);
+}
+
 export function toWish(r: Row) {
   return {
     id: r.id,
@@ -108,9 +119,24 @@ export function wishRoutes(deps: DescribeDeps) {
   app.use("*", requireAuth(deps));
   app.route("/", describeRoutes(deps));
 
-  app.get("/", async (c) => {
-    const { rows } = await db.query<Row>(`select ${COLUMNS} from wishes where user_id = $1 order by created_at desc`, [c.get("userId")]);
-    return c.json({ wishes: rows.map(toWish) });
+  app.get("/", async (c) => c.json({ wishes: await listWishes(db, c.get("userId")) }));
+
+  // Puts these wishes first, in this order; every other wish keeps its place after them, and an id that isn't theirs
+  // is ignored. One statement, so the last arrangement wins cleanly. Leaves updated_at alone (the notes digest
+  // sorts on it).
+  app.put("/order", async (c) => {
+    const parsed = orderBody.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: "Send the wishes in the order you want, each once." }, 400);
+    const userId = c.get("userId");
+    await db.query(
+      `with cur as (select id, row_number() over (order by ${ORDER}) as r from wishes where user_id = $1),
+            want as (select id, ord from unnest($2::uuid[]) with ordinality as t(id, ord))
+       update wishes w set list_position = f.pos
+       from (select cur.id, row_number() over (order by want.ord nulls last, cur.r) as pos from cur left join want using (id)) f
+       where w.id = f.id and w.user_id = $1`,
+      [userId, parsed.data.ids],
+    );
+    return c.json({ wishes: await listWishes(db, userId) });
   });
 
   app.post("/", async (c) => {

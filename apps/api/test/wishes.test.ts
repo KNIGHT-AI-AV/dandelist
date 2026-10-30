@@ -95,6 +95,32 @@ describe("wishes", () => {
     expect((await call("POST", "/wishes", t, { name: "Love", kind: "do", details: { worth: "priceless", line: "x".repeat(121) } })).status).toBe(400);
   });
 
+  it("keeps the person's own order: new wishes on top, a PUT /order puts the named ones first and the rest in place", async () => {
+    const t = await signIn("ada@example.com");
+    const add = async (name: string) => {
+      clock = new Date(clock.getTime() + 1000);
+      return ((await (await call("POST", "/wishes", t, { name, kind: "buy" })).json()) as { wish: { id: string } }).wish.id;
+    };
+    const [a, b, c, d] = [await add("A"), await add("B"), await add("C"), await add("D")];
+    const order = async (token = t) => ((await (await call("GET", "/wishes", token)).json()) as { wishes: { id: string }[] }).wishes.map((w) => w.id);
+    expect(await order()).toEqual([d, c, b, a]);
+    const put = await call("PUT", "/wishes/order", t, { ids: [a, b] });
+    expect(put.status).toBe(200);
+    expect(((await put.json()) as { wishes: { id: string }[] }).wishes.map((w) => w.id)).toEqual([a, b, d, c]);
+    expect(await order()).toEqual([a, b, d, c]);
+    const e = await add("E");
+    expect(await order()).toEqual([e, a, b, d, c]);
+    expect((await call("PUT", "/wishes/order", t, { ids: [c, e, a, b, d] })).status).toBe(200);
+    expect(await order()).toEqual([c, e, a, b, d]);
+    // Bad orders are refused, and a stranger's ids change nothing.
+    for (const ids of [[], [a, a], ["not-a-uuid"]]) expect((await call("PUT", "/wishes/order", t, { ids })).status).toBe(400);
+    expect((await call("PUT", "/wishes/order", "", { ids: [a] })).status).toBe(401);
+    const bea = await signIn("bea@example.com");
+    expect((await call("PUT", "/wishes/order", bea, { ids: [d, a] })).status).toBe(200);
+    expect(await order()).toEqual([c, e, a, b, d]);
+    expect(await order(bea)).toEqual([]);
+  });
+
   it("saves an Unsplash photo's credit and gives it back, and refuses a credit linking anywhere else (#112 review)", async () => {
     const t = await signIn("ada@example.com");
     const media = (image: object) => ({ name: "Porsche 911 Carrera", kind: "buy", details: { agent: { media: { kind: "vehicle", images: [image] } } } });
