@@ -7,9 +7,10 @@ import { Dimensions, PanResponder, Platform, UIManager, type PanResponderGesture
  * at most 1.75. Phones and the native apps never zoom.
  *
  * Under html { zoom } the page lays out in a window divided by S (measured in Chromium and WebKit: the root fits
- * exactly, fixed bars stay on the bottom edge), but visualViewport, getBoundingClientRect and pointer positions stay in
- * screen pixels. React Native Web reads those for Dimensions, measureInWindow and every gesture, so they are divided
- * by S here, once, where it reads them. Code that reads nativeEvent.pageX or pageY itself divides by zoom().
+ * exactly, fixed bars stay on the bottom edge), but visualViewport and pointer positions stay in screen pixels, and so
+ * does getBoundingClientRect in today's engines. React Native Web reads those for Dimensions, measureInWindow and every
+ * gesture, so they are divided here, once, where it reads them (a rectangle by what a probe box shows it needs). Code
+ * that reads nativeEvent.pageX or pageY itself divides by zoom().
  */
 export const ZOOM_FROM = { width: 900, height: 780 };
 export const MAX_ZOOM = 1.75;
@@ -23,6 +24,19 @@ export function zoomFor(width: number, height: number): number {
 let S = 1;
 /** The page's zoom now: 1 on phones and in the native apps. */
 export const zoom = () => S;
+
+/**
+ * What a measured rectangle is divided by to be in the page's units: the zoom in today's engines, which answer in
+ * screen pixels, but 1 where getBoundingClientRect already answers in the page's units (WebKit before its fix for bug
+ * 300474, late 2025, and Chrome before 128; independent review of #106). Measured on a probe box, never assumed.
+ */
+let rectScale = 1;
+export function rectScaleOf(measure: () => number, s: number): number {
+  if (s === 1) return 1;
+  const r = measure() / 100;
+  // Anything but the two known answers is read as today's behaviour.
+  return Math.abs(r - 1) < 0.02 ? 1 : s;
+}
 
 const GESTURE_KEYS = ["moveX", "moveY", "x0", "y0", "dx", "dy", "vx", "vy"] as const;
 
@@ -56,11 +70,22 @@ let installed = false;
 export function installZoom() {
   if (Platform.OS !== "web" || installed || typeof window === "undefined" || typeof document === "undefined") return;
   installed = true;
+  // A browser without CSS zoom (Firefox before 126) keeps the phone-sized column rather than half a correction.
+  const canZoom = typeof CSS !== "undefined" && typeof CSS.supports === "function" && CSS.supports("zoom", "2");
+  const probe = () => {
+    const el = document.createElement("div");
+    el.style.cssText = "position:absolute;left:0;top:0;width:100px;height:1px;visibility:hidden;pointer-events:none";
+    (document.body ?? document.documentElement).appendChild(el);
+    const width = el.getBoundingClientRect().width;
+    el.remove();
+    return width;
+  };
   const apply = () => {
-    const next = zoomFor(window.innerWidth, window.innerHeight);
+    const next = canZoom ? zoomFor(window.innerWidth, window.innerHeight) : 1;
     if (next === S) return;
     S = next;
     document.documentElement.style.setProperty("zoom", S === 1 ? "" : String(S));
+    rectScale = rectScaleOf(probe, S);
   };
   apply();
 
@@ -96,10 +121,10 @@ export function installZoom() {
   window.visualViewport?.addEventListener("resize", apply);
   window.addEventListener("resize", apply);
 
-  // measureInWindow reads getBoundingClientRect, in screen pixels.
+  // measureInWindow reads getBoundingClientRect: screen pixels in today's engines, the page's units in older ones.
   const ui = UIManager as unknown as { measureInWindow?: (node: unknown, cb: (x: number, y: number, w: number, h: number) => void) => void };
   const measureInWindow = ui.measureInWindow?.bind(UIManager);
-  if (measureInWindow) ui.measureInWindow = (node, cb) => measureInWindow(node, (x, y, w, h) => cb(x / S, y / S, w / S, h / S));
+  if (measureInWindow) ui.measureInWindow = (node, cb) => measureInWindow(node, (x, y, w, h) => cb(x / rectScale, y / rectScale, w / rectScale, h / rectScale));
 
   // Every gesture's distances and speeds, in the page's units.
   const create = PanResponder.create.bind(PanResponder);

@@ -33,8 +33,16 @@ vi.mock("react-native", () => ({ Platform: { OS: "web" }, Dimensions: rn.Dimensi
 
 const win = { innerWidth: 1920, innerHeight: 950, addEventListener: () => {}, visualViewport: { addEventListener: () => {} } };
 const style = new Map<string, string>();
+// Today's engines measure a zoomed 100px box in screen pixels; an older engine answers in the page's units.
+const engine = { old: false };
+const probeBox = () => ({
+  style: {} as Record<string, string>,
+  getBoundingClientRect: () => ({ width: engine.old ? 100 : 100 * (Number(style.get("zoom")) || 1) }),
+  remove: () => {},
+});
 vi.stubGlobal("window", win);
-vi.stubGlobal("document", { documentElement: { style: { setProperty: (k: string, v: string) => style.set(k, v) } } });
+vi.stubGlobal("CSS", { supports: (prop: string) => prop === "zoom" });
+vi.stubGlobal("document", { documentElement: { style: { setProperty: (k: string, v: string) => style.set(k, v) } }, body: { appendChild: () => {} }, createElement: probeBox });
 
 let v: typeof import("./viewport");
 beforeAll(async () => {
@@ -106,6 +114,33 @@ describe("a zoomed page", () => {
     config.onPanResponderMove({}, { stateID: 1, moveX: 0, moveY: 0, x0: 0, y0: 0, dx: 122, dy: 0, vx: 2.44, vy: 0, numberActiveTouches: 1 });
     expect(moves[0]).toMatchObject({ dx: 122 / s, vx: 2.44 / s, numberActiveTouches: 1 });
     expect(config.decelerationRate).toBe(0.9);
+  });
+
+  it("measures as an older engine does when its rectangles already come in the page's units (independent review of #106)", () => {
+    expect(v.rectScaleOf(() => 138, 1.38)).toBe(1.38);
+    expect(v.rectScaleOf(() => 100, 1.38)).toBe(1);
+    expect(v.rectScaleOf(() => 0, 1)).toBe(1);
+    // An older engine at a new zoom: its measures pass through, while gestures still come in screen pixels.
+    engine.old = true;
+    const sub = rn.Dimensions.addEventListener("change", (() => {}) as never);
+    win.innerWidth = 2560;
+    win.innerHeight = 1300;
+    rn.resize(2560, 1300);
+    let measured: number[] = [];
+    rn.UIManager.measureInWindow(null, (x, y, w, h) => (measured = [x, y, w, h]));
+    expect(measured).toEqual([244, 122, 610, 61]);
+    const moves: { dx: number }[] = [];
+    const config = rn.PanResponder.create({ onPanResponderMove: (_e: unknown, g: { dx: number }) => moves.push(g) }) as { onPanResponderMove: (e: unknown, g: object) => void };
+    config.onPanResponderMove({}, { stateID: 1, moveX: 0, moveY: 0, x0: 0, y0: 0, dx: 167, dy: 0, vx: 0, vy: 0, numberActiveTouches: 1 });
+    expect(moves[0]!.dx).toBeCloseTo(100, 5);
+    // Back to today's engine and the first window.
+    engine.old = false;
+    win.innerWidth = 1920;
+    win.innerHeight = 950;
+    rn.resize(1920, 950);
+    sub.remove();
+    rn.UIManager.measureInWindow(null, (x, y, w, h) => (measured = [x, y, w, h]));
+    expect(measured[2]).toBeCloseTo(610 / 1.22, 5);
   });
 
   it("changes nothing about a gesture at zoom 1", () => {
