@@ -2,6 +2,7 @@ import { PGlite } from "@electric-sql/pglite";
 import { beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../src/app";
 import { migrate, type Db } from "../src/db";
+import { UNSPLASH_IMAGE } from "./unsplash";
 
 let db: Db;
 let mail: { to: string; code: string }[];
@@ -92,6 +93,18 @@ describe("wishes", () => {
     expect(((await love.json()) as { wish: unknown }).wish).toMatchObject({ upfrontCents: 0, details: { worth: "priceless", line: "Free to give, impossible to buy." } });
     expect((await call("POST", "/wishes", t, { name: "Love", kind: "do", details: { worth: "free" } })).status).toBe(400);
     expect((await call("POST", "/wishes", t, { name: "Love", kind: "do", details: { worth: "priceless", line: "x".repeat(121) } })).status).toBe(400);
+  });
+
+  it("saves an Unsplash photo's credit and gives it back, and refuses a credit linking anywhere else (#112 review)", async () => {
+    const t = await signIn("ada@example.com");
+    const media = (image: object) => ({ name: "Porsche 911 Carrera", kind: "buy", details: { agent: { media: { kind: "vehicle", images: [image] } } } });
+    const saved = await call("POST", "/wishes", t, media(UNSPLASH_IMAGE));
+    expect(saved.status).toBe(201);
+    const { wish } = (await saved.json()) as { wish: { id: string } };
+    const list = (await (await call("GET", "/wishes", t)).json()) as { wishes: { id: string; details: { agent: { media: { images: { author: unknown }[] } } } }[] };
+    expect(list.wishes.find((w) => w.id === wish.id)!.details.agent.media.images[0]!.author).toEqual(UNSPLASH_IMAGE.author);
+    const hostile = { ...UNSPLASH_IMAGE, author: { name: "noir.", url: "https://evil.example/@noirmedia?utm_source=dandelist&utm_medium=referral" } };
+    expect((await call("POST", "/wishes", t, media(hostile))).status).toBe(400);
   });
 
   it("needs a signed-in person", async () => {

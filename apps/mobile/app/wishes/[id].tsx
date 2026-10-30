@@ -13,10 +13,11 @@ import { PhotoViewer, type ViewerFrom } from "../../components/detail/viewer";
 import { WaitingLight } from "../../components/waiting-light";
 import { AgentDot, Breathing, EdgeFade, ErrorLine, Eyebrow, Grain, IconButton, Protect, QuietButton, Shade } from "../../components/lux";
 import { MediaHero } from "../../components/media";
+import { PhotoCredit } from "../../components/photo-credit";
 import { Statement, Take } from "../../components/statement";
 import { useAuth } from "../../lib/auth";
 import { webOnly } from "../../lib/dream";
-import { photoCredit, realPhotos, showsGallery, trimBottom } from "../../lib/gallery";
+import { realPhotos, showsGallery, trimBottom } from "../../lib/gallery";
 import { FLICK, ease, native, spring, step, useReducedMotion } from "../../lib/motion";
 import { layout, radius, type, usePalette, useType } from "../../lib/theme";
 import { useWishes, type Wish } from "../../lib/wishes";
@@ -273,11 +274,12 @@ export default function WishDetail() {
           {/* The showing photo's credit and licence, as a caption: the hero's foot is under the title. */}
           {gallery && photos[photoIndex] ? (
             <Swap id={photos[photoIndex]!.url}>
-              <Text numberOfLines={1} style={[type.figure, { color: p.ink3 }]}>
-                {photoCredit(photos[photoIndex]!)}
-              </Text>
+              <PhotoCredit image={photos[photoIndex]} />
             </Swap>
-          ) : null}
+          ) : (
+            // A single photo is credited the same way; a 3D model and a cut-out carry their own credit.
+            <PhotoCredit image={!pictured?.media?.model3d && !pictured?.media?.cutout ? pictured?.media?.images[0] : null} />
+          )}
           <RetakePhoto wish={w} onBusy={setRetaking} />
         </Animated.View>
 

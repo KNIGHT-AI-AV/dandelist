@@ -3,7 +3,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Animated, Modal, Platform, StyleSheet, Text, View, useWindowDimensions, type NativeScrollEvent, type NativeSyntheticEvent, type ScrollView } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { MediaImage } from "../../lib/agent";
-import { containRect, pageAt, photoCredit, type Rect } from "../../lib/gallery";
+import { containRect, pageAt, type Rect } from "../../lib/gallery";
+import { PhotoCredit } from "../photo-credit";
 import { ease, native, spring, step } from "../../lib/motion";
 import { ThemeScope, layout, type, usePalette, useTheme, type ThemeId } from "../../lib/theme";
 import { IconButton, Shade } from "../lux";
@@ -203,7 +204,7 @@ export function PhotoViewer({ photos, from, reduced, onSettle, onClose }: { phot
             {photos.length > 1 ? <PageDots count={photos.length} x={x} width={W} glass={false} /> : null}
             {photos[cur] ? (
               <Swap id={String(cur)} style={{ alignSelf: "stretch" }}>
-                <Credit text={photoCredit(photos[cur]!)} />
+                <PhotoCredit image={photos[cur]} lines={2} style={{ textAlign: "center" }} />
               </Swap>
             ) : null}
           </Animated.View>
@@ -216,13 +217,4 @@ export function PhotoViewer({ photos, from, reduced, onSettle, onClose }: { phot
 function Scrim({ opacity }: { opacity: Animated.Value | number }) {
   const p = usePalette();
   return <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: `rgba(${p.bgRgb}, ${SCRIM})`, opacity }]} />;
-}
-
-function Credit({ text }: { text: string }) {
-  const p = usePalette();
-  return (
-    <Text numberOfLines={2} style={[type.figure, { color: p.ink2, textAlign: "center" }]}>
-      {text}
-    </Text>
-  );
 }

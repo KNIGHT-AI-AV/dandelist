@@ -1,5 +1,5 @@
 import { router } from "expo-router";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { ScrollView, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { layout, type, usePalette, useType } from "../lib/theme";
@@ -24,7 +24,7 @@ export interface LegalDocument {
  * A plain, readable legal page: one column, serif headings, Inter body. It holds one or more documents (Privacy and
  * Terms share /legal) with a quiet way to jump between them, and opens at `focus`: a document's id or a section's.
  */
-export function LegalPage({ eyebrow, title, documents, focus }: { eyebrow: string; title: string; documents: LegalDocument[]; focus?: string }) {
+export function LegalPage({ eyebrow, title, documents, focus, after }: { eyebrow: string; title: string; documents: LegalDocument[]; focus?: string; after?: ReactNode }) {
   const p = usePalette();
   const insets = useSafeAreaInsets();
   const t = useType();
@@ -114,6 +114,7 @@ export function LegalPage({ eyebrow, title, documents, focus }: { eyebrow: strin
             ))}
           </View>
         ))}
+        {after}
       </ScrollView>
       <View pointerEvents="none" style={{ position: "absolute", top: 0, left: 0, right: 0, height: insets.top + 64, transform: [{ scaleY: -1 }] }}>
         <EdgeFade height={insets.top + 64} />

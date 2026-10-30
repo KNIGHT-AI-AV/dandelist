@@ -6,9 +6,10 @@ import { useReducedMotion } from "../lib/motion";
 import { type, usePalette } from "../lib/theme";
 import { Embed } from "./embed";
 import { Photo } from "./lux";
+import { PhotoCredit } from "./photo-credit";
 
 /** What the agent found to show a wish: real photographs first, a 3D model when a true match exists. */
-export type MediaImage = { url: string; width?: number; height?: number; source: string; credit?: string; license?: string; clean?: boolean; generated?: boolean };
+export type MediaImage = { url: string; width?: number; height?: number; source: string; credit?: string; license?: string; clean?: boolean; generated?: boolean; author?: { name: string; url: string } };
 export type Model3d = { provider: "sketchfab"; uid: string; name: string; author: string; license: string; embedUrl: string; thumbnail: string };
 export type Media = {
   kind: "product" | "vehicle" | "place" | "experience" | "other";
@@ -120,7 +121,13 @@ export function Slideshow({ images, interval = 5200, style, children }: { images
           ))}
         </View>
       ) : null}
-      <Credit>{creditFor(current)}</Credit>
+      {current.author ? (
+        <View style={{ position: "absolute", right: 12, bottom: 10, maxWidth: "70%" }}>
+          <PhotoCredit image={current} />
+        </View>
+      ) : (
+        <Credit>{creditFor(current)}</Credit>
+      )}
     </View>
   );
 }
@@ -129,7 +136,7 @@ export function Slideshow({ images, interval = 5200, style, children }: { images
  * A product you can turn with a finger: the clean cutout tilts in perspective as you drag, a soft sheen follows the
  * angle, and it springs back when let go. It reads as an object on a plinth, not a flat photo.
  */
-export function TiltObject({ uri, style, credit }: { uri: string; style?: StyleProp<ViewStyle>; credit?: string }) {
+export function TiltObject({ uri, style, credit, image }: { uri: string; style?: StyleProp<ViewStyle>; credit?: string; image?: MediaImage }) {
   const p = usePalette();
   const reduced = useReducedMotion();
   const rx = useRef(new Animated.Value(0)).current;
@@ -185,7 +192,13 @@ export function TiltObject({ uri, style, credit }: { uri: string; style?: StyleP
       <Text pointerEvents="none" style={[type.eyebrow, { position: "absolute", bottom: 40, color: p.ink3 }]}>
         Drag to turn
       </Text>
-      {credit ? <Credit>{credit}</Credit> : null}
+      {image?.author ? (
+        <View style={{ position: "absolute", right: 12, bottom: 10, maxWidth: "70%" }}>
+          <PhotoCredit image={image} />
+        </View>
+      ) : credit ? (
+        <Credit>{credit}</Credit>
+      ) : null}
     </View>
   );
 }
@@ -200,7 +213,7 @@ export function MediaHero({ media, fallbackUri, kind, style, glyph, children }: 
       </Slideshow>
     );
   }
-  if (media?.cutout) return <TiltObject uri={media.cutout.url} style={style} credit={media.images[0] ? creditFor(media.images[0]) : undefined} />;
+  if (media?.cutout) return <TiltObject uri={media.cutout.url} style={style} credit={media.images[0] ? creditFor(media.images[0]) : undefined} image={media.images[0]} />;
   return (
     <View style={style}>
       <Photo uri={media?.images[0]?.url ?? fallbackUri} kind={kind} glyph={glyph} />

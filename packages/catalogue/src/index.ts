@@ -29,6 +29,11 @@ export interface MediaImage {
   generated?: boolean;
   /** Smaller copies of this same photo, narrowest first, for screens that show it smaller (see sizedFor). */
   variants?: { width: number; height: number; url: string }[];
+  /** An Unsplash photo: its id, the crop (x, y, w, h) on its original of `size`, and when its download was recorded. */
+  unsplash?: { id: string; rect: [number, number, number, number]; size: [number, number]; tracked?: string };
+  /** The photographer and the photo's page, for the credit (links carry Unsplash's utm parameters). */
+  author?: { name: string; url: string };
+  page?: string;
 }
 
 export interface Entry extends Seed {
@@ -59,12 +64,38 @@ export function heroOf(e: Pick<Entry, "media" | "imageUrl">): string | undefined
  * frame in pixels, the smallest copy of it that still covers the frame (sizedFor).
  */
 export function heroFor(e: Pick<Entry, "media" | "imageUrl">, aspect: number, framePx?: { width: number; height: number }): string | undefined {
-  const real = (e.media?.images ?? []).filter((i) => !i.generated && i.width && i.height);
-  if (!real.length || !(aspect > 0)) return heroOf(e);
-  const off = (i: MediaImage) => Math.abs(Math.log(i.width! / i.height! / aspect));
-  const best = real.reduce((b, i) => (off(i) < off(b) - 0.05 ? i : b));
+  const best = heroImageFor(e, aspect);
+  if (!best?.width || !best.height || !(aspect > 0)) return heroOf(e);
   // Covering the frame, the photo is as wide as the frame or as its height at the photo's own shape, whichever is more.
-  return framePx ? sizedFor(best, Math.max(framePx.width, (framePx.height * best.width!) / best.height!)) : best.url;
+  return framePx ? sizedFor(best, Math.max(framePx.width, (framePx.height * best.width) / best.height)) : best.url;
+}
+
+/** The image heroFor shows for a frame of this shape, so its credit can sit beside it. */
+export function heroImageFor(e: Pick<Entry, "media">, aspect: number): MediaImage | undefined {
+  const real = (e.media?.images ?? []).filter((i) => !i.generated && i.width && i.height);
+  if (!real.length) return undefined;
+  if (!(aspect > 0)) return real[0];
+  const off = (i: MediaImage) => Math.abs(Math.log(i.width! / i.height! / aspect));
+  return real.reduce((b, i) => (off(i) < off(b) - 0.05 ? i : b));
+}
+
+/** Unsplash's home page with the referral tags its API guidelines ask every credit link to carry. */
+export const UNSPLASH_HOME = "https://unsplash.com/?utm_source=dandelist&utm_medium=referral";
+
+/**
+ * The only credit links a photo may carry: an Unsplash photographer's profile and an Unsplash photo page, each tagged.
+ * Saved wishes come back from clients, so the API checks these on save and the app again before it links anything.
+ */
+export const UNSPLASH_PROFILE = /^https:\/\/unsplash\.com\/@[A-Za-z0-9_-]{1,64}\?utm_source=dandelist&utm_medium=referral$/;
+export const UNSPLASH_PAGE = /^https:\/\/unsplash\.com\/photos\/[A-Za-z0-9_-]{1,200}\?utm_source=dandelist&utm_medium=referral$/;
+
+/** The photographer to link, or nothing when the name or the link isn't one this app made. */
+export function safeAuthor(author: unknown): { name: string; url: string } | undefined {
+  if (!author || typeof author !== "object") return undefined;
+  const { name, url } = author as { name?: unknown; url?: unknown };
+  if (typeof name !== "string" || typeof url !== "string") return undefined;
+  const trimmed = name.trim();
+  return trimmed && trimmed.length <= 120 && UNSPLASH_PROFILE.test(url) ? { name: trimmed, url } : undefined;
 }
 
 /**
