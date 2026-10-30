@@ -18,7 +18,7 @@ import { Presence } from "./presence";
 const SLOW_MS = 800;
 /** While another request makes the pick, ask again this often, a few times. */
 const PENDING_MS = 4000;
-const PENDING_TRIES = 4;
+const PENDING_TRIES = 10;
 /** "Noted" stays this long before the card goes. */
 const NOTED_MS = 2400;
 const PHOTO_HEIGHT = 200;
