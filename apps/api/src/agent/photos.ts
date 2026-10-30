@@ -165,6 +165,8 @@ export async function photoPlan(meta: Meta, subject: PhotoSubject, opts: { model
 }
 
 const LETTERS = ["A", "B", "C", "D", "E", "F", "G"];
+/** The name of one look's answer format: a small, fixed-size vision call, so callers can hold less for it. */
+export const PHOTO_CHECK = "photo_check";
 /** The line-up's last option, always. */
 const NONE = "None of these, or can't tell";
 const RATINGS = ["studio", "editorial", "amateur"] as const;
@@ -227,7 +229,7 @@ export async function verifyPhoto(meta: Meta, url: string, plan: Pick<PhotoPlan,
       ...model,
       instructions: CHECK,
       input: withImage(`Options:\n${options.map((o, i) => `${letters[i]}. ${o}`).join("\n")}`, image),
-      text: { format: { type: "json_schema", name: "photo_check", schema: checkJson(letters), strict: true } },
+      text: { format: { type: "json_schema", name: PHOTO_CHECK, schema: checkJson(letters), strict: true } },
     });
     const v = checkSchema.parse(JSON.parse(unfence(res.text)));
     const fits = [...new Set(v.fits.map((l) => options[letters.indexOf(l.toUpperCase())]).filter((o): o is string => !!o))];
