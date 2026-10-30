@@ -467,8 +467,9 @@ export function ChatPage() {
         );
       }
       case "item":
-        // Hunted at once, in place: no button between the wish and its card.
-        return <HuntCard id={w.id} text={w.text} onPhase={onPhase} onShowOnList={home.showOnList} />;
+        // Hunted at once, in place: no button between the wish and its card. Its waiting music plays only while the chat
+        // is the page in front.
+        return <HuntCard id={w.id} text={w.text} watched={pager.page === "chat"} onPhase={onPhase} onShowOnList={home.showOnList} />;
       case "region_picker":
         // Only when the Dandy asks: where they live otherwise comes from Settings.
         return <RegionPicker current={life?.home ?? w.current} onPick={(place) => send({ type: "region", home: place }, `I'll live in ${place.label}.`)} />;

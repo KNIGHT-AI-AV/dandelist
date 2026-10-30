@@ -76,6 +76,13 @@ export const haptic = {
     lastHaptic = Date.now();
     if (Platform.OS !== "web") void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Soft);
   },
+  /** One step of a ramp (lib/waiting.ts: light, light, medium, heavy as a picture lands). */
+  impact(weight: "light" | "medium" | "heavy") {
+    lastHaptic = Date.now();
+    if (Platform.OS === "web") return;
+    const style = weight === "light" ? Haptics.ImpactFeedbackStyle.Light : weight === "medium" ? Haptics.ImpactFeedbackStyle.Medium : Haptics.ImpactFeedbackStyle.Heavy;
+    void Haptics.impactAsync(style);
+  },
 };
 
 /**

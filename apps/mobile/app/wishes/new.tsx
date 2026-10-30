@@ -24,7 +24,7 @@ import { ListeningPanel, MicButton, useVoiceWish } from "../../components/voice/
 import { KeyboardDock, KeyboardScroll, dockRoom } from "../../components/inputs";
 import { Rise } from "../../components/welcome/kit";
 import { haptic } from "../../lib/motion";
-import { play } from "../../lib/sound";
+import { useWaitingMusic } from "../../lib/waiting";
 import { clarityOf, deckFor, thoughtOf } from "../../lib/reveal";
 import { useMoney } from "../../lib/currency";
 import { amountSteps, photoOnly, startAmount, wholeCents } from "../../lib/worth";
@@ -125,14 +125,10 @@ export default function NewWish() {
   }, [working, draft?.title]);
   const clock = useClock(working ? startedAt : null);
 
-  // The first card landing is the moment that matters: one success tick, paired with the photo coming into focus. Money
-  // and the priceless land with their own card.
+  // The first card landing is the moment that matters. While the agent works, the waiting ballad; as the card lands, the
+  // haptic ramp and the chime (lib/waiting.ts). Money and the priceless land with their own card.
   const landed = !!run?.result?.options.length || !!run?.result?.worth;
-  useEffect(() => {
-    if (!landed) return;
-    haptic.success();
-    play("land");
-  }, [landed]);
+  useWaitingMusic(stage !== "research" ? "idle" : landed ? "landed" : working ? "waiting" : "idle");
 
   // Poll the research run until the agent finishes.
   useEffect(() => {
@@ -212,7 +208,7 @@ export default function NewWish() {
         recurringCents: 0,
         period: "month",
         recurring: [],
-        details: w.worth === "money" ? { worth: "money", ...(shot ? { agent: photoOnly(shot.imageUrl, shot.media) } : {}) } : { worth: "priceless", line: w.line.slice(0, 120) },
+        details: { ...(w.worth === "money" ? { worth: "money" as const } : { worth: "priceless" as const, line: w.line.slice(0, 120) }), ...(shot ? { agent: photoOnly(shot.imageUrl, shot.media) } : {}) },
       });
       if (fromPick) {
         pickAdded(fromPick);

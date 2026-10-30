@@ -6,16 +6,17 @@ import { useMoney } from "../../lib/currency";
 import { useDandy } from "../../lib/dandy";
 import { haptic } from "../../lib/motion";
 import { stepLine } from "../../lib/recheck";
-import { play } from "../../lib/sound";
 import { answersFrom, refineChanged, withGiven } from "../../lib/refine";
 import { cardState, listedWish } from "../../lib/listed";
 import { fonts, radius, type, usePalette } from "../../lib/theme";
+import { useWaitingMusic, type WaitPhase } from "../../lib/waiting";
 import { useWishes, type NewWish } from "../../lib/wishes";
 import { amountSteps, photoOnly, startAmount, wholeCents } from "../../lib/worth";
 import { AddedLine } from "../added-line";
 import { AskNote } from "../ask";
 import { ErrorLine, Glass, Money, Photo, PrimaryButton, QuietButton } from "../lux";
 import { RefinePanel } from "../refine";
+import { WaitingLight } from "../waiting-light";
 import { AmountPicker, PricelessPrice, glyphFor } from "../worth";
 import { Working } from "./working";
 
@@ -74,10 +75,11 @@ function sorry(e: unknown): string {
 const questionsOf = (h: Hunt): WishQuestion[] => (h.run?.result?.questions?.length ? h.run.result.questions : (h.run?.draft?.questions ?? h.draft?.questions ?? []));
 
 /**
- * `onPhase` hears whether the card is still being worked out (the chat's "Add another while you wait" shows while one
- * is); `onShowOnList` turns to the list with the saved wish in view.
+ * `watched`: the chat is the page in front, so a picture being made here is one the person is looking at. `onPhase`
+ * hears whether the card is still being worked out (the chat's "Add another while you wait" shows while one is);
+ * `onShowOnList` turns to the list with the saved wish in view.
  */
-export function HuntCard({ id: item, text, onPhase, onShowOnList }: { id: string; text: string; onPhase?(id: string, working: boolean): void; onShowOnList?(wishId: string): void }) {
+export function HuntCard({ id: item, text, watched = true, onPhase, onShowOnList }: { id: string; text: string; watched?: boolean; onPhase?(id: string, working: boolean): void; onShowOnList?(wishId: string): void }) {
   const id = `${item}\n${text}`;
   const p = usePalette();
   const { api } = useAuth();
@@ -89,6 +91,8 @@ export function HuntCard({ id: item, text, onPhase, onShowOnList }: { id: string
   const [saving, setSaving] = useState(false);
   // The Dandy's line when it kept its pick for a question left open.
   const [note, setNote] = useState<string | null>(null);
+  // How the last retake went: a picture that couldn't be found ends the wait quietly.
+  const [retook, setRetook] = useState<"none" | "found" | "failed">("none");
   const alive = useRef(true);
   useEffect(() => () => void (alive.current = false), []);
 
@@ -104,6 +108,7 @@ export function HuntCard({ id: item, text, onPhase, onShowOnList }: { id: string
     async (wish: { text: string; price?: boolean } | { draft: Draft; answers: Answer[] }) => {
       const draft = "draft" in wish ? wish.draft : null;
       const price = "text" in wish && !!wish.price;
+      setRetook("none");
       keep(fresh(draft, price));
       try {
         const run = await startHunt(api, wish);
@@ -130,12 +135,8 @@ export function HuntCard({ id: item, text, onPhase, onShowOnList }: { id: string
         const next = await getRun(api, run.id);
         const cur = hunts.get(id) ?? h;
         if (cur.run?.id !== run.id) return; // a newer hunt replaced this one
+        // Its landing (the ramp and the chime) follows the picture: see useWaitingMusic below.
         keep({ ...cur, run: next });
-        const landedNow = (!cur.run?.result?.options.length && !!next.result?.options.length) || (!cur.run?.result?.worth && !!next.result?.worth);
-        if (landedNow) {
-          haptic.success();
-          play("land");
-        }
       } catch {
         // A missed poll is retried on the next tick.
         keep({ ...(hunts.get(id) ?? h) });
@@ -158,15 +159,17 @@ export function HuntCard({ id: item, text, onPhase, onShowOnList }: { id: string
     const d = cur.run?.draft ?? cur.draft;
     if (!d || retaking) return;
     setRetaking(true);
+    setRetook("none");
     // The photo on screen goes first: it is the one being turned down, and the hunt starts from what was wrong with it.
     const seen = [...new Set([...(photo ? [photo] : []), ...(cur.shown ?? [])])];
     const page = cur.run?.result?.options[0]?.url;
     try {
       const shot = await retakePhoto(api, { title: d.title, kind: d.kind, summary: d.summary, ...(page ? { page } : {}) }, seen);
       keep({ ...(hunts.get(id) ?? cur), shot, shown: [...seen, shot.imageUrl] });
-      haptic.success();
+      setRetook("found");
     } catch (e) {
       keep({ ...(hunts.get(id) ?? cur), shown: seen, error: sorry(e) });
+      setRetook("failed");
     } finally {
       if (alive.current) setRetaking(false);
     }
@@ -179,6 +182,12 @@ export function HuntCard({ id: item, text, onPhase, onShowOnList }: { id: string
     asked.current = true;
     void retake();
   }, [option, photo, h.run?.status, retake]);
+
+  // The picture: being made while the hunt has none to show, or a retake (asked for, or about to start by itself) looks
+  // for one; landed once one is in. The ballad plays while it's made, and the ramp and the chime come as it lands.
+  const autoRetake = !!option && !photo && h.run?.status === "done" && !asked.current;
+  const picture: WaitPhase = retaking || autoRetake ? "waiting" : retook === "failed" ? "idle" : h.run?.result?.worth || (option && photo) ? "landed" : !done && !h.error ? "waiting" : "idle";
+  useWaitingMusic(picture, watched);
 
   // Where the card stands (lib/listed.ts). A hunt again with changed answers is a new find, so only the wish saved from
   // it counts then, not an older one of the same name.
@@ -255,7 +264,7 @@ export function HuntCard({ id: item, text, onPhase, onShowOnList }: { id: string
           recurringCents: 0,
           period: "month",
           recurring: [],
-          details: w.worth === "money" ? { worth: "money", ...(shot ? { agent: photoOnly(shot.imageUrl, shot.media) } : {}) } : { worth: "priceless", line: w.line.slice(0, 120) },
+          details: { ...(w.worth === "money" ? { worth: "money" as const } : { worth: "priceless" as const, line: w.line.slice(0, 120) }), ...(shot ? { agent: photoOnly(shot.imageUrl, shot.media) } : {}) },
         });
         haptic.success();
         keep({ ...(hunts.get(id) ?? h), savedId: saved.id });
@@ -284,14 +293,21 @@ export function HuntCard({ id: item, text, onPhase, onShowOnList }: { id: string
     );
   }
 
-  // Hunting with nothing to show yet: the wish, and one line of what the Dandy is doing.
+  // Hunting with nothing to show yet: the picture's place, held while it's made, the wish, and one line of what the
+  // Dandy is doing.
   if (!option && !done && !h.error) {
     return (
-      <Glass style={{ padding: 18, gap: 12, borderRadius: radius.lg }}>
-        <Text style={[type.title3, { fontFamily: fonts.displayItalic, color: p.ink }]} numberOfLines={2}>
-          {draft?.title ?? text}
-        </Text>
-        <Working dandy={dandy} label={doing(h)} />
+      <Glass style={{ padding: 0, gap: 0, borderRadius: radius.lg, overflow: "hidden" }}>
+        <View style={{ width: "100%", aspectRatio: 4 / 3 }}>
+          <Photo />
+          <WaitingLight active />
+        </View>
+        <View style={{ padding: 18, gap: 12 }}>
+          <Text style={[type.title3, { fontFamily: fonts.displayItalic, color: p.ink }]} numberOfLines={2}>
+            {draft?.title ?? text}
+          </Text>
+          <Working dandy={dandy} label={doing(h)} />
+        </View>
       </Glass>
     );
   }
@@ -308,7 +324,13 @@ export function HuntCard({ id: item, text, onPhase, onShowOnList }: { id: string
 
   return (
     <Glass style={{ padding: 0, gap: 0, borderRadius: radius.lg, overflow: "hidden" }}>
-      {photo ? <Photo uri={photo} style={{ width: "100%", aspectRatio: 4 / 3 }} /> : null}
+      {/* The photo in its 4:3 frame; while one is still coming (or a retake looks for a better one), light crosses it. */}
+      {photo || picture === "waiting" ? (
+        <View style={{ width: "100%", aspectRatio: 4 / 3 }}>
+          <Photo uri={photo} />
+          <WaitingLight active={picture === "waiting"} />
+        </View>
+      ) : null}
       <View style={{ padding: 18, gap: 10 }}>
         <Text style={[type.title2, { color: p.ink }]} numberOfLines={2}>
           {draft?.title}
