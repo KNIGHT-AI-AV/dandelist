@@ -29,6 +29,11 @@ export interface MediaImage {
   generated?: boolean;
   /** Smaller copies of this same photo, narrowest first, for screens that show it smaller (see sizedFor). */
   variants?: { width: number; height: number; url: string }[];
+  /** An Unsplash photo: its id, the crop (x, y, w, h) on its original of `size`, and when its download was recorded. */
+  unsplash?: { id: string; rect: [number, number, number, number]; size: [number, number]; tracked?: string };
+  /** The photographer and the photo's page, for the credit (links carry Unsplash's utm parameters). */
+  author?: { name: string; url: string };
+  page?: string;
 }
 
 export interface Entry extends Seed {
