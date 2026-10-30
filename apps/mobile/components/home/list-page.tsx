@@ -1,7 +1,7 @@
 import { recurringBreakdown, upfrontCashCents } from "@dandelist/cost";
 import { router } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Animated, Keyboard, Pressable, RefreshControl, Text, View, useWindowDimensions } from "react-native";
+import { Animated, Keyboard, Pressable, RefreshControl, Text, View, useWindowDimensions, type ScrollView } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { adoptWelcome, priceFirstWish } from "../../lib/adopt";
 import { useAuth } from "../../lib/auth";
@@ -27,7 +27,7 @@ import { TierControl } from "../list/tier-control";
 import { WishFace } from "../list/wish-card";
 import { Backdrop, Chip, Eyebrow, Glass, Hairline, Money, PrimaryButton, Shade } from "../lux";
 import { useHome } from "./bridge";
-import { geometry, tailRoom } from "./card-metrics";
+import { geometry, revealAt, tailRoom } from "./card-metrics";
 import { useTopRoom } from "./chrome";
 import { DandyArea } from "./dandy-area";
 import { GrowingCards, useCardLabel } from "./growing-cards";
@@ -183,9 +183,22 @@ export function ListPage() {
   // The focus line: the middle of what's visible between the top bar and the composer.
   const focus = (top + height - bottomRoom) / 2;
 
+  // A chat card's "Added to your list": its wish comes to the focus line, opened up, as the list slides in.
+  const scroller = useRef<ScrollView>(null);
+  const reduced = useReducedMotion();
+  const { shown, clearShown } = home;
+  useEffect(() => {
+    if (!shown) return;
+    const i = visible.findIndex((w) => w.id === shown);
+    if (i < 0 && status === "loading") return;
+    if (i >= 0) scroller.current?.scrollTo({ y: revealAt(i, g, listTop, focus), animated: !reduced });
+    clearShown();
+  }, [shown, clearShown, visible, status, g, listTop, focus, reduced]);
+
   return (
     <View style={{ flex: 1 }}>
       <Animated.ScrollView
+        ref={scroller}
         onScroll={onScroll}
         scrollEventThrottle={16}
         keyboardShouldPersistTaps="handled"

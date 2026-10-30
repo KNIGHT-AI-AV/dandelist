@@ -65,6 +65,14 @@ export function listHeight(count: number, g: CardGeometry): number {
   return count ? count * (g.rest + g.gap) + g.grow : 0;
 }
 
+/**
+ * The scroll offset that brings card `index` to the focus line, opened up: where the chat's "Added to your list"
+ * lands. Never above the top of the list.
+ */
+export function revealAt(index: number, g: CardGeometry, listTop: number, focus: number): number {
+  return Math.max(0, Math.round(listTop + index * (g.rest + g.gap) + g.rest / 2 - focus));
+}
+
 /** Space under the cards so the last one can scroll up to the focus line. */
 export function tailRoom(viewport: number, focus: number, g: CardGeometry, dockRoom: number): number {
   return Math.max(dockRoom, Math.ceil(viewport - focus - g.rest / 2 - g.grow + g.gap));

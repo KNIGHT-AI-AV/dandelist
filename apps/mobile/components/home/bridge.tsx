@@ -1,4 +1,5 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
+import type { TextInput } from "react-native";
 import { usePager } from "./pager";
 
 /**
@@ -19,6 +20,17 @@ export interface Home {
   /** The field has focus on the list: the list steps back and the Dandy comes forward. */
   focused: boolean;
   setFocused(on: boolean): void;
+  /** The docked composer's input, and a way to put the cursor in it (the chat's "Add another while you wait"). */
+  composer: RefObject<TextInput | null>;
+  focusComposer(): void;
+  /**
+   * Turns to the list with this wish's card in view (owner, 2026-10-30: the chat card's "Added to your list" takes them
+   * "to that screen where they see the actual list"). The chat stays as it was underneath.
+   */
+  showOnList(wishId: string): void;
+  /** The wish the list is to bring into view; the list clears it once it has. */
+  shown: string | null;
+  clearShown(): void;
 }
 
 const Ctx = createContext<Home | null>(null);
@@ -30,6 +42,8 @@ export function HomeProvider({ children }: { children: ReactNode }) {
   const [busy, setBusy] = useState(false);
   const [dock, setDock] = useState(0);
   const [focused, setFocused] = useState(false);
+  const [shown, setShown] = useState<string | null>(null);
+  const composer = useRef<TextInput | null>(null);
   const handler = useRef<((text: string) => void) | null>(null);
   // A message sent before the chat has mounted waits here.
   const waiting = useRef<string | null>(null);
@@ -65,7 +79,20 @@ export function HomeProvider({ children }: { children: ReactNode }) {
     [],
   );
 
-  const value = useMemo<Home>(() => ({ draft, setDraft, ask, busy, dock, setDock, focused, setFocused }), [draft, ask, busy, dock, focused]);
+  const focusComposer = useCallback(() => composer.current?.focus(), []);
+  const showOnList = useCallback(
+    (wishId: string) => {
+      setShown(wishId);
+      pager.go("list");
+    },
+    [pager],
+  );
+  const clearShown = useCallback(() => setShown(null), []);
+
+  const value = useMemo<Home>(
+    () => ({ draft, setDraft, ask, busy, dock, setDock, focused, setFocused, composer, focusComposer, showOnList, shown, clearShown }),
+    [draft, ask, busy, dock, focused, focusComposer, showOnList, shown, clearShown],
+  );
   return (
     <Ctx.Provider value={value}>
       <Inbox.Provider value={inbox}>{children}</Inbox.Provider>

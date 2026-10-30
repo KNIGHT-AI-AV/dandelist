@@ -42,6 +42,49 @@ export function carSelectionValues(selection: CarSelection) {
   return { selections: selection.picked, own: selection.own };
 }
 
+/** Options take several picks; every other step takes one. */
+export const multiStep = (step: string) => step === "options";
+
+/** A tap on a choice: it replaces the step's pick (options toggle instead), and a new model clears every other step. */
+export function pickCarChoice(w: CarWidget, x: CarSelection, step: string, id: string): CarSelection {
+  const now = x.picked[step] ?? [];
+  const picked = { ...x.picked, [step]: multiStep(step) ? (now.includes(id) ? now.filter((c) => c !== id) : [...now, id]) : [id] };
+  if (step === "model" && (x.own.model?.length || now[0] !== id)) for (const s of w.steps) if (s.id !== "model") picked[s.id] = [];
+  return { picked, own: multiStep(step) ? x.own : { ...x.own, [step]: [] } };
+}
+
+/** What a step holds now, offered choices first, then typed ones, by label. */
+export function carStepLabels(w: CarWidget, x: CarSelection, step: string): string[] {
+  const s = w.steps.find((st) => st.id === step);
+  const offered = (x.picked[step] ?? []).map((id) => s?.choices.find((c) => c.id === id)?.label).filter((l): l is string => !!l);
+  return [...offered, ...(x.own[step] ?? [])];
+}
+
+/**
+ * The Dandy's own picks when time runs out, for the steps it takes: a step with a pick keeps it; one that takes a
+ * single choice and has none gets the one at the lowest listed price, so an included colour comes before a paid one;
+ * options stay as they are. Returns the selection and the labels it went with, for its one line.
+ */
+export function autoPickCar(w: CarWidget, x: CarSelection, steps: readonly string[]): { selection: CarSelection; labels: string[] } {
+  const picked = { ...x.picked };
+  const labels: string[] = [];
+  for (const id of steps) {
+    const step = w.steps.find((s) => s.id === id);
+    if (!step) continue;
+    const held = carStepLabels(w, { picked, own: x.own }, id);
+    if (held.length || multiStep(id)) {
+      labels.push(...held);
+      continue;
+    }
+    const offered = step.choices.filter((c) => !c.custom);
+    if (!offered.length) continue;
+    const best = offered.reduce((a, c) => ((c.priceCents ?? Infinity) < (a.priceCents ?? Infinity) ? c : a));
+    picked[id] = [best.id];
+    labels.push(best.label);
+  }
+  return { selection: { picked, own: x.own }, labels };
+}
+
 export function removeCarOwn(w: CarWidget, selection: CarSelection, step: string, label: string): CarSelection {
   const own = { ...selection.own, [step]: (selection.own[step] ?? []).filter((entry) => entry !== label) };
   const picked = { ...selection.picked };
