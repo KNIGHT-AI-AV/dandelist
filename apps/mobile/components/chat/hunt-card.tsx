@@ -7,6 +7,7 @@ import { useDandy } from "../../lib/dandy";
 import { haptic } from "../../lib/motion";
 import { stepLine } from "../../lib/recheck";
 import { answersFrom, refineChanged, withGiven } from "../../lib/refine";
+import { guessOthers } from "../../lib/guess";
 import { cardState, listedWish } from "../../lib/listed";
 import { fonts, radius, type, usePalette } from "../../lib/theme";
 import { useWaitingMusic, type WaitPhase } from "../../lib/waiting";
@@ -14,6 +15,7 @@ import { useWishes, type NewWish } from "../../lib/wishes";
 import { amountSteps, photoOnly, startAmount, wholeCents } from "../../lib/worth";
 import { AddedLine } from "../added-line";
 import { AskNote } from "../ask";
+import { GuessRow } from "../guess";
 import { ErrorLine, Glass, Money, Photo, PrimaryButton, QuietButton } from "../lux";
 import { RefinePanel } from "../refine";
 import { WaitingLight } from "../waiting-light";
@@ -91,6 +93,8 @@ export function HuntCard({ id: item, text, watched = true, onPhase, onShowOnList
   const [saving, setSaving] = useState(false);
   // The Dandy's line when it kept its pick for a question left open.
   const [note, setNote] = useState<string | null>(null);
+  // "Yes, that's the one" on a best guess (components/guess.tsx): the row goes away.
+  const [guessKept, setGuessKept] = useState(false);
   // How the last retake went: a picture that couldn't be found ends the wait quietly.
   const [retook, setRetook] = useState<"none" | "found" | "failed">("none");
   const alive = useRef(true);
@@ -146,6 +150,8 @@ export function HuntCard({ id: item, text, watched = true, onPhase, onShowOnList
   }, [h, api, id, keep]);
 
   const draft = h.run?.draft ?? h.draft;
+  // The reading's other likely names when it had to work out what was meant; the chat can also just be told.
+  const guess = guessOthers(draft);
   const questions = questionsOf(h);
   const option: PriceOption | undefined = h.run?.result?.options[0];
   const done = h.run?.status === "done" || h.run?.status === "error";
@@ -335,6 +341,7 @@ export function HuntCard({ id: item, text, watched = true, onPhase, onShowOnList
         <Text style={[type.title2, { color: p.ink }]} numberOfLines={2}>
           {draft?.title}
         </Text>
+        {guess && !guessKept && !listedId ? <GuessRow others={guess} onConfirm={() => setGuessKept(true)} onPick={(name) => void start({ text: name })} /> : null}
         <Money cents={option.upfrontCents} size="card" />
         <Text style={[type.footnote, { color: p.ink2 }]} numberOfLines={2}>
           {option.statusLabel}
