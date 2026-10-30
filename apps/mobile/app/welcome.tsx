@@ -1,7 +1,7 @@
 import { entry, type Entry } from "@dandelist/catalogue";
 import { router } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Animated, Pressable, Text, View, useWindowDimensions } from "react-native";
+import { Animated, BackHandler, Platform, Pressable, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Grain, IconButton, PrimaryButton, Wordmark } from "../components/lux";
 import { SignInOptions } from "../components/sign-in-options";
@@ -23,8 +23,9 @@ import { recurringBreakdown } from "@dandelist/cost";
 import { thoughtOf } from "../lib/reveal";
 import { play, preloadSounds } from "../lib/sound";
 import { layout, type, usePalette, useTheme } from "../lib/theme";
-import { cataloguePool, emptyWelcome, fetchPool, listTotal, listed, loadWelcome, markTitleSeen, saveWelcome, seenTitle, settled, streamGuestWish, type FirstWish, type PoolItem, type WelcomeState } from "../lib/welcome";
+import { cataloguePool, emptyWelcome, fetchPool, keepsHunt, listTotal, listed, loadWelcome, markTitleSeen, saveWelcome, seenTitle, settled, streamGuestWish, type FirstWish, type PoolItem, type WelcomeState } from "../lib/welcome";
 import { startWelcome } from "../lib/welcome-start";
+import { welcomeSteps, type Fade } from "../lib/welcome-steps";
 import { useMoney } from "../lib/currency";
 import { amountSteps, startAmount } from "../lib/worth";
 import { dollars } from "../components/odometer";
@@ -60,6 +61,8 @@ function WelcomeSocial() {
 
 type Step = { kind: "title" } | { kind: "ask" } | { kind: "made" } | { kind: "vote"; pair: [PoolItem, PoolItem] } | { kind: "when" } | { kind: "comfort" } | { kind: "agent" } | { kind: "reveal" } | { kind: "theme" };
 type Pricing = "idle" | "pricing" | "priced" | "failed";
+/** What Back puts back on a step: the list, the pairs shown and the counts as they were on it, before its own choice. */
+type Snap = { items: PoolItem[]; seen: Set<string>; answered: number; rounds: number; done: number };
 
 /** Ask, three answered rounds, when, what it would take, the agent: the segments under the header. */
 const SEGMENTS = 2 + ANSWERED_ROUNDS + 2;
@@ -82,7 +85,8 @@ const ideaOf = (e: PoolItem) => (e.kind === "visit" && !/\b(week|weeks|month|tri
  * which is the sign-up. Back goes one step at a time and undoes that step's picks.
  *
  * Steps crossfade in place, slowly (owner, 10-29: "fade ... rather than a sliding card system"): the old step fades out
- * in 520 ms and the next fades up in 1.1 s. The header, the segments and the list meter stay put.
+ * in 520 ms and the next fades up in 1.1 s. The header, the segments and the list meter stay put. A tap during a fade
+ * is never dropped (lib/welcome-steps.ts): going back "needs to work every single time" (owner, 10-30).
  */
 export default function Welcome() {
   const p = usePalette();
@@ -108,17 +112,43 @@ export default function Welcome() {
   const shift = useRef(new Animated.Value(0)).current;
   // Behind the save sheet the page settles back a little (UI audit P1-13).
   const behind = useRef(new Animated.Value(1)).current;
-  const moving = useRef(false);
   const pill = useRef<View | null>(null);
   const seen = useRef(new Set<string>());
   const rounds = useRef(0);
   const answered = useRef(0);
   const run = useRef<AbortController | null>(null);
-  /** Where Back returns to: each step left behind, with the list and the counts as they were on it. */
-  const history = useRef<{ step: Step; items: PoolItem[]; answered: number; rounds: number; done: number }[]>([]);
+  /** They moved on from the card while this hunt ran: back on it, "Keep going" is there at once. */
+  const continued = useRef(false);
+  const calm = useRef(reduced);
+  calm.current = reduced;
   // Votes land after an animation; they read the list as it is then, not as it was when the pair was drawn.
   const latest = useRef(state);
   latest.current = state;
+  const filled = useRef(done);
+  filled.current = done;
+  /**
+   * Which step they are on, Back's history, and the crossfade between steps (lib/welcome-steps.ts). What Back puts
+   * back on a step is the list, the pairs shown and the counts as they are when an action on it starts.
+   */
+  const [steps] = useState(() => {
+    const fade: Fade = (to, done) =>
+      Animated.timing(stage, {
+        toValue: to,
+        duration: to ? (calm.current ? 160 : FADE_IN_MS) : calm.current ? 100 : FADE_OUT_MS,
+        easing: to ? ease.cinema : ease.inOut,
+        useNativeDriver: native,
+      }).start(({ finished }) => finished && done());
+    return welcomeSteps<Step, Snap>({
+      fade,
+      // The stage is dark here (the old step has faded out), or still lit for the first step, which shows at once.
+      show: (s) => {
+        setStep(s);
+        shift.setValue(0);
+      },
+      capture: () => ({ items: latest.current.items, seen: new Set(seen.current), answered: answered.current, rounds: rounds.current, done: filled.current }),
+      keepsHistory: (s) => s.kind !== "title" && s.kind !== "theme",
+    });
+  });
   // Ideas are drawn once per pool, so typing doesn't reshuffle the chips under a finger.
   const ideas = useMemo(() => [...pool].sort(() => Math.random() - 0.5).slice(0, 4).map(ideaOf), [pool]);
 
@@ -132,7 +162,7 @@ export default function Welcome() {
         // A first wish that was still being priced when they left is asked again rather than half-shown; one that
         // landed (priced, money with its amount, or priceless) stays.
         if (saved) setState({ ...saved, wish: settled(saved.wish) ? saved.wish : null });
-        setStep({ kind: "title" });
+        steps.start({ kind: "title" });
       },
       onPool: setPool,
     });
@@ -156,24 +186,13 @@ export default function Welcome() {
     });
   const patchWish = (fn: (w: FirstWish) => FirstWish) => patch((s) => (s.wish ? { ...s, wish: fn(s.wish) } : s));
 
-  /** Leaves the current step and brings in the next one; `back` mirrors the direction. */
-  const go = (next: Step, back = false) => {
-    if (moving.current) return;
-    moving.current = true;
-    if (!back && step && step.kind !== "title" && step.kind !== "theme") history.current.push({ step, items: latest.current.items, answered: answered.current, rounds: rounds.current, done });
-    // Every step fades out and the next fades up in place, slowly: no sliding cards.
-    const enter = () => {
-      setStep(next);
-      stage.setValue(0);
-      shift.setValue(0);
-      Animated.timing(stage, { toValue: 1, duration: reduced ? 160 : FADE_IN_MS, easing: ease.cinema, useNativeDriver: native }).start(() => (moving.current = false));
-    };
-    Animated.timing(stage, { toValue: 0, duration: reduced ? 100 : FADE_OUT_MS, easing: ease.inOut, useNativeDriver: native }).start(enter);
-  };
-
-  /** The chosen price flies along a short arc into the list meter, then the meter rolls up. */
-  const launch = (es: PoolItem[], from: View | null, then: () => void) => {
+  /**
+   * The chosen price flies along a short arc into the list meter, then the meter rolls up. If they went Back while it
+   * flew (`still` is false), the vote never happened: nothing is added.
+   */
+  const launch = (es: PoolItem[], from: View | null, still: () => boolean, then: () => void) => {
     const commit = () => {
+      if (!still()) return;
       patch((s) => ({ ...s, items: [...s.items, ...es.filter((e) => !s.items.some((x) => x.id === e.id))] }));
       then();
     };
@@ -199,6 +218,7 @@ export default function Welcome() {
     run.current?.abort();
     const ctrl = new AbortController();
     run.current = ctrl;
+    continued.current = false;
     setTrail([]);
     setFound(false);
     setPricing("pricing");
@@ -229,7 +249,8 @@ export default function Welcome() {
           setPricing("priced");
           if (first) {
             setFound(true);
-            setTimeout(() => setFound(false), FOUND_HOLD_MS);
+            // Only this hunt's own "found" ends: a later hunt's line is not cut short by this timer.
+            setTimeout(() => run.current === ctrl && setFound(false), FOUND_HOLD_MS);
           }
         } else if (e.type === "error" && !worthy) {
           patchWish((w) => ({ ...w, failed: e.message }));
@@ -253,49 +274,76 @@ export default function Welcome() {
     return { kind: "vote", pair };
   };
 
-  const startVoting = (text: string) => {
-    priceWish(text);
+  /**
+   * The first wish is sent from the `from` step. The same words as the wish already on the card keep its card, or the
+   * hunt still finding it (lib/welcome.ts keepsHunt); anything else is hunted afresh.
+   */
+  const startVoting = (from: Step, text: string) => {
+    const leave = steps.leave(from);
+    if (!leave) return;
+    const hunting = pricing === "pricing" && !!run.current && !run.current.signal.aborted;
+    if (!keepsHunt(latest.current.wish, text, hunting)) priceWish(text);
     seen.current = new Set();
     rounds.current = 0;
     answered.current = 0;
     patch((s) => ({ ...s, items: [] }));
     setDone(1);
-    go({ kind: "made" });
+    leave.to({ kind: "made" });
   };
 
-  const vote = (pair: [PoolItem, PoolItem], picked: PoolItem[], from: View | null) => {
+  /** A vote on the `at` pair; if they went Back before its price landed in the meter, it never happened. */
+  const vote = (at: Step, pair: [PoolItem, PoolItem], picked: PoolItem[], from: View | null) => {
+    const leave = steps.leave(at);
+    if (!leave) return;
     const v: Vote = picked.length === 2 ? "both" : picked.length === 0 ? "neither" : picked[0]!.id === pair[0].id ? "a" : "b";
-    launch(chosenBy(pair, v), from, () => {
+    launch(chosenBy(pair, v), from, leave.still, () => {
       rounds.current++;
       if (v !== "neither") answered.current++;
       setDone(1 + Math.min(answered.current, ANSWERED_ROUNDS));
       const left = pool.filter((e) => !seen.current.has(e.id)).length;
       const next = votingDone(answered.current, rounds.current, left) ? null : nextVote(latest.current);
-      go(next ?? { kind: "when" });
+      leave.to(next ?? { kind: "when" });
     });
   };
 
-  /** One step back, undoing what that step added to the list. */
+  /**
+   * One step back, putting back the list, the pairs shown and the counts as they were on that step. The first wish's
+   * hunt keeps going: sending the same words again picks it up rather than starting over.
+   */
   const goBack = () => {
-    const prev = history.current.pop();
-    if (!prev || moving.current) return;
-    answered.current = prev.answered;
-    rounds.current = prev.rounds;
-    setDone(prev.done);
-    patch((s) => ({ ...s, items: prev.items }));
-    if (prev.step.kind === "ask") run.current?.abort();
-    go(prev.step, true);
+    const leaving = steps.at;
+    const prev = steps.back();
+    if (!prev) return;
+    answered.current = prev.snap.answered;
+    rounds.current = prev.snap.rounds;
+    seen.current = new Set(prev.snap.seen);
+    setDone(prev.snap.done);
+    patch((s) => ({ ...s, items: prev.snap.items }));
+    // The list is summed again when they come forward; a sum from before could be for other picks.
+    if (leaving?.kind === "agent") setResult(null);
   };
+  // Android's back gesture steps back through the welcome like the Back button; with nowhere to go it leaves as usual.
+  const back = useRef(goBack);
+  back.current = goBack;
+  useEffect(() => {
+    if (Platform.OS !== "android") return;
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      if (!steps.canGoBack()) return false;
+      back.current();
+      return true;
+    });
+    return () => sub.remove();
+  }, [steps]);
 
   /** Clears the list and goes back to the first wish, with what they asked for still in the field. */
-  const restart = () => {
-    history.current = [];
+  const restart = (from: Step) => {
+    if (!steps.is(from)) return;
     run.current?.abort();
     setPricing("idle");
     setResult(null);
     setDone(0);
     patch((s) => ({ ...s, items: [], when: null, kept: false }));
-    go({ kind: "ask" }, true);
+    steps.reset(from, { kind: "ask" });
   };
 
   useEffect(() => {
@@ -315,7 +363,7 @@ export default function Welcome() {
   const keepPerYear = recurringBreakdown(items).perYear;
   // The fader step carries its own total in the faces, and needs the room the meter would take on a phone.
   const metered = step.kind === "vote" || step.kind === "when" || step.kind === "agent";
-  const canGoBack = history.current.length > 0 && step.kind !== "title" && step.kind !== "theme";
+  const canGoBack = steps.canGoBack() && step.kind !== "title" && step.kind !== "theme";
   const segmented = metered || step.kind === "ask" || step.kind === "made" || step.kind === "comfort";
   const framed = step.kind !== "title" && step.kind !== "theme";
   const gutter = layout.gutter(width);
@@ -333,34 +381,53 @@ export default function Welcome() {
       : null;
   const pillSpace = layout.control.meter + 32 + (ticker ? 44 : 0);
 
+  // Every action below names the step it belongs to (`here`): one from a step they have already left does nothing.
+  const here: Step = step;
   let body: React.ReactNode;
   switch (step.kind) {
     case "title":
-      body = <TitleSequence hero={HERO} short={short} onDone={() => { void markTitleSeen(); go({ kind: "ask" }); }} />;
+      body = <TitleSequence hero={HERO} short={short} onDone={() => { void markTitleSeen(); steps.leave(here)?.to({ kind: "ask" }); }} />;
       break;
     case "ask":
-      body = <Ask ideas={ideas} initial={state.wish?.text ?? ""} bottomInset={insets.bottom} onSubmit={startVoting} />;
+      body = <Ask ideas={ideas} initial={state.wish?.text ?? ""} bottomInset={insets.bottom} onSubmit={(text) => startVoting(here, text)} />;
       break;
     case "made":
       body = state.wish ? (
         <MadeStep
           wish={state.wish}
           pricing={pricing}
+          waited={continued.current}
           line={thought?.text ?? ""}
           onAmount={(amountCents) => patchWish((w) => ({ ...w, amountCents }))}
-          onPrice={() => state.wish && priceWish(state.wish.text, true)}
-          onContinue={() => go(nextVote(latest.current) ?? { kind: "when" })}
+          onPrice={() => steps.is(here) && state.wish && priceWish(state.wish.text, true)}
+          onContinue={() => {
+            const leave = steps.leave(here);
+            if (!leave) return;
+            continued.current = true;
+            leave.to(nextVote(latest.current) ?? { kind: "when" });
+          }}
         />
       ) : null;
       break;
     case "vote": {
       const [a, b] = step.pair;
       const label = `This or that · ${Math.min(answered.current + 1, ANSWERED_ROUNDS)} of ${ANSWERED_ROUNDS}`;
-      body = <VotePair key={`${a.id}|${b.id}`} a={a} b={b} label={label} onVote={(picked, from) => vote(step.pair, picked, from)} />;
+      body = <VotePair key={`${a.id}|${b.id}`} a={a} b={b} label={label} onVote={(picked, from) => vote(here, step.pair, picked, from)} />;
       break;
     }
     case "when":
-      body = <WhenStep value={state.when} onPick={(when) => { patch((s) => ({ ...s, when })); setDone(2 + ANSWERED_ROUNDS); setTimeout(() => go({ kind: "comfort" }), 220); }} />;
+      body = (
+        <WhenStep
+          value={state.when}
+          onPick={(when) => {
+            const leave = steps.leave(here);
+            if (!leave) return;
+            patch((s) => ({ ...s, when }));
+            setDone(2 + ANSWERED_ROUNDS);
+            setTimeout(() => leave.to({ kind: "comfort" }), 220);
+          }}
+        />
+      );
       break;
     case "comfort":
       body = (
@@ -370,7 +437,12 @@ export default function Welcome() {
           keepPerYearCents={keepPerYear}
           note={state.wish?.worth === "priceless" ? `${wishTitle} is priceless, so it isn't in the total.` : undefined}
           onChange={(c) => patch((s) => ({ ...s, incomeCents: c }))}
-          onDone={() => { setDone(3 + ANSWERED_ROUNDS); go({ kind: "agent" }); }}
+          onDone={() => {
+            const leave = steps.leave(here);
+            if (!leave) return;
+            setDone(3 + ANSWERED_ROUNDS);
+            leave.to({ kind: "agent" });
+          }}
         />
       );
       break;
@@ -381,12 +453,16 @@ export default function Welcome() {
             state={state}
             ready={pricing !== "pricing"}
             waiting={pricing === "pricing" ? { title: wishTitle, line: thought?.mine ? thought.text : "" } : null}
-            onResult={(r) => { setResult(r); setDone(SEGMENTS); }}
-            onRestart={restart}
+            onResult={(r) => {
+              if (!steps.is(here)) return;
+              setResult(r);
+              setDone(SEGMENTS);
+            }}
+            onRestart={() => restart(here)}
           />
           <Appear when={!!result}>
             <View style={{ paddingHorizontal: gutter, paddingBottom: 16 }}>
-              <PrimaryButton label="See my Dandelist" onPress={() => go({ kind: "reveal" })} />
+              <PrimaryButton label="See my Dandelist" onPress={() => steps.leave(here)?.to({ kind: "reveal" })} />
             </View>
           </Appear>
         </View>
@@ -401,8 +477,13 @@ export default function Welcome() {
           picks={listed(state)}
           upfrontCents={result.upfrontCents}
           monthlyRunningCents={result.monthlyRunningCents}
-          onKeep={() => { patch((s) => ({ ...s, kept: true })); go({ kind: "theme" }); }}
-          onRestart={restart}
+          onKeep={() => {
+            const leave = steps.leave(here);
+            if (!leave) return;
+            patch((s) => ({ ...s, kept: true }));
+            leave.to({ kind: "theme" });
+          }}
+          onRestart={() => restart(here)}
         />
       ) : null;
       break;

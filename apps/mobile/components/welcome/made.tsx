@@ -28,8 +28,11 @@ export const STAYS_ON_LIST = "It stays on your list, and the Dandy prices it aft
  * Money itself and the priceless (owner, 2026-10-30): money asks "How much?" on a slider, starting at any amount the
  * wish named, with a checked photo when one is found; something priceless shows infinity and the Dandy's line. A card
  * without a photo never shows an empty box: the panel holds infinity, the currency's sign, or the wish's first letter.
+ *
+ * `waited`: they already moved on from this card while it was hunted, and came Back to it; "Keep going" is there at
+ * once rather than after another wait.
  */
-export function MadeStep({ wish, pricing, line, onContinue, onAmount, onPrice }: { wish: FirstWish; pricing: "idle" | "pricing" | "priced" | "failed"; line: string; onContinue(): void; onAmount(cents: number): void; onPrice(): void }) {
+export function MadeStep({ wish, pricing, line, waited = false, onContinue, onAmount, onPrice }: { wish: FirstWish; pricing: "idle" | "pricing" | "priced" | "failed"; line: string; waited?: boolean; onContinue(): void; onAmount(cents: number): void; onPrice(): void }) {
   const p = usePalette();
   const t = useType();
   const dandy = useDandy();
@@ -37,7 +40,7 @@ export function MadeStep({ wish, pricing, line, onContinue, onAmount, onPrice }:
   const reduced = useReducedMotion();
   const { width, height } = useWindowDimensions();
   const gutter = layout.gutter(width);
-  const [patient, setPatient] = useState(false);
+  const [patient, setPatient] = useState(waited);
   const shown = useRef(new Animated.Value(0)).current;
   const breathe = useRef(new Animated.Value(0)).current;
   const option = wish.option;

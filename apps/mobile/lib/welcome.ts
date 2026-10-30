@@ -69,6 +69,13 @@ export interface FirstWish {
 /** A first wish that is on the list: priced, money with its amount, or priceless. */
 export const settled = (w: FirstWish | null | undefined): boolean => !!w && (!!w.option || w.worth === "priceless" || (w.worth === "money" && !!w.amountCents));
 
+/**
+ * Sending the same words again (after Back, or after starting over) keeps the card, or the hunt still finding it,
+ * instead of starting again: each new hunt is one of the few a guest gets an hour, and takes up to a minute. Words
+ * that changed, or a hunt that failed, are hunted afresh.
+ */
+export const keepsHunt = (w: FirstWish | null | undefined, text: string, hunting: boolean): boolean => !!w && w.text === text && (settled(w) || hunting);
+
 /** When they'd most want all of it (owner: not years; now, soon, in time, not sure). */
 export type When = "now" | "soon" | "time" | "unsure";
 export const WHEN_YEARS: Record<When, number | null> = { now: 1, soon: 3, time: 10, unsure: null };
