@@ -7,6 +7,7 @@ import { Ledger } from "../../components/ledger";
 import { AgentDot, Backdrop, Chip, EdgeFade, ErrorLine, Eyebrow, Glass, Grain, IconButton, Money, Photo, PrimaryButton, Protect, QuietButton, Shade } from "../../components/lux";
 import { Statement, Take } from "../../components/statement";
 import { getRun, startHunt, transcribeWish, type Answer, type Draft, type PriceOption, type Run, type Step } from "../../lib/agent";
+import { answerPick, pickAdded } from "../../lib/picks";
 import { answersFrom, refineChanged, withGiven } from "../../lib/refine";
 import { RefinePanel } from "../../components/refine";
 import { endTask, startTask } from "../../lib/activity";
@@ -66,7 +67,10 @@ export default function NewWish() {
   const column = { width: "100%" as const, maxWidth: layout.list + 2 * gutter, alignSelf: "center" as const, paddingHorizontal: gutter };
   const [stage, setStage] = useState<Stage>("describe");
   // The dream builder hands single items here with the person's words, which are read straight away.
-  const handed = useLocalSearchParams<{ text?: string }>().text;
+  const handedParams = useLocalSearchParams<{ text?: string; pick?: string }>();
+  const handed = handedParams.text;
+  /** Today's pick this wish came from, if any: it's recorded as added only once the wish is saved. */
+  const fromPick = handedParams.pick;
   const [text, setText] = useState(typeof handed === "string" ? handed.slice(0, 300) : "");
   const [reading, setReading] = useState(false);
   // The wish as read before, when hunting again with changed answers; a hunt from the words reads it on the server.
@@ -201,6 +205,10 @@ export default function NewWish() {
           },
         },
       });
+      if (fromPick) {
+        pickAdded(fromPick);
+        void answerPick(api, fromPick, "added").catch(() => {});
+      }
       router.replace("/wishes");
     } catch (e) {
       setError((e as Error).message);

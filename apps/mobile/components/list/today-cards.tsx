@@ -6,7 +6,7 @@ import { useAuth } from "../../lib/auth";
 import { useDandy } from "../../lib/dandy";
 import { haptic } from "../../lib/motion";
 import { notifier } from "../../lib/notifications";
-import { answerPick, fetchTodayPick, hiddenDay, hideForDay, localDay, showsPick, type TodayPick } from "../../lib/picks";
+import { answerPick, fetchTodayPick, hiddenDay, hideForDay, localDay, showsPick, wasPickAdded, type TodayPick } from "../../lib/picks";
 import { isFirstLaunch, updateReminders, useReminderState } from "../../lib/reminder-state";
 import { shouldAsk, type Permission } from "../../lib/reminders";
 import { layout, radius, space, type, usePalette, useType } from "../../lib/theme";
@@ -44,8 +44,12 @@ function useTodayPick() {
   const userId = auth.user?.id ?? null;
   const hasWish = wishes.length > 0;
 
+  // Closing the card is remembered per person on this device.
   useEffect(() => {
-    void hiddenDay().then(setHidden);
+    if (userId) void hiddenDay(userId).then(setHidden);
+  }, [userId]);
+
+  useEffect(() => {
     // Coming back on another day brings that day's pick.
     const sub = AppState.addEventListener("change", (s) => s === "active" && setDay(localDay()));
     return () => sub.remove();
@@ -105,13 +109,14 @@ function useTodayPick() {
     day,
     pick,
     noted,
-    visible: hidden !== undefined && showsPick(pick, day, hidden),
-    /** Adds it the usual way: the new wish screen hunts its real price, and the person saves it from there. */
+    visible: hidden !== undefined && showsPick(pick, day, hidden) && !wasPickAdded(pick.id),
+    /**
+     * Adds it the usual way: the new wish screen hunts its real price, and "added" is recorded once the person saves
+     * it there. Backing out leaves the pick on the list.
+     */
     add() {
-      const next = decide("added");
-      if (!next) return;
-      setPick(next);
-      router.push({ pathname: "/wishes/new", params: { text: next.title } });
+      if (!pick) return;
+      router.push({ pathname: "/wishes/new", params: { text: pick.title, pick: pick.id } });
     },
     skip() {
       const next = decide("skipped");
@@ -125,7 +130,7 @@ function useTodayPick() {
     },
     close() {
       setHidden(day);
-      void hideForDay(day);
+      if (userId) void hideForDay(userId, day);
     },
   };
 }

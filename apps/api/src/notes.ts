@@ -25,6 +25,8 @@ export function cleanNote(raw: string): string | null {
   const t = raw
     .replace(/\r\n?/g, "\n")
     .replace(/[\u0000-\u0009\u000b-\u001f\u007f]/g, " ")
+    // Invisible format characters (zero-width and direction marks) go, so no note can carry text its owner can't see.
+    .replace(/\p{Cf}/gu, "")
     .split("\n")
     .map((line) => line.replace(/\s+/g, " ").trim())
     .join("\n")

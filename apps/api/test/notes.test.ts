@@ -165,6 +165,8 @@ describe("the notes digest", () => {
   it("tidies a note and cuts each line at a word", () => {
     expect(cleanNote("  a \t b  ")).toBe("a b");
     expect(cleanNote(" \n\n ")).toBeNull();
+    // Invisible format characters go, so a note never hides text from its owner.
+    expect(cleanNote("buy​ it‮ now⁦")).toBe("buy it now");
     expect(cleanNote("one\r\ntwo\n\n\n\nthree")).toBe("one\ntwo\n\nthree");
     expect(digestLine("Leica Q3", "My dad's\ncamera")).toBe("Leica Q3: My dad's camera");
     const long = digestLine("Leica Q3", "word ".repeat(80));

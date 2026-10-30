@@ -272,13 +272,15 @@ export function pickRoutes(deps: AgentDeps) {
 
   const rowFor = async (userId: string, day: string) => (await db.query<PickRow>(`select ${PICK_COLUMNS} from daily_picks where user_id = $1 and day = $2`, [userId, day])).rows[0];
 
-  /** What the app hears about a day's row: the pick, still being made, or nothing today. */
-  const answer = (r: PickRow) => (r.status === "making" ? { pick: null, pending: true } : { pick: toPick(r) });
+  /** A claim left by a request that died, untouched for STALE_MS. */
+  const stale = (r: PickRow, now: number) => r.status === "making" && now - new Date(r.updated_at).getTime() >= STALE_MS;
+  /** What the app hears about a day's row: the pick, still being made, or nothing today (a dead claim out of tries). */
+  const answer = (r: PickRow, now?: number) => (r.status === "making" ? (now !== undefined && stale(r, now) ? { pick: null } : { pick: null, pending: true }) : { pick: toPick(r) });
 
   /** Nothing more to do for this day yet: it has its pick or its outcome, is being made, or must wait to try again. */
   const settled = (r: PickRow, now: number) =>
     !["making", "failed"].includes(r.status) ||
-    (r.status === "making" && now - new Date(r.updated_at).getTime() < STALE_MS) ||
+    (r.status === "making" && (!stale(r, now) || r.attempts >= PICK_TRIES_PER_DAY)) ||
     (r.status === "failed" && (r.attempts >= PICK_TRIES_PER_DAY || now - new Date(r.updated_at).getTime() < PICK_RETRY_MS));
 
   /**
@@ -291,7 +293,7 @@ export function pickRoutes(deps: AgentDeps) {
       `insert into daily_picks (user_id, day, status, attempts, created_at, updated_at) values ($1, $2, 'making', 1, $3, $3)
        on conflict (user_id, day) do update set status = 'making', attempts = daily_picks.attempts + 1, updated_at = $3
          where (daily_picks.status = 'failed' and daily_picks.attempts < $4 and daily_picks.updated_at < $5)
-            or (daily_picks.status = 'making' and daily_picks.updated_at < $6)
+            or (daily_picks.status = 'making' and daily_picks.attempts < $4 and daily_picks.updated_at < $6)
        returning id`,
       [userId, day, now.toISOString(), PICK_TRIES_PER_DAY, new Date(at - PICK_RETRY_MS).toISOString(), new Date(at - STALE_MS).toISOString()],
     );
@@ -305,7 +307,7 @@ export function pickRoutes(deps: AgentDeps) {
     const { day, persona } = body.data;
     const now = deps.now();
     const mine = await rowFor(userId, day);
-    if (mine && settled(mine, now.getTime())) return c.json(answer(mine));
+    if (mine && settled(mine, now.getTime())) return c.json(answer(mine, now.getTime()));
     if (!deps.meta) return c.json({ pick: null });
     const wishes = (await db.query<{ name: string; kind: string }>("select name, kind from wishes where user_id = $1 order by created_at desc limit $2", [userId, WISHES_READ])).rows;
     if (!wishes.length) return c.json({ pick: null });

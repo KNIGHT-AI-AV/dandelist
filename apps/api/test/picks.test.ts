@@ -336,4 +336,12 @@ describe("today's pick", () => {
     clock = new Date(clock.getTime() + 2 * 60_000);
     expect((await today(token)).body.pick.title).toBe("Riva Aquariva Super");
   });
+
+  it("leaves a dead claim alone once the day's tries are used, so a crash can't buy a fourth try", async () => {
+    const { token, id } = await signIn();
+    await addWish(token, "Riva boat");
+    await db.query("insert into daily_picks (user_id, day, status, attempts, created_at, updated_at) values ($1, '2026-10-29', 'making', 3, $2, $2)", [id, new Date(clock.getTime() - 10 * 60_000).toISOString()]);
+    expect((await today(token)).body).toEqual({ pick: null });
+    expect(calls).toEqual([]);
+  });
 });

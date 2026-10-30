@@ -5,7 +5,7 @@ vi.mock("./storage", () => ({
   getSecret: async (k: string) => store.get(k) ?? null,
   setSecret: async (k: string, v: string | null) => void (v === null ? store.delete(k) : store.set(k, v)),
 }));
-import { answerPick, fetchTodayPick, hiddenDay, hideForDay, localDay, showsPick, type TodayPick } from "./picks";
+import { answerPick, fetchTodayPick, hiddenDay, hideForDay, localDay, pickAdded, showsPick, wasPickAdded, type TodayPick } from "./picks";
 
 const pick: TodayPick = { id: "p1", day: "2026-10-29", status: "ready", title: "Riva Aquariva Super", kind: "own", why: "It goes with the summers on the lake you wrote about.", summary: "", photo: null, createdAt: "2026-10-29T12:00:00.000Z" };
 
@@ -28,9 +28,15 @@ describe("today's pick on the list", () => {
   });
 
   it("remembers the day it was closed on this device", async () => {
-    expect(await hiddenDay()).toBeNull();
-    await hideForDay("2026-10-29");
-    expect(await hiddenDay()).toBe("2026-10-29");
+    expect(await hiddenDay("user-a")).toBeNull();
+    await hideForDay("user-a", "2026-10-29");
+    expect(await hiddenDay("user-a")).toBe("2026-10-29");
+    // Another person on the same phone still sees theirs.
+    expect(await hiddenDay("user-b")).toBeNull();
+    // A pick counts as added only once its wish is saved.
+    expect(wasPickAdded("pick-1")).toBe(false);
+    pickAdded("pick-1");
+    expect(wasPickAdded("pick-1")).toBe(true);
   });
 
   it("asks the API with the day and the Dandy's personality, and answers it", async () => {

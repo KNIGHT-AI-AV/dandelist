@@ -53,19 +53,26 @@ export async function answerPick(api: Api, id: string, outcome: "added" | "skipp
 export const showsPick = (pick: TodayPick | null, day: string, hiddenDay: string | null): pick is TodayPick => !!pick && pick.status === "ready" && pick.day === day && hiddenDay !== day;
 
 const HIDDEN_KEY = "dandelist.pick.hidden";
+/** Per person, so one person closing the card never hides another's on a shared phone. */
+const hiddenKey = (userId: string) => `${HIDDEN_KEY}.${userId}`;
 
-/** The day the card was last closed on this device, if any. */
-export async function hiddenDay(): Promise<string | null> {
+/** The day this person last closed the card on this device, if any. */
+export async function hiddenDay(userId: string): Promise<string | null> {
   try {
-    return await getSecret(HIDDEN_KEY);
+    return await getSecret(hiddenKey(userId));
   } catch {
     return null;
   }
 }
 
-/** Hides the card until tomorrow on this device. */
-export async function hideForDay(day: string): Promise<void> {
+/** Hides this person's card until tomorrow on this device. */
+export async function hideForDay(userId: string, day: string): Promise<void> {
   try {
-    await setSecret(HIDDEN_KEY, day);
+    await setSecret(hiddenKey(userId), day);
   } catch {}
 }
+
+/** Picks saved as wishes this session: "added" is recorded once the wish is saved, and the list hides them at once. */
+const added = new Set<string>();
+export const pickAdded = (id: string) => void added.add(id);
+export const wasPickAdded = (id: string) => added.has(id);
