@@ -18,7 +18,7 @@ import { useAuth, useSignInOptions, type ProviderId, type SignInOption } from ".
 import type { Step as AgentStep } from "../lib/agent";
 import { ease, native, spring, useReducedMotion } from "../lib/motion";
 import { faderIncome } from "../lib/comfort";
-import { ANSWERED_ROUNDS, chosen as chosenBy, groupsFor, nextPair, votingDone, type Vote } from "../lib/pairs";
+import { ANSWERED_ROUNDS, chosen as chosenBy, groupsFor, pickPair, unseenCount, usablePairs, votingDone, type Vote, type WishPair } from "../lib/pairs";
 import { recurringBreakdown } from "@dandelist/cost";
 import { thoughtOf } from "../lib/reveal";
 import { play, preloadSounds } from "../lib/sound";
@@ -76,8 +76,9 @@ const ideaOf = (e: PoolItem) => (e.kind === "visit" && !/\b(week|weeks|month|tri
 /**
  * The pre-login experience (owner's walkthroughs, 2026-10-28 and 10-29). A slow, centred title that dissolves from a
  * touch, then straight into the first wish, typed, said or tapped; their own card is made in front of them (the agent
- * prices it for real and the photo fades up), then this or that from the pool (the first pair is a cover, later
- * pairs lean toward what they asked for); when they want it all; what it would take, as a fader of incomes with a
+ * prices it for real and the photo fades up), then this or that made from what they asked for (owner, 2026-10-30; the
+ * server makes the pairs while it prices the wish), with the pool as the fallback (a cover pair, then pairs leaning
+ * toward what they asked for); when they want it all; what it would take, as a fader of incomes with a
  * face for how it would feel; meeting their Dandy while it prices the whole list; the deck. Only then do they save it,
  * which is the sign-up. Back goes one step at a time and undoes that step's picks.
  *
@@ -113,6 +114,8 @@ export default function Welcome() {
   const seen = useRef(new Set<string>());
   const rounds = useRef(0);
   const answered = useRef(0);
+  /** This or that made from the first wish, as the server sends it beside the price; empty until then, or if it fails. */
+  const made = useRef<WishPair[]>([]);
   const run = useRef<AbortController | null>(null);
   /** Where Back returns to: each step left behind, with the list and the counts as they were on it. */
   const history = useRef<{ step: Step; items: PoolItem[]; answered: number; rounds: number; done: number }[]>([]);
@@ -193,7 +196,8 @@ export default function Welcome() {
 
   /**
    * Starts the agent on the first wish; it keeps working while this or that goes on. `price` is the money or priceless
-   * card's "Price it": the words are hunted as an ordinary priced wish.
+   * card's "Price it": the words are hunted as an ordinary priced wish. The same stream brings this or that made from
+   * the wish (owner, 2026-10-30), asked for again only when it hasn't come yet.
    */
   const priceWish = (text: string, price = false) => {
     run.current?.abort();
@@ -221,7 +225,11 @@ export default function Welcome() {
           } else patchWish((w) => ({ ...w, title: e.title, kind: e.kind, worth: "priceless", line: e.line, failed: undefined }));
           setPricing("priced");
         } else if (e.type === "photo") patchWish((w) => ({ ...w, photo: { imageUrl: e.imageUrl, ...(e.media ? { media: e.media } : {}) } }));
-        else if (e.type === "priced") {
+        else if (e.type === "pairs") {
+          // The next pair drawn comes from these; a pair already on screen stays.
+          const pairs = usablePairs(e.pairs);
+          if (pairs.length) made.current = pairs;
+        } else if (e.type === "priced") {
           const { label, seller, url, upfrontCents, recurring, status, statusLabel, checkedAt, imageUrl, media, source } = e.option;
           // The fast card lands first; a better one from the full research replaces it quietly, with no second "found".
           const first = !latest.current.wish?.option;
@@ -238,6 +246,7 @@ export default function Welcome() {
       },
       ctrl.signal,
       price,
+      !made.current.length,
     ).catch((err: Error) => {
       if (ctrl.signal.aborted || worthy) return;
       patchWish((w) => ({ ...w, failed: err instanceof TypeError ? "Couldn't reach Dandelist just now." : err.message }));
@@ -245,15 +254,20 @@ export default function Welcome() {
     });
   };
 
-  /** The next pair: a cover first, then pairs leaning toward what the first wish turned out to be. */
+  /**
+   * The next pair: one made from the first wish while there is one, "Neither" included. Before they arrive or once they
+   * are used up, the pool's: a cover first, then pairs leaning toward what the first wish turned out to be.
+   */
   const nextVote = (s: WelcomeState): Step | null => {
-    const pair = nextPair(pool, seen.current, rounds.current === 0 ? null : groupsFor(s.wish?.kind));
+    const pair = pickPair(made.current, pool, seen.current, rounds.current === 0 ? null : groupsFor(s.wish?.kind));
     if (!pair) return null;
     pair.forEach((e) => seen.current.add(e.id));
     return { kind: "vote", pair };
   };
 
   const startVoting = (text: string) => {
+    // A new wish brings its own pairs; the last wish's never stand in for them.
+    made.current = [];
     priceWish(text);
     seen.current = new Set();
     rounds.current = 0;
@@ -269,7 +283,7 @@ export default function Welcome() {
       rounds.current++;
       if (v !== "neither") answered.current++;
       setDone(1 + Math.min(answered.current, ANSWERED_ROUNDS));
-      const left = pool.filter((e) => !seen.current.has(e.id)).length;
+      const left = unseenCount(made.current, pool, seen.current);
       const next = votingDone(answered.current, rounds.current, left) ? null : nextVote(latest.current);
       go(next ?? { kind: "when" });
     });
