@@ -4,6 +4,7 @@ import { fractionOf, incomeAt } from "../lib/comfort";
 import { haptic, native, spring } from "../lib/motion";
 import { layout, shadow, type, usePalette } from "../lib/theme";
 import { tick } from "../lib/tick";
+import { zoom } from "../lib/viewport";
 
 const THUMB = 30;
 /** Room for a figure under the track, centred on its notch. */
@@ -76,11 +77,12 @@ export function Fader({
         touchedAt = Date.now();
         measure();
         Animated.spring(hold, { toValue: 1, ...spring.press, useNativeDriver: native }).start();
-        act.current.setFromPage(e.nativeEvent.pageX);
+        // The pointer is in screen pixels and the track's measure in the page's (lib/viewport.ts).
+        act.current.setFromPage(e.nativeEvent.pageX / zoom());
       },
       onPanResponderMove: (e) => {
         touchedAt = Date.now();
-        act.current.setFromPage(e.nativeEvent.pageX);
+        act.current.setFromPage(e.nativeEvent.pageX / zoom());
       },
       onPanResponderRelease: () => {
         touchedAt = Date.now();

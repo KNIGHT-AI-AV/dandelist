@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ease, native, useReducedMotion } from "../../lib/motion";
 import { play, preloadSounds } from "../../lib/sound";
 import { fonts, layout, type, usePalette } from "../../lib/theme";
+import { zoom } from "../../lib/viewport";
 import { recurringBreakdown } from "@dandelist/cost";
 import { comfortableIncome } from "../../lib/comfort";
 import { hostOf, shortDate } from "../../lib/welcome";
@@ -133,7 +134,7 @@ export function TitleSequence({ hero, short, onDone }: { hero: Entry; short: boo
     // one real control (UI audit P0-8: no button inside a button on the web).
     <View
       onStartShouldSetResponder={() => skippable && !from}
-      onResponderRelease={(e: GestureResponderEvent) => finish({ x: e.nativeEvent.pageX, y: e.nativeEvent.pageY })}
+      onResponderRelease={(e: GestureResponderEvent) => finish({ x: e.nativeEvent.pageX / zoom(), y: e.nativeEvent.pageY / zoom() })}
       style={{ flex: 1, overflow: "hidden", backgroundColor: p.bg }}
     >
       <Animated.View style={[StyleSheet.absoluteFill, { opacity: fade }]}>

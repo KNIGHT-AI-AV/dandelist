@@ -1,3 +1,5 @@
+// First, so every later read of the window, a measure or a gesture is in the page's units on a zoomed web page.
+import "../lib/viewport";
 import { BodoniModa_400Regular, BodoniModa_400Regular_Italic } from "@expo-google-fonts/bodoni-moda";
 import { DMMono_400Regular } from "@expo-google-fonts/dm-mono";
 import { InstrumentSerif_400Regular, InstrumentSerif_400Regular_Italic } from "@expo-google-fonts/instrument-serif";
