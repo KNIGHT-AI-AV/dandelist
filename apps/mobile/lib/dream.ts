@@ -7,12 +7,23 @@ export type { DreamAction, DreamEvent, KeepLine, LifeContext, Widget };
 /**
  * One entry in the conversation: what they said, what the Dandy said, its work rows, and the tools it opened.
  * `fresh` marks a line that arrived just now, which the chat writes out word by word; a resumed line shows whole.
+ * `live` marks a tool that opened in this visit, whose questions the Dandy is waiting on; a resumed one waits for a tap.
  */
 export type FeedItem =
   | { id: string; kind: "you"; text: string }
   | { id: string; kind: "agent"; text: string; fresh?: boolean }
   | { id: string; kind: "step"; text: string; state: "running" | "done" }
-  | { id: string; kind: "widget"; widget: Widget };
+  | { id: string; kind: "widget"; widget: Widget; live?: boolean };
+
+/** The tool the Dandy is waiting on: the newest one in the chat, while nothing has been said after it. */
+export function askingWidget(feed: readonly FeedItem[]): string | null {
+  for (let i = feed.length - 1; i >= 0; i--) {
+    const f = feed[i]!;
+    if (f.kind === "you") return null;
+    if (f.kind === "widget") return f.widget.id;
+  }
+  return null;
+}
 
 type ApiStream = (path: string, init?: RequestInit) => Promise<Response>;
 type Api = ApiStream;

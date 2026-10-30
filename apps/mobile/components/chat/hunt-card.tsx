@@ -7,10 +7,13 @@ import { useDandy } from "../../lib/dandy";
 import { haptic } from "../../lib/motion";
 import { stepLine } from "../../lib/recheck";
 import { answersFrom, refineChanged, withGiven } from "../../lib/refine";
+import { cardState, listedWish } from "../../lib/listed";
 import { fonts, radius, type, usePalette } from "../../lib/theme";
 import { useWaitingMusic, type WaitPhase } from "../../lib/waiting";
 import { useWishes, type NewWish } from "../../lib/wishes";
 import { amountSteps, photoOnly, startAmount, wholeCents } from "../../lib/worth";
+import { AddedLine } from "../added-line";
+import { AskNote } from "../ask";
 import { ErrorLine, Glass, Money, Photo, PrimaryButton, QuietButton } from "../lux";
 import { RefinePanel } from "../refine";
 import { WaitingLight } from "../waiting-light";
@@ -40,9 +43,13 @@ interface Hunt {
   amount?: number;
   /** Hunted as an ordinary priced wish after "Price it" on its money or priceless card. */
   price?: boolean;
+  /** The wish this card put on the list. */
+  savedId?: string;
 }
 
-// One hunt per chat item, kept across remounts (the feed re-renders, the pager moves) so nothing starts twice.
+// One hunt per chat item, kept across remounts (the feed re-renders, the pager moves) so nothing starts twice. Keyed by
+// the item and its words: item ids start again in every conversation, so an id alone would hand a new chat's first
+// card the hunt of an earlier chat's.
 const hunts = new Map<string, Hunt>();
 const POLL_MS = 1500;
 const fresh = (draft: Draft | null = null, price = false): Hunt => ({ run: null, draft, edits: {}, error: null, ...(price ? { price } : {}) });
@@ -67,17 +74,23 @@ function sorry(e: unknown): string {
 /** The questions as this hunt answered them: the final result's, else the draft's once they arrive. */
 const questionsOf = (h: Hunt): WishQuestion[] => (h.run?.result?.questions?.length ? h.run.result.questions : (h.run?.draft?.questions ?? h.draft?.questions ?? []));
 
-/** `watched`: the chat is the page in front, so a picture being made here is one the person is looking at. */
-export function HuntCard({ id, text, already, watched = true }: { id: string; text: string; already: boolean; watched?: boolean }) {
+/**
+ * `watched`: the chat is the page in front, so a picture being made here is one the person is looking at. `onPhase`
+ * hears whether the card is still being worked out (the chat's "Add another while you wait" shows while one is);
+ * `onShowOnList` turns to the list with the saved wish in view.
+ */
+export function HuntCard({ id: item, text, watched = true, onPhase, onShowOnList }: { id: string; text: string; watched?: boolean; onPhase?(id: string, working: boolean): void; onShowOnList?(wishId: string): void }) {
+  const id = `${item}\n${text}`;
   const p = usePalette();
   const { api } = useAuth();
   const dandy = useDandy();
   const money = useMoney();
-  const { add } = useWishes();
+  const { add, wishes } = useWishes();
   const [h, setH] = useState<Hunt>(() => hunts.get(id) ?? fresh());
   const [refining, setRefining] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
+  // The Dandy's line when it kept its pick for a question left open.
+  const [note, setNote] = useState<string | null>(null);
   // How the last retake went: a picture that couldn't be found ends the wait quietly.
   const [retook, setRetook] = useState<"none" | "found" | "failed">("none");
   const alive = useRef(true);
@@ -176,11 +189,20 @@ export function HuntCard({ id, text, already, watched = true }: { id: string; te
   const picture: WaitPhase = retaking || autoRetake ? "waiting" : retook === "failed" ? "idle" : h.run?.result?.worth || (option && photo) ? "landed" : !done && !h.error ? "waiting" : "idle";
   useWaitingMusic(picture, watched);
 
-  const huntAgain = () => {
-    if (!draft || !refineChanged(questions, h.edits)) return;
-    const answers = answersFrom(questions, h.edits);
+  // Where the card stands (lib/listed.ts). A hunt again with changed answers is a new find, so only the wish saved from
+  // it counts then, not an older one of the same name.
+  const landed = !!option || !!h.run?.result?.worth;
+  const listedId = listedWish(wishes, h.savedId, h.draft ? [] : [text, draft?.title, h.run?.result?.worth?.title]);
+  const state = cardState({ landed, failed: !!h.error || done, listedId });
+  const phase = useRef(onPhase);
+  phase.current = onPhase;
+  useEffect(() => phase.current?.(item, state === "working"), [item, state]);
+  useEffect(() => () => phase.current?.(item, false), [item]);
+
+  const huntAgain = (edits: Record<string, string> = h.edits) => {
+    if (!draft || !refineChanged(questions, edits)) return;
+    const answers = answersFrom(questions, edits);
     setRefining(false);
-    setSaved(false);
     // The draft carries the answers too, so a retry after a dropped connection keeps them.
     void start({ draft: { ...draft, questions: withGiven(questions, answers) }, answers });
   };
@@ -214,9 +236,9 @@ export function HuntCard({ id, text, already, watched = true }: { id: string; te
           },
         },
       };
-      await add(wish);
+      const saved = await add(wish);
       haptic.success();
-      setSaved(true);
+      keep({ ...(hunts.get(id) ?? h), savedId: saved.id });
     } catch (e) {
       keep({ ...h, error: sorry(e) });
     } finally {
@@ -234,7 +256,7 @@ export function HuntCard({ id, text, already, watched = true }: { id: string; te
     const saveWorth = async (w: WorthCard) => {
       setSaving(true);
       try {
-        await add({
+        const saved = await add({
           name: w.title,
           kind: w.kind,
           tier: "nice",
@@ -245,7 +267,7 @@ export function HuntCard({ id, text, already, watched = true }: { id: string; te
           details: { ...(w.worth === "money" ? { worth: "money" as const } : { worth: "priceless" as const, line: w.line.slice(0, 120) }), ...(shot ? { agent: photoOnly(shot.imageUrl, shot.media) } : {}) },
         });
         haptic.success();
-        setSaved(true);
+        keep({ ...(hunts.get(id) ?? h), savedId: saved.id });
       } catch (e) {
         keep({ ...(hunts.get(id) ?? h), error: sorry(e) });
       } finally {
@@ -263,9 +285,9 @@ export function HuntCard({ id, text, already, watched = true }: { id: string; te
           </Text>
           {worth.worth === "money" ? <AmountPicker cents={amountCents} namedCents={named} onChange={(c) => keep({ ...(hunts.get(id) ?? h), amount: c })} /> : <PricelessPrice line={worth.line} />}
           {h.error ? <ErrorLine>{h.error}</ErrorLine> : null}
-          <PrimaryButton label={saved || already ? "On your list" : "Add to my list"} busy={saving} disabled={saved || already} onPress={() => void saveWorth(worth)} />
+          {listedId ? <AddedLine onPress={() => onShowOnList?.(listedId)} /> : <PrimaryButton label="Add to my list" busy={saving} onPress={() => void saveWorth(worth)} />}
           {/* The reading can be wrong ("a gold bar" is a thing to buy): hunt it as an ordinary wish instead. */}
-          {saved || already ? null : <QuietButton label="Price it" onPress={() => void start({ text, price: true })} style={{ alignSelf: "flex-start" }} />}
+          {listedId ? null : <QuietButton label="Price it" onPress={() => void start({ text, price: true })} style={{ alignSelf: "flex-start" }} />}
         </View>
       </Glass>
     );
@@ -320,9 +342,34 @@ export function HuntCard({ id, text, already, watched = true }: { id: string; te
         {h.error ? <ErrorLine>{h.error}</ErrorLine> : null}
         {!done ? <Working dandy={dandy} label="Checking more sellers" /> : null}
         <QuietButton label={retaking ? "Finding a better photo..." : "Retake photo"} onPress={() => void retake()} style={{ alignSelf: "flex-start" }} />
-        <PrimaryButton label={saved || already ? "On your list" : "Add to my list"} busy={saving} disabled={saved || already} onPress={() => void save()} />
-        {questions.length ? <QuietButton label={refining ? "Done refining" : "Refine it"} onPress={() => setRefining((r) => !r)} style={{ alignSelf: "flex-start" }} /> : null}
-        {refining ? <RefinePanel questions={questions} edits={h.edits} onEdit={(q, a) => keep({ ...h, edits: { ...h.edits, [q]: a } })} onHunt={huntAgain} /> : null}
+        {listedId ? <AddedLine onPress={() => onShowOnList?.(listedId)} /> : <PrimaryButton label="Add to my list" busy={saving} onPress={() => void save()} />}
+        {questions.length ? (
+          <QuietButton
+            label={refining ? "Done refining" : "Refine it"}
+            onPress={() => {
+              setNote(null);
+              setRefining((r) => !r);
+            }}
+            style={{ alignSelf: "flex-start" }}
+          />
+        ) : null}
+        {refining ? (
+          <RefinePanel
+            questions={questions}
+            edits={h.edits}
+            onEdit={(q, a) => {
+              const cur = hunts.get(id) ?? h;
+              keep({ ...cur, edits: { ...cur.edits, [q]: a } });
+            }}
+            onHunt={huntAgain}
+            onClose={(line) => {
+              setRefining(false);
+              setNote(line);
+            }}
+          />
+        ) : (
+          <AskNote text={note} />
+        )}
       </View>
     </Glass>
   );

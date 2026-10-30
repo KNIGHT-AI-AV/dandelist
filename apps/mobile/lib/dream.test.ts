@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cleanSuggestions, dayPart, feedFromSession, greeting, idleTooLong, moneyIn, nameForApi, shouldResume, taskFor, webOnly, whenLabel, wishFrom } from "./dream";
+import { askingWidget, cleanSuggestions, dayPart, feedFromSession, greeting, idleTooLong, moneyIn, nameForApi, shouldResume, taskFor, webOnly, whenLabel, wishFrom, type FeedItem } from "./dream";
 
 const base = { name: "Sea-view villa", kind: "own" as const, status: "verified" as const, images: [{ url: "https://example.com/v.jpg", source: "example.com" }], url: "https://example.com/villa", checkedAt: "2026-10-27T10:00:00Z" };
 
@@ -99,5 +99,23 @@ describe("an empty chat", () => {
     expect(nameForApi("  Ava\n  Rose ")).toBe("Ava Rose");
     expect(nameForApi("x".repeat(30))).toHaveLength(24);
     expect(nameForApi("   ")).toBeUndefined();
+  });
+});
+
+describe("the tool the Dandy is waiting on", () => {
+  const item = { kind: "item" as const, id: "item_2", text: "a Leica Q3" };
+  const region = { kind: "region_picker" as const, id: "region_1", current: null };
+
+  it("is the newest tool, until the person says something after it", () => {
+    const feed: FeedItem[] = [
+      { id: "f1", kind: "you", text: "A villa and a Leica" },
+      { id: "f2", kind: "widget", widget: region, live: true },
+      { id: "f3", kind: "agent", text: "Where shall we look?" },
+      { id: "f4", kind: "step", text: "Reading", state: "done" },
+    ];
+    expect(askingWidget(feed)).toBe("region_1");
+    expect(askingWidget([...feed, { id: "f5", kind: "widget", widget: item }])).toBe("item_2");
+    expect(askingWidget([...feed, { id: "f5", kind: "you", text: "Actually, a Porsche" }])).toBeNull();
+    expect(askingWidget([])).toBeNull();
   });
 });

@@ -11,13 +11,17 @@ import { DandyAvatar } from "../dandy-avatar";
 import { CarBuilder, HomeBuilder, RegionPicker } from "../dream/builders";
 import { SwipeDeck } from "../dream/deck";
 import { ServiceQuote, WishReady } from "../dream/quotes";
+import { AddAnotherPrompt } from "../add-another";
 import { KeyboardScroll, dockRoom } from "../inputs";
 import { Glass, Icon, PrimaryButton } from "../lux";
 import { Rise } from "../welcome/kit";
 import { endTask, startTask, updateTask } from "../../lib/activity";
 import { useAuth } from "../../lib/auth";
 import { useDandy } from "../../lib/dandy";
+import { listedWish } from "../../lib/listed";
+import { takeQueuedWishes } from "../../lib/wish-queue";
 import {
+  askingWidget,
   dreamTurn,
   feedFromSession,
   idleTooLong,
@@ -120,6 +124,10 @@ export function ChatPage() {
   const [life, setLife] = useState<LifeContext | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [sessionId, setSessionIdState] = useState<string | null>(null);
+  // Hunt cards still finding out what their wish is and what it costs, while "Add another while you wait" shows.
+  const [hunting, setHunting] = useState<ReadonlySet<string>>(() => new Set());
+  // Finds put on the list from this conversation: card (its id and name) to the wish saved from it.
+  const [savedFrom, setSavedFrom] = useState<Readonly<Record<string, string>>>({});
 
   const session = useRef<string | null>(null);
   // Bumped whenever the chat changes conversation; anything still arriving for an older one is dropped.
@@ -187,7 +195,7 @@ export function ChatPage() {
       else if (e.type === "widget") {
         const id = nextId();
         if (pinned.current) anchor.current = id;
-        setFeed((f) => (f.some((x) => x.kind === "widget" && x.widget.id === e.widget.id) ? f.map((x) => (x.kind === "widget" && x.widget.id === e.widget.id ? { ...x, widget: e.widget } : x)) : [...f, { id, kind: "widget", widget: e.widget }]));
+        setFeed((f) => (f.some((x) => x.kind === "widget" && x.widget.id === e.widget.id) ? f.map((x) => (x.kind === "widget" && x.widget.id === e.widget.id ? { ...x, widget: e.widget } : x)) : [...f, { id, kind: "widget", widget: e.widget, live: true }]));
       } else if (e.type === "life") setLife(e.life);
       else if (e.type === "error") {
         haptic.error();
@@ -281,6 +289,10 @@ export function ChatPage() {
   // during a reply joins the queue.
   const stepRunning = feed.some((f) => f.kind === "step" && f.state === "running");
   useChatInbox(submit, false);
+  // Wishes added on the New wish screen while it prices one join this queue too, in order (lib/wish-queue.ts).
+  const submitRef = useRef(submit);
+  submitRef.current = submit;
+  useEffect(() => takeQueuedWishes((t) => submitRef.current(t)), []);
 
   // ---- conversations
 
@@ -296,6 +308,8 @@ export function ChatPage() {
     anchor.current = null;
     pinned.current = true;
     setFeed([]);
+    // Card ids start again in every conversation, so what the last one saved is forgotten with it.
+    setSavedFrom({});
     setSession(null);
   }, [setSession]);
 
@@ -399,7 +413,16 @@ export function ChatPage() {
 
   // ---- rendering
 
-  const owned = useMemo(() => new Set(wishes.map((w) => w.name.trim().toLowerCase())), [wishes]);
+  const onPhase = useCallback((id: string, working: boolean) => {
+    setHunting((s) => {
+      if (s.has(id) === working) return s;
+      const next = new Set(s);
+      if (working) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }, []);
+  const asking = useMemo(() => askingWidget(feed), [feed]);
   const rows = useMemo(() => rowsOf(feed), [feed]);
   const lastSteps = useMemo(() => {
     for (let i = rows.length - 1; i >= 0; i--) if ("steps" in rows[i]!) return rows[i]!.key;
@@ -408,12 +431,12 @@ export function ChatPage() {
   const firstWords = feed.find((f) => f.kind === "you")?.text ?? history.sessions?.find((s) => s.id === sessionId)?.title ?? null;
   const empty = !feed.length;
 
-  const renderWidget = (w: Widget): ReactNode => {
+  const renderWidget = (w: Widget, live: boolean): ReactNode => {
     switch (w.kind) {
       case "home_builder":
-        return <HomeBuilder w={w} onApply={(values) => send({ type: "builder", widgetId: w.id, values })} onSearchNow={() => send({ type: "search_now", widgetId: w.id })} />;
+        return <HomeBuilder w={w} live={live} waiting={asking === w.id} onApply={(values) => send({ type: "builder", widgetId: w.id, values })} onSearchNow={() => send({ type: "search_now", widgetId: w.id })} />;
       case "car_builder":
-        return <CarBuilder w={w} onApply={(values) => send({ type: "builder", widgetId: w.id, values })} />;
+        return <CarBuilder w={w} live={live} waiting={asking === w.id} onApply={(values) => send({ type: "builder", widgetId: w.id, values })} />;
       case "deck":
         return (
           <View style={{ gap: 10 }}>
@@ -429,12 +452,24 @@ export function ChatPage() {
         );
       case "service_quote":
         return <ServiceQuote w={w} onAccept={async () => send({ type: "pick", widgetId: w.id })} />;
-      case "wish_ready":
-        return <WishReady w={w} already={owned.has(w.wish.name.trim().toLowerCase())} onAdd={async () => void (await add(wishFrom(w.wish)))} />;
+      case "wish_ready": {
+        const card = `${w.id}\n${w.wish.name}`;
+        return (
+          <WishReady
+            w={w}
+            listedId={listedWish(wishes, savedFrom[card], [w.wish.name])}
+            onShowOnList={home.showOnList}
+            onAdd={async () => {
+              const saved = await add(wishFrom(w.wish));
+              setSavedFrom((m) => ({ ...m, [card]: saved.id }));
+            }}
+          />
+        );
+      }
       case "item":
         // Hunted at once, in place: no button between the wish and its card. Its waiting music plays only while the chat
         // is the page in front.
-        return <HuntCard id={w.id} text={w.text} already={owned.has(w.text.trim().toLowerCase())} watched={pager.page === "chat"} />;
+        return <HuntCard id={w.id} text={w.text} watched={pager.page === "chat"} onPhase={onPhase} onShowOnList={home.showOnList} />;
       case "region_picker":
         // Only when the Dandy asks: where they live otherwise comes from Settings.
         return <RegionPicker current={life?.home ?? w.current} onPick={(place) => send({ type: "region", home: place }, `I'll live in ${place.label}.`)} />;
@@ -460,7 +495,7 @@ export function ChatPage() {
           </Rise>
         );
       case "widget":
-        return <Rise onLayout={(e) => onWidgetLayout(f.id, e)}>{renderWidget(f.widget)}</Rise>;
+        return <Rise onLayout={(e) => onWidgetLayout(f.id, e)}>{renderWidget(f.widget, !!f.live)}</Rise>;
       default:
         return null;
     }
@@ -509,6 +544,13 @@ export function ChatPage() {
         {(busy && !quiet && !stepRunning) || opening || (!ready && auth.status === "signedIn") ? (
           <Rise>
             <Working dandy={dandy} />
+          </Rise>
+        ) : null}
+        {/* While a wish is still being found (owner, 2026-10-30: "prompt them if they want to add more onto the queue"):
+            one quiet line under the cards, which puts the cursor in the composer; the queue never waits. */}
+        {hunting.size > 0 && ready ? (
+          <Rise>
+            <AddAnotherPrompt onPress={home.focusComposer} />
           </Rise>
         ) : null}
       </KeyboardScroll>

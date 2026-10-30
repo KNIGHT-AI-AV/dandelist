@@ -4,6 +4,7 @@ import { StyleSheet, Text, View } from "react-native";
 import { moneyIn, monthlyOf } from "../../lib/dream";
 import { haptic } from "../../lib/motion";
 import { fonts, radius, usePalette, type } from "../../lib/theme";
+import { AddedLine } from "../added-line";
 import { ErrorLine, Eyebrow, Glass, Hairline, PrimaryButton, Shade } from "../lux";
 import { Odometer } from "../odometer";
 import { GlassReveal } from "../reveal";
@@ -75,12 +76,12 @@ export function ServiceQuote({ w, onAccept }: { w: Extract<Widget, { kind: "serv
 }
 
 /**
- * A finished find: the price, the cost to keep it, and one tap to put it on the list. `already` is true when a
- * conversation reopens on a find that is on the list by now, so it can't be added twice.
+ * A finished find: the price, the cost to keep it, and one tap to put it on the list. `listedId` is the wish on the
+ * list from it (saved here, or one by the same name when a conversation reopens), so it can't be added twice; the
+ * card then says "Added to your list", and a tap shows it there.
  */
-export function WishReady({ w, onAdd, already = false }: { w: Extract<Widget, { kind: "wish_ready" }>; onAdd(): Promise<void>; already?: boolean }) {
+export function WishReady({ w, onAdd, listedId = null, onShowOnList }: { w: Extract<Widget, { kind: "wish_ready" }>; onAdd(): Promise<void>; listedId?: string | null; onShowOnList?(wishId: string): void }) {
   const p = usePalette();
-  const [added, setAdded] = useState(already);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const wish = w.wish;
@@ -97,24 +98,26 @@ export function WishReady({ w, onAdd, already = false }: { w: Extract<Widget, { 
       </View>
       {wish.keep.length ? <KeepStatement lines={wish.keep} currency={wish.currency} /> : null}
       {error ? <ErrorLine>{error}</ErrorLine> : null}
-      <PrimaryButton
-        label={added ? "On your list" : "Add to my list"}
-        busy={busy}
-        disabled={added}
-        onPress={async () => {
-          setBusy(true);
-          setError(null);
-          try {
-            await onAdd();
-            haptic.success();
-            setAdded(true);
-          } catch (e) {
-            setError((e as Error).message);
-          } finally {
-            setBusy(false);
-          }
-        }}
-      />
+      {listedId ? (
+        <AddedLine onPress={() => onShowOnList?.(listedId)} />
+      ) : (
+        <PrimaryButton
+          label="Add to my list"
+          busy={busy}
+          onPress={async () => {
+            setBusy(true);
+            setError(null);
+            try {
+              await onAdd();
+              haptic.success();
+            } catch (e) {
+              setError((e as Error).message);
+            } finally {
+              setBusy(false);
+            }
+          }}
+        />
+      )}
     </Glass>
   );
 }

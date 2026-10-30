@@ -1,6 +1,6 @@
 import type { Widget } from "@dandelist/catalogue/dream";
 import { describe, expect, it } from "vitest";
-import { carSelectionSummary, carSelectionValues, commitCarDrafts, initialCarSelection, removeCarOwn } from "./car-selection";
+import { autoPickCar, carSelectionSummary, carSelectionValues, carStepLabels, commitCarDrafts, initialCarSelection, pickCarChoice, removeCarOwn } from "./car-selection";
 
 const widget: Extract<Widget, { kind: "car_builder" }> = {
   kind: "car_builder", id: "car", currency: "USD", steps: [
@@ -49,5 +49,52 @@ describe("car builder typed choices", () => {
     expect(removed.picked.options).toEqual([]);
     expect(removed.picked.model).toEqual([]);
     expect(carSelectionSummary(widget, removed).subtotal).toBe(0);
+  });
+});
+
+/** A build with nothing picked past the model: what the Dandy chooses when nobody answers. */
+const open: Extract<Widget, { kind: "car_builder" }> = {
+  kind: "car_builder", id: "car_2", currency: "USD", steps: [
+    { id: "model", title: "Model", choices: [{ id: "g", label: "G-Class" }], selected: "g" },
+    { id: "trim", title: "Trim", choices: [{ id: "amg", label: "AMG G 63", priceCents: 18655000 }, { id: "g550", label: "G 550", priceCents: 14800000 }] },
+    { id: "colour", title: "Colour", choices: [{ id: "red", label: "Hyacinth Red", priceCents: 75000 }, { id: "black", label: "Obsidian Black", priceCents: 0 }] },
+    { id: "interior", title: "Interior", choices: [] },
+    { id: "options", title: "Options", choices: [{ id: "night", label: "Night Package", priceCents: 130000 }] },
+  ],
+};
+
+describe("car builder one tap at a time", () => {
+  it("a tap replaces a single step's pick and toggles an option", () => {
+    let x = pickCarChoice(open, initialCarSelection(open), "trim", "amg");
+    x = pickCarChoice(open, x, "trim", "g550");
+    expect(x.picked.trim).toEqual(["g550"]);
+    x = pickCarChoice(open, x, "options", "night");
+    expect(x.picked.options).toEqual(["night"]);
+    expect(pickCarChoice(open, x, "options", "night").picked.options).toEqual([]);
+  });
+
+  it("a tapped card drops a typed answer for the same step", () => {
+    const typed = commitCarDrafts(open, initialCarSelection(open), { colour: "Mint green" });
+    const x = pickCarChoice(open, typed, "colour", "black");
+    expect(carStepLabels(open, x, "colour")).toEqual(["Obsidian Black"]);
+  });
+
+  it("when time runs out the Dandy picks the lowest price for single steps and adds no options", () => {
+    const { selection, labels } = autoPickCar(open, initialCarSelection(open), ["trim", "colour", "interior", "options"]);
+    expect(selection.picked.trim).toEqual(["g550"]);
+    // An included colour comes before a paid one.
+    expect(selection.picked.colour).toEqual(["black"]);
+    expect(selection.picked.options).toEqual([]);
+    expect(labels).toEqual(["G 550", "Obsidian Black"]);
+    expect(carSelectionValues(selection).selections).toMatchObject({ model: ["g"], trim: ["g550"], colour: ["black"], interior: [], options: [] });
+  });
+
+  it("keeps what is already picked or typed, and names it", () => {
+    const typed = commitCarDrafts(open, pickCarChoice(open, initialCarSelection(open), "trim", "amg"), { colour: "Mint green" });
+    const { selection, labels } = autoPickCar(open, typed, ["trim", "colour"]);
+    expect(selection.picked.trim).toEqual(["amg"]);
+    expect(selection.own.colour).toEqual(["Mint green"]);
+    expect(selection.picked.colour).toEqual([]);
+    expect(labels).toEqual(["AMG G 63", "Mint green"]);
   });
 });

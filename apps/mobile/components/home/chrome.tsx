@@ -145,6 +145,7 @@ export function Dock() {
     <Animated.View pointerEvents={here ? "box-none" : "none"} style={{ position: "absolute", left: 0, right: 0, bottom: 0, top: 0, opacity, transform: [{ translateY: sink }] }} aria-hidden={!here}>
       <KeyboardDock onHeight={home.setDock} maxWidth={layout.column}>
         <Composer
+          ref={home.composer}
           value={home.draft}
           onChangeText={home.setDraft}
           onSend={home.ask}

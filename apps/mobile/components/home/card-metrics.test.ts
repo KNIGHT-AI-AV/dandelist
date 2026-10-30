@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cardRanges, geometry, sample } from "./card-metrics";
+import { cardRanges, geometry, revealAt, sample } from "./card-metrics";
 
 const g = geometry(393);
 const LIST_TOP = 420;
@@ -46,5 +46,19 @@ describe("the growing cards", () => {
 
   it("never moves the first card", () => {
     for (let scroll = -100; scroll < 2000; scroll += 13) expect(layout(scroll)[0]!.top).toBe(0);
+  });
+});
+
+describe("showing a card from the chat", () => {
+  it("scrolls the card to the focus line, opened up", () => {
+    for (const i of [0, 1, 4, N - 1]) {
+      const y = revealAt(i, g, LIST_TOP, FOCUS);
+      expect(sample(cardRanges(i, g, LIST_TOP, FOCUS).open, y)).toBeCloseTo(1, 6);
+      expect(layout(y)[i]!.open).toBeCloseTo(1, 6);
+    }
+  });
+
+  it("never scrolls above the top of the list", () => {
+    expect(revealAt(0, g, 0, FOCUS)).toBe(0);
   });
 });
