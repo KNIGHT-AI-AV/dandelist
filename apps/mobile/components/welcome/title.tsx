@@ -2,7 +2,7 @@ import type { Entry } from "@dandelist/catalogue";
 import { heroFor } from "@dandelist/catalogue";
 import { Image as ExpoImage } from "expo-image";
 import { useEffect, useRef, useState } from "react";
-import { Animated, Easing, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions, type GestureResponderEvent } from "react-native";
+import { Animated, Easing, PixelRatio, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions, type GestureResponderEvent } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ease, native, useReducedMotion } from "../../lib/motion";
 import { play, preloadSounds } from "../../lib/sound";
@@ -53,7 +53,14 @@ export function TitleSequence({ hero, short, onDone }: { hero: Entry; short: boo
   const [from, setFrom] = useState<{ x: number; y: number } | null>(null);
   const finished = useRef(false);
   // The photo is fetched before anything moves, so it never swaps in mid-reveal (owner, 10-29: "The intro blinks").
-  const heroUri = heroFor(hero, width / height) ?? null;
+  // The copy that covers the screen at up to 2.5 pixels a point (past that a photo looks no sharper), counting the web
+  // page's zoom: a phone gets a copy sized for it, not the 4K crop (Lighthouse, 2026-10-30). It is sized once, for the
+  // window the title opened in, so a resize mid-intro never swaps in another copy (the blink above).
+  const [frame] = useState(() => {
+    const density = Math.min(PixelRatio.get(), 2.5) * zoom();
+    return { width: width * density, height: height * density };
+  });
+  const heroUri = heroFor(hero, width / height, frame) ?? null;
   const [ready, setReady] = useState(short || reduced || !heroUri);
   useEffect(() => {
     if (ready || !heroUri) return;

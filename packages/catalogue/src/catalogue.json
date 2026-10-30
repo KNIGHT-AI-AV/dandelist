@@ -21,7 +21,24 @@
           "height": 2048,
           "source": "unsplash.com",
           "credit": "Daniel Garcia, noir.",
-          "license": "Unsplash License"
+          "license": "Unsplash License",
+          "variants": [
+            {
+              "width": 800,
+              "height": 800,
+              "url": "https://api.dandelist.knightaiav.com/media/d4947385bfe8e84cebd2e3e5fe935f8a4106f13c35d30ca7b77887b2fd97552d.jpg"
+            },
+            {
+              "width": 1200,
+              "height": 1200,
+              "url": "https://api.dandelist.knightaiav.com/media/e5c00440d97e89230137708034884e1e1db2b7f072da4f30f2a715f4ff65f9c5.jpg"
+            },
+            {
+              "width": 1600,
+              "height": 1600,
+              "url": "https://api.dandelist.knightaiav.com/media/330cc0713242fb6e5e3bbb0aa8842cab715f426c92c9f5158f90667414989455.jpg"
+            }
+          ]
         },
         {
           "url": "https://api.dandelist.knightaiav.com/media/f10b4f5636637e742f52639762b6c879570d4349ebfa35e8a2df218de78459e6.jpg",
@@ -29,7 +46,24 @@
           "height": 2520,
           "source": "unsplash.com",
           "credit": "Daniel Garcia, noir.",
-          "license": "Unsplash License"
+          "license": "Unsplash License",
+          "variants": [
+            {
+              "width": 800,
+              "height": 1120,
+              "url": "https://api.dandelist.knightaiav.com/media/92c30eab330c16d33b00fff1187dec2f00823de818702398572e929af37f3dde.jpg"
+            },
+            {
+              "width": 1200,
+              "height": 1680,
+              "url": "https://api.dandelist.knightaiav.com/media/b2e616b8b692d59d98c3672b48ac6cebdcfd72c723931b92294bc9ee5b5a9380.jpg"
+            },
+            {
+              "width": 1600,
+              "height": 2240,
+              "url": "https://api.dandelist.knightaiav.com/media/d2ba847b4f4b23e470711281738580d0bc62d599d3ddcdd4543ab33961cbe622.jpg"
+            }
+          ]
         },
         {
           "url": "https://api.dandelist.knightaiav.com/media/c7ba1c3bacb3149c7ddfb7c675c4e64ff13c080944158bc09069872794e52703.jpg",
@@ -37,7 +71,24 @@
           "height": 1125,
           "source": "unsplash.com",
           "credit": "Daniel Garcia, noir.",
-          "license": "Unsplash License"
+          "license": "Unsplash License",
+          "variants": [
+            {
+              "width": 800,
+              "height": 300,
+              "url": "https://api.dandelist.knightaiav.com/media/7ab7ccf7ba525213db8f67fb83c81e378c5baa264cd2805d8c6531890f0f5382.jpg"
+            },
+            {
+              "width": 1200,
+              "height": 450,
+              "url": "https://api.dandelist.knightaiav.com/media/f09dae36c4562319ebdb8fb68370019d92ab8228330f4eb38d73d506985b4bc9.jpg"
+            },
+            {
+              "width": 1600,
+              "height": 600,
+              "url": "https://api.dandelist.knightaiav.com/media/3e93becc722898e3cf31f2e443db19a9b613ab97f96566ffd8f1eac31e4c63fc.jpg"
+            }
+          ]
         }
       ]
     }
