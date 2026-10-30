@@ -72,8 +72,9 @@ export function PhotoCard({ e, onPress, style, big = false }: { e: PoolItem; onP
 
 /**
  * This or that. Two full-bleed halves; tapping one grows it a touch while the other dims and slides away. "Both"
- * and "Neither" are always there as two equal buttons, and on the web the arrow keys vote. The pair comes from the
- * pool (lib/pairs); a "Neither" brings another pair rather than counting as an answer.
+ * and "Neither" are always there as two equal buttons, and on the web the arrow keys vote. The pair is made from the
+ * first wish, or comes from the pool until those arrive (lib/pairs); every card has a real photo. A "Neither" brings
+ * another pair rather than counting as an answer.
  */
 export function VotePair({ a, b, label, onVote }: { a: PoolItem; b: PoolItem; label: string; onVote(chosen: PoolItem[], from: View | null): void }) {
   const p = usePalette();

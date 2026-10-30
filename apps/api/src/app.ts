@@ -5,7 +5,8 @@ import { authRoutes, requireAuth, type AuthVars } from "./auth";
 import { dreamRoutes } from "./dream/routes";
 import { fxRoutes } from "./fx";
 import { guestRoutes } from "./guest";
-import { poolSource } from "./pool";
+import { pairRoutes } from "./pairs";
+import { poolSource, typicalSource } from "./pool";
 import { previewRoutes } from "./preview";
 import { isStoredKey } from "./media-store";
 import { agentKeyRoutes, mcpRoutes } from "./mcp";
@@ -52,8 +53,12 @@ export function createApp(deps: AppDeps) {
   app.route("/agent", agentRoutes(deps));
   // The pre-login pool (catalogue plus archive subjects with photos), shared by the preview and the guest routes.
   const pool = poolSource(db, deps.now);
+  // Archive subjects with a typical price, photographed or not: this or that prices the things it names from them.
+  const typicals = typicalSource(db, deps.now);
   app.route("/preview", previewRoutes({ ...deps, pool }));
-  app.route("/guest", guestRoutes({ ...deps, pool }));
+  app.route("/guest", guestRoutes({ ...deps, pool, typicals }));
+  // This or that from a signed-in person's list and notes (pairs.ts), for the app's own this or that.
+  app.route("/pairs", pairRoutes({ ...deps, pool, typicals }));
   app.route("/", dreamRoutes(deps));
   // Agents: keys a person makes in Settings, and the MCP server those keys open, one account per key.
   app.route("/me/agent-keys", agentKeyRoutes(deps));
