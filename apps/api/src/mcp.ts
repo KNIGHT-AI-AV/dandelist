@@ -3,11 +3,13 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { checkPhoto } from "./agent/photos";
 import { publicFetch } from "./agent/tools";
+import { arrange, GROUPS, SORTS, type Arrangeable } from "./arrange";
 import { requireAuth, type AuthDeps, type AuthVars } from "./auth";
 import type { Db } from "./db";
 import { NOTE_MAX } from "./notes";
 import { RateLimiter } from "./ratelimit";
 import { newRefreshToken, sameHash, signAccess } from "./tokens";
+import { MAX_WISHES_PER_USER } from "./wishes";
 import type { AppDeps } from "./app";
 
 /**
@@ -146,6 +148,17 @@ export const MCP_TOOLS = [
     ),
   },
   { name: "remove_wish", description: "Remove a wish from the list.", inputSchema: obj({ id: uuid }, ["id"]) },
+  {
+    name: "reorder_wishes",
+    description:
+      "Reorder the list: sort it (price, monthly upkeep, newest, oldest, name), lead with kinds or tiers (visit is a trip; must, nice and dream are tiers) and pin wishes to the top or the end by id, in order. Every other wish keeps its place. Returns the list in its new order.",
+    inputSchema: obj({
+      sort: { type: "string", enum: [...SORTS] },
+      first: { type: "array", items: { type: "string", enum: [...GROUPS] }, maxItems: GROUPS.length },
+      top: { type: "array", items: uuid, maxItems: MAX_WISHES_PER_USER },
+      bottom: { type: "array", items: uuid, maxItems: MAX_WISHES_PER_USER },
+    }),
+  },
   { name: "hunt", description: "Start the price hunt for a wish described in words. Poll hunt_status with the run_id; a first card lands in about 15 s and the hunt ends within a minute.", inputSchema: obj({ text: { type: "string", minLength: 2, maxLength: 1000 } }, ["text"]) },
   { name: "hunt_status", description: "A hunt's status and the prices and photos it found so far.", inputSchema: obj({ run_id: uuid }, ["run_id"]) },
   { name: "save_hunt", description: "Save a hunt's option (the best, unless you pick another by index) as a wish.", inputSchema: obj({ run_id: uuid, option: { type: "integer", minimum: 0, maximum: 3 }, tier: { type: "string", enum: TIERS } }, ["run_id"]) },
@@ -222,6 +235,22 @@ async function runTool(name: string, args: Record<string, unknown>, as: (method:
     case "remove_wish":
       await as("DELETE", `/wishes/${z.string().uuid().parse(args.id)}`);
       return { removed: true };
+    case "reorder_wishes": {
+      const a = z
+        .object({
+          sort: z.enum(SORTS).default("keep"),
+          first: z.array(z.enum(GROUPS)).max(GROUPS.length).default([]),
+          top: z.array(z.string().uuid()).max(MAX_WISHES_PER_USER).default([]),
+          bottom: z.array(z.string().uuid()).max(MAX_WISHES_PER_USER).default([]),
+        })
+        .parse(args);
+      const list = await wishes();
+      const mine = new Set(list.map((w) => w.id));
+      if ([...a.top, ...a.bottom].some((id) => !mine.has(id))) throw new ToolError("That wish wasn't found on this account.");
+      if (!list.length) return { wishes: [] };
+      const { wishes: after } = await as("PUT", "/wishes/order", { ids: arrange(list as unknown as Arrangeable[], a) });
+      return { wishes: (after as ServerWish[]).map(compact) };
+    }
     case "hunt": {
       const { run } = await as("POST", "/agent/runs", { text: z.string().trim().min(2).max(1000).parse(args.text) });
       return { run_id: run.id, status: run.status, cached: !!run.cached };

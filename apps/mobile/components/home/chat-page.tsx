@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Greeting } from "../chat/greeting";
 import { HistorySheet } from "../chat/history-sheet";
 import { HuntCard } from "../chat/hunt-card";
+import { ListChangeCard } from "../chat/list-change";
 import { useHistory } from "../chat/use-history";
 import { StreamText, WorkLog, Working, type StepLine } from "../chat/working";
 import { DandyAvatar } from "../dandy-avatar";
@@ -470,6 +471,9 @@ export function ChatPage() {
         // Hunted at once, in place: no button between the wish and its card. Its waiting music plays only while the chat
         // is the page in front.
         return <HuntCard id={w.id} text={w.text} watched={pager.page === "chat"} onPhase={onPhase} onShowOnList={home.showOnList} />;
+      case "list_change":
+        // A change to their own list: nothing moves until they tap Apply.
+        return <ListChangeCard w={w} onShowOnList={home.showOnList} />;
       case "region_picker":
         // Only when the Dandy asks: where they live otherwise comes from Settings.
         return <RegionPicker current={life?.home ?? w.current} onPick={(place) => send({ type: "region", home: place }, `I'll live in ${place.label}.`)} />;

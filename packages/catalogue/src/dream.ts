@@ -68,6 +68,11 @@ export type Widget =
   | { kind: "region_picker"; id: string; current: LifeContext["home"] }
   /** A single thing to buy or do (a watch, a trip): handed to the item price research with the person's words. */
   | { kind: "item"; id: string; text: string }
+  /**
+   * A change to the person's own list that their Dandy suggests (owner, 2026-10-30: "change the list and manage list for
+   * things like reorder"): the whole new order, tier moves and removals. Nothing changes until they tap Apply.
+   */
+  | { kind: "list_change"; id: string; title: string; order: string[]; tiers: { id: string; tier: "must" | "nice" | "dream" }[]; remove: string[] }
   | {
       kind: "wish_ready";
       id: string;
