@@ -5,6 +5,7 @@ import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDime
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ledger } from "../../components/ledger";
 import { AgentDot, Backdrop, Chip, EdgeFade, ErrorLine, Eyebrow, Glass, Grain, IconButton, Money, Photo, PrimaryButton, Protect, QuietButton, Shade } from "../../components/lux";
+import { SoundButton } from "../../components/sound-button";
 import { Statement, Take } from "../../components/statement";
 import { getRun, startHunt, transcribeWish, type Answer, type Draft, type PriceOption, type Run, type Step } from "../../lib/agent";
 import { answerPick, pickAdded } from "../../lib/picks";
@@ -278,6 +279,8 @@ export default function NewWish() {
 
   const latestImage = wishes.find((w) => w.details.agent?.imageUrl)?.details.agent?.imageUrl;
   const close = <IconButton icon="close" label="Close" onPress={() => (router.canGoBack() ? router.back() : router.replace("/wishes"))} style={{ position: "absolute", top: insets.top + (layout.headerBar - layout.control.icon) / 2, left: gutter, zIndex: 10 }} />;
+  // Sound on and off opposite Close, for the music that plays while the hunt runs (owner, 2026-10-30).
+  const sound = <SoundButton glass style={{ position: "absolute", top: insets.top + (layout.headerBar - layout.control.icon) / 2, right: gutter, zIndex: 10 }} />;
 
   // Concierge: describe the wish over a blurred photograph; the hunt starts the moment it's sent.
   if (stage === "describe") {
@@ -294,6 +297,7 @@ export default function NewWish() {
         )}
         <Glass intensity={70} style={[StyleSheet.absoluteFill, { borderRadius: 0, borderWidth: 0 }]} />
         {close}
+        {sound}
         <KeyboardScroll dock={askDock} contentContainerStyle={[column, { paddingTop: insets.top + layout.contentTop, paddingBottom: dockRoom(askDock, insets.bottom), gap: space[20] }]}>
             <View style={{ gap: layout.stack.tight }}>
               <Eyebrow>New wish</Eyebrow>
@@ -493,6 +497,7 @@ export default function NewWish() {
         </View>
       </ScrollView>
       {close}
+      {sound}
       {result?.options.length || worth ? (
         <>
           <EdgeFade height={dock} />

@@ -1,13 +1,16 @@
 /**
  * The fader's notch on the web: a short, quiet mechanical tick, synthesised (a few milliseconds of filtered noise
  * with a fast decay), so there is no sound file. The audio context opens on the first tick, which always follows a
- * touch, so browsers allow it.
+ * touch, so browsers allow it. Silent while sounds are off, like every other sound.
  */
+import { soundsEnabled } from "./sound";
+
 let ctx: AudioContext | null = null;
 let noise: AudioBuffer | null = null;
 let last = 0;
 
 export function tick(): void {
+  if (!soundsEnabled()) return;
   try {
     const now = performance.now();
     if (now - last < 28) return; // a fast drag across many notches still reads as ticks, not a buzz

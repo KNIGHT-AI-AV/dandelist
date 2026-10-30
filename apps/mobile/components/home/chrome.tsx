@@ -14,6 +14,7 @@ import { Icon, Wordmark } from "../lux";
 import { ListeningStrip, MicButton, useVoiceWish } from "../voice/say-wish";
 import { useHome } from "./bridge";
 import { offsetNode, usePager } from "./pager";
+import { SoundButton } from "../sound-button";
 import { ProfileAvatar } from "./profile-avatar";
 
 /** What each page is called, for the dots' screen-reader names and the page headings. */
@@ -53,6 +54,11 @@ function Dots() {
 
 /** Narrower than this, the bar keeps the wordmark, dots and photo only; the theme stays a row in settings. */
 const PALETTE_FROM = 360;
+/**
+ * From here the note fits beside the palette: wordmark 98, dots 98, note and palette 88, gap 12 and photo 50 make 346
+ * of the 350 a 390 pt phone leaves inside its gutters. Narrower, sound stays the switch in settings.
+ */
+const SOUND_FROM = 388;
 /** The space between the palette's touch area and the photo's, so one thumb never lands on both. */
 const PALETTE_GAP = 12;
 
@@ -83,8 +89,8 @@ export function PaletteButton() {
 }
 
 /**
- * The bar over every page: the wordmark (back to the list), the dots, the palette (to the themes) and the profile
- * picture (to settings). It stays put while the pages slide under it.
+ * The bar over every page: the wordmark (back to the list), the dots, sound on and off, the palette (to the themes)
+ * and the profile picture (to settings). It stays put while the pages slide under it.
  */
 export function TopBar() {
   const insets = useSafeAreaInsets();
@@ -104,7 +110,13 @@ export function TopBar() {
         </Pressable>
         <Dots />
         <View pointerEvents="box-none" style={{ flexDirection: "row", alignItems: "center", gap: PALETTE_GAP }}>
-          {width >= PALETTE_FROM ? <PaletteButton /> : null}
+          {width >= PALETTE_FROM ? (
+            // The note and the palette side by side, each its own 44 pt target; the gap keeps the palette off the photo.
+            <View pointerEvents="box-none" style={{ flexDirection: "row", alignItems: "center" }}>
+              {width >= SOUND_FROM ? <SoundButton /> : null}
+              <PaletteButton />
+            </View>
+          ) : null}
           <Pressable accessibilityRole="button" accessibilityLabel="Settings" onPress={() => go("settings")} onPressIn={press.onPressIn} onPressOut={press.onPressOut} style={{ width: layout.control.chip, height: layout.control.chip, alignItems: "flex-end", justifyContent: "center" }}>
             <Animated.View style={{ transform: [{ scale: press.scale }] }}>
               <ProfileAvatar size={34} />
