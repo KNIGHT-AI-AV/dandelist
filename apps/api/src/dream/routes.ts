@@ -14,6 +14,7 @@ import { deckWidget, runTurn } from "./agent";
 import { TurnBudget, TurnLimitError, type ApifyConfig, type DreamCtx } from "./context";
 import { HISTORY_LIMIT, previewOf, summary, titleOf } from "./history";
 import { homeSchema, lifeBody, readLife, writeLife } from "./life";
+import { notesFor } from "../notes";
 import { Suggestions } from "./suggest";
 import { emptyState, type DreamState, type TranscriptEntry } from "./types";
 
@@ -168,6 +169,8 @@ export function dreamRoutes(deps: DreamDeps) {
       },
     };
     const life = await readLife(db, userId);
+    // What they've told us about their wishes, for the concierge to keep in mind (notes.ts). Theirs alone.
+    const notes = await notesFor(db, userId);
 
     return streamSSE(c, async (stream) => {
       let open = true;
@@ -196,6 +199,7 @@ export function dreamRoutes(deps: DreamDeps) {
         emit,
         step: (id, state, text) => emit({ type: "step", id, state, text }),
         voice: voiceLine(body.data.persona),
+        notes,
         name: body.data.name,
       };
       let timer: ReturnType<typeof setTimeout> | undefined;

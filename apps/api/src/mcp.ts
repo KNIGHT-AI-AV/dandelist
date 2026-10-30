@@ -5,6 +5,7 @@ import { checkPhoto } from "./agent/photos";
 import { publicFetch } from "./agent/tools";
 import { requireAuth, type AuthDeps, type AuthVars } from "./auth";
 import type { Db } from "./db";
+import { NOTE_MAX } from "./notes";
 import { RateLimiter } from "./ratelimit";
 import { newRefreshToken, sameHash, signAccess } from "./tokens";
 import type { AppDeps } from "./app";
@@ -119,7 +120,7 @@ const obj = (properties: Record<string, unknown>, required: string[] = []) => ({
 
 /** Every tool an agent can call, with the JSON Schema of its input. */
 export const MCP_TOOLS = [
-  { name: "list_wishes", description: "List every wish on this account: name, kind, tier, price, running costs, photo and source.", inputSchema: obj({}) },
+  { name: "list_wishes", description: "List every wish on this account: name, kind, tier, price, running costs, photo, source and the person's note on why it matters.", inputSchema: obj({}) },
   { name: "get_wish", description: "One wish by id.", inputSchema: obj({ id: uuid }, ["id"]) },
   {
     name: "add_wish",
@@ -138,8 +139,11 @@ export const MCP_TOOLS = [
   },
   {
     name: "update_wish",
-    description: "Change a wish's name, tier or upfront price.",
-    inputSchema: obj({ id: uuid, name: { type: "string", maxLength: 200 }, tier: { type: "string", enum: TIERS }, upfront_cents: { type: "integer", minimum: 0 } }, ["id"]),
+    description: "Change a wish's name, tier, upfront price or note (why it matters to the person; an empty note clears it).",
+    inputSchema: obj(
+      { id: uuid, name: { type: "string", maxLength: 200 }, tier: { type: "string", enum: TIERS }, upfront_cents: { type: "integer", minimum: 0 }, note: { type: "string", maxLength: NOTE_MAX } },
+      ["id"],
+    ),
   },
   { name: "remove_wish", description: "Remove a wish from the list.", inputSchema: obj({ id: uuid }, ["id"]) },
   { name: "hunt", description: "Start the price hunt for a wish described in words. Poll hunt_status with the run_id; a first card lands in about 15 s and the hunt ends within a minute.", inputSchema: obj({ text: { type: "string", minLength: 2, maxLength: 1000 } }, ["text"]) },
@@ -156,7 +160,7 @@ export const MCP_TOOLS = [
 
 class ToolError extends Error {}
 
-type ServerWish = { id: string; name: string; kind: string; tier: string; upfrontCents: number; recurring: { amountCents: number; period: string; label?: string }[]; details: { agent?: Record<string, any> } };
+type ServerWish = { id: string; name: string; kind: string; tier: string; upfrontCents: number; recurring: { amountCents: number; period: string; label?: string }[]; details: { agent?: Record<string, any> }; note?: string | null };
 const PER_MONTH: Record<string, number> = { week: 52 / 12, month: 1, year: 1 / 12 };
 
 const compact = (w: ServerWish) => ({
@@ -169,6 +173,7 @@ const compact = (w: ServerWish) => ({
   photo_url: w.details?.agent?.imageUrl ?? null,
   source_url: w.details?.agent?.url ?? null,
   seller: w.details?.agent?.seller ?? null,
+  note: w.note ?? null,
 });
 
 const hostOf = (raw: string) => {
@@ -201,9 +206,16 @@ async function runTool(name: string, args: Record<string, unknown>, as: (method:
       return { wish: compact(w) };
     }
     case "update_wish": {
-      const a = z.object({ id: z.string().uuid(), name: z.string().trim().min(1).max(200).optional(), tier: z.enum(TIERS).optional(), upfront_cents: z.number().int().min(0).optional() }).parse(args);
-      const change = { ...(a.name ? { name: a.name } : {}), ...(a.tier ? { tier: a.tier } : {}), ...(a.upfront_cents !== undefined ? { upfrontCents: a.upfront_cents } : {}) };
-      if (!Object.keys(change).length) throw new ToolError("Say what to change: name, tier or upfront_cents.");
+      const a = z
+        .object({ id: z.string().uuid(), name: z.string().trim().min(1).max(200).optional(), tier: z.enum(TIERS).optional(), upfront_cents: z.number().int().min(0).optional(), note: z.string().max(NOTE_MAX).optional() })
+        .parse(args);
+      const change = {
+        ...(a.name ? { name: a.name } : {}),
+        ...(a.tier ? { tier: a.tier } : {}),
+        ...(a.upfront_cents !== undefined ? { upfrontCents: a.upfront_cents } : {}),
+        ...(a.note !== undefined ? { note: a.note.trim() ? a.note : null } : {}),
+      };
+      if (!Object.keys(change).length) throw new ToolError("Say what to change: name, tier, upfront_cents or note.");
       const { wish: w } = await as("PATCH", `/wishes/${a.id}`, change);
       return { wish: compact(w) };
     }

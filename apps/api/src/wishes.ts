@@ -3,6 +3,7 @@ import { z } from "zod";
 import { mediaSchema } from "./agent/media";
 import { requireAuth, type AuthVars } from "./auth";
 import { describeRoutes, type DescribeDeps } from "./describe";
+import { NOTE_MAX, cleanNote } from "./notes";
 
 /** A wish's source and image links are opened and shown by the app, so only http(s) addresses are stored. */
 export function webLinksOnly(details: Record<string, unknown>): boolean {
@@ -42,6 +43,14 @@ const createBody = z.object({
       return media === undefined || mediaSchema.safeParse(media).success;
     }, "Check the pictures.")
     .optional(),
+  // Why it matters to the person, in their words (notes.ts). Tidied here; empty or null clears it.
+  note: z
+    .string()
+    .max(NOTE_MAX * 2)
+    .nullable()
+    .transform((n) => (n === null ? null : cleanNote(n)))
+    .refine((n) => n === null || n.length <= NOTE_MAX, `Keep the note under ${NOTE_MAX} characters.`)
+    .optional(),
 });
 
 const patchBody = createBody.partial().refine((b) => Object.keys(b).length > 0, "Nothing to change.");
@@ -57,11 +66,12 @@ type Row = {
   resale_cents: string | number | null;
   details: unknown;
   image_key: string | null;
+  note: string | null;
   created_at: string | Date;
   updated_at: string | Date;
 };
 
-const COLUMNS = "id, name, kind, tier, upfront_cents, recurring, resale_cents, details, image_key, created_at, updated_at";
+const COLUMNS = "id, name, kind, tier, upfront_cents, recurring, resale_cents, details, image_key, note, created_at, updated_at";
 
 export function toWish(r: Row) {
   return {
@@ -74,6 +84,7 @@ export function toWish(r: Row) {
     resaleCents: r.resale_cents === null ? null : Number(r.resale_cents),
     details: typeof r.details === "string" ? JSON.parse(r.details) : r.details,
     imageKey: r.image_key,
+    note: r.note ?? null,
     createdAt: new Date(r.created_at).toISOString(),
     updatedAt: new Date(r.updated_at).toISOString(),
   };
@@ -102,10 +113,11 @@ export function wishRoutes(deps: DescribeDeps) {
     if (Number(count.rows[0]?.n ?? 0) >= MAX_WISHES_PER_USER) return c.json({ error: `You can keep up to ${MAX_WISHES_PER_USER} wishes.` }, 409);
     const w = parsed.data;
     const now = deps.now().toISOString();
+    const note = w.note ?? null;
     const { rows } = await db.query<Row>(
-      `insert into wishes (user_id, name, kind, tier, upfront_cents, recurring, resale_cents, details, created_at, updated_at)
-       values ($1, $2, $3, $4, $5, $6::jsonb, $7, $8::jsonb, $9, $9) returning ${COLUMNS}`,
-      [userId, w.name, w.kind, w.tier, w.upfrontCents, JSON.stringify(w.recurring), w.resaleCents ?? null, JSON.stringify(w.details ?? {}), now],
+      `insert into wishes (user_id, name, kind, tier, upfront_cents, recurring, resale_cents, details, note, note_updated_at, created_at, updated_at)
+       values ($1, $2, $3, $4, $5, $6::jsonb, $7, $8::jsonb, $10, $11, $9, $9) returning ${COLUMNS}`,
+      [userId, w.name, w.kind, w.tier, w.upfrontCents, JSON.stringify(w.recurring), w.resaleCents ?? null, JSON.stringify(w.details ?? {}), now, note, note ? now : null],
     );
     return c.json({ wish: toWish(rows[0]!) }, 201);
   });
@@ -128,6 +140,10 @@ export function wishRoutes(deps: DescribeDeps) {
     if (p.recurring !== undefined) set("recurring", JSON.stringify(p.recurring), "::jsonb");
     if (p.resaleCents !== undefined) set("resale_cents", p.resaleCents);
     if (p.details !== undefined) set("details", JSON.stringify(p.details), "::jsonb");
+    if (p.note !== undefined) {
+      set("note", p.note);
+      set("note_updated_at", p.note === null ? null : deps.now().toISOString());
+    }
     set("updated_at", deps.now().toISOString());
     vals.push(id.data, c.get("userId"));
     const { rows } = await db.query<Row>(

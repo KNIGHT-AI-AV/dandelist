@@ -18,6 +18,7 @@ import { DeleteAccount } from "../settings/delete-account";
 import { FactsCard } from "../settings/facts";
 import { Card, Row, RowRule, Section } from "../settings/kit";
 import { LinkedAccounts } from "../settings/linked-accounts";
+import { NotificationSettings } from "../settings/notifications";
 import { PlacePicker, type Place } from "../settings/place-picker";
 import { placeLabel } from "../settings/places";
 import { NameField, ProfileCard } from "../settings/profile-card";
@@ -169,6 +170,9 @@ export function SettingsPage() {
             />
           </Card>
         </Section>
+
+        {/* Today's pick and the nudge, on phones once notifications are switched on (lib/notifications.ts). */}
+        <NotificationSettings />
 
         <Section title="Sign-in accounts">
           <LinkedAccounts identities={identities} options={options} email={email} onChange={setIdentities} notice={notice} />

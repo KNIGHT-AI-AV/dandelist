@@ -17,6 +17,7 @@ import { pgArchive, type Archive } from "../archive/archive";
 import { MAX_CLIP_BYTES, TRANSCRIBES_PER_USER_PER_DAY, WISH_KEYWORDS, cleanTranscript, clipProblem, readWav } from "./transcribe";
 import { personaSchema, voiceLine } from "./persona";
 import { stoppable } from "../sse";
+import { notesFor, withNotes } from "../notes";
 
 export const RUNS_PER_USER_PER_DAY = 20;
 /** Every judge shares one account, so it gets more runs; its share of the daily spend cap still bounds it. */
@@ -186,7 +187,8 @@ export function agentRoutes(deps: AgentDeps) {
     // Each wish read is two model calls: interpret, then clarify.
     if (Number(read.rows[0]?.n ?? 0) >= INTERPRETS_PER_USER_PER_DAY * 2) return c.json({ error: `You can add up to ${INTERPRETS_PER_USER_PER_DAY} wishes this way a day.` }, 429);
     try {
-      const meta = metaFor(c.get("userId"), "interpret");
+      // The person's own notes on their wishes join the reading and the questions (notes.ts).
+      const meta = withNotes(metaFor(c.get("userId"), "interpret"), await notesFor(db, c.get("userId")));
       const draft = await interpret(meta, body.data.text);
       const questions = await clarify(meta, draft);
       return c.json({ draft, questions });
@@ -293,6 +295,9 @@ export function agentRoutes(deps: AgentDeps) {
       return c.json({ error: friendly(e) }, 429);
     }
 
+    // The person's own notes join the calls that plan for them: the reading, the questions and the research (notes.ts).
+    const notes = await notesFor(db, userId);
+
     // Count and insert in one statement. Parallel requests can still overshoot by a few; the per-person spend cap
     // above bounds what that costs.
     const since = new Date(now.getTime() - CACHE_MS).toISOString();
@@ -317,7 +322,7 @@ export function agentRoutes(deps: AgentDeps) {
     const stop = new AbortController();
     const shopping = shoppingFor(userId, draft?.region ?? "US", draft?.currency ?? "USD", addCost);
     const fast: { result: ReturnType<typeof resultOf> | null } = { result: null };
-    const hunt = huntWish(metaFor(userId, "research", addCost, stop.signal), {
+    const hunt = huntWish(withNotes(metaFor(userId, "research", addCost, stop.signal), notes), {
       text,
       draft,
       answers,

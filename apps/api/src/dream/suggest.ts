@@ -5,6 +5,7 @@ import { assertBudget, assertUserBudget, recordSpend, userCapUsd, withHold, type
 import { tidy } from "./agent";
 import { json, strictObject } from "./context";
 import { readLife } from "./life";
+import { notesFor } from "../notes";
 
 /**
  * Three things to say to start a new chat (owner, 2026-10-28: "fresh, agentic suggestions per new chat, based on
@@ -27,6 +28,8 @@ export interface SuggestMemory {
   home: string | null;
   chats: string[];
   persona?: PersonaId;
+  /** Their own notes on their wishes, framed as data for the instructions (notes.ts); empty when none. */
+  notes?: string;
 }
 
 export interface SuggestDeps {
@@ -115,14 +118,15 @@ const SUGGEST = `You suggest what someone might ask their private concierge for 
 
 const SCHEMA = strictObject({ suggestions: { type: "array", items: { type: "string" } } });
 
-/** What the suggestions are built from: their wishes, where they live, their latest chat titles. */
+/** What the suggestions are built from: their wishes, where they live, their latest chat titles and their notes. */
 export async function readMemory(db: Db, userId: string, persona?: PersonaId): Promise<SuggestMemory> {
-  const [wishes, life, chats] = await Promise.all([
+  const [wishes, life, chats, notes] = await Promise.all([
     db.query<{ name: string }>("select name from wishes where user_id = $1 order by created_at desc limit 24", [userId]),
     readLife(db, userId),
     db.query<{ title: string }>("select title from dream_sessions where user_id = $1 and title is not null order by updated_at desc limit 6", [userId]),
+    notesFor(db, userId),
   ]);
-  return { wishes: wishes.rows.map((r) => r.name), home: life.home?.label ?? null, chats: chats.rows.map((r) => r.title), persona };
+  return { wishes: wishes.rows.map((r) => r.name), home: life.home?.label ?? null, chats: chats.rows.map((r) => r.title), persona, notes };
 }
 
 function modelInput(m: SuggestMemory, now: Date): string {
@@ -148,7 +152,7 @@ async function ask(deps: SuggestDeps, userId: string, memory: SuggestMemory): Pr
     check,
     () =>
       client.responses({
-        instructions: voice ? `${SUGGEST}\n${voice}` : SUGGEST,
+        instructions: [SUGGEST, voice, memory.notes].filter(Boolean).join("\n"),
         input: modelInput(memory, deps.now()),
         text: { format: { type: "json_schema", name: "chat_suggestions", schema: SCHEMA, strict: true } },
       }),

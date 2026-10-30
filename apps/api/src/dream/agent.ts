@@ -844,7 +844,7 @@ const PROMISE = /\b(let me|i'll|i will|i'm going to|i am going to|opening|search
 const NUDGE = "You said you would do that but called no tool. Call the tool now, without repeating what you said.";
 
 async function converse(ctx: DreamCtx, t: TranscriptEntry[], state: DreamState, message: string): Promise<void> {
-  let res = await ctx.meta.responses({ instructions: ctx.voice ? `${CONCIERGE}\n${ctx.voice}` : CONCIERGE, input: modelInput(ctx, t, state, message), tools: CONCIERGE_TOOLS });
+  let res = await ctx.meta.responses({ instructions: [CONCIERGE, ctx.voice, ctx.notes].filter(Boolean).join("\n"), input: modelInput(ctx, t, state, message), tools: CONCIERGE_TOOLS });
   const speak = async (text: string) => {
     const clean = brief(inCharacter(honest(text.replace(/^\s*(?:[-*]|\d+[.)])\s+/gm, "").replace(/\s*\n+\s*/g, " ").trim(), sayableFacts(t, state, ctx))));
     if (!clean) return;

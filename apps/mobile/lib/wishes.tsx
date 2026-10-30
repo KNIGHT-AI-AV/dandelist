@@ -14,6 +14,8 @@ export interface Wish {
   item: Item;
   /** What the agent found when the wish was researched: the chosen option, its source and the summary. */
   details: WishDetails;
+  /** Why it matters to them, in their own words; only they see it, and their Dandy keeps it in mind. */
+  note?: string | null;
   createdAt: string;
 }
 
@@ -64,6 +66,8 @@ interface WishStore {
   mergeDetails(id: string, change: Partial<WishDetails>): void;
   /** Saves a new photo on a wish (a retake). Shows at once; goes back if the server says no. */
   setPhoto(id: string, photo: { imageUrl: string; media: Media }): Promise<void>;
+  /** Saves why the wish matters to them (null clears it). The copy on screen changes once the server has it. */
+  setNote(id: string, note: string | null): Promise<void>;
 }
 
 type ServerWish = {
@@ -75,6 +79,7 @@ type ServerWish = {
   recurring: { amountCents: number; period: Period }[];
   resaleCents: number | null;
   details: WishDetails | null;
+  note?: string | null;
   createdAt: string;
 };
 
@@ -85,6 +90,7 @@ const fromServer = (w: ServerWish): Wish => ({
   tier: w.tier,
   createdAt: w.createdAt,
   details: w.details ?? {},
+  note: w.note ?? null,
   item: { id: w.id, upfrontCents: w.upfrontCents, recurring: w.recurring, ...(w.resaleCents === null ? {} : { resaleCents: w.resaleCents }) },
 });
 
@@ -182,6 +188,12 @@ export function WishProvider({ children }: { children: ReactNode }) {
         if (res?.ok) return;
         setWishes((ws) => ws.map((x) => (x.id === id && x.details === details ? { ...x, details: was.details } : x)));
         throw await failure(res, "Couldn't save the new photo.");
+      },
+      async setNote(id, note) {
+        const res = await api(`/wishes/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ note }) }).catch(() => null);
+        if (!res?.ok) throw await failure(res, "Couldn't save your note.");
+        const saved = fromServer(((await res.json()) as { wish: ServerWish }).wish).note;
+        setWishes((ws) => ws.map((x) => (x.id === id ? { ...x, note: saved } : x)));
       },
     }),
     [wishes, status, error, reload, api],
