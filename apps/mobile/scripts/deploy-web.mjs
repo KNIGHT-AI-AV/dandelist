@@ -2,12 +2,36 @@
  * Builds the web app against the live API and publishes it to Cloudflare Pages (project "dandelist",
  * served at https://dandelist.knightaiav.com). Needs a wrangler login with Pages access.
  */
-import { execSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 import { copyFileSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 
-const env = { ...process.env, EXPO_PUBLIC_API_URL: process.env.EXPO_PUBLIC_API_URL ?? "https://api.dandelist.knightaiav.com" };
+// The commit this bundle is built from. The app compares it with web.version in latest.json and offers a reload when
+// they differ (lib/update-core.ts). Edits not yet committed get the time on the end, so they read as new too.
+function webVersion() {
+  const git = (...args) => execFileSync("git", args, { cwd: new URL("..", import.meta.url), encoding: "utf8" }).trim();
+  const head = git("rev-parse", "HEAD");
+  return git("status", "--porcelain", "--untracked-files=no") ? `${head}-dirty-${Date.now().toString(36)}` : head;
+}
+const env = {
+  ...process.env,
+  EXPO_PUBLIC_API_URL: process.env.EXPO_PUBLIC_API_URL ?? "https://api.dandelist.knightaiav.com",
+  EXPO_PUBLIC_WEB_VERSION: process.env.EXPO_PUBLIC_WEB_VERSION || webVersion(),
+};
 const run = (cmd) => execSync(cmd, { stdio: "inherit", env, cwd: new URL("..", import.meta.url) });
 run("npx expo export --platform web --clear");
+
+// What is newest, for every client (lib/update-core.ts): public/latest.json, which the export copies into dist, with
+// this bundle's version added. Stop rather than publish a file the apps can't read.
+const latestFile = new URL("../dist/latest.json", import.meta.url);
+const latest = JSON.parse(readFileSync(latestFile, "utf8"));
+for (const os of ["ios", "android"]) {
+  const { build, url } = latest[os] ?? {};
+  if (!Number.isInteger(build) || build < 1 || typeof url !== "string" || (url !== "" && !url.startsWith("https://"))) {
+    throw new Error(`public/latest.json: ${os} needs a whole build number and an https url ("" never asks)`);
+  }
+}
+latest.web = { version: env.EXPO_PUBLIC_WEB_VERSION };
+writeFileSync(latestFile, `${JSON.stringify(latest, null, 2)}\n`);
 
 // Paint the page in the person's theme before any script loads, so the first frame is never a white flash.
 const BG = { emerald: "#03140D", bordeaux: "#14060A", noir: "#0A0A0B", ivory: "#F5F0E6", delina: "#F6E3E7", sapphire: "#050A18" };
@@ -37,6 +61,8 @@ for (const dir of IMMUTABLE) {
 }
 writeFileSync(
   new URL("../dist/_headers", import.meta.url),
-  IMMUTABLE.map((dir) => `/${dir}/*\n  Cache-Control: public, max-age=31536000, immutable\n`).join(""),
+  IMMUTABLE.map((dir) => `/${dir}/*\n  Cache-Control: public, max-age=31536000, immutable\n`).join("") +
+    // Every app asks for this on each launch: never from a cache without checking.
+    "/latest.json\n  Cache-Control: no-cache\n",
 );
 run("npx -y wrangler@4.149.0 pages deploy dist --project-name dandelist --branch main --commit-dirty=true");
