@@ -600,13 +600,15 @@ export async function quickFind(meta: Meta, input: QuickInput, ctx: QuickContext
   let people: number | null = null;
   const party = chosen ? null : partyOf(draft, [input.words, ...(input.details ?? [])].join("; "));
   if (party) {
-    // Only a one-time quote for each of them (never monthly or a child's rate; an adult's rate only for adults).
-    const applies = (text: string, c: Candidate) => personPrice(text, c.amount, c.currency) && perPersonApplies([text], c.amount, c.currency, party.adultsOnly);
+    // Only a one-time quote for each of them (never monthly or a child's rate; an adult's rate only for adults). The
+    // page and the search's own result for it are read together: a period or child rate in either holds the quote.
+    const applies = (shown: string, alsoSaid: string, c: Candidate) =>
+      personPrice(shown, c.amount, c.currency) && perPersonApplies([shown, alsoSaid], c.amount, c.currency, party.adultsOnly);
     for (const { c, page } of pages) {
       if (!(c.amount > 0) || !/^[A-Z]{3}$/.test(c.currency)) continue;
       const text = said.get(pageKey(c.url)) ?? c.resultTitle ?? "";
-      const onPage = page.ok && namesWish(page, words, loose) && applies(page.text, c);
-      const inResult = !page.ok && refused(page) && !!c.resultTitle && titleNames(c.resultTitle, words, loose) && applies(text, c);
+      const onPage = page.ok && namesWish(page, words, loose) && applies(page.text, text, c);
+      const inResult = !page.ok && refused(page) && !!c.resultTitle && titleNames(c.resultTitle, words, loose) && applies(text, "", c);
       if (!onPage && !inResult) continue;
       chosen = { c, ...(onPage ? { page } : {}), price: { amount: c.amount, currency: c.currency, how: onPage ? "page" : "result" } };
       people = party.count;

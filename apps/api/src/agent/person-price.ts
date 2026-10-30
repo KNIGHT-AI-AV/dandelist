@@ -3,8 +3,14 @@ import { priceMentions } from "./tools";
 const PERSON = "(persons?|people|adults?|children|child|guests?|heads?|pax|passengers?|travell?ers?|participants?)";
 const AFTER = new RegExp("^\\s*(?:(?:per|a|each|/)\\s*" + PERSON + "\\b|p\\.?p\\.?(?![a-z])|pax\\b)", "i");
 const BEFORE = new RegExp("\\b(?:per|each)\\s+" + PERSON + "(?:\\s+guests?)?\\s*[:=]?\\s*$", "i");
-/** A time unit right after a quote ("per person per month", "/person/night", "USD 150/month"): a recurring charge. */
-const RECURRING = /^\s*,?\s*(?:(?:per|a|each|every|\/)\s*(?:month|mo|week|wk|year|yr|day|night|nt|hour|hr|session|lesson|class)\b|monthly|weekly|nightly|daily|yearly|annually|hourly)/i;
+/**
+ * A time unit in the same clause just after a quote or its person unit ("per person per month", "/person/night",
+ * "per adult guest per month", "USD 150/month"): a recurring charge.
+ */
+const PER_TIME = /^[^.;\n]{0,30}?(?:\b(?:per|a|each|every)\s+|\/\s*)(?:month|mo|week|wk|year|yr|day|night|nt|hour|hr|session|lesson|class)\b/i;
+/** "Monthly" and the like count only right after the quote: "including daily breakfast" is no billing period. */
+const TIME_WORD = /^\s*,?\s*(?:monthly|weekly|nightly|daily|yearly|annually|hourly)\b/i;
+const RECURRING = { test: (s: string) => PER_TIME.test(s) || TIME_WORD.test(s) };
 /** A separate rate for children named anywhere in the text. */
 const CHILD_RATE = /\b(?:per|each|a|\/)\s*(?:child|children|kids?|infants?|teens?|youths?)\b|\b(?:child|children'?s?|kids?'?|infant|youth|junior)\s+(?:prices?|rates?|tickets?|fares?)\b/i;
 
@@ -27,7 +33,8 @@ const currencyMark = (mark: string | undefined) => !!namedCurrency(mark) || mark
 /** Each place the text states this amount with a person unit beside it: who the unit is for, and whether it recurs. */
 function personQuotes(text: string, amount: number, currency?: string): { tier: Tier; recurring: boolean }[] {
   if (!Number.isFinite(amount) || amount <= 0) return [];
-  return priceMentions(text, amount).flatMap((m) => {
+  // A wide enough window to see a period after a compound unit ("per adult guest per month").
+  return priceMentions(text, amount, 48).flatMap((m) => {
     const leading = LEADING_CURRENCY.exec(m.before);
     const trailing = TRAILING_CURRENCY.exec(m.after);
     // Skip actual currency marks, never arbitrary three-letter words such as "and".
@@ -95,6 +102,8 @@ export function headcount(text: string): number | null {
 }
 
 const PEOPLE_FIELD = /\b(?:people|persons?|guests?|travell?ers?|passengers?|adults?|party|group|headcount|who'?s (?:going|coming)|how many)\b/i;
+/** A field that counts people with a rate of their own ("children: 2", "kids", "seniors"). */
+const OWN_RATE_FIELD = /\b(?:children|child|kids?|infants?|babies|seniors?|teens?)\b/i;
 
 /** A stated party: how many people, and whether the words say they are all adults. */
 export interface Party {
@@ -123,12 +132,20 @@ function partyIn(text: string): Party | "mixed" | null {
  * mixes people who may be priced at their own rate: a per-person quote is then held, as #78 did.
  */
 export function partyOf(draft: { questions?: { id: string; label: string; picked: string }[]; specifics: { name: string; value: string }[]; summary?: string } | null | undefined, words = ""): Party | null {
-  const fromField = (name: string, value: string): Party | "mixed" | null =>
-    !PEOPLE_FIELD.test(name) ? null : (partyIn(value) ?? (/^\s*\d{1,2}\s*$/.test(value) ? { count: Number(value), adultsOnly: false } : null));
-  const found =
-    draft?.questions?.map((q) => fromField(`${q.id} ${q.label}`, q.picked)).find((p) => p !== null) ??
-    draft?.specifics.map((s) => fromField(s.name, s.value)).find((p) => p !== null) ??
-    partyIn(words) ??
-    (draft?.summary ? partyIn(draft.summary) : null);
-  return found && found !== "mixed" && found.count >= 1 && found.count <= 90 ? found : null;
+  const fromField = (name: string, value: string): Party | "mixed" | null => {
+    // A field of its own for children or seniors ("children: 2") mixes the party unless it says none.
+    if (OWN_RATE_FIELD.test(name) && !/^\s*(?:0|none|no|zero)\b/i.test(value)) return /\d|one|two|three|four|five|six|some|yes/i.test(value) ? "mixed" : null;
+    if (!PEOPLE_FIELD.test(name)) return null;
+    return partyIn(value) ?? (/^\s*\d{1,2}\s*$/.test(value) ? { count: Number(value), adultsOnly: false } : null);
+  };
+  // Every place the wish states its people is read: one that mixes tiers holds the quote, wherever it is.
+  const all = [
+    ...(draft?.questions ?? []).map((q) => fromField(`${q.id} ${q.label}`, q.picked)),
+    ...(draft?.specifics ?? []).map((s) => fromField(s.name, s.value)),
+    partyIn(words),
+    draft?.summary ? partyIn(draft.summary) : null,
+  ];
+  if (all.includes("mixed")) return null;
+  const found = all.find((p): p is Party => p !== null && p !== "mixed");
+  return found && found.count >= 1 && found.count <= 90 ? found : null;
 }
