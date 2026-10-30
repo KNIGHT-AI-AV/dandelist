@@ -40,9 +40,12 @@ export const PICK_RETRY_MS = 5 * 60 * 1000;
 /** A claim this old was left by a request that died; the next request takes it over. */
 const STALE_MS = 2 * 60 * 1000;
 /** The whole pick, photo included, answers within this or not at all. */
-const PICK_MS = 40_000;
-/** The photo search's share of it: a plan, a web search and two looks at each candidate. */
-const PHOTO_MS = 20_000;
+const PICK_MS = 50_000;
+/**
+ * The photo search's share of it: a plan, a web search and two looks at each candidate. A hunt's median is about 16 s
+ * and its slow tail runs past 25 s (2026-10-29, 24 wishes); at 20 s the first live pick came back without a photo.
+ */
+const PHOTO_MS = 30_000;
 /** What the model reads: the newest wishes and earlier picks. */
 const WISHES_READ = 40;
 const PICKS_READ = 30;
