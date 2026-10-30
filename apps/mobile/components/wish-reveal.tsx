@@ -6,6 +6,7 @@ import { cardBlur, type Card } from "../lib/reveal";
 import { ease, native, step, useReducedMotion } from "../lib/motion";
 import { fonts, layout, radius, type, usePalette } from "../lib/theme";
 import { AgentDot, Eyebrow, Glass } from "./lux";
+import { WaitingLight } from "./waiting-light";
 
 /** One picture every 1.6 s: long enough to register, short enough to feel alive. */
 const SHUFFLE_MS = 1600;
@@ -88,6 +89,8 @@ export function RevealPhoto({ deck, final, clarity, done }: { deck: Card[]; fina
           />
         </Animated.View>
       ) : null}
+      {/* While the picture is being made: light crossing it, motes drifting up. The real one lands over it. */}
+      <WaitingLight active={!done} />
       {done && final ? (
         <Animated.View style={[StyleSheet.absoluteFill, { transform: [{ scale: settle }] }]}>
           {reduced ? null : (

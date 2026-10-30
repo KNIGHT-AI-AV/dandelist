@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { holdSounds, resumeSounds } from "../../lib/sound";
 import { SPEECH_LEVEL, downsample, encodeWav, levelOf, shouldStop } from "../../lib/wav";
 import { BARS, MAX_LISTEN_MS, type Recorder, type RecorderOptions, type StopReason } from "./recorder-types";
 
@@ -29,6 +30,8 @@ export function useRecorder({ onClip, onError, maxMs = MAX_LISTEN_MS }: Recorder
     if (!l) return;
     live.current = null;
     clearInterval(l.timer);
+    // The microphone has stopped taking sound: the app's sounds may play again.
+    void resumeSounds();
     setListening(false);
     setLevels([]);
     setElapsed(0);
@@ -66,24 +69,37 @@ export function useRecorder({ onClip, onError, maxMs = MAX_LISTEN_MS }: Recorder
 
   const start = useCallback(async () => {
     if (!supported || live.current) return;
+    // Nothing the app plays may go into the recording: the waiting music stops at once, until resumeSounds.
+    holdSounds();
     let stream: MediaStream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
     } catch (e) {
+      void resumeSounds();
       const denied = (e as DOMException)?.name === "NotAllowedError" || (e as DOMException)?.name === "SecurityError";
       return handlers.current.onError(denied ? "Allow the microphone to say your wish, or type it." : "Couldn't open a microphone. Type it instead.");
     }
-    const ctx = new AudioContext();
-    await ctx.resume().catch(() => {});
-    const source = ctx.createMediaStreamSource(stream);
-    const analyser = ctx.createAnalyser();
-    analyser.fftSize = 2048;
-    source.connect(analyser);
-    const recorder = new MediaRecorder(stream);
-    const l: Live = { ctx, stream, recorder, analyser, source, chunks: [], timer: 0 as never, startedAt: performance.now(), spokeAt: null };
-    recorder.ondataavailable = (e) => e.data.size && l.chunks.push(e.data);
-    recorder.start(250);
+    let l: Live;
+    try {
+      const ctx = new AudioContext();
+      await ctx.resume().catch(() => {});
+      const source = ctx.createMediaStreamSource(stream);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 2048;
+      source.connect(analyser);
+      const recorder = new MediaRecorder(stream);
+      const made: Live = { ctx, stream, recorder, analyser, source, chunks: [], timer: 0 as never, startedAt: performance.now(), spokeAt: null };
+      recorder.ondataavailable = (e) => e.data.size && made.chunks.push(e.data);
+      recorder.start(250);
+      l = made;
+    } catch {
+      // The browser gave the microphone but couldn't record it: close it, and let the app's sounds play again.
+      stream.getTracks().forEach((t) => t.stop());
+      void resumeSounds();
+      return handlers.current.onError("Couldn't open a microphone. Type it instead.");
+    }
     live.current = l;
+    const { analyser } = l;
     const buf = new Float32Array(analyser.fftSize);
     const ring: number[] = [];
     l.timer = setInterval(() => {
