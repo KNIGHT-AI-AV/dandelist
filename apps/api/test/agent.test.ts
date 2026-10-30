@@ -1,6 +1,6 @@
 import { PGlite } from "@electric-sql/pglite";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanThought, unknownNumbers } from "../src/agent/agent";
+import { cleanThought, json, unknownNumbers } from "../src/agent/agent";
 import { assertPublicUrl, htmlToText, pageNamesItem, pageShowsPrice, privateIp, sellerOwnsHost, structuredPrices } from "../src/agent/tools";
 
 // Shop hostnames resolve to a public documentation address, so no test touches real DNS.
@@ -377,5 +377,14 @@ describe("wish agent", () => {
     app = makeApp(false);
     const t = await signIn("ada@example.com");
     expect((await call("POST", "/agent/interpret", t, { text: "a bike" })).status).toBe(503);
+  });
+});
+
+describe("the model's JSON answer", () => {
+  it("reads the object after a sentence the model put first, and still fails on text with no object", () => {
+    expect(json('{"options":[]}')).toEqual({ options: [] });
+    expect(json('```json\n{"a":1}\n```')).toEqual({ a: 1 });
+    expect(json('I\'ve gathered the prices. {"options":[{"label":"x"}],"note":""}')).toEqual({ options: [{ label: "x" }], note: "" });
+    expect(() => json("I couldn't find anything.")).toThrow();
   });
 });
