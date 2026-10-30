@@ -3,7 +3,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import type { Meta } from "./agent/agent";
 import { personaSchema, voiceLine, type PersonaId } from "./agent/persona";
-import { findPhoto } from "./agent/photos";
+import { PHOTO_CHECK, findPhoto } from "./agent/photos";
 import { USER_DAILY_USD, type AgentDeps } from "./agent/routes";
 import { within } from "./agent/time";
 import { publicFetch, type Fetcher } from "./agent/tools";
@@ -13,7 +13,7 @@ import { json, strictObject } from "./dream/context";
 import { readLife } from "./dream/life";
 import { notesFor } from "./notes";
 import { stoppable } from "./sse";
-import { HOLD_USD, SpendLimitError, assertBudget, assertUserBudget, hold, recordSpend, userCapUsd, withHold } from "./spend";
+import { HOLD_USD, SpendLimitError, assertBudget, assertUserBudget, recordSpend, userCapUsd, withHold } from "./spend";
 
 /**
  * Today's pick (owner, 2026-10-29: "intelligent suggestions... Maybe we'll do something like daily item suggestions
@@ -259,6 +259,9 @@ function toPick(r: PickRow): DailyPick | null {
 }
 
 const todayBody = z.object({ day: z.string().max(10), persona: personaSchema.catch(undefined) });
+
+/** The most one call can cost, held while it runs: a look at one photo is small and fixed, a fifth of a full call. */
+export const holdFor = (body: Record<string, unknown>) => ((body.text as { format?: { name?: string } } | undefined)?.format?.name === PHOTO_CHECK ? HOLD_USD / 5 : HOLD_USD);
 const outcomeBody = z.object({ outcome: z.enum(["added", "skipped"]) });
 
 export function pickRoutes(deps: AgentDeps) {
@@ -329,23 +332,9 @@ export function pickRoutes(deps: AgentDeps) {
 
     const stop = new AbortController();
     const client = new MetaClient({ ...deps.meta, fetch: stoppable(deps.meta.fetch ?? fetch, stop.signal), onUsage: (usage, cost) => recordSpend(db, userId, "pick", usage, cost, deps.now()) });
-    const meta: Meta = { responses: (b) => withHold(guard, () => client.responses(b), userId) };
-    // The photo search looks at each photo twice at once, a few photos at a time: more calls side by side than one
-    // person may hold one by one (spend.ts). It runs under a single hold instead, each call still checking the caps.
-    const looks: Meta = { responses: async (b) => (await guard(), client.responses(b)) };
-    const searchPhoto = async (pick: MadePick) => {
-      let release: () => void;
-      try {
-        release = hold(HOLD_USD, userId);
-      } catch {
-        return null; // the person has other work in flight: the card shows without a photo
-      }
-      try {
-        return await photoFor(looks, pick, deps.webFetch ?? publicFetch, Date.now() + PHOTO_MS);
-      } finally {
-        release();
-      }
-    };
+    // Every call holds its own share of the caps while it runs, as the agent's do (agent/routes.ts): a look at one
+    // photo a fifth of a full call, and past the person's in-flight slots a call waits its turn (spend.ts).
+    const meta: Meta = { responses: (b) => withHold(guard, () => client.responses(b), userId, holdFor(b)) };
     try {
       const [life, notes, past] = await Promise.all([
         readLife(db, userId),
@@ -355,7 +344,7 @@ export function pickRoutes(deps: AgentDeps) {
       const made = await within(
         (async () => {
           const pick = await choosePick(meta, { day, home: life.home?.label ?? null, wishes, picks: past.rows, notes, persona });
-          return { pick, photo: await searchPhoto(pick) };
+          return { pick, photo: await photoFor(meta, pick, deps.webFetch ?? publicFetch, Date.now() + PHOTO_MS) };
         })(),
         PICK_MS,
       );

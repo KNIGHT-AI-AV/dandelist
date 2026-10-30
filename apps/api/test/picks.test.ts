@@ -7,7 +7,8 @@ import { USER_DAILY_USD } from "../src/agent/routes";
 import { createApp } from "../src/app";
 import { migrate, type Db } from "../src/db";
 import { NOTES_HEADING } from "../src/notes";
-import { PICK_RETRY_MS, PICK_TRIES_PER_DAY, PickRejected, checkPick, dayOk, sameThing } from "../src/picks";
+import { PICK_RETRY_MS, PICK_TRIES_PER_DAY, PickRejected, checkPick, dayOk, holdFor, sameThing } from "../src/picks";
+import { HOLD_USD, heldFor } from "../src/spend";
 import { imageResponse, jpegHeader } from "./images";
 
 /**
@@ -30,6 +31,9 @@ let answers: (Json | string)[];
 let photoSize: [number, number] | null;
 /** Whether the photo search's two looks pick the photo out of the line-up. */
 let looksPass: boolean;
+/** Whose holds each model call sees while it runs, and what they were. */
+let watch: string | null;
+let held: { format: string; usd: number }[];
 
 const reply = (output: unknown[]) => Response.json({ id: `resp_${calls.length}`, output, usage: { input_tokens: 4000, output_tokens: 300 } });
 const message = (text: string) => ({ type: "message", content: [{ type: "output_text", text, annotations: [] }] });
@@ -38,6 +42,7 @@ const fakeMeta = (async (_url: string, init: RequestInit) => {
   const body = JSON.parse(String(init.body)) as Json;
   calls.push(body);
   const format = body.text?.format?.name;
+  if (watch) held.push({ format: format ?? "text", usd: heldFor(watch) });
   if (format === "daily_pick") {
     const next = answers.shift() ?? RIVA;
     // The live API often writes a sentence before the JSON when it has searched (2026-10-29).
@@ -74,6 +79,8 @@ beforeEach(async () => {
   answers = [];
   photoSize = [3000, 2000];
   looksPass = true;
+  watch = null;
+  held = [];
   clock = new Date("2026-10-29T12:00:00Z");
   app = createApp({
     db,
@@ -197,6 +204,27 @@ describe("today's pick", () => {
     const again = await today(token);
     expect(again.body.pick).toEqual(first.body.pick);
     expect(pickCalls()).toHaveLength(1);
+  });
+
+  it("holds its own share of the caps for each call, a look at a photo a fifth of one", async () => {
+    const { token, id } = await signIn();
+    await addWish(token, "Riva boat");
+    watch = id;
+    expect((await today(token)).body.pick.photo).not.toBeNull();
+    const looks = held.filter((h) => h.format === "photo_check");
+    expect(looks).toHaveLength(2);
+    // Each look runs under its own small hold (one or two in flight), never one shared hold for the whole search.
+    for (const { usd } of looks) {
+      const fifths = usd / (HOLD_USD / 5);
+      expect(Math.abs(fifths - Math.round(fifths))).toBeLessThan(1e-9);
+      expect(Math.round(fifths)).toBeGreaterThanOrEqual(1);
+      expect(Math.round(fifths)).toBeLessThanOrEqual(2);
+    }
+    for (const h of held.filter((x) => x.format === "daily_pick" || x.format === "photo_plan")) expect(h.usd).toBeGreaterThanOrEqual(HOLD_USD);
+    // Everything is released once the pick is made.
+    expect(heldFor(id)).toBe(0);
+    expect(holdFor({ text: { format: { name: "photo_check" } } })).toBeCloseTo(HOLD_USD / 5);
+    expect(holdFor({ text: { format: { name: "daily_pick" } } })).toBe(HOLD_USD);
   });
 
   it("shows no photo rather than an unchecked one", async () => {
