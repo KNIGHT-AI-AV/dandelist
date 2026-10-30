@@ -35,6 +35,8 @@ jobs:
           cache: false
       - name: Reject tracked local database directories
         run: node .github/scripts/check-source-tree.mjs
+      - name: Test shared release control without providers
+        run: node --test infra/release-control/control.test.mjs
       - name: Install locked dependencies
         run: pnpm install --frozen-lockfile
       - name: Run all workspace tests
