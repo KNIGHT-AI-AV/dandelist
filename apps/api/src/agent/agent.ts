@@ -86,11 +86,33 @@ export const draftSchema = z.object({
   sure: z.boolean().optional(),
   /** Other things they may mean, when the reading wasn't sure, best first. */
   others: z.array(z.string().trim().min(1).max(120)).max(3).optional(),
+  /**
+   * What the real thing typically costs, paid once, in US dollars, by the reading's own rough knowledge (150000 for a
+   * G-Class). A price far from it is a toy, a part or a misread (see plausible). 0 or missing when the reading couldn't
+   * say; missing on drafts read before 2026-10-30.
+   */
+  typical: z.number().min(0).max(1e13).optional(),
 });
 export type Draft = z.infer<typeof draftSchema>;
 
 /** The name shops and photos are matched on: the bare name when the reading gave one, else the title. */
 export const nameOf = (d: Pick<Draft, "title" | "name">): string => d.name?.trim() || d.title;
+
+/** How many times below the reading's typical price a figure may be, and above it, and still be the thing's price. */
+const BELOW_TYPICAL = 30;
+const ABOVE_TYPICAL = 100;
+
+/**
+ * Whether a price (US cents, paid once) can be the real thing's, by the reading's rough typical price: 30 times below
+ * it is a toy, a scale model, a part or a payment, and 100 times above it a misread (owner, 2026-10-30: a pink G-Wagon
+ * came back as a $79 ride-on toy). A draft without a typical price, and nothing to pay upfront, pass.
+ */
+export function plausible(d: Pick<Draft, "typical">, upfrontCents: number): boolean {
+  const typical = d.typical ?? 0;
+  if (!(typical > 0) || !(upfrontCents > 0)) return true;
+  const usd = upfrontCents / 100;
+  return usd * BELOW_TYPICAL >= typical && usd <= typical * ABOVE_TYPICAL;
+}
 
 export const questionSchema = z.object({ question: z.string().trim().min(1).max(200), choices: z.array(z.string().trim().min(1).max(80)).min(2).max(4) });
 export type Question = z.infer<typeof questionSchema>;
@@ -128,6 +150,11 @@ const DRAFT_JSON = strictObject({
       "priced: anything that can be bought, booked, hired or paid for, which is almost every wish. Anything with a trip, a place, a thing, a service, an event or time off is priced, whoever it is with: 'a week in Bali with my wife', 'a year off to travel' and 'dinner with my mom in Paris' are priced. money: money itself, a sum of cash or wealth with nothing to buy, like 'money', 'a million dollars', 'cash', 'to be rich' or '$50k'. priceless: only when nothing about the wish can be bought or booked, like love, health, happiness or a feeling. When unsure, priced.",
   },
   amount: { type: "number", description: "For money: the amount the wish names, in currency, like 1000000 for 'a million dollars' or 50000 for '$50k'. 0 when it names none, and 0 for any other worth." },
+  typical: {
+    type: "number",
+    description:
+      "For priced: roughly what the real thing typically costs, paid once, in US dollars, from your own knowledge: 150000 for a Mercedes-Benz G-Class, 10000 for a Rolex Submariner, 3000 for a week in Lisbon for two. 0 when you can't say, when it is only paid by the month or year, and for any other worth.",
+  },
   line: {
     type: "string",
     description: `For priceless: one short, warm, witty line about this very wish, under ${MAX_LINE} characters, like 'Free to give, impossible to buy.' for love. Plain words: no cliché, no emoji, no numbers, never preachy, never about saving up. Empty for any other worth.`,
@@ -194,6 +221,7 @@ export function readingOf(raw: unknown): unknown {
   if (!raw || typeof raw !== "object") return raw;
   const r = raw as Record<string, unknown>;
   const amount = typeof r.amount === "number" && Number.isFinite(r.amount) && r.amount > 0 ? Math.min(r.amount, MAX_AMOUNT) : 0;
+  const typical = typeof r.typical === "number" && Number.isFinite(r.typical) && r.typical > 0 ? Math.min(r.typical, MAX_AMOUNT) : 0;
   const line = typeof r.line === "string" ? r.line.slice(0, 200) : "";
   const worth = (WORTHS as readonly unknown[]).includes(r.worth) ? r.worth : "priced";
   // A name, a guess and its alternatives that don't read as names are dropped, never a reason to fail the wish.
@@ -201,7 +229,7 @@ export function readingOf(raw: unknown): unknown {
   const name = clean(r.name);
   const others = Array.isArray(r.others) ? r.others.map(clean).filter(Boolean).slice(0, 3) : [];
   const sure = typeof r.sure === "boolean" ? r.sure : true;
-  return { ...r, amount, line, worth, ...(name ? { name } : { name: undefined }), sure, others: sure ? [] : others };
+  return { ...r, amount, typical, line, worth, ...(name ? { name } : { name: undefined }), sure, others: sure ? [] : others };
 }
 
 const QUESTIONS_JSON = strictObject({
@@ -733,6 +761,7 @@ export function researchInstructions(today: Date, withShopping: boolean, voice =
   return [
     `You are Dandelist's price researcher. Today is ${longDate(today)}. Find 2 to 4 real, current ways to get this wish and what each costs.`,
     "- Price what is sold new today. If the wish names a model, price exactly that model. If it names only a product line, price the newest model in that line, never an older generation. Leave out used, refurbished, open-box and discontinued listings unless the person asked for them.",
+    "- Price the real thing itself, never a toy, a scale model, a replica, or a part or accessory for it, unless the wish is for one.",
     withShopping
       ? "- For anything sold by retailers, call shopping_search first: it lists today's offers, including from stores whose pages can't be opened. Then open the best merchant's own product page with get_page where you can, to read the price there."
       : "",

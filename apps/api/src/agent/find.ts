@@ -6,6 +6,7 @@ import {
   fallbackExplanation,
   interpret,
   pickQuestions,
+  plausible,
   research,
   unpriced,
   type Answer,
@@ -255,6 +256,11 @@ export async function huntWish(meta: Meta, ctx: HuntContext): Promise<HuntResult
     researched = await research(meta, { ...ctx, fetcher, draft, answers: extra, deadline: t0 + RESEARCH_MS });
   } catch (e) {
     failure = e;
+  }
+  // An option priced far from the real thing's typical price is a toy, a part or a misread, never this wish's.
+  if (researched?.options.some((o) => !plausible(draft, o.upfrontCents))) {
+    const options = researched.options.filter((o) => plausible(draft, o.upfrontCents));
+    researched = { ...researched, options, explanation: options.length ? fallbackExplanation(explainFacts(draft, options)) : "" };
   }
   // Research that ends early still gives the fast card until its own deadline.
   await within(early, t0 + QUICK_MS - Date.now());

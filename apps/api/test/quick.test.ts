@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // Shop hostnames resolve to a public documentation address, so no test touches real DNS.
 vi.mock("node:dns/promises", async (importOriginal) => ({ ...(await importOriginal<object>()), lookup: async () => [{ address: "93.184.215.14", family: 4 }] }));
 import { WRAP_UP_MS, explainFacts, research, tidyQuestions, type Draft, type Meta, type PriceOption, type Step } from "../src/agent/agent";
+import { estimateCard } from "../src/agent/estimate";
 import { huntWish, mergeFast, type HuntResult } from "../src/agent/find";
 import { lineFor } from "../src/agent/lines";
 import { closestPage, mediaKindOf, namesWish, parseAmount, photoCandidates, quickFind, readCandidates, wholeMention, wishWords, type ProductPage } from "../src/agent/quick";
@@ -30,6 +31,7 @@ const OLDCARS = "https://oldcarsdata.com/aston-martin/db11/price-history";
 const KBB = "https://www.kbb.com/aston-martin/db11/2020/";
 const DEALER = "https://www.dealer.example/aston-martin-db11";
 const LEASE = "https://www.lease.example/aston-martin-db11";
+const TOY = "https://www.toys.example/rolex-submariner-date-kids-watch";
 
 const html = (head: string, body: string) => `<html><head>${head}</head><body>${body}</body></html>`;
 const ld = (data: unknown) => `<script type="application/ld+json">${JSON.stringify(data)}</script>`;
@@ -51,6 +53,7 @@ const PAGES: Record<string, string> = {
     "<p>Your private chef cooks a dinner party at home for up to twelve guests. From $1,200.</p>",
   ),
   [LEASE]: html(`<title>Aston Martin DB11 | Lease</title>`, "<p>Drive an Aston Martin DB11 for $450/mo with $5,000 down.</p>"),
+  [TOY]: html(`<title>Rolex Submariner Date Kids Toy Watch | Toys</title>${ld({ "@type": "Product", name: "Rolex Submariner Date Kids Toy Watch", image: "/toy.jpg", offers: { price: 29, priceCurrency: "USD" } })}`, "<p>Rolex Submariner Date toy watch for kids. $29</p>"),
   [VILLA]: html(`<title>Villa in Santa Lucija | Agency</title><meta property="og:image" content="/photos/villa-santa-lucija-1.jpg">`, "<p>Detached villa in Santa Lucija, Malta. 3 bedrooms, pool. Price: €1,950,000</p>"),
 };
 
@@ -173,6 +176,22 @@ describe("the fast card", () => {
     const meta = metaOf(() => searched([`${CHRONO} | 9.500 € | EUR`], [{ url: CHRONO, title: "Rolex Submariner Date 126610LN" }]));
     const card = await quickFind(meta, { words: "rolex submariner date", draft: DRAFT, homeCurrency: "USD" }, ctx());
     expect(card).toMatchObject({ upfrontCents: 1_026_000, source: { currency: "EUR", price: 9500, rate: 1.08, rateDate: "2026-10-28" }, imageUrl: "https://img.chrono.example/sub-126610ln.jpg", status: "verified" });
+  });
+
+  it("passes over a toy priced far below the real thing's typical price for the next page (owner, 2026-10-30)", async () => {
+    const meta = metaOf(() =>
+      searched(
+        [`${TOY} | $29 | USD`, `${ROLEX} | $10,250 | USD`],
+        [
+          { url: TOY, title: "Rolex Submariner Date Kids Toy Watch" },
+          { url: ROLEX, title: "Submariner Date | Rolex" },
+        ],
+      ),
+    );
+    const card = await quickFind(meta, { words: "a rolex submariner date", draft: { ...DRAFT, typical: 10_000 }, homeCurrency: "USD" }, ctx());
+    expect(card).toMatchObject({ url: ROLEX, upfrontCents: 1_025_000, status: "verified" });
+    // A reading with no typical price judges nothing: the toy's page, named for the wish and priced, stands.
+    expect(await quickFind(meta, { words: "a rolex submariner date", draft: DRAFT, homeCurrency: "USD" }, ctx())).toMatchObject({ url: TOY, upfrontCents: 2_900 });
   });
 
   it("takes a price only from a page that shows it", async () => {
@@ -342,7 +361,7 @@ describe("the whole hunt", () => {
    * A fake model for every call of a hunt; `slow` holds the research's final answer back until released, `reading`
    * holds the draft back and `asking` the questions.
    */
-  function huntMeta(opts: { slow?: Promise<void>; failResearch?: boolean; lines?: string[]; reading?: Promise<void>; asking?: Promise<void> } = {}) {
+  function huntMeta(opts: { slow?: Promise<void>; failResearch?: boolean; lines?: string[]; reading?: Promise<void>; asking?: Promise<void>; typical?: number; options?: unknown[] } = {}) {
     const calls: Body[] = [];
     const meta = metaOf(async (b) => {
       calls.push(b);
@@ -351,7 +370,7 @@ describe("the whole hunt", () => {
       if (vision !== null) return result(vision);
       if (format === "wish_draft") {
         await opts.reading;
-        return result(JSON.stringify({ ...DRAFT, questions: undefined }));
+        return result(JSON.stringify({ ...DRAFT, questions: undefined, typical: opts.typical ?? 0 }));
       }
       if (format === "wish_questions") {
         await opts.asking;
@@ -364,7 +383,7 @@ describe("the whole hunt", () => {
       }
       if (format === "price_options") {
         await opts.slow;
-        return result(JSON.stringify({ options: FINAL_OPTIONS, note: "", media: { kind: "product", subject: "Rolex Submariner Date", generation: "", noun: "watch" } }));
+        return result(JSON.stringify({ options: opts.options ?? FINAL_OPTIONS, note: "", media: { kind: "product", subject: "Rolex Submariner Date", generation: "", noun: "watch" } }));
       }
       return result("The Chrono listing is the one to pick.");
     });
@@ -442,6 +461,23 @@ describe("the whole hunt", () => {
     expect(calls.find((c) => String(c.instructions ?? "").startsWith("You find, fast"))!.input).toContain("Details: Which bracelet? Jubilee, two-tone");
     expect(calls.find((c) => String(c.instructions ?? "").startsWith("You are Dandelist's price researcher"))!.input).toContain("The person answered: Which bracelet? Jubilee, two-tone");
     expect(done.questions).toEqual([{ id: "bracelet", label: "Which bracelet?", options: ["Oyster", "Jubilee"], picked: "Jubilee, two-tone", answered: true }]);
+  });
+
+  it("drops a research option priced like a toy against the real thing's typical price", async () => {
+    const toy = { label: "Rolex Submariner Date Kids Toy Watch", seller: "Toys", url: TOY, currency: "USD", price: 29, recurring: [], evidence: "$29", confidence: "high", parts: [] };
+    const { meta } = huntMeta({ typical: 10_000, options: [toy, ...FINAL_OPTIONS] });
+    const done = await huntWish(meta, { ...base(), text: "A Rolex Submariner date in steel" });
+    expect(done.options.map((o) => o.url)).not.toContain(TOY);
+    expect(done.options.map((o) => o.url)).toEqual(expect.arrayContaining([ROLEX, CHRONO]));
+    expect(done.explanation).not.toMatch(/toy/i);
+  });
+
+  it("refuses an estimate priced like a toy and searches once more, but judges nothing without a typical price", async () => {
+    const calls: Body[] = [];
+    const meta = metaOf((b) => (calls.push(b), result(`${TOY} | $29 | USD`, { raw: { output: [{ type: "web_search_call", action: { query: "rolex submariner date price" }, results: [{ url: TOY, title: "Rolex Submariner Date Kids Toy Watch" }] }] } })));
+    expect(await estimateCard(meta, { ...DRAFT, typical: 10_000 }, { home: "USD", fetcher: fakeWeb, by: Date.now() + 20_000 })).toBeNull();
+    expect(calls).toHaveLength(2);
+    expect(await estimateCard(meta, DRAFT, { home: "USD", fetcher: fakeWeb, by: Date.now() + 20_000 })).toMatchObject({ url: TOY, upfrontCents: 2_900, status: "estimate" });
   });
 
   it("keeps the fast card when the research fails", async () => {
