@@ -2,6 +2,7 @@ import type { Media } from "./agent";
 import type { Item, Period } from "@dandelist/cost";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useAuth } from "./auth";
+import { ordered } from "./list-order";
 
 export type WishKind = "buy" | "do" | "visit" | "own";
 export type WishTier = "must" | "nice" | "dream";
@@ -66,6 +67,8 @@ interface WishStore {
   remove(id: string): Promise<void>;
   /** Moves a wish to another tier. Shows at once; goes back if the server says no. */
   setTier(id: string, tier: WishTier): Promise<void>;
+  /** Puts these wishes first, in this order, the rest after them as they were. Shows at once; goes back if the server says no. */
+  reorder(ids: string[]): Promise<void>;
   /**
    * Folds details the server has already saved (a description) into the wish on screen, with no request and no
    * reload, so nothing else on screen is disturbed.
@@ -182,6 +185,14 @@ export function WishProvider({ children }: { children: ReactNode }) {
         // Only undo this change: a later tap may already have moved the wish on.
         setWishes((ws) => ws.map((x) => (x.id === id && x.tier === tier ? { ...x, tier: was } : x)));
         throw await failure(res, "Couldn't save the wish.");
+      },
+      async reorder(ids) {
+        const before = wishes;
+        setWishes((ws) => ordered(ws, ids));
+        const res = await api("/wishes/order", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids }) }).catch(() => null);
+        if (res?.ok) return;
+        setWishes(before);
+        throw await failure(res, "Couldn't save the new order.");
       },
       mergeDetails(id, change) {
         setWishes((ws) => ws.map((x) => (x.id === id ? { ...x, details: { ...x.details, ...change } } : x)));

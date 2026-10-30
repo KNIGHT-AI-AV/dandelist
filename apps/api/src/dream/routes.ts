@@ -15,6 +15,7 @@ import { TurnBudget, TurnLimitError, type ApifyConfig, type DreamCtx } from "./c
 import { HISTORY_LIMIT, previewOf, summary, titleOf } from "./history";
 import { homeSchema, lifeBody, readLife, writeLife } from "./life";
 import { notesFor } from "../notes";
+import { listWishes } from "../wishes";
 import { Suggestions } from "./suggest";
 import { emptyState, type DreamState, type TranscriptEntry } from "./types";
 
@@ -171,6 +172,8 @@ export function dreamRoutes(deps: DreamDeps) {
     const life = await readLife(db, userId);
     // What they've told us about their wishes, for the concierge to keep in mind (notes.ts). Theirs alone.
     const notes = await notesFor(db, userId);
+    // Their list in its order, so the concierge can suggest a new order, a tier or a removal (edit_list).
+    const list = await listWishes(db, userId);
 
     return streamSSE(c, async (stream) => {
       let open = true;
@@ -201,6 +204,7 @@ export function dreamRoutes(deps: DreamDeps) {
         voice: voiceLine(body.data.persona),
         notes,
         name: body.data.name,
+        list,
       };
       let timer: ReturnType<typeof setTimeout> | undefined;
       const late = new Promise<"late">((resolve) => (timer = setTimeout(() => resolve("late"), TURN_STOP_MS)));

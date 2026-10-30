@@ -1,6 +1,7 @@
 import type { DreamEvent, LifeContext } from "@dandelist/catalogue/dream";
 import type { Meta } from "../agent/agent";
 import type { Fetcher } from "../agent/tools";
+import type { Arrangeable } from "../arrange";
 import type { Db } from "../db";
 
 /** Per-turn ceilings, so one message can't run up an unbounded bill or keep a phone waiting for minutes. */
@@ -79,6 +80,8 @@ export interface DreamCtx {
   notes?: string;
   /** The Dandy's name as its owner typed it, passed to the model as data so it can introduce itself. */
   name?: string;
+  /** The person's list in its order (wishes.ts listWishes), so the Dandy can suggest changes to it. Theirs alone. */
+  list?: Arrangeable[];
 }
 
 /** Strict JSON schema helpers in the shape Meta's Responses API takes. */

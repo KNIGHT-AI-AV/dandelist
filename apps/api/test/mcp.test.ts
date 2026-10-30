@@ -127,6 +127,19 @@ describe("the MCP server", () => {
     expect((await tool(key, "list_wishes")).structuredContent.wishes).toEqual([]);
   });
 
+  it("reorders the key's own list by price, kind or pinned wishes, and keeps that order", async () => {
+    const { key } = await makeKey(await signIn("ada@example.com"));
+    const add = async (name: string, kind: string, upfront_cents: number) => (await tool(key, "add_wish", { name, kind, upfront_cents })).structuredContent.wish.id as string;
+    const watch = await add("Watch", "buy", 1_000_000);
+    const trip = await add("Trip", "visit", 400_000);
+    const bike = await add("Bike", "buy", 200_000);
+    const ids = (r: { structuredContent?: { wishes: { id: string }[] } }) => r.structuredContent!.wishes.map((w) => w.id);
+    expect(ids(await tool(key, "reorder_wishes", { sort: "price_high" }))).toEqual([watch, trip, bike]);
+    expect(ids(await tool(key, "list_wishes"))).toEqual([watch, trip, bike]);
+    expect(ids(await tool(key, "reorder_wishes", { first: ["visit"] }))).toEqual([trip, watch, bike]);
+    expect(ids(await tool(key, "reorder_wishes", { top: [bike], bottom: [trip] }))).toEqual([bike, watch, trip]);
+  });
+
   it("never lets one account's key read or change another's wishes", async () => {
     const ada = await signIn("ada@example.com");
     const bea = await signIn("bea@example.com");
@@ -139,6 +152,7 @@ describe("the MCP server", () => {
       ["update_wish", { id, name: "Mine now" }],
       ["remove_wish", { id }],
       ["find_photo", { wish_id: id }],
+      ["reorder_wishes", { top: [id] }],
     ] as const) {
       const r = await tool(beaKey, name, args);
       expect(r.isError, name).toBe(true);
