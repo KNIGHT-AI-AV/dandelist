@@ -47,3 +47,24 @@ export function dockDistance(pos: number): number {
   if (x >= PAGE_COUNT - 1) return PAGE_COUNT - x;
   return 1;
 }
+
+/**
+ * Whether page `i` is in view at rest at position `pos` with `span` pages side by side: the one in front, and in a
+ * spread (lib/spread.ts) the one after it too, on the right.
+ */
+export function inView(i: number, pos: number, span: 1 | 2): boolean {
+  const off = offsetOf(i, Math.round(pos));
+  return off >= 0 && off < span;
+}
+
+/**
+ * The nearest position that shows `page` with `span` pages side by side. A page already in view stays where it is; one
+ * further on comes in on the right and one further back on the left, so a spread turns as little as it can. With one
+ * page this is `nearest`.
+ */
+export function nearestIn(pos: number, page: PageId, span: 1 | 2): number {
+  const base = Math.round(pos);
+  const off = offsetOf(PAGES.indexOf(page), base);
+  if (off >= 0 && off < span) return base;
+  return off > 0 ? base + off - (span - 1) : base + off;
+}

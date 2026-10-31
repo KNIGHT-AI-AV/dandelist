@@ -1,7 +1,7 @@
 import { reportProblem } from "../help";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { ScrollView, Switch, Text, View, useWindowDimensions } from "react-native";
+import { ScrollView, Switch, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { linkErrorMessage, useAuth, useSignInOptions, type LinkedIdentity } from "../../lib/auth";
 import { CURRENCIES, useMoney } from "../../lib/currency";
@@ -29,22 +29,22 @@ import { StatsTiles } from "../settings/stats";
 import { SongNote } from "../song-note";
 import { useTopRoom } from "./chrome";
 import { usePager } from "./pager";
+import { usePageSize } from "../../lib/page-size";
 
 /**
  * The person's settings (owner's walkthrough, 2026-10-28): their picture and name, where they'd live and the currency
  * everything shows in, their Dandy, the list in numbers, three things the Dandy has noticed, the look, the sign-in
  * accounts on the account, and at the bottom Privacy & Terms, signing out and, behind a deliberate second step,
- * deleting the account. Its figures refresh each time the page comes to the front.
+ * deleting the account. Its figures refresh each time the page comes into view.
  */
 export function SettingsPage() {
   const p = usePalette();
   const auth = useAuth();
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
+  const { width } = usePageSize();
   const top = useTopRoom();
   const gutter = layout.gutter(width);
-  const { page } = usePager();
-  const here = page === "settings";
+  const here = usePager().shows("settings");
   const dandy = useDandy();
   const theme = useTheme();
   const [soundsOn, setSoundsOn] = useSoundsOn();

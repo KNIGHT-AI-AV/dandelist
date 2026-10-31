@@ -1,7 +1,7 @@
 import { upfrontCashCents } from "@dandelist/cost";
 import { router } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Animated, Keyboard, Pressable, RefreshControl, Text, View, useWindowDimensions, type ScrollView } from "react-native";
+import { Animated, Keyboard, Pressable, RefreshControl, Text, View, type ScrollView } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { adoptWelcome, priceFirstWish } from "../../lib/adopt";
 import { useAuth } from "../../lib/auth";
@@ -34,6 +34,7 @@ import { DandyArea } from "./dandy-area";
 import { GrowingCards, useCardLabel } from "./growing-cards";
 import { usePager } from "./pager";
 import { useHomeRemovals } from "./removals";
+import { usePageSize } from "../../lib/page-size";
 
 type Api = ReturnType<typeof useAuth>["api"];
 
@@ -127,7 +128,7 @@ export function ListPage() {
   const p = usePalette();
   const t = useType();
   const insets = useSafeAreaInsets();
-  const { width, height } = useWindowDimensions();
+  const { width, height } = usePageSize();
   const top = useTopRoom();
   const late = useAfter(200);
   const gutter = layout.gutter(width);
