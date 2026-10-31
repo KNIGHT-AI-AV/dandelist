@@ -4,6 +4,7 @@ import { Text, View } from "react-native";
 import { LegalPage } from "../components/legal";
 import { Hairline } from "../components/lux";
 import { PhotoCredit } from "../components/photo-credit";
+import { ICON_LICENSE } from "../lib/icon-glyphs";
 import { PRIVACY, PRIVACY_UPDATED, TERMS, TERMS_UPDATED } from "../lib/legal";
 import { layout, type, usePalette, useType } from "../lib/theme";
 
@@ -51,12 +52,25 @@ function PhotoCredits() {
   );
 }
 
+/** Keep the upstream copyright and permission notice available in the distributed app. */
+function IconCredits() {
+  const p = usePalette();
+  const t = useType();
+  return (
+    <View style={{ gap: layout.stack.base }}>
+      <Hairline />
+      <Text accessibilityRole="header" style={[t.title2, { color: p.ink }]}>Tabler Icons</Text>
+      <Text selectable style={[type.footnote, { color: p.ink2 }]}>{ICON_LICENSE}</Text>
+    </View>
+  );
+}
+
 /**
  * Privacy and Terms on one page (owner's walkthrough, 2026-10-28). `?section=terms` opens at the terms and
  * `?section=deletion` at how to delete your data, the address Meta's app dashboard links to. The photo credits
- * close the page.
+ * and icon license close the page.
  */
 export default function Legal() {
   const { section } = useLocalSearchParams<{ section?: string }>();
-  return <LegalPage eyebrow="Dandelist" title="Privacy & Terms" documents={DOCUMENTS} focus={typeof section === "string" ? section : undefined} after={<PhotoCredits />} />;
+  return <LegalPage eyebrow="Dandelist" title="Privacy & Terms" documents={DOCUMENTS} focus={typeof section === "string" ? section : undefined} after={<View style={{ gap: layout.stack.section }}><PhotoCredits /><IconCredits /></View>} />;
 }

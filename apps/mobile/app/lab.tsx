@@ -105,7 +105,7 @@ function GlassBench() {
   );
 }
 
-const ICONS: IconName[] = ["palette", "back", "forward", "arrow", "close", "plus", "check", "send", "mic", "search", "heart"];
+const ICONS: IconName[] = ["palette", "back", "forward", "arrow", "close", "plus", "check", "send", "mic", "search", "heart", "music", "musicOff"];
 
 /** A microphone at rest, so the composer shows it the way it does before anything is typed. */
 const QUIET_VOICE: VoiceWish = { supported: true, phase: "idle", levels: [], elapsedMs: 0, toggle: () => {}, cancel: () => {} };
@@ -186,6 +186,11 @@ function RealSize({ id }: { id: ThemeId }) {
             <Text style={[type.label, { color: p.danger }]}>Remove</Text>
           </View>
         </Mark>
+        {(["music", "musicOff"] as const).map((name) => (
+          <Mark key={name} caption={`${name} 22`}>
+            <Icon name={name} size={22} color={p.ink2} />
+          </Mark>
+        ))}
         {[12, 13, 14].map((s) => (
           <Mark key={s} caption={`check ${s}`}>
             <Icon name="check" size={s} color={p.accentText} />

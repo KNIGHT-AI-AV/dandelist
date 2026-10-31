@@ -4,7 +4,9 @@ import { Image, type ImageContentPosition } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Animated, Easing, Image as RNImage, Platform, Pressable, StyleSheet, Text, TextInput, View, useWindowDimensions, type StyleProp, type TextInputProps, type TextStyle, type ViewStyle } from "react-native";
-import Svg, { Circle, Path } from "react-native-svg";
+import Svg, { Path } from "react-native-svg";
+import { ICON_PATHS, type IconName } from "../lib/icon-glyphs";
+export type { IconName } from "../lib/icon-glyphs";
 import { useMoney } from "../lib/currency";
 import { ease, haptic, native, usePress, useReducedMotion } from "../lib/motion";
 import { fonts, layout, radius, type, usePalette, useTheme, useType, type ThemeId } from "../lib/theme";
@@ -242,49 +244,6 @@ export function GlyphPanel({ glyph, style }: { glyph: string; style?: StyleProp<
   );
 }
 
-export type IconName = "back" | "forward" | "arrow" | "close" | "plus" | "check" | "send" | "mic" | "search" | "heart" | "palette" | "music" | "musicOff";
-
-/** `d` is stroked; `dots` are small solid circles, [cx, cy, r]. */
-type Glyph = { d: string; dots?: readonly (readonly [number, number, number])[] };
-
-/**
- * The line icons (owner, 2026-10-29: "actually do line art design"), drawn for this app on a 24 grid: one 1.5
- * stroke with round caps and joins, nothing filled but the palette's wells of paint. Each sits optically centred in
- * the box, so a chevron leans a half unit towards its point and the check rides a quarter unit high.
- */
-const GLYPHS: Record<IconName, Glyph> = {
-  back: { d: "M14.75 4.75 L8.25 12 L14.75 19.25" },
-  forward: { d: "M9.25 4.75 L15.75 12 L9.25 19.25" },
-  // "Added to your list": a stem and an open head, pointing on to the list.
-  arrow: { d: "M4.75 12 H19.25 M13 5.75 L19.25 12 L13 18.25" },
-  close: { d: "M6 6 L18 18 M18 6 L6 18" },
-  plus: { d: "M12 4.5 V19.5 M4.5 12 H19.5" },
-  check: { d: "M4.5 12.25 L9.5 17.25 L19.5 6.25" },
-  // The composer's send: a stem and an open head.
-  send: { d: "M12 19.5 V4.5 M6.5 10 L12 4.5 L17.5 10" },
-  // A capsule in its cradle on a short stem.
-  mic: { d: "M9 6.25 A3 3 0 0 1 15 6.25 V11.25 A3 3 0 0 1 9 11.25 Z M6 11.25 A6 6 0 0 0 18 11.25 M12 17.25 V20.75" },
-  search: { d: "M17.75 10.75 A7 7 0 1 1 3.75 10.75 A7 7 0 1 1 17.75 10.75 Z M15.7 15.7 L20.25 20.25" },
-  heart: { d: "M12 19.75 C12 19.75 3.75 15 3.75 9.5 C3.75 6.9 5.8 5 8.2 5 C9.85 5 11.25 5.95 12 7.35 C12.75 5.95 14.15 5 15.8 5 C18.2 5 20.25 6.9 20.25 9.5 C20.25 15 12 19.75 12 19.75 Z" },
-  // An artist's palette: a tilted oval board with a thumb notch swept out of its lower right (a 5.4 radius cut whose
-  // lips are rounded at 2.2 and 1.8), the thumb hole above the notch, and three wells of paint an equal step apart
-  // along the far rim.
-  palette: {
-    d: "M14.57 19.45 A9.35 7.85 -18 1 1 21.16 9.73 A2.2 2.2 0 0 1 19.65 12.31 A5.4 5.4 0 0 0 15.81 17.68 A1.8 1.8 0 0 1 14.57 19.45 Z M16.46 11.29 A1.55 1.55 0 1 1 13.36 11.29 A1.55 1.55 0 1 1 16.46 11.29 Z",
-    dots: [
-      [7.38, 15.48, 1.25],
-      [6.44, 11.29, 1.25],
-      [9.59, 8.07, 1.25],
-    ],
-  },
-  // An eighth note: an open head, its stem rising from the head's right side, and a flag that swells out and turns
-  // back down. The stem sits on the centre line, so the note is optically centred however narrow it is.
-  music: { d: "M12 17 A2.75 2.75 0 1 1 6.5 17 A2.75 2.75 0 1 1 12 17 Z M12 17 V4.25 C12 6.75 18 7.25 17.25 12.5" },
-  // The note struck through corner to corner. The stem stops a full unit clear of the slash on both sides and gives
-  // up its stub at the head, so nothing crosses and the head stays a whole circle.
-  musicOff: { d: "M12 17 A2.75 2.75 0 1 1 6.5 17 A2.75 2.75 0 1 1 12 17 Z M12 8.46 V4.25 C12 6.75 18 7.25 17.25 12.5 M4.25 4.25 L19.75 19.75" },
-};
-
 /**
  * One line icon, `size` points square. The stroke is 1.5 on the 24 grid and scales with the icon, but never draws
  * under 1.35 pt: small marks read thinner than they draw, so, as type does, they get relatively heavier as they
@@ -294,13 +253,12 @@ const GLYPHS: Record<IconName, Glyph> = {
 export function Icon({ name, color, size = 17 }: { name: IconName; color?: string; size?: number }) {
   const p = usePalette();
   const c = color ?? p.ink;
-  const g = GLYPHS[name];
+  const paths = ICON_PATHS[name];
   const stroke = Math.max(1.5, (1.35 * 24) / size);
   return (
     <View pointerEvents="none" aria-hidden accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={{ width: size, height: size }}>
       <Svg width={size} height={size} viewBox="0 0 24 24">
-        <Path d={g.d} fill="none" stroke={c} strokeWidth={stroke} strokeLinecap="round" strokeLinejoin="round" />
-        {g.dots?.map(([cx, cy, r]) => <Circle key={`${cx} ${cy}`} cx={cx} cy={cy} r={r} fill={c} />)}
+        {paths.map((d, index) => <Path key={index} d={d} fill="none" stroke={c} strokeWidth={stroke} strokeLinecap="round" strokeLinejoin="round" />)}
       </Svg>
     </View>
   );
