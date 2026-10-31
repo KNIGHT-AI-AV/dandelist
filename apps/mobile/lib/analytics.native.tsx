@@ -29,7 +29,12 @@ export const analytics: Analytics = {
 /** Screens by their route, and the account by its id while signed in. */
 function Tracker() {
   const path = usePathname();
-  useEffect(() => void client.screen(path || "/"), [path]);
+  useEffect(() => {
+    // No screen event or recording while a sign-in page holds its one-time ticket (review of #139).
+    if (/^\/auth(\/|$)/.test(path || "/")) return void client.stopSessionRecording();
+    void client.startSessionRecording();
+    void client.screen(path || "/");
+  }, [path]);
   const { status, user } = useAuth();
   const id = status === "signedIn" ? user?.id : undefined;
   useEffect(() => {

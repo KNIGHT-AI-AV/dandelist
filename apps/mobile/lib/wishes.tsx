@@ -1,12 +1,12 @@
 import type { Media } from "./agent";
 import type { Category, Financing } from "./comfort";
 import type { Item, Period } from "@dandelist/cost";
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode, type SetStateAction } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode, type SetStateAction } from "react";
 import { analytics } from "./analytics";
 import { priceBand } from "./analytics-config";
 import { useAuth } from "./auth";
 import { ordered } from "./list-order";
-import { createWishSession, updateWishSession } from "./wish-session";
+import { createWishSession, updateWishSession, whileCurrent } from "./wish-session";
 
 export type WishKind = "buy" | "do" | "visit" | "own";
 export type WishTier = "must" | "nice" | "dream";
@@ -135,6 +135,9 @@ export function WishProvider({ children }: { children: ReactNode }) {
     setSession(current);
   }
   const { scope } = current;
+  // The sign-in now, for completions to check against (wish-session.ts whileCurrent).
+  const scopeNow = useRef(scope);
+  scopeNow.current = scope;
   const { wishes, status, error } = current.value;
   const update = useCallback((change: (value: WishState) => WishState) => {
     setSession((latest) => updateWishSession(latest, scope, change));
@@ -188,15 +191,17 @@ export function WishProvider({ children }: { children: ReactNode }) {
         if (!res?.ok) throw await failure(res, "Couldn't save the wish.");
         const wish = fromServer(((await res.json()) as { wish: ServerWish }).wish);
         setWishes((ws) => [wish, ...ws]);
-        // What kind of wish and how big, never its name.
-        analytics.capture("wish_added", { kind: wish.kind, tier: wish.tier, price: priceBand(wish.item.upfrontCents), running_costs: wish.item.recurring.length > 0, worth: wish.details.worth ?? null, from_agent: !!wish.details.agent });
+        // What kind of wish and how big, never its name; told only under the sign-in that added it.
+        whileCurrent(() => scopeNow.current, scope, () =>
+          analytics.capture("wish_added", { kind: wish.kind, tier: wish.tier, price: priceBand(wish.item.upfrontCents), running_costs: wish.item.recurring.length > 0, worth: wish.details.worth ?? null, from_agent: !!wish.details.agent }),
+        );
         return wish;
       },
       async remove(id) {
         const before = wishes;
         setWishes((ws) => ws.filter((x) => x.id !== id));
         const res = await api(`/wishes/${id}`, { method: "DELETE" }).catch(() => null);
-        if (res?.ok || res?.status === 404) return void analytics.capture("wish_removed", { kind: before.find((x) => x.id === id)?.kind ?? null });
+        if (res?.ok || res?.status === 404) return whileCurrent(() => scopeNow.current, scope, () => analytics.capture("wish_removed", { kind: before.find((x) => x.id === id)?.kind ?? null }));
         setWishes(before);
         throw await failure(res, "Couldn't remove the wish.");
       },
@@ -242,7 +247,7 @@ export function WishProvider({ children }: { children: ReactNode }) {
         setWishes((ws) => ws.map((x) => (x.id === id ? { ...x, note: saved } : x)));
       },
     }),
-    [wishes, status, error, reload, api, setWishes],
+    [wishes, status, error, reload, api, setWishes, scope],
   );
   return <Ctx.Provider value={store}>{children}</Ctx.Provider>;
 }
