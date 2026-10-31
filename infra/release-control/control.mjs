@@ -13,6 +13,19 @@ const fingerprint = (value) => typeof value === "string" && hashPattern.test(val
 const imageDigest = (value) => typeof value === "string" && digestPattern.test(value);
 const need = (condition, message) => { if (!condition) throw new Error(message); };
 const text = (value) => typeof value === "string" && value.trim().length > 0 && value.length <= 512;
+const object = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
+const validRetirements = (records) => object(records) && Object.entries(records).every(([sha, record]) => {
+  const attempt = record?.attempt;
+  return sourceSha(sha) && attempt?.sha === sha && text(attempt.id) && text(attempt.owner)
+    && fingerprint(attempt.configurationHash) && fingerprint(attempt.planHash)
+    && attempt.build?.status === "SUCCEEDED" && text(attempt.build.id) && imageDigest(attempt.build.digest)
+    && attempt.deploy === null && !attempt.transferTo && text(record.reason) && text(record.evidence)
+    && sourceSha(record.observedMainSha) && record.observedMainSha !== sha
+    && typeof record.retiredAt === "string" && Number.isFinite(Date.parse(record.retiredAt))
+    && Number.isSafeInteger(record.reviewed?.seq) && record.reviewed.seq > 0
+    && Number.isSafeInteger(record.reviewed?.revision) && record.reviewed.revision >= 0
+    && fingerprint(record.reviewed?.fingerprints?.inbox) && fingerprint(record.reviewed?.fingerprints?.outbox);
+});
 
 // The supported launcher resolves one host-local control root, never its own directory.
 export const defaultControlRoot = () => join(homedir(), "Desktop", "Dandelist Design", "master", "release-control");
@@ -45,11 +58,14 @@ export class ReleaseControl {
     need(bytes.endsWith("\n") && bytes.length > 1, "Incomplete journal; reconcile without mutation");
     let state;
     let previous = "";
+    let minimumVersion = 1;
     for (const [index, line] of bytes.slice(0, -1).split("\n").entries()) {
       const row = JSON.parse(line);
       need(row.previous === previous && row.hash === hash(JSON.stringify(row.entry)), "Journal integrity mismatch");
       state = row.entry.state;
-      need(state?.version === 1 && state.service === this.service && state.seq === index + 1 && Number.isSafeInteger(state.revision) && Array.isArray(state.holds) && state.completed && typeof state.completed === "object", "Invalid journal state");
+      need([1, 2].includes(state?.version) && state.version >= minimumVersion && state.service === this.service && state.seq === index + 1 && Number.isSafeInteger(state.revision) && Array.isArray(state.holds) && state.completed && typeof state.completed === "object", "Invalid journal state");
+      need(state.version === 1 ? !Object.hasOwn(state, "retired") : validRetirements(state.retired), "Invalid retirement state");
+      minimumVersion = state.version;
       previous = row.hash;
     }
     need(registration.seq === state.seq && registration.hash === previous, "Journal/checkpoint mismatch; reconcile without mutation");
@@ -121,6 +137,7 @@ export class ReleaseControl {
         return clone(state.active);
       }
       need(!state.completed[sha], "Completed source exists; verify alreadyDeployed instead of rebuilding");
+      need(!state.retired?.[sha], "Retired source exists; review its not-deployed history instead of rebuilding");
       need(!state.holds.length, "Unresolved review hold");
       state.revision++;
       state.active = { id: randomUUID(), sha, owner, configurationHash, ...(planHash === undefined ? {} : { planHash }), build: null, deploy: null, clearance: null };
@@ -138,6 +155,32 @@ export class ReleaseControl {
       if (state.active) state.active.clearance = null;
       this.#save(state, "hold_added");
       return id;
+    });
+  }
+
+  /** Coordination only: a known successful build, superseded before any deploy intent. */
+  async retireUndeployed({ attemptId, owner, sha, buildId, digest, configurationHash, planHash, expectedSeq, expectedRevision, fingerprints, observedMainSha, reason, evidence }) {
+    need(sourceSha(sha) && sourceSha(observedMainSha) && observedMainSha !== sha, "Exact source and different reviewed main SHA required");
+    need(text(buildId) && imageDigest(digest) && fingerprint(configurationHash) && fingerprint(planHash), "Exact verified build and adapter identity required");
+    need(Number.isSafeInteger(expectedSeq) && expectedSeq > 0 && Number.isSafeInteger(expectedRevision) && expectedRevision >= 0 && text(reason) && text(evidence), "Reviewed state, reason and evidence required");
+    return this.#locked((state) => {
+      const active = this.#active(state, { attemptId, owner });
+      need(state.seq === expectedSeq && state.revision === expectedRevision, "Reviewed state changed");
+      need(active.sha === sha && active.configurationHash === configurationHash && active.planHash === planHash, "Attempt source or adapter identity changed");
+      need(active.build?.status === "SUCCEEDED" && active.build.id === buildId && active.build.digest === digest, "Known successful build and digest required");
+      need(active.deploy === null, "Deploy intent exists or state is incomplete; resume or reconcile without retirement");
+      const current = this.fingerprints();
+      need(fingerprints?.inbox === current.inbox && fingerprints?.outbox === current.outbox, "Reviewed mailbox snapshot changed");
+      need(!state.retired?.[sha] && !state.completed[sha], "Source already has a terminal record");
+      const record = { attempt: clone(active), retiredAt: new Date(this.clock()).toISOString(), reason, evidence, observedMainSha, reviewed: { seq: expectedSeq, revision: expectedRevision, fingerprints: current } };
+      // Version 1 writers must fail closed rather than ignore the new retired-source guard.
+      state.version = 2;
+      state.retired ??= {};
+      state.retired[sha] = record;
+      state.active = null;
+      state.revision++;
+      this.#save(state, { type: "attempt_retired_undeployed", attemptId, owner, sha });
+      return clone(record);
     });
   }
 

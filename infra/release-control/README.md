@@ -103,7 +103,56 @@ cooperating-writer guarantee. No global absence-of-builds claim is made.
 
 ## Offline validation
 
+### Retire a superseded build before deployment
+
+`retireUndeployed(input)` records a known successful build as **not deployed**.
+It is a coordination transition, with no provider callback, cancellation,
+credential load, deployment or replacement build. It does not relax source proof,
+relabel an image as newer main, or infer that a recorded build is currently live.
+
+Use `node infra/release-control/cli.mjs retire SERVICE reviewed-input.json` only
+after both lanes acknowledge the recovery and all provider mutation processes for
+that attempt have stopped. The recorded owner performs it; a different operator
+must first use the explicit transfer/accept workflow, then obtain a new snapshot.
+Do not edit or hot-swap an active copied runner.
+
+The JSON input requires `attemptId`, `owner`, `sha`, `buildId`, `digest`,
+`configurationHash`, `planHash`, `expectedSeq`, `expectedRevision`, mailbox
+`fingerprints`, a different `observedMainSha`, and bounded `reason`/`evidence`
+strings. Copy identities from an inspected intact journal, and review the
+mailboxes and separate PC board before recording their fingerprints. The main
+SHA and evidence are reviewer assertions; this cloud-free command does not fetch
+GitHub or independently prove the absence of uncoordinated provider actions.
+
+Under the exclusive service lock it rechecks every identity and snapshot,
+requires a successful known build/digest, and requires `deploy === null`.
+**Any deploy intent, even one with no provider ID, rejects retirement.**
+Running, failed, incomplete and ambiguous build histories also reject it. Those
+cases retain their existing known-ID or explicit reconciliation paths.
+
+The full original attempt, including any old clearance, is archived in
+`retired[sha]` with its review evidence and timestamp. Active ownership clears;
+holds and successful completion records are preserved. An archived clearance
+cannot operate without its active attempt. A repeated retirement or beginning
+the same retired SHA is refused. No new source begins automatically; a different
+required release still needs the usual source, CI, holds and mutation grants.
+
+Retirement upgrades the journal from version 1 to **version 2**. Updated readers
+accept old history, validate the retirement map and reject a version downgrade.
+Old version 1 writers fail closed on the upgraded journal instead of silently
+ignoring the retired-source guard. **Both lanes must adopt the reviewed version 2
+coordinator and its unchanged provider adapter before retirement.** Preserve the
+old runner as evidence; create a reviewed new immutable runner for subsequent
+commands. Never roll back the journal to make an old runner work.
+
+Freeze main during a real attempt, from source preparation through deployment
+completion. This prevents another source-proof stop; elapsed time and a newer
+merge do not make a superseded build deployable.
+
 `node --test infra/release-control/control.test.mjs` uses temporary directories,
 separate processes and stubbed callbacks. No cloud call, installed dependency,
 credential or real release state is needed. Run under the local board/RAM gate.
 Integration and adoption must be independently reviewed before real mutations.
+The additional `retirement.test.mjs` suite exercises temporary journals and real
+subprocess races, including the frozen version 1 writer's rejection. The legacy
+fixture is test-only and must never become an operational launcher.
