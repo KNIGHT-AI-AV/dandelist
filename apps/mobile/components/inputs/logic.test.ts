@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CODE_LENGTH, MONEY_MAX_CENTS, centsToRaw, displayCaret, editMoney, isEmail, moneyText, nextCode, rawToCents, sanitizeCode } from "./logic";
+import { CODE_LENGTH, MONEY_MAX_CENTS, centsToRaw, displayCaret, echoes, editMoney, isEmail, moneyText, nextCode, rawToCents, sanitizeCode } from "./logic";
 
 /** Types `ch` into `text` with the caret at `at`, as the native input would report it. */
 const typeAt = (text: string, at: number, ch: string) => editMoney(text, text.slice(0, at) + ch + text.slice(at), { start: at, end: at });
@@ -167,5 +167,21 @@ describe("email check", () => {
     expect(isEmail("you@example.c")).toBe(false);
     expect(isEmail("you example@x.com")).toBe(false);
     expect(isEmail("@example.com")).toBe(false);
+  });
+});
+
+describe("the composer's sent-text echo", () => {
+  // iOS can hand the sent words back after the field was cleared (owner, 2026-10-31: the Rolex rode along with the DB11).
+  it("knows the sent text coming back, even with one word autocorrected", () => {
+    expect(echoes("Rolex day date 40 green ombré Roman", "Rolex day date 40 green ombré Roman")).toBe(true);
+    expect(echoes("rolex day date 40 green ombré roman ", "Rolex day date 40 green ombré Roman")).toBe(true);
+    expect(echoes("Rolex day date 40 green ombré Romano", "Rolex day date 40 green ombré Roman")).toBe(true);
+  });
+
+  it("never takes new typing for an echo", () => {
+    expect(echoes("A", "Rolex day date 40 green ombré Roman")).toBe(false);
+    expect(echoes("Aston Martin DB 11", "Rolex day date 40 green ombré Roman")).toBe(false);
+    expect(echoes("Rolex day date 40 green ombré Roman\nAston Martin DB 11", "Rolex day date 40 green ombré Roman")).toBe(false);
+    expect(echoes("", "Rolex")).toBe(false);
   });
 });
