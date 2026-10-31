@@ -432,7 +432,8 @@ export default function Welcome() {
           hero={HERO}
           short={short}
           onDone={() => {
-            void markTitleSeen();
+            // A first visit is marked seen only once the look is chosen, so one left at the theme asks for it again.
+            if (short) void markTitleSeen();
             chrome.setValue(0);
             fromTitle.current = true;
             steps.leave(here)?.to(short ? { kind: "ask" } : { kind: "theme" });
@@ -529,6 +530,7 @@ export default function Welcome() {
           totalCents={null}
           onDone={(id) => {
             theme.set(id);
+            void markTitleSeen();
             steps.leave(here)?.to({ kind: "ask" });
           }}
         />
