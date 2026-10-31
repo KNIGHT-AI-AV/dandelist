@@ -1,5 +1,5 @@
 {
-  "ios": { "build": 28, "url": "https://testflight.apple.com/join/tuh4Jxkw" },
+  "ios": { "build": 29, "url": "https://testflight.apple.com/join/tuh4Jxkw" },
   "android": { "build": 15, "url": "https://expo.dev/artifacts/eas/jY2QO6YwRIM3WqoliJa7cI31jlRhpbMg1DaYaPbVLRA.apk" },
   "web": { "version": "" }
 }
