@@ -8,6 +8,7 @@ import { authRoutes, requireAuth, type AuthVars } from "./auth";
 import { dreamRoutes } from "./dream/routes";
 import { fxRoutes } from "./fx";
 import { guestRoutes } from "./guest";
+import { dropHelpCopies, helpRoutes } from "./help";
 import { pairRoutes } from "./pairs";
 import { poolSource, typicalSource } from "./pool";
 import { previewRoutes } from "./preview";
@@ -83,6 +84,8 @@ export function createApp(deps: AppDeps) {
   app.route("/me/agent-keys", agentKeyRoutes(deps));
   app.route("/mcp", mcpRoutes({ ...deps, call: (path, init) => app.request(path, init) }));
   app.route("/me", meRoutes(deps));
+  // What someone saw when they asked for help, kept private for the team (help.ts).
+  app.route("/help", helpRoutes(deps));
 
   app.use("/me", requireAuth(deps));
   app.get("/me", async (c) => {
@@ -94,9 +97,15 @@ export function createApp(deps: AppDeps) {
   // Account deletion is required by the App Store; everything the user owns goes with the row.
   app.delete("/me", async (c) => {
     const avatar = (await db.query<{ avatar_key: string | null }>("select avatar_key from users where id = $1", [c.get("userId")])).rows[0]?.avatar_key;
-    await db.query("delete from users where id = $1", [c.get("userId")]);
+    // The account goes, and in the same statement its help reports' private copies are queued for deletion: none can be
+    // missed, and any that can't be deleted now are retried by sweepHelp (review of #140).
+    const queued = await db.query<{ id: string }>(
+      "with gone as (delete from users where id = $1 returning id) insert into help_deletions (id) select r.id from help_reports r join gone on r.user_id = gone.id on conflict (id) do nothing returning id",
+      [c.get("userId")],
+    );
     // Their profile photo goes too. Avatar keys belong to one person, and the store deletes nothing else.
     if (avatar && deps.media?.store) await deps.media.store.delete(avatar).catch((e: unknown) => console.warn("could not delete a profile photo", e instanceof Error ? e.message : e));
+    await dropHelpCopies(deps, queued.rows.map((r) => r.id));
     return c.body(null, 204);
   });
 

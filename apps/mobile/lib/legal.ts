@@ -22,6 +22,7 @@ export const PRIVACY: LegalSection[] = [
       "If you add them in Settings, a display name, a profile photo and where you would like to live. You can change or remove each of them at any time.",
       "The wishes you add: what you describe, the prices and sources the agent found, and the choices you make, such as your monthly amount, your timeline and your theme.",
       "Before you create an account, your picks and your first wish are kept on your device, not in an account. To price that wish and preview your list, the app sends them to our server, which passes them to Meta's Model API. We don't store them; they join an account only when you save your list to one.",
+      "If you send us a report with Help, we keep a picture of the screen you were on, your latest conversation, your list and the app's state, so we can see what went wrong. Only our team sees them, and deleting your account deletes them.",
     ],
   },
   {

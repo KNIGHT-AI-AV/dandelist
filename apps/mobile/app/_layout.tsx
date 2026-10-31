@@ -6,12 +6,17 @@ import { View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { Reminders } from "../components/home/reminders";
 import { UpdatePrompt } from "../components/update-prompt";
+import { HelpHost } from "../components/help";
 import { AnalyticsProvider } from "../lib/analytics";
+import { keepLogs } from "../lib/help";
 import { AuthProvider } from "../lib/auth";
 import { CurrencyProvider } from "../lib/currency";
 import { useAppFonts } from "../lib/fonts";
 import { ThemeProvider, usePalette } from "../lib/theme";
 import { WishProvider } from "../lib/wishes";
+
+// The last errors and warnings, kept for a help report (lib/help.ts).
+keepLogs();
 
 export default function RootLayout() {
   return (
@@ -37,6 +42,8 @@ function Root() {
             <Reminders />
             {/* "A new version is out", from latest.json, once the home is calm (lib/update-core.ts). */}
             <UpdatePrompt />
+            {/* The help sheet the bar's help button and Settings open (components/help.tsx). */}
+            <HelpHost />
             {/* Navigation paints its own background between screens; without this it is React Navigation's light grey
                 (#F2F2F2), which Taste Engine found on the live site. */}
             <NavigationTheme value={{ ...(p.scheme === "dark" ? DarkTheme : DefaultTheme), colors: { ...(p.scheme === "dark" ? DarkTheme : DefaultTheme).colors, background: p.bg, card: p.bg, text: p.ink, border: p.hair, primary: p.accent } }}>

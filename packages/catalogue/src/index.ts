@@ -1,6 +1,7 @@
 import type { Item, Period } from "@dandelist/cost";
 import checked from "./catalogue.json";
 export { safeCommonsSourcePage } from "./photo-source";
+export { HELP_LINE_MAX, HELP_LOG_KEEP, redactDiagnostic, type HelpDiagnostics, type HelpLine } from "./help";
 
 /**
  * The pre-login catalogue: real things with real prices. Each entry was priced by the Meta wish agent on the
