@@ -145,3 +145,20 @@ Successful source/CI and provider-configuration checks are not direct inspection
 of a running container, product behavior, exact credit settlement, external beta
 review or physical-device acceptance. Record those separately. Do not deploy
 simply to claim the launcher was exercised.
+# A successful build superseded before deployment
+
+If main advances after a successful build, source verification stops deployment.
+Keep the known attempt and build IDs. Do not move main back, bypass the source
+verifier, relabel the image, rewrite the journal or create another active attempt.
+The coordination-only `retire` procedure in [README.md](./README.md#retire-a-superseded-build-before-deployment)
+can close only a known successful build with strictly no deployment intent.
+It records **not deployed**, preserves the artifact's original source identity,
+and blocks automatic rebuilding of that source.
+
+This is an explicit reviewed recovery, not an automatic launcher retry. Both
+lanes must stop the old mutation process and acknowledge the version 2 coordinator
+before the recorded owner runs it. Version 1 runners then fail closed; preserve
+them and use a separately reviewed immutable updated runner for later commands.
+No credentials, cloud resources or provider callbacks are involved in retirement.
+A later real release still requires fresh exact-source/CI approval and manual
+board/mailbox grants. Keep main frozen throughout that attempt.
