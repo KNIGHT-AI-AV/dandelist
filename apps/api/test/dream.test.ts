@@ -639,11 +639,13 @@ describe("dream turn", () => {
     concierge = [[fc("search_homes", VILLA_ARGS)], [message("Looking now.")]];
     const res = await call("POST", "/dream/turn", t, { sessionId: null, action: { type: "message", text: "a modern sea-view villa" }, follow: true });
     const done = (await res.text()).split("\n").filter((l) => l.startsWith("data:")).map((l) => JSON.parse(l.slice(5)) as Ev).find((e) => e.type === "done")!;
-    // The app comes back mid-search: the saved conversation has no deck yet, and the cursor sits before the search's events.
+    // The app comes back mid-search: the saved conversation has the turn's line but no deck yet; what the running
+    // search has shown comes as pending events, and the log is followed from its end.
     const mid = (await (await call("GET", `/dream/sessions/${done.sessionId}`, t)).json()) as Ev;
     expect(mid.running).toHaveLength(1);
     expect(mid.widgets.filter((w: Ev) => w.kind === "deck")).toEqual([]);
-    const seen: Ev[] = [];
+    expect(mid.transcript.filter((e: Ev) => e.text === "Looking now.")).toHaveLength(1);
+    const seen: Ev[] = [...(mid.pending as Ev[])];
     let after = mid.seq as number;
     for (let i = 0; i < 100; i++) {
       const body = (await (await call("GET", `/dream/sessions/${done.sessionId}/events?after=${after}`, t)).json()) as Ev;
@@ -655,9 +657,37 @@ describe("dream turn", () => {
     }
     expect(seen.some((e) => e.type === "step" && e.state === "running" && /^job_/.test(e.id))).toBe(true);
     expect(seen.filter((e) => e.type === "widget" && e.widget.kind === "deck")).toHaveLength(1);
+    // The turn's own line is in the saved conversation and never comes again from the log (review of #134).
+    expect(seen.filter((e) => e.type === "text" && e.text === "Looking now.")).toEqual([]);
     const end = (await (await call("GET", `/dream/sessions/${done.sessionId}`, t)).json()) as Ev;
     expect(end.widgets.filter((w: Ev) => w.kind === "deck")).toHaveLength(1);
     expect(end.running).toEqual([]);
+    expect(end.pending).toEqual([]);
+  });
+
+  it("begins a turn's stream with what the app missed since the last number it saw (review of #134)", async () => {
+    const t = await signIn("ada@example.com");
+    await liveIn(t, "MT", "Malta");
+    concierge = [[fc("search_homes", VILLA_ARGS)], [message("Looking now.")]];
+    const res = await call("POST", "/dream/turn", t, { sessionId: null, action: { type: "message", text: "a modern sea-view villa" }, follow: true });
+    const first = (await res.text()).split("\n").filter((l) => l.startsWith("data:")).map((l) => JSON.parse(l.slice(5)) as Ev);
+    const done = first.find((e) => e.type === "done")!;
+    // The app stopped listening at the turn's done; the search then shows its deck before the next turn's stream opens.
+    for (let i = 0; i < 100; i++) {
+      const v = (await (await call("GET", `/dream/sessions/${done.sessionId}`, t)).json()) as Ev;
+      if (!v.running.length) break;
+      await new Promise((r) => setTimeout(r, 20));
+    }
+    concierge = [[message("Here's what turned up.")]];
+    const next = await call("POST", "/dream/turn", t, { sessionId: done.sessionId, action: { type: "message", text: "anything?" }, follow: true, after: done.seq });
+    const events = (await next.text()).split("\n").filter((l) => l.startsWith("data:")).map((l) => JSON.parse(l.slice(5)) as Ev);
+    const deck = events.findIndex((e) => e.type === "widget" && e.widget.kind === "deck");
+    expect(deck).toBeGreaterThan(-1);
+    // Each with its number, in log order, before the turn's own start.
+    expect(events[deck]!.seq).toBeGreaterThan(done.seq);
+    expect(deck).toBeLessThan(events.findIndex((e) => e.type === "start"));
+    const numbers = events.filter((e) => typeof e.seq === "number").map((e) => e.seq as number);
+    expect([...numbers].sort((a, b) => a - b)).toEqual(numbers);
   });
 
   it("runs everything inline for an app that doesn't follow the event log (TestFlight builds up to 26)", async () => {

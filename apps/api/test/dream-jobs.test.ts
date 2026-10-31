@@ -45,29 +45,47 @@ describe("jobs beside the conversation", () => {
     expect((await jobs.since("s1", 99, 0)).gap).toBe(true);
   });
 
-  it("tells a reloading app to follow from just before the oldest running work's first event", () => {
+  it("gives a reload exactly what running work has shown and nothing finished work saved (review of #134)", () => {
     const jobs = new Jobs();
-    jobs.publish("s1", { type: "text", text: "saved already" });
+    jobs.add("s1", view("t1", "turn"));
+    jobs.publish("s1", { type: "text", text: "Looking now." }, "t1");
     jobs.add("s1", view("a", "car:x"));
-    jobs.publish("s1", { type: "step", id: "job_a", state: "running", text: "job a" });
-    jobs.add("s1", view("b", "home:y"));
-    jobs.publish("s1", { type: "step", id: "job_b", state: "running", text: "job b" });
-    expect(jobs.resumeFrom("s1")).toBe(1);
+    jobs.publish("s1", { type: "step", id: "job_a", state: "running", text: "job a" }, "a");
+    // The turn ends and its line is saved: it isn't pending any more, though it came after the job began.
+    jobs.remove("s1", "t1");
+    jobs.publish("s1", { type: "widget", widget: { kind: "deck", id: "deck_1" } as never }, "a");
+    expect(jobs.pending("s1").map((l) => `${l.seq}:${l.event.type}`)).toEqual(["2:step", "3:widget"]);
     jobs.remove("s1", "a");
-    expect(jobs.resumeFrom("s1")).toBe(2);
-    jobs.remove("s1", "b");
-    expect(jobs.resumeFrom("s1")).toBe(jobs.seq("s1"));
+    expect(jobs.pending("s1")).toEqual([]);
+    expect(jobs.after("s1", 1).map((l) => l.seq)).toEqual([2, 3]);
   });
 
-  it("passes events on to listeners with the work that published them", () => {
+  it("drops a job replaced before it began to save, and lets one already saving finish beside its successor (review of #134)", () => {
+    const jobs = new Jobs();
+    const a = jobs.add("s1", view("a", "car:db11"));
+    jobs.add("s1", view("b", "car:db11"));
+    expect(a.replaced()).toBe(true);
+    expect(jobs.beginCommit("s1", "a")).toBe(false);
+    // Saving first: the newer search runs beside it instead of replacing it.
+    expect(jobs.beginCommit("s1", "b")).toBe(true);
+    const c = jobs.add("s1", view("c", "car:db11"));
+    expect(jobs.list("s1").map((j) => j.id)).toEqual(["a", "b", "c"]);
+    expect(c.replaced()).toBe(false);
+    expect(jobs.beginCommit("s1", "b")).toBe(true);
+    // A turn always saves.
+    jobs.add("s1", view("t", "turn"));
+    expect(jobs.beginCommit("s1", "t")).toBe(true);
+  });
+
+  it("passes events on to listeners, numbered and with the work that published them", () => {
     const jobs = new Jobs();
     const heard: string[] = [];
-    const stop = jobs.listen("s1", (e, origin) => heard.push(`${e.type}:${origin ?? "-"}`));
+    const stop = jobs.listen("s1", (l) => void heard.push(`${l.seq}:${l.event.type}:${l.origin ?? "-"}`));
     jobs.publish("s1", { type: "text", text: "hi" }, "turn1");
     jobs.publish("s1", { type: "widget", widget: { kind: "item", id: "item_1", text: "a Leica Q3" } as never });
     stop();
     jobs.publish("s1", { type: "text", text: "after" });
-    expect(heard).toEqual(["text:turn1", "widget:-"]);
+    expect(heard).toEqual(["1:text:turn1", "2:widget:-"]);
   });
 
   it("runs one save of a session at a time", async () => {

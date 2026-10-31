@@ -71,7 +71,15 @@ export const dandyNameSchema = z.string().trim().min(1).max(24).regex(/^[^\p{C}]
  * as jobs beside the conversation. Apps from before that (TestFlight builds up to 26) leave it out, and their turns run
  * everything inline as they always did, so their cards still arrive in the turn's own stream.
  */
-const turnBody = z.object({ sessionId: z.string().uuid().nullish(), action: actionSchema, persona: personaSchema, name: dandyNameSchema, follow: z.boolean().optional() });
+const turnBody = z.object({
+  sessionId: z.string().uuid().nullish(),
+  action: actionSchema,
+  persona: personaSchema,
+  name: dandyNameSchema,
+  follow: z.boolean().optional(),
+  /** The highest event number the app has seen in this conversation: the stream begins with anything after it. */
+  after: z.number().int().min(0).optional(),
+});
 const suggestQuery = z.object({ persona: personaSchema });
 
 type SessionRow = { id: string; transcript: unknown; state: unknown };
@@ -139,12 +147,20 @@ export function dreamRoutes(deps: DreamDeps) {
     // neither misses a card that isn't saved yet nor gets one twice (review of #134).
     const read = await jobs.lock(id.data, async () => {
       const { rows } = await db.query<SessionRow>("select id, transcript, state from dream_sessions where id = $1 and user_id = $2", [id.data, c.get("userId")]);
-      return { row: rows[0], seq: jobs.resumeFrom(id.data), running: jobs.list(id.data) };
+      return { row: rows[0], seq: jobs.seq(id.data), pending: jobs.pending(id.data), running: jobs.list(id.data) };
     });
     if (!read.row) return c.json({ error: "That conversation wasn't found." }, 404);
     const state = parse(read.row.state) as DreamState;
     const decks = Object.values(state.decks ?? {}).map(deckWidget);
-    return c.json({ id: read.row.id, transcript: parse(read.row.transcript), widgets: [...Object.values(state.widgets ?? {}), ...decks], running: read.running, seq: read.seq });
+    // The saved conversation, what running work has shown that isn't saved yet, and the number to follow the log from.
+    return c.json({
+      id: read.row.id,
+      transcript: parse(read.row.transcript),
+      widgets: [...Object.values(state.widgets ?? {}), ...decks],
+      pending: read.pending.map((l) => ({ ...l.event, seq: l.seq })),
+      running: read.running,
+      seq: read.seq,
+    });
   });
 
   app.post("/dream/turn", async (c) => {
@@ -247,10 +263,10 @@ export function dreamRoutes(deps: DreamDeps) {
       const emit = async (e: DreamEvent) => {
         if (closed || replaced()) return;
         // Lines the work keeps in the conversation it logs itself, as it does in a turn (runSearch, pickListing).
-        jobs.publish(sessionId, e);
+        jobs.publish(sessionId, e, id);
       };
       const jctx = { ...ctxFor(emit, new TurnBudget(Date.now() + JOB_WRAP_MS), AbortSignal.any([signal, own.signal])), life: from.life };
-      jobs.publish(sessionId, { type: "step", id: `job_${id}`, state: "running", text: label });
+      jobs.publish(sessionId, { type: "step", id: `job_${id}`, state: "running", text: label }, id);
       const run = (async () => {
         let timer: ReturnType<typeof setTimeout> | undefined;
         const late = new Promise<"late">((resolve) => (timer = setTimeout(() => resolve("late"), deps.jobStopMs ?? JOB_STOP_MS)));
@@ -262,18 +278,18 @@ export function dreamRoutes(deps: DreamDeps) {
         const made = structuredClone({ transcript: jt, state: js });
         const seen = new Set(made.transcript.filter((_, i) => jobBefore.has(jt[i]!)));
         if (replaced()) return;
-        if (outcome === "late") jobs.publish(sessionId, { type: "error", message: friendly(new TurnLimitError("time")) });
+        if (outcome === "late") jobs.publish(sessionId, { type: "error", message: friendly(new TurnLimitError("time")) }, id);
         else if (outcome) {
           const e = outcome.e;
           if (!(e instanceof SpendLimitError || e instanceof TurnLimitError)) console.error("dream job failed", sessionId, lane, e instanceof MetaApiError ? `${e.status} ${e.body.slice(0, 200)}` : e);
-          jobs.publish(sessionId, { type: "error", message: friendly(e) });
+          jobs.publish(sessionId, { type: "error", message: friendly(e) }, id);
         }
-        // Whatever it made before it ended stays.
-        await save(jobBase, made, seen, { valid: () => !replaced(), retire: id });
+        // Whatever it made before it ended stays, unless a newer job replaced it before it began to save.
+        await save(jobBase, made, seen, { commit: id, retire: id });
       })()
         .catch((e) => console.error("could not finish dream job", sessionId, lane, e))
         .finally(() => {
-          jobs.publish(sessionId, { type: "step", id: `job_${id}`, state: "done", text: label });
+          jobs.publish(sessionId, { type: "step", id: `job_${id}`, state: "done", text: label }, id);
           jobs.remove(sessionId, id);
           if (!jobs.list(sessionId).length) jobs.publish(sessionId, { type: "done", sessionId, seq: jobs.seq(sessionId) + 1 });
         });
@@ -281,14 +297,15 @@ export function dreamRoutes(deps: DreamDeps) {
       return id;
     };
 
-    /** Saves one piece of work's changes into the conversation as it stands now (jobs.ts mergeChat). */
     /**
-     * `valid` is asked once the lock is held: a job replaced while it waited saves nothing. `retire` takes the job or turn
-     * off the running list inside the same lock, so a session view sees it either running and unsaved or saved and gone.
+     * Saves one piece of work's changes into the conversation as it stands now (jobs.ts mergeChat). `commit` names the
+     * job that is saving: once the lock is held it is marked as saving, unless a newer job replaced it first, and then it
+     * saves nothing; marked, it can no longer be replaced while it reads and writes. `retire` takes the job or turn off
+     * the running list inside the same lock, so a session view sees it either running and unsaved or saved and gone.
      */
-    const save = (from: DreamState, next: ChatCopy, seen: ReadonlySet<TranscriptEntry>, opts: { valid?: () => boolean; retire?: string } = {}) =>
+    const save = (from: DreamState, next: ChatCopy, seen: ReadonlySet<TranscriptEntry>, opts: { commit?: string; retire?: string } = {}) =>
       jobs.lock(sessionId, async () => {
-        if (opts.valid && !opts.valid()) {
+        if (opts.commit && !jobs.beginCommit(sessionId, opts.commit)) {
           if (opts.retire) jobs.remove(sessionId, opts.retire);
           return;
         }
@@ -315,21 +332,28 @@ export function dreamRoutes(deps: DreamDeps) {
         const stopBeat = heartbeat(stream);
         // The turn shows as running work too, so an app that comes back mid-turn keeps following the conversation.
         jobs.add(sessionId, { id: turnId, lane: "turn", label: "", startedAt: deps.now().toISOString() });
-        const send = async (e: DreamEvent) => {
-          if (!open) return;
-          try {
-            await stream.writeSSE({ data: JSON.stringify(e) });
-          } catch {
-            open = false; // the app went away; the work still finishes and is saved
-          }
-        };
+        // Everything goes down the stream in the order it was logged, each with its number, so the app knows where it
+        // is in the log (jobs.ts, the delivery contract).
+        let queue = Promise.resolve();
+        const send = (e: DreamEvent, seq?: number) =>
+          (queue = queue.then(async () => {
+            if (!open) return;
+            try {
+              await stream.writeSSE({ data: JSON.stringify(seq ? { ...e, seq } : e) });
+            } catch {
+              open = false; // the app went away; the work still finishes and is saved
+            }
+          }));
         const emit = async (e: DreamEvent) => {
-          jobs.publish(sessionId, e, turnId);
-          await send(e);
+          const seq = jobs.publish(sessionId, e, turnId);
+          await send(e, seq);
         };
-        // What the jobs it starts show while the turn is still open goes down the same stream; after it closes, the app
-        // follows the event log from the turn's done.
-        const unlisten = jobs.listen(sessionId, (e, origin) => void (origin !== turnId && send(e)));
+        // First what the app missed since the last number it saw (a card a running job showed while the app wasn't
+        // listening), then everything the jobs show while the turn is open. Both are taken in one step, with nothing
+        // awaited in between, so no event falls between them.
+        const missed = body.data.after === undefined ? [] : jobs.after(sessionId, body.data.after);
+        const unlisten = jobs.listen(sessionId, (l) => void (l.origin !== turnId && send(l.event, l.seq)));
+        for (const l of missed) void send(l.event, l.seq);
         await send({ type: "start", sessionId });
         const ctx = ctxFor(emit, new TurnBudget(), stop.signal);
         let timer: ReturnType<typeof setTimeout> | undefined;

@@ -38,12 +38,12 @@ export function nameForApi(name: string | undefined): string | undefined {
  * Sends one action and streams the Dandy's events back as they happen. Returns the session id. The Dandy's
  * personality and name go with it, so it speaks in its own voice and introduces itself by name.
  */
-export async function dreamTurn(apiStream: ApiStream, sessionId: string | null, action: DreamAction, onEvent: (e: DreamEvent) => void, opts: { signal?: AbortSignal; name?: string } = {}): Promise<string | null> {
+export async function dreamTurn(apiStream: ApiStream, sessionId: string | null, action: DreamAction, onEvent: (e: Numbered) => void, opts: { signal?: AbortSignal; name?: string; after?: number } = {}): Promise<string | null> {
   const res = await apiStream("/dream/turn", {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
     // This app follows the event log after a turn, so the server may run slow work as jobs beside it.
-    body: JSON.stringify({ sessionId, action, persona: currentPersona(), name: nameForApi(opts.name), follow: true }),
+    body: JSON.stringify({ sessionId, action, persona: currentPersona(), name: nameForApi(opts.name), follow: true, ...(opts.after !== undefined ? { after: opts.after } : {}) }),
     signal: opts.signal,
   });
   if (!res.ok || !res.body) {
@@ -68,7 +68,7 @@ export async function dreamTurn(apiStream: ApiStream, sessionId: string | null, 
         .join("");
       buffer = buffer.slice(cut + 2);
       if (!data) continue;
-      const e = JSON.parse(data) as DreamEvent;
+      const e = JSON.parse(data) as Numbered;
       if (e.type === "done" || e.type === "start") session = e.sessionId;
       onEvent(e);
     }
@@ -153,6 +153,9 @@ export interface SessionEntry {
   widget?: { kind: Widget["kind"]; id: string };
 }
 
+/** An event with its number in the conversation's log (api dream/jobs.ts), when it came from the log or a turn's stream. */
+export type Numbered = DreamEvent & { seq?: number };
+
 /** A piece of the Dandy's work still running on the server (api dream/jobs.ts); a turn in flight has no label. */
 export interface RunningJob {
   id: string;
@@ -168,6 +171,8 @@ export interface SessionDetail {
   transcript: SessionEntry[];
   widgets: Widget[];
   running?: RunningJob[];
+  /** What work still running has shown that isn't saved yet, in order, each with its number. */
+  pending?: Numbered[];
   seq?: number;
 }
 

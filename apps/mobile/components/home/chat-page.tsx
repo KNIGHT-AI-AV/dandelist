@@ -34,6 +34,7 @@ import {
   wishFrom,
   type DreamAction,
   type DreamEvent,
+  type Numbered,
   type FeedItem,
   type LifeContext,
   type Widget,
@@ -143,7 +144,11 @@ export function ChatPage() {
   const dandyRef = useRef(dandy);
   dandyRef.current = dandy;
 
+  // The highest event number seen in this conversation, from a turn's stream or the log (api dream/jobs.ts): the
+  // next turn and the follower both pick up after it, so nothing is missed between them.
+  const seen = useRef(0);
   const setSession = useCallback((id: string | null) => {
+    if (id !== session.current) seen.current = 0;
     session.current = id;
     setSessionIdState(id);
   }, []);
@@ -221,7 +226,7 @@ export function ChatPage() {
       following.current = ctrl;
       const mine = gen.current;
       void (async () => {
-        let seq = after;
+        let seq = Math.max(after, seen.current);
         let misses = 0;
         while (!ctrl.signal.aborted && gen.current === mine && session.current === sid) {
           try {
@@ -234,6 +239,7 @@ export function ChatPage() {
             }
             for (const { seq: n, event } of r.events) {
               seq = n;
+              seen.current = Math.max(seen.current, n);
               if (gen.current === mine && session.current === sid) handle(event);
             }
             if (!r.running.length) break;
@@ -260,6 +266,9 @@ export function ChatPage() {
         const rows: FeedItem[] = (s.running ?? []).filter((j) => j.label).map((j) => ({ id: `job_${j.id}`, kind: "step", text: j.label, state: "running" }));
         instant.current = true;
         setFeed([...feedFromSession(s, nextId), ...rows]);
+        // What running work has shown that isn't saved yet goes on top, once; then the log from its end.
+        for (const e of s.pending ?? []) handle(e);
+        seen.current = s.seq ?? 0;
         if (s.running?.length) followJobs(sid, s.seq ?? 0);
       } catch {
         // The next return to the app tries again.
@@ -295,21 +304,23 @@ export function ChatPage() {
     // Every turn is one of the Dandy's live tasks on the list. A swipe shows only if it turns into real work.
     let task: string | null = isQuiet ? null : startTask(taskFor(next.action));
     const late = isQuiet ? setTimeout(() => (task = startTask(taskFor(next.action))), 700) : null;
-    const onEvent = (e: DreamEvent) => {
+    const onEvent = (e: Numbered) => {
       if (gen.current !== mine) return;
       lastActive.current = Date.now();
       // Known from the first event, so a stream that breaks can still be caught up on.
       if (e.type === "start" && session.current !== e.sessionId) setSession(e.sessionId);
+      if (e.seq) seen.current = Math.max(seen.current, e.seq);
       if (e.type === "step" && e.state === "running" && task) updateTask(task, e.text);
       // The turn is done but its jobs work on: follow them from here.
       if (e.type === "done" && e.running) {
         setSession(e.sessionId);
-        followJobs(e.sessionId, e.seq ?? 0);
+        followJobs(e.sessionId, Math.max(e.seq ?? 0, seen.current));
       }
       handle(e);
     };
     try {
-      const sid = await dreamTurn(auth.apiStream, session.current, next.action, onEvent, { signal: ctrl.signal, name: dandyRef.current.name });
+      // The stream begins with anything the app missed since the last number it saw.
+      const sid = await dreamTurn(auth.apiStream, session.current, next.action, onEvent, { signal: ctrl.signal, name: dandyRef.current.name, ...(session.current ? { after: seen.current } : {}) });
       if (gen.current === mine && sid) setSession(sid);
     } catch (e) {
       if (gen.current === mine && !ctrl.signal.aborted) {
@@ -421,6 +432,8 @@ export function ChatPage() {
         const rows: FeedItem[] = (s.running ?? []).filter((j) => j.label).map((j) => ({ id: `job_${j.id}`, kind: "step", text: j.label, state: "running" }));
         setFeed([...feedFromSession(s, nextId), ...rows]);
         setSession(s.id);
+        for (const e of s.pending ?? []) handle(e);
+        seen.current = s.seq ?? 0;
         if (s.running?.length) followJobs(s.id, s.seq ?? 0);
       } catch (e) {
         if (gen.current !== mine) return;
