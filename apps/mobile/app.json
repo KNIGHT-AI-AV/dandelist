@@ -52,6 +52,7 @@
           "enableBackgroundRecording": false
         }
       ],
+      ["expo-build-properties", { "ios": { "enableSceneSupport": true } }],
       "./plugins/without-push-entitlement.js",
       "expo-notifications"
     ],

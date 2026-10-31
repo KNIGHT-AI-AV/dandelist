@@ -24,6 +24,19 @@ say() { echo "[$(date -u +%H:%M:%SZ)] $*"; }
 # Mac Team Attack's memory STOP is pressure level 4; stop before a heavy step rather than be stopped in it.
 pressure() { [ "$(sysctl -n kern.memorystatus_vm_pressure_level)" -lt 4 ] || { say "STOP: memory pressure level 4"; exit 3; }; }
 
+# The Xcode this job builds with: the Mac's default (xcode-select, untouched), or Xcode 27.1 for this job alone when
+# the launcher passes DEVELOPER_DIR (owner, 2026-10-31: "xcode yea go", side by side; the iPhone Duo's inner screen
+# needs an iOS 27.1 SDK build). xcodebuild and xcrun both read DEVELOPER_DIR; nothing runs xcode-select -s.
+if [ -n "${DEVELOPER_DIR:-}" ]; then
+  case "$DEVELOPER_DIR" in /Applications/Xcode-27.1.app/Contents/Developer) ;; *) echo "refusing DEVELOPER_DIR $DEVELOPER_DIR" >&2; exit 2 ;; esac
+  [ -d "$DEVELOPER_DIR" ] || { echo "no Xcode at $DEVELOPER_DIR" >&2; exit 2; }
+  export DEVELOPER_DIR
+fi
+IOS_SDK="$(xcrun --sdk iphoneos --show-sdk-version)"
+say "Xcode: $(xcodebuild -version | tr '\n' ' '); iOS SDK $IOS_SDK"
+# A 27.1 job must really build against the iOS 27.1 SDK (Mac Team Attack's review): anything else stops here.
+if [ -n "${DEVELOPER_DIR:-}" ] && [ "$IOS_SDK" != "27.1" ]; then echo "Xcode 27.1 reports iOS SDK $IOS_SDK, not 27.1" >&2; exit 2; fi
+
 mkdir -p "$JOB"/{secrets,private_keys,kc,home,tmp,logs,out,cache}
 KC="$JOB/kc/dandelist-build.keychain-db"
 KCPW="$(openssl rand -hex 24)"
