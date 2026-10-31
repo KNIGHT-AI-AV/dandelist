@@ -3,7 +3,7 @@ import { AccessibilityInfo, Animated, AppState, Easing, Platform, Pressable, Tex
 import { AskClock } from "../lib/ask";
 import { haptic, native, useReducedMotion } from "../lib/motion";
 import { layout, type, usePalette } from "../lib/theme";
-import { useFrontPage } from "./home/pager";
+import { usePageShown } from "./home/pager";
 
 /**
  * The clock behind one run of questions (lib/ask.ts). It waits on `open` while `run` is true and calls `onDue` with
@@ -33,8 +33,9 @@ export function useAskClock(open: string | null, run: boolean, onDue: (key: stri
   // A field belongs to the question it sits in; when that one closes, so does its hold.
   useEffect(() => clock.hold("typing", false), [clock, open]);
 
-  const page = useFrontPage();
-  useEffect(() => clock.hold("page", page !== null && page !== "chat"), [clock, page]);
+  // Held while the chat is out of view on the home ring (in a spread it can sit beside the list); never off the ring.
+  const chatShown = usePageShown("chat");
+  useEffect(() => clock.hold("page", chatShown === false), [clock, chatShown]);
   useEffect(() => {
     const sub = AppState.addEventListener("change", (s) => clock.hold("away", s !== "active"));
     return () => sub?.remove();

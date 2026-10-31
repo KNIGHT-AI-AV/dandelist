@@ -1,7 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { PAGES } from "../../lib/pager";
 import { UNDO_MS } from "../../lib/removal";
+import { keepsGrace } from "../../lib/remove-confirm";
 import { layout, space } from "../../lib/theme";
 import { useWishes, type Wish } from "../../lib/wishes";
 import { dockRoom } from "../inputs";
@@ -34,7 +36,10 @@ const Ctx = createContext<Removals | null>(null);
 export function RemovalsProvider({ children }: { children: ReactNode }) {
   const { remove: commit } = useWishes();
   const home = useHome();
-  const { page } = usePager();
+  const { page, span, shows, width: pageWidth } = usePager();
+  // In a spread, the list or Details beside another page keeps the free window and holds the toast (one of them at
+  // most is ever in view).
+  const pane = PAGES.find((id) => shows(id) && keepsGrace(id));
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const [errorNote, setErrorNote] = useState<Note | null>(null);
@@ -55,7 +60,7 @@ export function RemovalsProvider({ children }: { children: ReactNode }) {
     [begin],
   );
   // The free window after a yes, and the removal waiting on an answer.
-  const grace = useRemoveGrace(page);
+  const grace = useRemoveGrace(pane ?? page);
   const [asking, setAsking] = useState<{ w: Wish; focusUndo: boolean } | null>(null);
   const remove = useCallback(
     (w: Wish, focusUndo = true) => {
@@ -73,13 +78,15 @@ export function RemovalsProvider({ children }: { children: ReactNode }) {
   const keep = useCallback(() => setAsking(null), []);
   const pending = removals.pending;
   const note: Note | null = pending ? { key: pending.id, text: `Removed ${pending.name}`, action: { label: "Undo", onPress: () => removals.undo(pending.id) } } : errorNote;
-  const docked = page === "list" || page === "chat";
+  // Above the composer where it docks under the page; in a spread it sits under the chat, away from the toast's page.
+  const docked = span === 1 && (page === "list" || page === "chat");
+  const toastLeft = span === 2 && pane && pane !== page ? pageWidth : 0;
   const bottom = docked ? dockRoom(home.dock || layout.control.primary, insets.bottom) - space[12] : insets.bottom + space[16];
   const value = useMemo<Removals>(() => ({ pendingId: pending?.id, remove, showError }), [pending?.id, remove, showError]);
   return (
     <Ctx.Provider value={value}>
       {children}
-      <Toast note={note} bottom={bottom} side={layout.gutter(width)} claim={claim} onHold={removals.hold} onRelease={removals.release} />
+      <Toast note={note} bottom={bottom} side={layout.gutter(span === 2 ? pageWidth : width)} left={toastLeft} width={span === 2 ? pageWidth : undefined} claim={claim} onHold={removals.hold} onRelease={removals.release} />
       <ConfirmRemove name={asking?.w.name ?? null} onRemove={confirm} onKeep={keep} />
     </Ctx.Provider>
   );

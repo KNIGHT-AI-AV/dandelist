@@ -1,7 +1,8 @@
 import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { Platform, useWindowDimensions, type TextStyle } from "react-native";
+import { Platform, type TextStyle } from "react-native";
 import { DEFAULT_THEME, THEMES, scaleType, type Palette, type ThemeId, type TypeRole } from "./palette";
 import { getSecret, setSecret } from "./storage";
+import { usePageSize } from "./page-size";
 
 /**
  * The theme provider and hooks. The tokens themselves (palettes, type roles, spacing, radii, shadows) live in
@@ -49,9 +50,9 @@ export function useTheme() {
   return useContext(ThemeContext);
 }
 
-/** The type roles at this window's width: hero, display, title1 and title2 scale; the rest stay fixed. */
+/** The type roles at this screen's width (its own page's in a spread): hero, display, title1 and title2 scale; the rest stay fixed. */
 export function useType(): Record<TypeRole, TextStyle> {
-  const { width } = useWindowDimensions();
+  const { width } = usePageSize();
   // Whole-pixel steps, so resizing a browser window doesn't re-render every frame of the drag.
   const w = Math.round(width / 8) * 8;
   return useMemo(() => scaleType(w, Platform.OS === "web") as Record<TypeRole, TextStyle>, [w]);
