@@ -3,7 +3,7 @@ import shipped from "../public/latest.json";
 import { AWAY_MS, LAUNCH, buildNumber, fetchLatest, offerFor, parseLatest, promptDue, promptStep, webUpdater, type Get, type Latest, type Offer, type Prompt, type PromptEvent } from "./update";
 
 const TESTFLIGHT = "https://testflight.apple.com/join/tuh4Jxkw";
-const APK = "https://expo.dev/artifacts/eas/pp9JA8kHnrSy9W8-dW167AHF0px4NDttiOeS6ny9zmE.apk";
+const APK = "https://github.com/KNIGHT-AI-AV/dandelist/releases/download/android-16/dandelist-android-16.apk";
 const LATEST: Latest = { ios: { build: 21, url: TESTFLIGHT }, android: { build: 14, url: APK }, web: { version: "b2c3" } };
 const OFFER: Offer = { kind: "store", url: TESTFLIGHT, target: "ios:21" };
 const run = (s: Prompt, ...events: PromptEvent[]) => events.reduce(promptStep, s);
