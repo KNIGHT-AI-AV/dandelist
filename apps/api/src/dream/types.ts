@@ -91,6 +91,8 @@ export interface DreamState {
   quotes: Record<string, QuoteState>;
   /** Listing URLs already shown, so a refined search brings new ones. */
   seen: string[];
+  /** A background job's mark on the ids it makes, so they never collide with the turn's own (jobs.ts); never saved. */
+  tag?: string;
 }
 
 export const emptyState = (): DreamState => ({ counter: 0, widgets: {}, decks: {}, builds: {}, quotes: {}, seen: [] });

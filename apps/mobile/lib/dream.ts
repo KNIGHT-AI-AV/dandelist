@@ -38,11 +38,12 @@ export function nameForApi(name: string | undefined): string | undefined {
  * Sends one action and streams the Dandy's events back as they happen. Returns the session id. The Dandy's
  * personality and name go with it, so it speaks in its own voice and introduces itself by name.
  */
-export async function dreamTurn(apiStream: ApiStream, sessionId: string | null, action: DreamAction, onEvent: (e: DreamEvent) => void, opts: { signal?: AbortSignal; name?: string } = {}): Promise<string | null> {
+export async function dreamTurn(apiStream: ApiStream, sessionId: string | null, action: DreamAction, onEvent: (e: Numbered) => void, opts: { signal?: AbortSignal; name?: string; after?: number } = {}): Promise<string | null> {
   const res = await apiStream("/dream/turn", {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
-    body: JSON.stringify({ sessionId, action, persona: currentPersona(), name: nameForApi(opts.name) }),
+    // This app follows the event log after a turn, so the server may run slow work as jobs beside it.
+    body: JSON.stringify({ sessionId, action, persona: currentPersona(), name: nameForApi(opts.name), follow: true, ...(opts.after !== undefined ? { after: opts.after } : {}) }),
     signal: opts.signal,
   });
   if (!res.ok || !res.body) {
@@ -67,8 +68,8 @@ export async function dreamTurn(apiStream: ApiStream, sessionId: string | null, 
         .join("");
       buffer = buffer.slice(cut + 2);
       if (!data) continue;
-      const e = JSON.parse(data) as DreamEvent;
-      if (e.type === "done") session = e.sessionId;
+      const e = JSON.parse(data) as Numbered;
+      if (e.type === "done" || e.type === "start") session = e.sessionId;
       onEvent(e);
     }
   }
@@ -152,11 +153,27 @@ export interface SessionEntry {
   widget?: { kind: Widget["kind"]; id: string };
 }
 
-/** A saved conversation (GET /dream/sessions/:id): its transcript and the widgets it still holds. */
+/** An event with its number in the conversation's log (api dream/jobs.ts), when it came from the log or a turn's stream. */
+export type Numbered = DreamEvent & { seq?: number };
+
+/** A piece of the Dandy's work still running on the server (api dream/jobs.ts); a turn in flight has no label. */
+export interface RunningJob {
+  id: string;
+  label: string;
+}
+
+/**
+ * A saved conversation (GET /dream/sessions/:id): its transcript and the widgets it still holds, what is still running
+ * and the event log's number to follow it from.
+ */
 export interface SessionDetail {
   id: string;
   transcript: SessionEntry[];
   widgets: Widget[];
+  running?: RunningJob[];
+  /** What work still running has shown that isn't saved yet, in order, each with its number. */
+  pending?: Numbered[];
+  seq?: number;
 }
 
 /** A conversation touched within this long is picked up again when the chat opens; an older one stays in history. */
@@ -188,6 +205,19 @@ export async function loadSession(api: Api, id: string): Promise<SessionDetail> 
   if (!res?.ok) throw await failure(res, "Couldn't open that conversation.");
   return (await res.json()) as SessionDetail;
 }
+
+/**
+ * What a conversation's turns and background jobs showed after `after` (GET /dream/sessions/:id/events). The server
+ * holds the request up to 20 s for something new while work runs. `gap`: some were missed, so load the session again.
+ */
+export async function sessionEvents(api: Api, id: string, after: number, signal?: AbortSignal): Promise<{ events: { seq: number; event: DreamEvent }[]; seq: number; gap: boolean; running: RunningJob[] }> {
+  const res = await api(`/dream/sessions/${encodeURIComponent(id)}/events?after=${after}`, { signal });
+  if (!res.ok) throw await failure(res, "Couldn't follow that conversation.");
+  return (await res.json()) as { events: { seq: number; event: DreamEvent }[]; seq: number; gap: boolean; running: RunningJob[] };
+}
+
+/** A request that died with the connection (the app went to the background, the phone changed networks). */
+export const lostConnection = (e: unknown): boolean => /fetch failed|network|connection|timed out|socket|offline/i.test(e instanceof Error ? e.message : String(e ?? ""));
 
 /** Deletes a conversation for good. One that is already gone counts as deleted. */
 export async function deleteSession(api: Api, id: string): Promise<void> {

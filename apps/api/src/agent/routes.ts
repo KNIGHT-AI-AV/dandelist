@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import type { Alive } from "../alive";
 import { MetaApiError, MetaClient, TRANSCRIBE_MODEL } from "@dandelist/meta";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
@@ -20,7 +21,7 @@ import { moneyPhoto, photoMedia, pricelessPhoto } from "./worth";
 import { stoppable } from "../sse";
 import { notesFor, withNotes } from "../notes";
 
-export const RUNS_PER_USER_PER_DAY = 20;
+export const RUNS_PER_USER_PER_DAY = 40;
 /** Every judge shares one account, so it gets more runs; its share of the daily spend cap still bounds it. */
 export const RUNS_PER_JUDGE_PER_DAY = 120;
 export const INTERPRETS_PER_USER_PER_DAY = 60;
@@ -44,6 +45,8 @@ export interface AgentDeps extends AuthDeps {
   media?: { store?: MediaStore; cutouts?: boolean; generate?: boolean; upscale?: boolean; cutoutsPerDay: number; imagesPerDay: number };
   /** The shared photo archive (defaults to the database's). Tests pass their own or none. */
   archive?: Archive | null;
+  /** Keeps the instance awake while work outlives its request (alive.ts). */
+  alive?: Alive;
 }
 
 const IMAGE_MODEL = "muse-image-1.0";
@@ -357,7 +360,7 @@ export function agentRoutes(deps: AgentDeps) {
     });
     let timer: ReturnType<typeof setTimeout> | undefined;
     const late = new Promise<"late">((resolve) => (timer = setTimeout(() => resolve("late"), HUNT_STOP_MS)));
-    void Promise.race([hunt.then((r) => ({ r }), (e: unknown) => ({ e })), late])
+    const settled = Promise.race([hunt.then((r) => ({ r }), (e: unknown) => ({ e })), late])
       .then(async (outcome) => {
         clearTimeout(timer);
         stop.abort(); // anything still running stops spending
@@ -384,6 +387,8 @@ export function agentRoutes(deps: AgentDeps) {
         return db.query("update agent_runs set status = 'error', error = $1, updated_at = $2 where id = $3", [e ? friendly(e) : "That took too long. Try again.", touch(), run.id]);
       })
       .catch((e) => console.error("could not record research outcome", run.id, e));
+    // The hunt goes on with the phone gone: the instance stays awake until it's recorded (alive.ts).
+    void deps.alive?.keep(settled);
 
     return c.json({ run: toRun(run) }, 202);
   });

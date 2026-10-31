@@ -21,6 +21,7 @@ const message = (text: string) => ({ type: "message", content: [{ type: "output_
 const fakeMeta = (async (_url: string, init: RequestInit) => {
   const body = JSON.parse(String(init.body)) as Record<string, any>;
   metaCalls.push(body);
+  if (body.text?.format?.name === "wants") return reply([message(JSON.stringify({ wants: [] }))]);
   if (body.text?.format?.name === "chat_suggestions") {
     if (suggestStatus !== 200) return new Response("unavailable", { status: suggestStatus });
     return reply([message(typeof suggestReply === "string" ? suggestReply : JSON.stringify({ suggestions: suggestReply }))]);
@@ -201,7 +202,8 @@ describe("the Dandy speaks as itself", () => {
     concierge = [[message("I'm Muse Spark, a model made by Meta. I'm Ava, your Dandy. What would you love?")]];
     const { status, events } = await say(t, "Who are you?", undefined, { persona: "heir", name: "Ava" });
     expect(status).toBe(200);
-    const call0 = metaCalls[0]!;
+    // The concierge's own call: the separate read of the message's wants carries no tools.
+    const call0 = metaCalls.find((b) => b.tools?.length)!;
     expect(call0.input).toContain('YOUR NAME: "Ava"');
     expect(call0.instructions).toMatch(/never mention Meta or Muse/);
     expect(call0.instructions).toMatch(/never call yourself an AI/);

@@ -1,7 +1,8 @@
 import type { DreamEvent } from "@dandelist/catalogue/dream";
 import { MetaApiError, MetaClient } from "@dandelist/meta";
 import { Hono, type Context } from "hono";
-import { streamSSE } from "hono/streaming";
+import { streamSSE, type SSEStreamingApi } from "hono/streaming";
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { personaSchema, voiceLine } from "../agent/persona";
 import type { Meta } from "../agent/agent";
@@ -10,7 +11,8 @@ import { publicFetch } from "../agent/tools";
 import { requireAuth, type AuthVars } from "../auth";
 import { heartbeat, stoppable } from "../sse";
 import { assertBudget, assertUserBudget, recordSpend, SpendLimitError, userCapUsd, withHold } from "../spend";
-import { deckWidget, runTurn } from "./agent";
+import { MAX_TRANSCRIPT, deckWidget, runTurn } from "./agent";
+import { Jobs, mergeChat, type ChatCopy } from "./jobs";
 import { TurnBudget, TurnLimitError, type ApifyConfig, type DreamCtx } from "./context";
 import { HISTORY_LIMIT, previewOf, summary, titleOf } from "./history";
 import { homeSchema, lifeBody, readLife, writeLife } from "./life";
@@ -35,15 +37,27 @@ export const DREAM_CALLS_PER_USER_PER_DAY = 400;
  * phone reported as "The network connection was lost"). Turns wrap up on their own well before (TURN_WRAP_MS).
  */
 export const TURN_STOP_MS = 95_000;
+/** The longest message the chat takes, in characters. */
+export const MESSAGE_MAX = 16_000;
+/** A background job wraps up by then (no new model call starts) and is stopped by JOB_STOP_MS: no request holds it. */
+export const JOB_WRAP_MS = 110_000;
+export const JOB_STOP_MS = 150_000;
+/** How long GET /dream/sessions/:id/events waits for something new while work runs. */
+export const EVENTS_WAIT_MS = 20_000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export interface DreamDeps extends AgentDeps {
+  /** The conversations' running jobs and event logs; one per server (tests pass their own). */
+  jobs?: Jobs;
+  /** A job's hard stop in ms (JOB_STOP_MS; tests shorten it). */
+  jobStopMs?: number;
   /** Listing portals through Apify. Missing turns them off; the web search still runs. */
   apify?: ApifyConfig;
 }
 
 const actionSchema = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("message"), text: z.string().trim().min(1).max(2000) }),
+  // Long enough to write a book to it (owner, 2026-10-31: "write a book to us and just rant to us").
+  z.object({ type: z.literal("message"), text: z.string().trim().min(1).max(MESSAGE_MAX) }),
   z.object({ type: z.literal("builder"), widgetId: z.string().max(40), values: z.record(z.unknown()).refine((v) => JSON.stringify(v).length <= 8000, "Too much.") }),
   z.object({ type: z.literal("swipe"), widgetId: z.string().max(40), listingId: z.string().max(40), verdict: z.enum(["yes", "no"]) }),
   z.object({ type: z.literal("search_now"), widgetId: z.string().max(40) }),
@@ -52,7 +66,20 @@ const actionSchema = z.discriminatedUnion("type", [
 ]);
 /** The Dandy's name as its owner typed it: one line of printable characters, so it can introduce itself. */
 export const dandyNameSchema = z.string().trim().min(1).max(24).regex(/^[^\p{C}]+$/u).optional();
-const turnBody = z.object({ sessionId: z.string().uuid().nullish(), action: actionSchema, persona: personaSchema, name: dandyNameSchema });
+/**
+ * `follow`: the app follows the session's event log after a turn (GET /dream/sessions/:id/events), so slow work can run
+ * as jobs beside the conversation. Apps from before that (TestFlight builds up to 26) leave it out, and their turns run
+ * everything inline as they always did, so their cards still arrive in the turn's own stream.
+ */
+const turnBody = z.object({
+  sessionId: z.string().uuid().nullish(),
+  action: actionSchema,
+  persona: personaSchema,
+  name: dandyNameSchema,
+  follow: z.boolean().optional(),
+  /** The highest event number the app has seen in this conversation: the stream begins with anything after it. */
+  after: z.number().int().min(0).optional(),
+});
 const suggestQuery = z.object({ persona: personaSchema });
 
 type SessionRow = { id: string; transcript: unknown; state: unknown };
@@ -74,6 +101,7 @@ function friendly(e: unknown): string {
 export function dreamRoutes(deps: DreamDeps) {
   const app = new Hono<{ Variables: AuthVars }>();
   const { db } = deps;
+  const jobs = deps.jobs ?? new Jobs();
   const caps = deps.spendCaps ?? { dailyUsd: 10, totalUsd: 120 };
   const auth = requireAuth(deps);
   const suggestions = new Suggestions({ db, meta: deps.meta, caps, personUsd: USER_DAILY_USD, judge: deps.judge, now: deps.now });
@@ -115,11 +143,24 @@ export function dreamRoutes(deps: DreamDeps) {
   app.get("/dream/sessions/:id", async (c) => {
     const id = z.string().uuid().safeParse(c.req.param("id"));
     if (!id.success) return c.json({ error: "That conversation wasn't found." }, 404);
-    const { rows } = await db.query<SessionRow>("select id, transcript, state from dream_sessions where id = $1 and user_id = $2", [id.data, c.get("userId")]);
-    if (!rows[0]) return c.json({ error: "That conversation wasn't found." }, 404);
-    const state = parse(rows[0].state) as DreamState;
+    // The saved conversation and where to follow its log from, read together: no job folds in between, so the app
+    // neither misses a card that isn't saved yet nor gets one twice (review of #134).
+    const read = await jobs.lock(id.data, async () => {
+      const { rows } = await db.query<SessionRow>("select id, transcript, state from dream_sessions where id = $1 and user_id = $2", [id.data, c.get("userId")]);
+      return { row: rows[0], seq: jobs.seq(id.data), pending: jobs.pending(id.data), running: jobs.list(id.data) };
+    });
+    if (!read.row) return c.json({ error: "That conversation wasn't found." }, 404);
+    const state = parse(read.row.state) as DreamState;
     const decks = Object.values(state.decks ?? {}).map(deckWidget);
-    return c.json({ id: rows[0].id, transcript: parse(rows[0].transcript), widgets: [...Object.values(state.widgets ?? {}), ...decks] });
+    // The saved conversation, what running work has shown that isn't saved yet, and the number to follow the log from.
+    return c.json({
+      id: read.row.id,
+      transcript: parse(read.row.transcript),
+      widgets: [...Object.values(state.widgets ?? {}), ...decks],
+      pending: read.pending.map((l) => ({ ...l.event, seq: l.seq })),
+      running: read.running,
+      seq: read.seq,
+    });
   });
 
   app.post("/dream/turn", async (c) => {
@@ -153,40 +194,31 @@ export function dreamRoutes(deps: DreamDeps) {
     const saved = parse(session.state) as Partial<DreamState> | null;
     const state: DreamState = { ...emptyState(), ...(saved ?? {}) };
     const sessionId = session.id;
-    const budget = new TurnBudget();
-    const stop = new AbortController();
-    const client = new MetaClient({ ...deps.meta, fetch: stoppable(deps.meta.fetch ?? fetch, stop.signal), onUsage: (usage, cost) => recordSpend(db, userId, "dream", usage, cost, deps.now()) });
-    const meta: Meta = {
-      responses: async (b) => {
-        budget.meta();
-        return withHold(
-          async () => {
-            await assertBudget(db, caps, deps.now());
-            await assertUserBudget(db, userId, await userCapUsd(db, userId, USER_DAILY_USD, deps.judge, caps), deps.now());
-          },
-          () => client.responses(b),
-          userId,
-        );
-      },
-    };
+    // What the turn began with, so its save folds in beside what jobs saved meanwhile (jobs.ts mergeChat).
+    const base = structuredClone(state);
+    const before = new Set(transcript);
     const life = await readLife(db, userId);
     // What they've told us about their wishes, for the concierge to keep in mind (notes.ts). Theirs alone.
     const notes = await notesFor(db, userId);
     // Their list in its order, so the concierge can suggest a new order, a tier or a removal (edit_list).
     const list = await listWishes(db, userId);
+    const stop = new AbortController();
+    const turnId = randomUUID().slice(0, 8);
 
-    return streamSSE(c, async (stream) => {
-      let open = true;
-      stream.onAbort(() => void (open = false));
-      // A comment line every 15 s keeps the phone and App Runner from closing a quiet stream mid-search.
-      const stopBeat = heartbeat(stream);
-      const emit = async (e: DreamEvent) => {
-        if (!open) return;
-        try {
-          await stream.writeSSE({ data: JSON.stringify(e) });
-        } catch {
-          open = false; // the app went away; the work still finishes and is saved
-        }
+    const ctxFor = (emit: DreamCtx["emit"], budget: TurnBudget, signal: AbortSignal): DreamCtx => {
+      const client = new MetaClient({ ...deps.meta!, fetch: stoppable(deps.meta!.fetch ?? fetch, signal), onUsage: (usage, cost) => recordSpend(db, userId, "dream", usage, cost, deps.now()) });
+      const meta: Meta = {
+        responses: async (b) => {
+          budget.meta();
+          return withHold(
+            async () => {
+              await assertBudget(db, caps, deps.now());
+              await assertUserBudget(db, userId, await userCapUsd(db, userId, USER_DAILY_USD, deps.judge, caps), deps.now());
+            },
+            () => client.responses(b),
+            userId,
+          );
+        },
       };
       const ctx: DreamCtx = {
         db,
@@ -205,37 +237,171 @@ export function dreamRoutes(deps: DreamDeps) {
         notes,
         name: body.data.name,
         list,
+        running: () => jobs.list(sessionId).filter((j) => j.lane !== "turn"),
+        ...(body.data.follow ? { spawn: (t: TranscriptEntry[], st: DreamState, lane: string, label: string, work: (c: DreamCtx, t: TranscriptEntry[], st: DreamState) => Promise<unknown>) => spawn(ctx, t, st, lane, label, work) } : {}),
       };
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      const late = new Promise<"late">((resolve) => (timer = setTimeout(() => resolve("late"), TURN_STOP_MS)));
-      const outcome = await Promise.race([runTurn(ctx, transcript, state, body.data.action).then(() => null, (e: unknown) => ({ e })), late]);
-      clearTimeout(timer);
-      if (outcome === "late") {
-        // Whatever is still running stops spending; what the turn already showed stays in the conversation.
-        stop.abort();
-        await emit({ type: "error", message: friendly(new TurnLimitError("time")) });
-      } else if (outcome) {
-        const e = outcome.e;
-        if (!(e instanceof SpendLimitError || e instanceof TurnLimitError)) console.error("dream turn failed", sessionId, e instanceof MetaApiError ? `${e.status} ${e.body.slice(0, 200)}` : e);
-        await emit({ type: "error", message: friendly(e) });
-      }
-      try {
+      return ctx;
+    };
+
+    /**
+     * Slow work as a job beside the conversation (jobs.ts): it runs on a copy of the chat as it is now, with its own
+     * budget and stop, shows its steps and cards through the session's event log, and folds what it made back in when
+     * it ends. A newer job in the same lane stops it, and then what it made is dropped.
+     */
+    const spawn = (from: DreamCtx, t0: TranscriptEntry[], st0: DreamState, lane: string, label: string, work: (c: DreamCtx, t: TranscriptEntry[], st: DreamState) => Promise<unknown>): string => {
+      const id = randomUUID().slice(0, 8);
+      const jt = structuredClone(t0);
+      const js = structuredClone(st0);
+      js.tag = `${id.slice(0, 3)}`;
+      const jobBase = structuredClone(js);
+      const jobBefore = new Set(jt);
+      const { signal, replaced } = jobs.add(sessionId, { id, lane, label, startedAt: deps.now().toISOString() });
+      // Its own stop, for its time limit; a newer job in its lane stops it through `signal`.
+      const own = new AbortController();
+      // Set once the job has ended (on its own, at its time limit or replaced): from then on it shows nothing.
+      let closed = false;
+      const emit = async (e: DreamEvent) => {
+        if (closed || replaced()) return;
+        // Lines the work keeps in the conversation it logs itself, as it does in a turn (runSearch, pickListing).
+        jobs.publish(sessionId, e, id);
+      };
+      const jctx = { ...ctxFor(emit, new TurnBudget(Date.now() + JOB_WRAP_MS), AbortSignal.any([signal, own.signal])), life: from.life };
+      jobs.publish(sessionId, { type: "step", id: `job_${id}`, state: "running", text: label }, id);
+      const run = (async () => {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const late = new Promise<"late">((resolve) => (timer = setTimeout(() => resolve("late"), deps.jobStopMs ?? JOB_STOP_MS)));
+        const outcome = await Promise.race([work(jctx, jt, js).then(() => null, (e: unknown) => ({ e })), late]);
+        clearTimeout(timer);
+        // Ended: anything still in flight stops spending, and whatever it resolves to later is neither shown nor saved.
+        closed = true;
+        own.abort();
+        const made = structuredClone({ transcript: jt, state: js });
+        const seen = new Set(made.transcript.filter((_, i) => jobBefore.has(jt[i]!)));
+        if (replaced()) return;
+        if (outcome === "late") jobs.publish(sessionId, { type: "error", message: friendly(new TurnLimitError("time")) }, id);
+        else if (outcome) {
+          const e = outcome.e;
+          if (!(e instanceof SpendLimitError || e instanceof TurnLimitError)) console.error("dream job failed", sessionId, lane, e instanceof MetaApiError ? `${e.status} ${e.body.slice(0, 200)}` : e);
+          jobs.publish(sessionId, { type: "error", message: friendly(e) }, id);
+        }
+        // Whatever it made before it ended stays, unless a newer job replaced it before it began to save.
+        await save(jobBase, made, seen, { commit: id, retire: id });
+      })()
+        .catch((e) => console.error("could not finish dream job", sessionId, lane, e))
+        .finally(() => {
+          jobs.publish(sessionId, { type: "step", id: `job_${id}`, state: "done", text: label }, id);
+          jobs.remove(sessionId, id);
+          if (!jobs.list(sessionId).length) jobs.publish(sessionId, { type: "done", sessionId, seq: jobs.seq(sessionId) + 1 });
+        });
+      void deps.alive?.keep(run);
+      return id;
+    };
+
+    /**
+     * Saves one piece of work's changes into the conversation as it stands now (jobs.ts mergeChat). `commit` names the
+     * job that is saving: once the lock is held it is marked as saving, unless a newer job replaced it first, and then it
+     * saves nothing; marked, it can no longer be replaced while it reads and writes. `retire` takes the job or turn off
+     * the running list inside the same lock, so a session view sees it either running and unsaved or saved and gone.
+     */
+    const save = (from: DreamState, next: ChatCopy, seen: ReadonlySet<TranscriptEntry>, opts: { commit?: string; retire?: string } = {}) =>
+      jobs.lock(sessionId, async () => {
+        if (opts.commit && !jobs.beginCommit(sessionId, opts.commit)) {
+          if (opts.retire) jobs.remove(sessionId, opts.retire);
+          return;
+        }
+        const row = (await db.query<SessionRow>("select id, transcript, state from dream_sessions where id = $1 and user_id = $2", [sessionId, userId])).rows[0];
+        if (!row) return; // deleted meanwhile
+        const latest = { transcript: (parse(row.transcript) ?? []) as TranscriptEntry[], state: { ...emptyState(), ...((parse(row.state) as Partial<DreamState> | null) ?? {}) } };
+        const merged = mergeChat(latest, from, next, seen, MAX_TRANSCRIPT);
         await db.query("update dream_sessions set transcript = $1::jsonb, state = $2::jsonb, updated_at = $3, title = coalesce(title, $5), preview = coalesce($6, preview) where id = $4", [
-          JSON.stringify(transcript),
-          JSON.stringify(state),
+          JSON.stringify(merged.transcript),
+          JSON.stringify(merged.state),
           deps.now().toISOString(),
           sessionId,
-          titleOf(transcript),
-          previewOf(transcript),
+          titleOf(merged.transcript),
+          previewOf(merged.transcript),
         ]);
-      } catch (e) {
-        console.error("could not save dream session", sessionId, e);
-      }
-      await emit({ type: "done", sessionId });
-      stopBeat();
-      stop.abort();
-      open = false;
-    });
+        if (opts.retire) jobs.remove(sessionId, opts.retire);
+      });
+
+    const turn = (stream: SSEStreamingApi) =>
+      (async () => {
+        let open = true;
+        stream.onAbort(() => void (open = false));
+        // A comment line every 15 s keeps the phone and App Runner from closing a quiet stream mid-search.
+        const stopBeat = heartbeat(stream);
+        // The turn shows as running work too, so an app that comes back mid-turn keeps following the conversation.
+        jobs.add(sessionId, { id: turnId, lane: "turn", label: "", startedAt: deps.now().toISOString() });
+        // Everything goes down the stream in the order it was logged, each with its number, so the app knows where it
+        // is in the log (jobs.ts, the delivery contract).
+        let queue = Promise.resolve();
+        const send = (e: DreamEvent, seq?: number) =>
+          (queue = queue.then(async () => {
+            if (!open) return;
+            try {
+              await stream.writeSSE({ data: JSON.stringify(seq ? { ...e, seq } : e) });
+            } catch {
+              open = false; // the app went away; the work still finishes and is saved
+            }
+          }));
+        const emit = async (e: DreamEvent) => {
+          const seq = jobs.publish(sessionId, e, turnId);
+          await send(e, seq);
+        };
+        // First what the app missed since the last number it saw (a card a running job showed while the app wasn't
+        // listening), then everything the jobs show while the turn is open. Both are taken in one step, with nothing
+        // awaited in between, so no event falls between them.
+        const missed = body.data.after === undefined ? [] : jobs.after(sessionId, body.data.after);
+        const unlisten = jobs.listen(sessionId, (l) => void (l.origin !== turnId && send(l.event, l.seq)));
+        for (const l of missed) void send(l.event, l.seq);
+        await send({ type: "start", sessionId, log: jobs.seq(sessionId) });
+        const ctx = ctxFor(emit, new TurnBudget(), stop.signal);
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const late = new Promise<"late">((resolve) => (timer = setTimeout(() => resolve("late"), TURN_STOP_MS)));
+        const outcome = await Promise.race([runTurn(ctx, transcript, state, body.data.action).then(() => null, (e: unknown) => ({ e })), late]);
+        clearTimeout(timer);
+        if (outcome === "late") {
+          // Whatever is still running in the turn stops spending; what it already showed stays in the conversation.
+          // Jobs it started keep going.
+          await emit({ type: "error", message: friendly(new TurnLimitError("time")) });
+        } else if (outcome) {
+          const e = outcome.e;
+          if (!(e instanceof SpendLimitError || e instanceof TurnLimitError)) console.error("dream turn failed", sessionId, e instanceof MetaApiError ? `${e.status} ${e.body.slice(0, 200)}` : e);
+          await emit({ type: "error", message: friendly(e) });
+        }
+        try {
+          await save(base, { transcript, state }, before, { retire: turnId });
+        } catch (e) {
+          console.error("could not save dream session", sessionId, e);
+        }
+        jobs.remove(sessionId, turnId);
+        unlisten();
+        // The seq the app follows the event log from, for the jobs this turn left running.
+        const running = jobs.list(sessionId).length;
+        const done: DreamEvent = { type: "done", sessionId, seq: jobs.seq(sessionId) + 1, running };
+        await emit(done);
+        stopBeat();
+        // Anything still running in the turn itself stops spending; its jobs have their own stop.
+        stop.abort();
+        open = false;
+      })();
+
+    // The turn finishes with the phone gone: the instance stays awake until it's saved (alive.ts).
+    return streamSSE(c, (stream) => deps.alive?.keep(turn(stream)) ?? turn(stream));
+  });
+
+  /**
+   * GET /dream/sessions/:id/events?after=<seq>: what the conversation's turns and jobs showed after `after`, waiting up
+   * to EVENTS_WAIT_MS for something new while work runs. `gap` means some were missed (or the server restarted): load
+   * the session again.
+   */
+  app.get("/dream/sessions/:id/events", async (c) => {
+    const id = z.string().uuid().safeParse(c.req.param("id"));
+    if (!id.success) return c.json({ error: "That conversation wasn't found." }, 404);
+    const { rows } = await db.query("select 1 from dream_sessions where id = $1 and user_id = $2", [id.data, c.get("userId")]);
+    if (!rows[0]) return c.json({ error: "That conversation wasn't found." }, 404);
+    const after = Math.max(0, Math.floor(Number(c.req.query("after") ?? 0)) || 0);
+    return c.json(await jobs.since(id.data, after, EVENTS_WAIT_MS));
   });
 
   return app;
