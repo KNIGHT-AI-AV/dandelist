@@ -384,12 +384,10 @@ export function ChatPage() {
       setHistoryOpen(false);
       setOpening(true);
       const mine = gen.current;
-      const token = delivery.claim();
       try {
-        const s = await loadSession(auth.api, id);
-        if (gen.current !== mine) return;
-        setSession(s.id);
-        delivery.restore(token, s.id, s);
+        // Entered only if nothing took over while it loaded (leaving it too): a message sent meanwhile keeps its own
+        // conversation.
+        await delivery.open(id, setSession);
       } catch (e) {
         if (gen.current !== mine) return;
         if (!opts.quiet) push({ id: nextId(), kind: "agent", text: friendly(e, "I couldn't open that conversation. Try again."), fresh: true });
@@ -398,7 +396,7 @@ export function ChatPage() {
         lastActive.current = Date.now();
       }
     },
-    [auth.api, leave, push, setSession, delivery],
+    [leave, push, setSession, delivery],
   );
 
   startNewRef.current = () => startNew();

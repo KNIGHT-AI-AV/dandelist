@@ -106,6 +106,19 @@ export class Delivery {
     return true;
   }
 
+  /**
+   * Opens a saved conversation (history, or the latest one on launch): the chat enters it only if nothing took delivery
+   * over while it loaded (review of #134). A turn sent meanwhile wins, and the chat never switches away from it.
+   * Errors loading it reach the caller.
+   */
+  async open(id: string, enter: (sid: string) => void): Promise<boolean> {
+    const token = this.claim();
+    const s = await this.deps.load(id);
+    if (!this.holds(token)) return false;
+    enter(s.id);
+    return this.restore(token, s.id, s);
+  }
+
   /** Reloads the conversation as saved; a turn that starts meanwhile wins and the reload's answer is dropped. */
   async recover(sid: string): Promise<void> {
     const token = this.claim();
