@@ -294,7 +294,7 @@ export default function WishDetail() {
           {/* Price: the statement, then the agent's take. */}
           <Animated.View style={[{ gap: layout.stack.base }, enter(1)]}>
             <Swap id={priceKey}>
-              <Statement item={w.item} priceless={worth === "priceless"} monthlyHint={w.item.recurring.map((rr) => rr.label).filter(Boolean).join(", ")} />
+              <Statement item={w.item} priceless={worth === "priceless"} monthlyHint={w.item.recurring.map((rr) => rr.label).filter(Boolean).join(", ")} timeline />
             </Swap>
             {a?.explanation ? <Take>{a.explanation}</Take> : worth === "priceless" && w.details.line ? <Take>{w.details.line}</Take> : null}
           </Animated.View>
