@@ -52,6 +52,8 @@ function ListingCard({ l }: { l: Listing }) {
 /**
  * Swipe right for yes, left for no; the buttons do the same. The top card follows the finger 1:1 and tilts up to
  * ±12°; it commits past 35% of the width or above 900 px/s, otherwise springs home. The next card rises as you drag.
+ * When the last card goes, the server prices the best one they liked as the wish, or deals more when they liked none
+ * (owner, 2026-10-31: "Ending up with no pick").
  */
 export function SwipeDeck({ cards, onSwipe, onPick, onSearchNow, onEnough }: { cards: Listing[]; onSwipe(l: Listing, verdict: "yes" | "no"): void; onPick(l: Listing): void; onSearchNow(): void; onEnough(): void }) {
   const p = usePalette();
@@ -62,6 +64,7 @@ export function SwipeDeck({ cards, onSwipe, onPick, onSearchNow, onEnough }: { c
   const x = useRef(new Animated.Value(0)).current;
   const y = useRef(new Animated.Value(0)).current;
   const busy = useRef(false);
+  const liked = useRef(false);
   const top = cards[index];
   const next = cards[index + 1];
 
@@ -71,6 +74,7 @@ export function SwipeDeck({ cards, onSwipe, onPick, onSearchNow, onEnough }: { c
     haptic.select();
     const out = (verdict === "yes" ? 1 : -1) * (cardW * 1.4);
     const done = () => {
+      if (verdict === "yes") liked.current = true;
       onSwipe(top, verdict);
       x.setValue(0);
       y.setValue(0);
@@ -81,6 +85,10 @@ export function SwipeDeck({ cards, onSwipe, onPick, onSearchNow, onEnough }: { c
     Animated.timing(x, { toValue: out, duration: Math.max(140, 220 - Math.abs(vx) * 40), easing: ease.out, useNativeDriver: native }).start(done);
   };
 
+  // The responder is made once, so it reaches the card on top now, and the width now, through refs: it used to keep
+  // the first card's, so every swipe after the first was sent as the first card's again (Codex, round 44).
+  const latest = useRef({ commit, cardW });
+  latest.current = { commit, cardW };
   const pan = useRef(
     PanResponder.create({
       onMoveShouldSetPanResponder: (_e, g) => Math.abs(g.dx) > 8 && Math.abs(g.dx) > Math.abs(g.dy),
@@ -89,9 +97,9 @@ export function SwipeDeck({ cards, onSwipe, onPick, onSearchNow, onEnough }: { c
         y.setValue(g.dy * 0.15);
       },
       onPanResponderRelease: (_e, g) => {
-        const far = Math.abs(g.dx) > cardW * 0.35;
+        const far = Math.abs(g.dx) > latest.current.cardW * 0.35;
         const fast = Math.abs(g.vx) * 1000 > 900;
-        if ((far || fast) && Math.sign(g.dx || g.vx) !== 0) return commit(g.dx + g.vx > 0 ? "yes" : "no", g.vx);
+        if ((far || fast) && Math.sign(g.dx || g.vx) !== 0) return latest.current.commit(g.dx + g.vx > 0 ? "yes" : "no", g.vx);
         Animated.parallel([
           Animated.spring(x, { toValue: 0, ...spring.snap, useNativeDriver: native }),
           Animated.spring(y, { toValue: 0, ...spring.snap, useNativeDriver: native }),
@@ -103,7 +111,7 @@ export function SwipeDeck({ cards, onSwipe, onPick, onSearchNow, onEnough }: { c
   if (!top) {
     return (
       <View style={{ alignItems: "center", gap: 12, paddingVertical: 24 }}>
-        <Text style={[type.title3, { fontFamily: fonts.displayItalic, color: p.ink2 }]}>That's this round.</Text>
+        <Text style={[type.title3, { fontFamily: fonts.displayItalic, color: p.ink2 }]}>{liked.current ? "Pricing your best match." : "None of those. Finding more."}</Text>
       </View>
     );
   }

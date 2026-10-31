@@ -1,8 +1,7 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { AppState, useWindowDimensions } from "react-native";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { UNDO_MS } from "../../lib/removal";
-import { graceAfter, keepsGrace, needsConfirm } from "../../lib/remove-confirm";
 import { layout, space } from "../../lib/theme";
 import { useWishes, type Wish } from "../../lib/wishes";
 import { dockRoom } from "../inputs";
@@ -11,6 +10,7 @@ import { Toast, type Note } from "../list/undo-toast";
 import { useRemovals } from "../list/use-removals";
 import { useHome } from "./bridge";
 import { usePager } from "./pager";
+import { useRemoveGrace } from "./remove-grace";
 
 interface Removals {
   /** The wish waiting out its undo window, hidden on every page. */
@@ -29,7 +29,7 @@ const Ctx = createContext<Removals | null>(null);
  * One undo window for the whole ring: a wish removed on Details also leaves the list at once, and one toast says so
  * wherever you are, above the composer on the list and the chat. Removing asks first, once (owner, 2026-10-31): after
  * a yes, removals go through without asking for two minutes, or until the app goes to the background or they move on
- * to a page other than the list and Details.
+ * to a page other than the list and Details, or to another screen (components/home/remove-grace.ts).
  */
 export function RemovalsProvider({ children }: { children: ReactNode }) {
   const { remove: commit } = useWishes();
@@ -54,31 +54,22 @@ export function RemovalsProvider({ children }: { children: ReactNode }) {
     },
     [begin],
   );
-  // When removals stop going through without asking (0: they ask), and the removal waiting on an answer.
-  const graceUntil = useRef(0);
+  // The free window after a yes, and the removal waiting on an answer.
+  const grace = useRemoveGrace(page);
   const [asking, setAsking] = useState<{ w: Wish; focusUndo: boolean } | null>(null);
-  useEffect(() => {
-    const sub = AppState.addEventListener("change", (s) => {
-      if (s !== "active") graceUntil.current = 0;
-    });
-    return () => sub.remove();
-  }, []);
-  useEffect(() => {
-    if (!keepsGrace(page)) graceUntil.current = 0;
-  }, [page]);
   const remove = useCallback(
     (w: Wish, focusUndo = true) => {
-      if (needsConfirm(graceUntil.current, Date.now())) setAsking({ w, focusUndo });
+      if (grace.needs()) setAsking({ w, focusUndo });
       else go(w, focusUndo);
     },
-    [go],
+    [go, grace],
   );
   const confirm = useCallback(() => {
     if (!asking) return;
-    graceUntil.current = graceAfter(Date.now());
+    grace.granted();
     setAsking(null);
     go(asking.w, asking.focusUndo);
-  }, [asking, go]);
+  }, [asking, go, grace]);
   const keep = useCallback(() => setAsking(null), []);
   const pending = removals.pending;
   const note: Note | null = pending ? { key: pending.id, text: `Removed ${pending.name}`, action: { label: "Undo", onPress: () => removals.undo(pending.id) } } : errorNote;
