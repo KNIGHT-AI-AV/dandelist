@@ -1164,6 +1164,9 @@ export async function research(meta: Meta, ctx: ResearchContext): Promise<Resear
   return { options: result, explanation: explanation ?? (result.length ? fallbackExplanation(explainFacts(ctx.draft, result)) : ""), note, horizonYears: HORIZON_YEARS };
 }
 
+/** How the facts name a price read on the seller's own page. */
+const CHECKED = "checked on the seller's page";
+
 /** The numbers the explanation may use, already formatted the way the app shows them. */
 export function explainFacts(draft: Draft, options: PriceOption[]) {
   return {
@@ -1172,7 +1175,7 @@ export function explainFacts(draft: Draft, options: PriceOption[]) {
     options: options.map((o) => ({
       label: o.label,
       seller: o.seller,
-      price_source: o.status === "verified" ? "checked on the seller's page" : o.listing ? `listed by ${o.listing.merchant} in today's shopping search` : "an estimate, not checked",
+      price_source: o.status === "verified" ? CHECKED : o.listing ? `listed by ${o.listing.merchant} in today's shopping search` : "an estimate, not checked",
       upfront: formatCents(o.upfrontCents),
       // No recorded running costs is not the same as none: the hunt prices the thing, not always its upkeep.
       running_cost_per_month: o.totals.monthlyCents ? formatCents(o.totals.monthlyCents) : "not recorded",
@@ -1204,12 +1207,22 @@ export function unknownNumbers(text: string, facts: unknown): string[] {
   return (text.match(NUMBER) ?? []).filter((n) => !allowed.has(normalize(n)));
 }
 
+/**
+ * The summary when the model's own words can't be used: about the option the card shows (the first), by its seller's
+ * name rather than its long title, and naming a lower asking price found elsewhere instead of describing that one as
+ * if it were the card's (owner, 2026-10-31: the card said $52,200 while this line said $51,400, twice over).
+ */
 export function fallbackExplanation(facts: ReturnType<typeof explainFacts>): string {
-  const byUpfront = [...facts.options].sort((a, b) => Number(a.upfront.replace(/[$,]/g, "")) - Number(b.upfront.replace(/[$,]/g, "")));
-  const byTotal = [...facts.options].sort((a, b) => Number(a.total_over_horizon.replace(/[$,]/g, "")) - Number(b.total_over_horizon.replace(/[$,]/g, "")));
-  const first = byUpfront[0]!;
-  const cheapest = byTotal[0]!;
-  return `${first.label} asks the least upfront at ${first.upfront}. Over ${facts.horizon_years} years, ${cheapest.label} costs the least in total at ${cheapest.total_over_horizon}.`;
+  const money = (s: string) => Number(s.replace(/[^\d.]/g, ""));
+  const [chosen, ...others] = facts.options;
+  if (!chosen) return "";
+  type Fact = typeof chosen;
+  const name = (o: Fact) => o.seller || o.label;
+  const source = (o: Fact) => (o.price_source === CHECKED ? "" : ` (${o.price_source})`);
+  const over = money(chosen.total_over_horizon) > money(chosen.upfront) ? `, ${chosen.total_over_horizon} over ${facts.horizon_years} years with its running costs` : "";
+  const lowest = others.reduce((low, o) => (money(o.upfront) < money(low.upfront) ? o : low), chosen);
+  if (lowest === chosen) return `${name(chosen)} asks ${others.length ? "the least upfront at " : ""}${chosen.upfront}${source(chosen)}${over}.`;
+  return `${name(chosen)} asks ${chosen.upfront}${source(chosen)}${over}. The lowest asking price found was ${lowest.upfront} from ${name(lowest)}${source(lowest)}.`;
 }
 
 export async function explain(meta: Meta, draft: Draft, options: PriceOption[], voice = ""): Promise<string> {
