@@ -40,9 +40,16 @@ export const PRIVACY: LegalSection[] = [
     ],
   },
   {
+    heading: "How we see what works and what breaks",
+    body: [
+      "We use PostHog to see how the app is used and to fix what goes wrong: which screens open, where you tap, errors and crashes, and recordings of how the screens looked, with every text field hidden while you type. They're tied to your account by an ID, never your email address or name, and PostHog doesn't keep your IP address.",
+      "For each request to the agent we also note which model ran, how much it read and wrote, and what it cost, but not what you wrote.",
+    ],
+  },
+  {
     heading: "Where your data lives",
     body: [
-      "Our servers and database run on Amazon Web Services in the United States. The website is served by Cloudflare. Sign-in codes are emailed through Resend.",
+      "Our servers and database run on Amazon Web Services in the United States. The website is served by Cloudflare. Sign-in codes are emailed through Resend. Usage analytics are kept by PostHog in the United States.",
     ],
   },
   {

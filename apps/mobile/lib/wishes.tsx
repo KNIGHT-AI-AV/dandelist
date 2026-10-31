@@ -2,6 +2,8 @@ import type { Media } from "./agent";
 import type { Category, Financing } from "./comfort";
 import type { Item, Period } from "@dandelist/cost";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode, type SetStateAction } from "react";
+import { analytics } from "./analytics";
+import { priceBand } from "./analytics-config";
 import { useAuth } from "./auth";
 import { ordered } from "./list-order";
 import { createWishSession, updateWishSession } from "./wish-session";
@@ -186,13 +188,15 @@ export function WishProvider({ children }: { children: ReactNode }) {
         if (!res?.ok) throw await failure(res, "Couldn't save the wish.");
         const wish = fromServer(((await res.json()) as { wish: ServerWish }).wish);
         setWishes((ws) => [wish, ...ws]);
+        // What kind of wish and how big, never its name.
+        analytics.capture("wish_added", { kind: wish.kind, tier: wish.tier, price: priceBand(wish.item.upfrontCents), running_costs: wish.item.recurring.length > 0, worth: wish.details.worth ?? null, from_agent: !!wish.details.agent });
         return wish;
       },
       async remove(id) {
         const before = wishes;
         setWishes((ws) => ws.filter((x) => x.id !== id));
         const res = await api(`/wishes/${id}`, { method: "DELETE" }).catch(() => null);
-        if (res?.ok || res?.status === 404) return;
+        if (res?.ok || res?.status === 404) return void analytics.capture("wish_removed", { kind: before.find((x) => x.id === id)?.kind ?? null });
         setWishes(before);
         throw await failure(res, "Couldn't remove the wish.");
       },
