@@ -21,7 +21,7 @@ const store = vi.hoisted(() => ({
   map: new Map<string, string>(),
   slowRead: null as null | { key: string; entered: () => void; gate: Promise<void> },
   slow: null as null | { key: string; value: string | null; entered: () => void; gate: Promise<void> },
-  failing: null as null | { key: string; value: string },
+  failing: null as null | { key: string; value: string | null },
 }));
 vi.mock("./storage", () => ({
   getSecret: async (key: string) => {
@@ -521,11 +521,15 @@ describe("the provider return screen against a newer sign-in (round41)", () => {
   });
 
   it.each([
-    ["its session's token is stored", REFRESH, "ref-bob-1"],
-    ["its verifier is removed", VERIFIER, null],
-  ])("moves nothing for a ticket a newer sign-in took over from while %s, and keeps its session until that one lands", async (_, key, value) => {
+    ["its session's token is stored", REFRESH, "ref-bob-1", false],
+    ["its verifier is removed", VERIFIER, null, false],
+    ["storing its session's token fails", REFRESH, "ref-bob-1", true],
+    ["removing its verifier fails", VERIFIER, null, true],
+  ])("moves nothing for a ticket a newer sign-in took over from while %s, and keeps its session until that one lands", async (_, key, value, fails) => {
     store.map.set(VERIFIER, "verifier-1");
     const held = slowWrite(key, value);
+    // A keychain that refuses this write once it lets it through.
+    if (fails) store.failing = { key, value };
     await mount("ticket-1");
     await act(async () => void (await held.writing));
     // Bob's session is in place while that write is still going on, and a newer sign-in starts.
@@ -539,13 +543,33 @@ describe("the provider return screen against a newer sign-in (round41)", () => {
     await act(async () => held.release());
     await settle();
     expect(route.moves).toEqual([]);
-    expect(await state()).toEqual(asBob);
+    // Bob's session stays in place; when his token couldn't be stored, nothing of his is stored.
+    expect(await state()).toEqual({ ...asBob, stored: fails && key === REFRESH ? null : "ref-bob-1" });
+    store.failing = null;
     await act(async () => {
       verifying.release();
       await newer;
     });
     expect(await state()).toEqual(asAda);
     expect(route.moves).toEqual([]);
+  });
+});
+
+describe("a token write the keychain refuses, with no newer sign-in (round42 controls)", () => {
+  it.each([
+    ["storing its session's token", REFRESH, "ref-bob-1"],
+    ["removing its verifier", VERIFIER, null],
+  ])("still reports a failure %s on the return screen, and stores the next sign-in after it", async (_, key, value) => {
+    store.map.set(VERIFIER, "verifier-1");
+    store.failing = { key, value };
+    await mount("ticket-1");
+    await settle();
+    // Nothing newer started, so the failure is this sign-in's own and the person is told.
+    expect(route.moves).toEqual([{ pathname: "/sign-in", params: { error: "failed" } }]);
+    // The writes carry on behind it.
+    store.failing = null;
+    await signInAs(ada);
+    expect(await state()).toEqual(asAda);
   });
 });
 

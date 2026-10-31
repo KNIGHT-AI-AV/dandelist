@@ -243,6 +243,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   /**
+   * Awaits a step of attempt `owner`, such as storing its token. True when it went through. Its failure is thrown while
+   * the attempt is the newest, and ends it quietly (false) once a newer sign-in or a sign-out has started.
+   */
+  const step = useCallback(
+    async (owner: number, work: Promise<unknown>) => {
+      try {
+        await work;
+        return true;
+      } catch (e) {
+        if (!latest(owner)) return false;
+        throw e;
+      }
+    },
+    [latest],
+  );
+
+  /**
    * Puts a sign-in's session in place in one step, unless a newer sign-in or sign-out started since `owner` did. True
    * only if it is still the newest once its token is stored; a session in place stays when a newer one starts meanwhile.
    */
@@ -257,10 +274,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       refreshToken.current = t.refreshToken;
       setUser(t.user);
       setStatus("signedIn");
-      await write(REFRESH_KEY, t.refreshToken, () => session.current === owner);
-      return latest(owner);
+      return (await step(owner, write(REFRESH_KEY, t.refreshToken, () => session.current === owner))) && latest(owner);
     },
-    [latest, write],
+    [latest, write, step],
   );
 
   /** Signed out on this device: no bearer, no session, nothing stored. */
@@ -400,7 +416,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (!verifier) throw new Error("That sign-in has expired. Try again.");
           const took = await finishSignIn(mine, await post("/auth/oauth/redeem", { ticket, verifier }).catch(() => null));
           // Only this sign-in's own verifier goes: a newer one may have stored its own since.
-          if (took) await write(VERIFIER_KEY, null, async () => (await getSecret(VERIFIER_KEY)) === verifier);
+          if (took && !(await step(mine, write(VERIFIER_KEY, null, async () => (await getSecret(VERIFIER_KEY)) === verifier)))) return false;
           // Signed in, and still the newest sign-in once that is done.
           return took && latest(mine);
         })();
@@ -412,7 +428,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       return pending;
     },
-    [start, latest, finishSignIn, write],
+    [start, latest, finishSignIn, write, step],
   );
   const redeemTicket = useCallback((ticket: string) => redeem(ticket), [redeem]);
 
