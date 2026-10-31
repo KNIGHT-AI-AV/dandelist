@@ -248,6 +248,14 @@ export async function huntWish(meta: Meta, ctx: HuntContext): Promise<HuntResult
       }
       const questions = await questionsBy(2_000);
       await ctx.onProvisional?.({ options: [q], explanation: "", note: "", horizonYears: HORIZON_YEARS, draft, questions, provisional: true });
+      // Sent without a photo, the card goes again the moment the hunt's checked pick lands, rather than half a minute
+      // later with the full card (live hunts, 2026-10-31: fast cards at 13 to 22 s, full cards at 52 to 54 s). Only
+      // while the hunt runs and this is still the card; it is part of `told`, so it never lands after the full card.
+      if (q.imageUrl) return;
+      const later = await within(searched, Math.max(0, t0 + HUNT_STOP_MS - 2_000 - Date.now()));
+      if (!later || card.settled || card.fast !== q) return;
+      withPhoto(q, later);
+      await ctx.onProvisional?.({ options: [q], explanation: "", note: "", horizonYears: HORIZON_YEARS, draft, questions, provisional: true });
     })().then(
       () => undefined,
       (e) => console.error("could not send the fast card", e),
