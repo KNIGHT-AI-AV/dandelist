@@ -28,8 +28,10 @@ export default function Home() {
   const initial: PageId = PAGES.includes(page as PageId) ? (page as PageId) : "list";
   const pages = useMemo(() => ({ list: <ListPage />, chat: <ChatPage />, details: <DetailsPage />, money: <MoneyPage />, settings: <SettingsPage /> }), []);
   if (auth.status === "signedOut") return <Redirect href="/welcome" />;
+  // Clipped: the dock sinks 56 below the screen on the other pages, and unclipped that made the web page itself
+  // scroll, lifting the bar away and showing a white strip at the end of Settings (UI audit, 2026-10-31).
   return (
-    <View style={{ flex: 1, backgroundColor: p.bg }}>
+    <View style={{ flex: 1, backgroundColor: p.bg, overflow: "hidden" }}>
       <Atmosphere />
       <PagerProvider initial={initial}>
         <HomeProvider>
