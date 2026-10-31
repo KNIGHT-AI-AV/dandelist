@@ -19,7 +19,7 @@ const job: RunningJob = { id: "j1", label: "Searching for a DB11 V12" };
  * in, and every request to the server held until the test answers it, in any order. Answers ignore their abort signal,
  * like a fetch that was already on its way back.
  */
-function chat(sid = "s1") {
+function chat(sid: string | null = "s1") {
   const feed: string[] = [];
   const polls: { after: number; answer: ReturnType<typeof later<Poll>> }[] = [];
   const loads: ReturnType<typeof later<SessionDetail>>[] = [];
@@ -181,6 +181,36 @@ describe("reloads and the follower (controls)", () => {
     c.loads[0]!.reject(new Error("offline"));
     await reload;
     expect(c.polls.map((p) => p.after)).toEqual([7]);
+  });
+
+  it("doesn't enter a conversation opened from history when a message is sent while it loads", async () => {
+    const c = chat(null);
+    const entered: string[] = [];
+    const opening = c.d.open("s1", (sid) => {
+      entered.push(sid);
+      c.box.current = sid;
+    });
+    // A message sent while it loads starts its own conversation.
+    const t = c.d.beginTurn();
+    c.box.current = "s2";
+    c.stream(t, [{ type: "start", sessionId: "s2", log: 0 }, { ...text("Hello."), seq: 1 }]);
+    c.loads[0]!.resolve({ id: "s1", transcript: [{ role: "agent", text: "old", at }], widgets: [], running: [job], seq: 4 });
+    expect(await opening).toBe(false);
+    expect(entered).toEqual([]);
+    expect(c.box.current).toBe("s2");
+    expect(c.feed).toEqual(["Hello."]);
+    expect(c.d.seen).toBe(1);
+    expect(c.polls).toHaveLength(0);
+  });
+
+  it("enters and shows a conversation opened from history when nothing came first (control)", async () => {
+    const c = chat(null);
+    const opening = c.d.open("s1", (sid) => void (c.box.current = sid));
+    c.loads[0]!.resolve({ id: "s1", transcript: [{ role: "agent", text: "Here are three.", at }], widgets: [], running: [job], pending: [{ ...text("Found a fourth."), seq: 5 }], seq: 5 });
+    expect(await opening).toBe(true);
+    expect(c.box.current).toBe("s1");
+    expect(c.feed).toEqual(["dandy: Here are three.", "Found a fourth."]);
+    expect(c.polls.map((p) => p.after)).toEqual([5]);
   });
 
   it("opens a conversation only for the open that asked for it", () => {
