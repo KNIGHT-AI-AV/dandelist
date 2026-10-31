@@ -61,12 +61,16 @@ function Outcome({ r }: { r: Recheck }) {
       </View>
     );
   }
+  // Both answers belong to this look (r.attempt); neither works while its result is being saved.
+  const saving = busy || !!r.saving;
+  const keep = () => void (saving || dismissRecheck(r.wishId, r.attempt));
   const use = async () => {
-    if (!wish) return dismissRecheck(r.wishId);
+    if (saving) return;
+    if (!wish) return dismissRecheck(r.wishId, r.attempt);
     setBusy(true);
     setError(null);
     try {
-      await (o.kind === "amended" ? adoptAmend(api, wish, reload) : adoptRecheck(api, wish, reload));
+      await (o.kind === "amended" ? adoptAmend(api, wish, reload, r.attempt) : adoptRecheck(api, wish, reload, r.attempt));
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -83,8 +87,8 @@ function Outcome({ r }: { r: Recheck }) {
         </Text>
         {error ? <Text style={[type.footnote, { color: p.danger }]}>{error}</Text> : null}
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[8] }}>
-          <QuietButton label={busy ? "Saving..." : "Use it"} onPress={() => void use()} />
-          <QuietButton label="Keep the one I had" onPress={() => dismissRecheck(r.wishId)} />
+          <QuietButton label={saving ? "Saving..." : "Use it"} onPress={() => void use()} />
+          <QuietButton label="Keep the one I had" onPress={keep} />
         </View>
       </View>
     );
@@ -100,8 +104,8 @@ function Outcome({ r }: { r: Recheck }) {
       </Text>
       {error ? <Text style={[type.footnote, { color: p.danger }]}>{error}</Text> : null}
       <View style={{ flexDirection: "row", gap: space[8] }}>
-        <QuietButton label={busy ? "Saving..." : "Use the new price"} onPress={() => void use()} />
-        <QuietButton label={`Keep ${money.format(o.was)}`} onPress={() => dismissRecheck(r.wishId)} />
+        <QuietButton label={saving ? "Saving..." : "Use the new price"} onPress={() => void use()} />
+        <QuietButton label={`Keep ${money.format(o.was)}`} onPress={keep} />
       </View>
     </View>
   );

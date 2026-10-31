@@ -54,11 +54,14 @@ export function AmendWish({ wish, autoFocus = false, onReveal }: { wish: Wish; a
     setError(null);
     void amendWish(api, wish, words);
   };
+  // Both answers belong to this look (r.attempt); neither works while its result is being saved.
+  const saving = busy || !!r?.saving;
   const use = async () => {
+    if (saving || !r) return;
     setBusy(true);
     setError(null);
     try {
-      await adoptAmend(api, wish, reload);
+      await adoptAmend(api, wish, reload, r.attempt);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -81,8 +84,8 @@ export function AmendWish({ wish, autoFocus = false, onReveal }: { wish: Wish; a
           </Text>
           {error ? <ErrorLine>{error}</ErrorLine> : null}
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[8] }}>
-            <QuietButton label={busy ? "Saving..." : "Use it"} onPress={() => void use()} />
-            <QuietButton label="Keep the one I had" onPress={() => dismissRecheck(wish.id)} />
+            <QuietButton label={saving ? "Saving..." : "Use it"} onPress={() => void use()} />
+            <QuietButton label="Keep the one I had" onPress={() => void (saving || dismissRecheck(wish.id, r!.attempt))} />
           </View>
         </View>
       ) : (

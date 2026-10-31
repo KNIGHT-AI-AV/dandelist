@@ -6,6 +6,7 @@ import { analytics } from "./analytics";
 import { priceBand } from "./analytics-config";
 import { useAuth } from "./auth";
 import { ordered } from "./list-order";
+import { useRecheckOwner } from "./rechecks";
 import { createWishSession, updateWishSession, whileCurrent } from "./wish-session";
 
 export type WishKind = "buy" | "do" | "visit" | "own";
@@ -127,6 +128,8 @@ const emptyState = (): WishState => ({ wishes: [], status: "idle", error: null }
 export function WishProvider({ children }: { children: ReactNode }) {
   const { status: authStatus, user, api } = useAuth();
   const owner = authStatus === "signedIn" ? user?.id ?? null : null;
+  // Price checks and "what you meant" looks belong to this sign-in too (lib/rechecks.ts).
+  useRecheckOwner();
   const [session, setSession] = useState(() => createWishSession(owner, emptyState()));
   let current = session;
   if (session.scope.owner !== owner) {
