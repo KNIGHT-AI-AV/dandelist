@@ -1,41 +1,30 @@
-import { Image, Text, View, type StyleProp, type ViewStyle } from "react-native";
+import { Text, View, type StyleProp, type ViewStyle } from "react-native";
+import Svg, { Path } from "react-native-svg";
 import { colorOf, type Dandy, type ShapeId } from "../lib/dandy";
 import { fonts } from "../lib/theme";
 
-/** A rounded equilateral triangle, white on clear, tinted to the Dandy's colour (assets/shapes, drawn with PIL). */
-const TRIANGLE = require("../assets/shapes/triangle.png");
+/** One soft-cornered family on a 64-unit canvas. The inset leaves room for the shallow shadow. */
+const SHAPE_PATHS: Record<ShapeId, string> = {
+  circle: "M32 4 A28 28 0 1 1 32 60 A28 28 0 1 1 32 4 Z",
+  square: "M19 7 H45 Q57 7 57 19 V45 Q57 57 45 57 H19 Q7 57 7 45 V19 Q7 7 19 7 Z",
+  diamond: "M28.5 4.5 Q32 1 35.5 4.5 L59.5 28.5 Q63 32 59.5 35.5 L35.5 59.5 Q32 63 28.5 59.5 L4.5 35.5 Q1 32 4.5 28.5 Z",
+  capsule: "M32 3 A17 17 0 0 1 49 20 V44 A17 17 0 0 1 15 44 V20 A17 17 0 0 1 32 3 Z",
+  triangle: "M28.5 6 Q32 0 35.5 6 L60.5 49.5 Q64 56 56.5 56 H7.5 Q0 56 3.5 49.5 Z",
+};
 
-/** The outline of each shape at a size: corner radii, and a turn for the diamond. */
-function shapeStyle(shape: ShapeId, size: number): ViewStyle {
-  switch (shape) {
-    case "square":
-      return { width: size * 0.9, height: size * 0.9, borderRadius: size * 0.24, borderCurve: "continuous" };
-    case "diamond":
-      return { width: size * 0.72, height: size * 0.72, borderRadius: size * 0.12, transform: [{ rotate: "45deg" }] };
-    case "capsule":
-      return { width: size * 0.62, height: size, borderRadius: size };
-    default:
-      return { width: size, height: size, borderRadius: size / 2 };
-  }
-}
-
-/** A Dandy's mark: its shape filled with its colour, its initial set in the house serif on top. */
+/** The same vector geometry and fill path everywhere, including the triangle: no bitmap tint/filter dependency. */
 export function DandyAvatar({ dandy, size = 36, style }: { dandy: Pick<Dandy, "name" | "shape" | "color">; size?: number; style?: StyleProp<ViewStyle> }) {
   const c = colorOf(dandy);
   const triangle = dandy.shape === "triangle";
+  const path = Object.prototype.hasOwnProperty.call(SHAPE_PATHS, dandy.shape) ? SHAPE_PATHS[dandy.shape] : SHAPE_PATHS.circle;
+  const lineHeight = size * 0.6;
   return (
-    <View style={[{ width: size, height: size, alignItems: "center", justifyContent: "center" }, style]} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-      {triangle ? (
-        <>
-          {/* The same soft shadow as the other shapes, from a blurred dark copy of the triangle. */}
-          <Image source={TRIANGLE} blurRadius={3} style={{ position: "absolute", width: size, height: size, top: 2, tintColor: "rgba(0,0,0,0.35)" }} />
-          <Image source={TRIANGLE} style={{ width: size, height: size, tintColor: c.hex }} />
-        </>
-      ) : (
-        <View style={[shapeStyle(dandy.shape, size), { backgroundColor: c.hex, boxShadow: "0 2px 8px rgba(0,0,0,0.25)" } as ViewStyle]} />
-      )}
-      {/* The triangle's middle sits low, so its initial is smaller and set lower. */}
-      <Text style={{ position: "absolute", fontFamily: fonts.title, fontSize: size * (triangle ? 0.4 : 0.52), lineHeight: size * (triangle ? 0.5 : 0.62), marginTop: triangle ? size * 0.12 : 0, color: c.light ? "#16130E" : "#F2EBDC" }}>{dandy.name.trim().charAt(0).toUpperCase() || "D"}</Text>
+    <View style={[{ width: size, height: size, alignItems: "center", justifyContent: "center" }, style]} aria-hidden accessibilityElementsHidden importantForAccessibility="no-hide-descendants" pointerEvents="none">
+      <Svg width={size} height={size} viewBox="0 0 64 64">
+        <Path d={path} fill="#000000" opacity={0.22} transform="translate(0 1.5)" />
+        <Path d={path} fill={c.hex} />
+      </Svg>
+      <Text style={{ position: "absolute", width: size, top: (size - lineHeight) / 2 + (triangle ? size * 0.1 : 0), textAlign: "center", fontFamily: fonts.title, fontSize: size * (triangle ? 0.38 : 0.47), lineHeight, color: c.light ? "#16130E" : "#F2EBDC" }}>{dandy.name.trim().charAt(0).toUpperCase() || "D"}</Text>
     </View>
   );
 }
