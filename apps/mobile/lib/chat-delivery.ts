@@ -109,11 +109,18 @@ export class Delivery {
   /**
    * Opens a saved conversation (history, or the latest one on launch): the chat enters it only if nothing took delivery
    * over while it loaded (review of #134). A turn sent meanwhile wins, and the chat never switches away from it.
-   * Errors loading it reach the caller.
+   * Errors loading it reach the caller only while the open still holds delivery.
    */
   async open(id: string, enter: (sid: string) => void): Promise<boolean> {
     const token = this.claim();
-    const s = await this.deps.load(id);
+    let s: SessionDetail;
+    try {
+      s = await this.deps.load(id);
+    } catch (e) {
+      // A failure nothing waits for any more says nothing: a message sent meanwhile keeps its turn's feed clean.
+      if (this.holds(token)) throw e;
+      return false;
+    }
     if (!this.holds(token)) return false;
     enter(s.id);
     return this.restore(token, s.id, s);

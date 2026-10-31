@@ -203,6 +203,28 @@ describe("reloads and the follower (controls)", () => {
     expect(c.polls).toHaveLength(0);
   });
 
+  it("keeps a history open's failure out of a message's turn that began while it loaded (review of #145)", async () => {
+    const c = chat(null);
+    const opening = c.d.open("s1", () => {
+      throw new Error("entered");
+    });
+    const t = c.d.beginTurn();
+    c.box.current = "s2";
+    c.stream(t, [{ type: "start", sessionId: "s2", log: 0 }, { ...text("Hello."), seq: 1 }]);
+    c.loads[0]!.reject(new Error("Couldn't open that conversation."));
+    // Nothing waits for it any more: it fails quietly, and the turn's feed stays as it is.
+    expect(await opening).toBe(false);
+    expect(c.feed).toEqual(["Hello."]);
+    expect(c.box.current).toBe("s2");
+  });
+
+  it("still reports a history open's failure when nothing came first (control)", async () => {
+    const c = chat(null);
+    const opening = c.d.open("s1", () => void 0);
+    c.loads[0]!.reject(new Error("Couldn't open that conversation."));
+    await expect(opening).rejects.toThrow("Couldn't open that conversation.");
+  });
+
   it("enters and shows a conversation opened from history when nothing came first (control)", async () => {
     const c = chat(null);
     const opening = c.d.open("s1", (sid) => void (c.box.current = sid));
