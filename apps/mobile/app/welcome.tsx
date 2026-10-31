@@ -79,7 +79,8 @@ const ideaOf = (e: PoolItem) => (e.kind === "visit" && !/\b(week|weeks|month|tri
 
 /**
  * The pre-login experience (owner's walkthroughs, 2026-10-28 and 10-29). A slow, centred title that dissolves from a
- * touch, then straight into the first wish, typed, said or tapped; their own card is made in front of them (the agent
+ * touch, then the look they want first, so their colour is settled before anything else (owner, 2026-10-31; a return
+ * visit has chosen already and skips it), then the first wish, typed, said or tapped; their own card is made in front of them (the agent
  * prices it for real and the photo fades up), then this or that made from what they asked for (owner, 2026-10-30; the
  * server makes the pairs while it prices the wish), with the pool as the fallback (a cover pair, then pairs leaning
  * toward what they asked for); when they want it all; what it would take, as a fader of incomes with a
@@ -434,7 +435,7 @@ export default function Welcome() {
             void markTitleSeen();
             chrome.setValue(0);
             fromTitle.current = true;
-            steps.leave(here)?.to({ kind: "ask" });
+            steps.leave(here)?.to(short ? { kind: "ask" } : { kind: "theme" });
           }}
         />
       );
@@ -523,7 +524,15 @@ export default function Welcome() {
       );
       break;
     case "theme":
-      body = result ? <ThemeChooser totalCents={result.upfrontCents} onDone={(id) => { theme.set(id); setSheet(true); }} /> : null;
+      body = (
+        <ThemeChooser
+          totalCents={null}
+          onDone={(id) => {
+            theme.set(id);
+            steps.leave(here)?.to({ kind: "ask" });
+          }}
+        />
+      );
       break;
     case "reveal":
       body = result ? (
@@ -532,10 +541,10 @@ export default function Welcome() {
           upfrontCents={result.upfrontCents}
           monthlyRunningCents={result.monthlyRunningCents}
           onKeep={() => {
-            const leave = steps.leave(here);
-            if (!leave) return;
+            // The look was chosen at the start, so keeping the list goes straight to saving it.
+            if (!steps.is(here)) return;
             patch((s) => ({ ...s, kept: true }));
-            leave.to({ kind: "theme" });
+            setSheet(true);
           }}
           onRestart={() => restart(here)}
         />
