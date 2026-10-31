@@ -168,17 +168,18 @@ export async function carBuilder(ctx: DreamCtx, id: string, make: string, model:
     /* an unreadable answer is the same as no price list */
   }
   const parsed = configSchema.safeParse(raw);
+  // A model the maker no longer makes can only be bought used: a configurator for it would price a car no one sells
+  // (owner, 2026-10-31: the DB11, replaced by the DB12, opened a builder). Asked first, since such an answer usually
+  // has no current trims to list (review of #128).
+  if (parsed.success && parsed.data.sold_new === false) {
+    await ctx.step("config", "done", `The ${name} isn't sold new any more`);
+    return "not sold new";
+  }
   if (!parsed.success || !parsed.data.trims.length || !/^https?:\/\//i.test(parsed.data.source_url)) {
     await ctx.step("config", "done", `Couldn't read a price list for the ${name}`);
     return null;
   }
   const cfg = parsed.data;
-  // A model the maker no longer makes can only be bought used: a configurator for it would price a car no one sells
-  // (owner, 2026-10-31: the DB11, replaced by the DB12, opened a builder).
-  if (cfg.sold_new === false) {
-    await ctx.step("config", "done", `The ${name} isn't sold new any more`);
-    return "not sold new";
-  }
   const page = ctx.budget.pages(1) ? await readListing(cfg.source_url, ctx.web) : null;
   const shows = (price: number) => !!page?.ok && price > 0 && pageShowsPrice({ text: page.text, structuredPrices: page.prices }, price);
   const source = (/^[A-Za-z]{3}$/.test(cfg.currency) ? cfg.currency : "USD").toUpperCase();

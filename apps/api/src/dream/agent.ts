@@ -157,18 +157,21 @@ function nextId(state: DreamState, prefix: string): string {
 
 /**
  * One key per thing as the person wrote it: case, accents on Latin letters, punctuation and a leading English article
- * don't make another thing. Letters and digits of every script stay what they are (キヤノン and セイコー are two things;
- * review of #128), and text with none at all gets no key, so it is never taken for something else.
+ * don't make another thing. Every other script keeps its letters, digits and marks (キヤノン and セイコー are two things,
+ * and so are कान and किन, whose vowel signs are marks; review of #128), and text with no letter or digit at all gets
+ * no key, so it is never taken for something else.
  */
-export const sameThing = (text: string) =>
-  text
+export const sameThing = (text: string) => {
+  const key = text
     .normalize("NFKD")
     .replace(/(\p{Script=Latin})\p{M}+/gu, "$1")
     .normalize("NFC")
     .toLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .replace(/[^\p{L}\p{N}\p{M}]+/gu, " ")
     .trim()
     .replace(/^(?:a|an|the|my) /, "");
+  return /[\p{L}\p{N}]/u.test(key) ? key : "";
+};
 
 function remember(state: DreamState, w: Widget) {
   if (w.kind === "deck") return;
