@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PriceOption, Run } from "./agent";
 import type { Wish } from "./wishes";
 
-vi.mock("./auth", () => ({ useAuth: () => ({ status: "signedOut", user: null }) }));
+// The sign-in binding itself is tested at the real transport in rechecks-signin.test.ts.
+vi.mock("./auth", () => ({ useAuth: () => ({ status: "signedOut", user: null }), currentSignIn: () => 0, bindToSignIn: <T>(api: T) => api }));
 const agent = vi.hoisted(() => ({ interpretWish: vi.fn(), startResearch: vi.fn(), getRun: vi.fn() }));
 vi.mock("./agent", () => agent);
 

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useSyncExternalStore } from "react";
 import { endTask, startTask, updateTask } from "./activity";
 import { getRun, interpretWish, startResearch, type PriceOption, type Run } from "./agent";
-import { useAuth } from "./auth";
+import { bindToSignIn, currentSignIn, useAuth } from "./auth";
 import { POLL_MS, amendPatch, newPricePatch, pickOption, stepLine } from "./recheck";
 import type { Wish } from "./wishes";
 
@@ -125,15 +125,19 @@ class Superseded extends Error {}
 
 /**
  * Starts a look at `wish` for this sign-in and runs `work`, which calls `live()` before every follow-on request, write
- * or result: it throws once the person signed out or in as someone else, or the look was answered or replaced.
+ * or result: it throws once the person signed out or in as someone else, or the look was answered or replaced. Its
+ * requests go through `api` bound to the sign-in it started under (review of #131), so none is sent with another
+ * account's bearer even before the screen has caught up with the change.
  */
-async function look(wish: Wish, said: string | undefined, label: string, work: (live: () => void, task: string, keep: (outcome: Outcome) => void) => Promise<void>, failure: string): Promise<void> {
+async function look(wish: Wish, said: string | undefined, label: string, api: Api, work: (live: () => void, task: string, keep: (outcome: Outcome) => void, api: Api) => Promise<void>, failure: string): Promise<void> {
   const mine = owner;
   if (!mine || held.has(wish.id) || checks.some((c) => c.wishId === wish.id && c.outcome.kind === "running")) return;
   const attempt = newAttempt();
+  const at = currentSignIn();
+  const bound = bindToSignIn(api, at);
   const base = { wishId: wish.id, name: wish.name, owner: mine, attempt, ...(said ? { said } : {}) };
   const live = () => {
-    if (owner !== mine || !checks.some((c) => c.wishId === wish.id && c.attempt === attempt)) throw new Superseded();
+    if (owner !== mine || currentSignIn() !== at || !checks.some((c) => c.wishId === wish.id && c.attempt === attempt)) throw new Superseded();
   };
   const keep = (outcome: Outcome) => {
     live();
@@ -143,9 +147,9 @@ async function look(wish: Wish, said: string | undefined, label: string, work: (
   const task = startTask(label, accountOf(mine));
   lookTasks.add(task);
   try {
-    await work(live, task, keep);
+    await work(live, task, keep, bound);
   } catch (e) {
-    if (owner === mine && checks.some((c) => c.wishId === wish.id && c.attempt === attempt)) {
+    if (owner === mine && currentSignIn() === at && checks.some((c) => c.wishId === wish.id && c.attempt === attempt)) {
       // Still on screen: a failure says so; a look that gave way to another save of the wish just goes.
       if (e instanceof Superseded) set(checks.filter((c) => c.attempt !== attempt));
       else put({ ...base, outcome: { kind: "failed", message: (e as Error).message || failure }, at: Date.now() });
@@ -178,7 +182,8 @@ export async function recheckWish(api: Api, wish: Wish, reload: () => Promise<vo
     wish,
     undefined,
     `Checking the price of ${short(wish.name)}`,
-    async (live, task, keep) => {
+    api,
+    async (live, task, keep, api) => {
       const { draft } = await interpretWish(api, wish.name);
       live();
       const run = await follow(api, await startResearch(api, draft, []), live, task);
@@ -213,7 +218,8 @@ export async function amendWish(api: Api, wish: Wish, said: string): Promise<voi
     wish,
     words,
     `Looking again at ${short(wish.name)}`,
-    async (live, task, keep) => {
+    api,
+    async (live, task, keep, api) => {
       const { draft } = await interpretWish(api, `${wish.name}. ${words}`);
       live();
       const run = await follow(api, await startResearch(api, draft, []), live, task);
@@ -232,14 +238,16 @@ export async function amendWish(api: Api, wish: Wish, said: string): Promise<voi
  * be pressed again meanwhile, and the wish stays held until the list has the saved wish, so a look started after this
  * starts from it. When the save lands only that look is cleared.
  */
-async function adopt(api: Api, wish: Wish, attempt: string | undefined, kind: "amended" | "changed", save: (r: Recheck) => Promise<void>, reload: () => Promise<void>): Promise<void> {
+async function adopt(api: Api, wish: Wish, attempt: string | undefined, kind: "amended" | "changed", save: (r: Recheck, api: Api) => Promise<void>, reload: () => Promise<void>): Promise<void> {
   const mine = owner;
   const r = checks.find((c) => c.wishId === wish.id && (!attempt || c.attempt === attempt));
   if (!mine || !r || r.owner !== mine || r.outcome.kind !== kind || r.saving) return;
+  // The save goes as the sign-in that pressed Use, or not at all.
+  const bound = bindToSignIn(api, currentSignIn());
   await holdWish(wish.id, async () => {
     put({ ...r, saving: true });
     try {
-      await save(r);
+      await save(r, bound);
     } catch (e) {
       if (owner === mine && checks.some((c) => c.attempt === r.attempt)) put({ ...r, saving: false });
       throw e;
@@ -260,7 +268,7 @@ export async function adoptAmend(api: Api, wish: Wish, reload: () => Promise<voi
     wish,
     attempt,
     "amended",
-    async (r) => {
+    async (r, api) => {
       if (r.outcome.kind !== "amended") return;
       const body = amendPatch(wish, r.outcome.run, r.outcome.option, r.outcome.name);
       const res = await api(`/wishes/${wish.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).catch(() => null);
@@ -277,7 +285,7 @@ export async function adoptRecheck(api: Api, wish: Wish, reload: () => Promise<v
     wish,
     attempt,
     "changed",
-    async (r) => {
+    async (r, api) => {
       if (r.outcome.kind === "changed") await patch(api, wish, r.outcome.run, r.outcome.option);
     },
     reload,

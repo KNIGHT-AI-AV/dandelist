@@ -32,7 +32,8 @@ const auth = vi.hoisted(() => {
 vi.mock("./auth", async () => {
   const { useSyncExternalStore } = await import("react");
   const api = async (path: string) => new Response(JSON.stringify(path === "/wishes" ? { wishes: [] } : {}), { status: 200 });
-  return { useAuth: () => ({ ...useSyncExternalStore(auth.subscribe, auth.get), api }) };
+  // The sign-in binding itself is tested at the real transport in rechecks-signin.test.ts.
+  return { useAuth: () => ({ ...useSyncExternalStore(auth.subscribe, auth.get), api }), currentSignIn: () => 0, bindToSignIn: <T>(api: T) => api };
 });
 const agent = vi.hoisted(() => ({ interpretWish: vi.fn(), startResearch: vi.fn(), getRun: vi.fn() }));
 vi.mock("./agent", () => agent);
