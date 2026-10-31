@@ -12,6 +12,8 @@ export interface MediaStore {
   /** Stores a profile photo under its own key (see avatarKeyFor). */
   putAvatar(key: string, bytes: Uint8Array, type: MediaType): Promise<void>;
   get(key: string): Promise<{ bytes: Uint8Array; type: MediaType } | null>;
+  /** A help report's file under help/ (help.ts): kept private, never served by /media. */
+  putPrivate?(key: string, bytes: Uint8Array, type: string): Promise<void>;
   /**
    * Removes a profile photo. Only avatar keys can be deleted: the agent's pictures are shared between everyone whose
    * wish shows them, so nothing a person does can remove one.
@@ -24,6 +26,8 @@ const EXT: Record<MediaType, string> = { "image/png": "png", "image/jpeg": "jpg"
 export const MEDIA_KEY = /^[a-f0-9]{64}\.(png|jpg|webp)$/;
 /** Profile photos live in their own namespace (avatars/ in the bucket), never sharing a key with the agent's pictures. */
 export const AVATAR_KEY = /^av-[a-f0-9]{64}\.(png|jpg|webp)$/;
+/** A help report's files: help/<report id>/report.json or screen.jpg. Never matches isStoredKey, so /media never serves one. */
+export const HELP_KEY = /^[0-9a-f-]{36}\/(report\.json|screen\.jpg)$/;
 export const isStoredKey = (key: string) => MEDIA_KEY.test(key) || AVATAR_KEY.test(key);
 export const typeOfKey = (key: string): MediaType => (key.endsWith(".png") ? "image/png" : key.endsWith(".webp") ? "image/webp" : "image/jpeg");
 
@@ -49,6 +53,9 @@ export function memoryMediaStore(publicBase: string): MediaStore & { objects: Ma
     async putAvatar(key, bytes) {
       if (AVATAR_KEY.test(key)) objects.set(key, bytes);
     },
+    async putPrivate(key, bytes) {
+      if (HELP_KEY.test(key)) objects.set(`help/${key}`, bytes);
+    },
     async get(key) {
       const bytes = objects.get(key);
       return bytes ? { bytes, type: typeOfKey(key) } : null;
@@ -72,6 +79,11 @@ export function fileMediaStore(dir: string, publicBase: string): MediaStore {
       if (!AVATAR_KEY.test(key)) return;
       await mkdir(dir, { recursive: true });
       await writeFile(join(dir, key), bytes);
+    },
+    async putPrivate(key, bytes) {
+      if (!HELP_KEY.test(key)) return;
+      await mkdir(join(dir, "help", key.split("/")[0]!), { recursive: true });
+      await writeFile(join(dir, "help", key), bytes);
     },
     async get(key) {
       if (!isStoredKey(key)) return null;
@@ -99,6 +111,10 @@ export async function s3MediaStore(bucket: string, region: string, publicBase: s
     async putAvatar(key, bytes, type) {
       if (!AVATAR_KEY.test(key)) return;
       await s3.send(new PutObjectCommand({ Bucket: bucket, Key: s3Path(key), Body: bytes, ContentType: type, CacheControl: "public, max-age=31536000, immutable" }));
+    },
+    async putPrivate(key, bytes, type) {
+      if (!HELP_KEY.test(key)) return;
+      await s3.send(new PutObjectCommand({ Bucket: bucket, Key: `help/${key}`, Body: bytes, ContentType: type, CacheControl: "private, no-store" }));
     },
     async get(key) {
       if (!isStoredKey(key)) return null;

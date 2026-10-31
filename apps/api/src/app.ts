@@ -8,6 +8,7 @@ import { authRoutes, requireAuth, type AuthVars } from "./auth";
 import { dreamRoutes } from "./dream/routes";
 import { fxRoutes } from "./fx";
 import { guestRoutes } from "./guest";
+import { helpRoutes } from "./help";
 import { pairRoutes } from "./pairs";
 import { poolSource, typicalSource } from "./pool";
 import { previewRoutes } from "./preview";
@@ -83,6 +84,8 @@ export function createApp(deps: AppDeps) {
   app.route("/me/agent-keys", agentKeyRoutes(deps));
   app.route("/mcp", mcpRoutes({ ...deps, call: (path, init) => app.request(path, init) }));
   app.route("/me", meRoutes(deps));
+  // What someone saw when they asked for help, kept private for the team (help.ts).
+  app.route("/help", helpRoutes(deps));
 
   app.use("/me", requireAuth(deps));
   app.get("/me", async (c) => {
