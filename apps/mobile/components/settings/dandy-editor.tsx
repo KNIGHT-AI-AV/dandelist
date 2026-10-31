@@ -95,11 +95,11 @@ export function DandyFields({ draft }: { draft: DandyDraft }) {
       </Group>
 
       <Group label="Its personality">
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }} accessibilityRole="radiogroup">
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }} accessibilityRole="radiogroup" accessibilityLabel="Personality">
           {PERSONAS.map((pe) => {
             const on = dandy.persona === pe.id;
             return (
-              <Pressable key={pe.id} accessibilityRole="radio" accessibilityState={{ selected: on }} accessibilityLabel={`${pe.name}. ${pe.line}`} onPress={() => choose({ persona: pe.id })} style={{ flexBasis: "47%", flexGrow: 1 }}>
+              <Pressable key={pe.id} accessibilityRole="radio" aria-checked={on} accessibilityState={{ checked: on }} accessibilityLabel={`${pe.name}. ${pe.line}`} onPress={() => choose({ persona: pe.id })} style={{ flexBasis: "47%", flexGrow: 1 }}>
                 <Glass intensity={on ? 70 : 40} style={{ minHeight: 88, borderRadius: radius.control, borderCurve: "continuous", padding: 14, gap: 4, borderColor: on ? p.accent : p.line }}>
                   <Text style={[type.title3, { color: p.ink }]}>{pe.name}</Text>
                   <Text style={[type.footnote, { color: p.ink2 }]}>{pe.line}</Text>
@@ -111,11 +111,11 @@ export function DandyFields({ draft }: { draft: DandyDraft }) {
       </Group>
 
       <Group label="Its shape">
-        <View style={{ flexDirection: "row", justifyContent: "space-between" }} accessibilityRole="radiogroup">
+        <View style={{ flexDirection: "row", justifyContent: "space-between" }} accessibilityRole="radiogroup" accessibilityLabel="Shape">
           {SHAPES.map((s) => {
             const on = dandy.shape === s;
             return (
-              <Pressable key={s} accessibilityRole="radio" accessibilityState={{ selected: on }} accessibilityLabel={s} onPress={() => choose({ shape: s })} hitSlop={6}>
+              <Pressable key={s} accessibilityRole="radio" aria-checked={on} accessibilityState={{ checked: on }} accessibilityLabel={s} onPress={() => choose({ shape: s })} hitSlop={6}>
                 <View style={{ width: 56, height: 56, borderRadius: radius.control, borderCurve: "continuous", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: on ? p.accent : p.hair }}>
                   <DandyAvatar dandy={{ ...shown, shape: s }} size={34} />
                 </View>
@@ -126,11 +126,11 @@ export function DandyFields({ draft }: { draft: DandyDraft }) {
       </Group>
 
       <Group label="Its colour">
-        <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", rowGap: 12 }} accessibilityRole="radiogroup">
+        <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", rowGap: 12 }} accessibilityRole="radiogroup" accessibilityLabel="Colour">
           {DANDY_COLORS.map((c) => {
             const on = dandy.color === c.id;
             return (
-              <Pressable key={c.id} accessibilityRole="radio" accessibilityState={{ selected: on }} accessibilityLabel={c.name} onPress={() => choose({ color: c.id })} hitSlop={4} style={{ width: "20%", alignItems: "center" }}>
+              <Pressable key={c.id} accessibilityRole="radio" aria-checked={on} accessibilityState={{ checked: on }} accessibilityLabel={c.name} onPress={() => choose({ color: c.id })} hitSlop={4} style={{ width: "20%", alignItems: "center" }}>
                 <View style={{ width: swatch + 8, height: swatch + 8, borderRadius: (swatch + 8) / 2, borderWidth: on ? 1.5 : 0, borderColor: p.ink, alignItems: "center", justifyContent: "center" }}>
                   <View style={{ width: swatch, height: swatch, borderRadius: swatch / 2, backgroundColor: c.hex, borderWidth: 1, borderColor: p.hair }} />
                 </View>
