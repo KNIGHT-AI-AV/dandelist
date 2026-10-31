@@ -19,7 +19,21 @@ import { emptyState, type CarBuildState, type CarCriteria, type Criteria, type D
  * model picks tools and writes short notes, and a note is trimmed of any sentence with a number the facts don't hold.
  */
 
-export const REFINE_AFTER_SWIPES = 5;
+/**
+ * The card a finished deck ends on (owner, 2026-10-31: "Ending up with no pick"; decks used to search again instead
+ * of choosing): the first card they liked that has a photo, else the first they liked; with nothing liked, the
+ * best-ranked card they didn't pass on, with a photo first. Null when they passed on every card, so the search goes
+ * again instead.
+ */
+export function bestCard(deck: Pick<DeckState, "cards" | "swipes">): DeckState["cards"][number] | null {
+  const liked = deck.cards.filter((c) => deck.swipes[c.id] === "yes");
+  const open = deck.cards.filter((c) => deck.swipes[c.id] !== "no");
+  const pictured = (cards: DeckState["cards"]) => cards.find((c) => c.images.length > 0);
+  return pictured(liked) ?? liked[0] ?? pictured(open) ?? open[0] ?? null;
+}
+
+/** What the deck's "That's enough" button sends (apps/mobile/components/home/chat-page.tsx): the best match, now. */
+const ENOUGH = /^that.?s enough,? show me the best match\.?$/i;
 /** Things one message may hand to the item price research at once; each is its own hunt against the day's allowance. */
 export const MAX_ITEMS_PER_MESSAGE = 10;
 const TRANSCRIPT_FOR_MODEL = 16;
@@ -507,7 +521,7 @@ async function pickListing(ctx: DreamCtx, t: TranscriptEntry[], state: DreamStat
       url: card.url,
       ...(card.checkedAt ? { checkedAt: card.checkedAt } : {}),
       status: card.status === "verified" ? "verified" : "estimate",
-      images: card.images,
+      images: card.images.length ? card.images : await commonsImages(ctx, card.title),
       currency,
     },
   };
@@ -516,6 +530,20 @@ async function pickListing(ctx: DreamCtx, t: TranscriptEntry[], state: DreamStat
   await say(ctx, note);
   await show(ctx, t, state, w, `Made ${card.title} the wish (${w.id}): ${money(upfront, currency)} upfront, ${money(monthly, currency)} a month to keep.`);
   return `Made ${card.title} the wish.`;
+}
+
+/** A picked card that came without a photo (a page that turned the server away) gets one from Wikimedia Commons. */
+async function commonsImages(ctx: DreamCtx, title: string): Promise<MediaImage[]> {
+  const photo = await commonsPhoto(ctx, title).catch(() => null);
+  return photo ? [{ url: photo.url, source: "Wikimedia Commons", credit: photo.credit }] : [];
+}
+
+/** Ends a deck on its best card, priced as the wish; with every card passed on, refines and deals another. */
+async function endDeck(ctx: DreamCtx, t: TranscriptEntry[], state: DreamState, deck: DeckState): Promise<void> {
+  deck.refined = true;
+  const best = bestCard(deck);
+  if (best) return slow(ctx, t, state, `pick:${deck.id}`, `Pricing the ${best.title}`, (c, tt, ss) => pickListing(c, tt, ss, ss.decks[deck.id] ?? deck, best.id));
+  return slow(ctx, t, state, `refine:${deck.id}`, "Finding more like the ones you liked", (c, tt, ss) => refineAndSearch(c, tt, ss, ss.decks[deck.id], ss.decks[deck.id]?.criteria ?? deck.criteria, ""));
 }
 
 /** The running costs each kind of wish should carry; any without published evidence are named, never filled in. */
@@ -1300,8 +1328,15 @@ function searchJob(c: Criteria): { lane: string; label: string } {
 export async function runTurn(ctx: DreamCtx, t: TranscriptEntry[], state: DreamState, action: DreamAction): Promise<void> {
   if (action.type !== "swipe") log(t, { role: "user", text: actionNote(action), at: ctx.now().toISOString() });
   switch (action.type) {
-    case "message":
+    case "message": {
+      // "That's enough, show me the best match" ends the newest deck on its best card, without asking the model.
+      const latest = Object.values(state.decks).at(-1);
+      if (ENOUGH.test(action.text.trim()) && latest && bestCard(latest)) {
+        ctx.budget.tool();
+        return endDeck(ctx, t, state, latest);
+      }
       return converse(ctx, t, state, action.text);
+    }
 
     case "region": {
       ctx.life = await writeLife(ctx.db, ctx.userId, { home: action.home }, "chip", ctx.now());
@@ -1318,12 +1353,11 @@ export async function runTurn(ctx: DreamCtx, t: TranscriptEntry[], state: DreamS
       if (!deck || !deck.cards.some((c) => c.id === action.listingId)) return void (await ctx.emit({ type: "error", message: "That card isn't in this deck any more." }));
       deck.swipes[action.listingId] = action.verdict;
       const n = Object.keys(deck.swipes).length;
-      if (!deck.refined && (n >= REFINE_AFTER_SWIPES || n >= deck.cards.length)) {
+      // The last card ends the deck on its best card (endDeck marks it at once, so late swipes don't end it twice).
+      if (!deck.refined && n >= deck.cards.length) {
         ctx.budget.tool();
         log(t, { role: "user", text: `[swiped ${n} cards in ${deck.id}]`, at: ctx.now().toISOString() });
-        // Marked now, so the swipes that come while it searches don't start it again.
-        deck.refined = true;
-        await slow(ctx, t, state, `refine:${deck.id}`, "Finding more like the ones you liked", (c, tt, ss) => refineAndSearch(c, tt, ss, ss.decks[deck.id], ss.decks[deck.id]?.criteria ?? deck.criteria, ""));
+        await endDeck(ctx, t, state, deck);
       }
       return;
     }
