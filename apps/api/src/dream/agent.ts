@@ -89,6 +89,10 @@ export const CONCIERGE_TOOLS = [
   }),
   fn("pick", "Make a listing the wish when the person chooses one ('the second one', 'I'll take the Sliema villa'), or accept a service quote (listing_id empty).", { widget_id: str, listing_id: str }),
   fn("ask_region", "Show the region picker when a regional wish needs a place and neither the message nor LIFE CONTEXT gives one.", {}),
+  fn("ask_choices", "Ask one short question with two to four short answers they can tap, when you need one detail before you can act (which one, new or used, a colour, a budget, when). It says the question for you.", {
+    question: str,
+    options: { ...strs, description: "Two to four short answers, a few words each, e.g. ['New', 'Used', 'Either']." },
+  }),
   fn("price_item", "Hand things to buy or do that aren't a home, a car or a service (a watch, a camera, a trip, a dinner, a course) to the item price research. Each one is hunted on its own.", {
     items: { ...strs, description: "Each separate thing in the person's own words, one entry per thing, e.g. ['a Leica Q3', 'a month in Lisbon']. Never two things in one entry." },
   }),
@@ -109,6 +113,7 @@ const CONCIERGE = `You are the person's Dandy, their private concierge on Dandel
 - You are their Dandy and nothing else. Your name is the one in YOUR NAME; use it when you introduce yourself. Never say which model, company or technology is behind you, never mention Meta or Muse, and never call yourself an AI, an assistant, a bot, a model or an agent. If they ask what you are, say you're their Dandy, here to find the real thing and what it costs.
 - Never use the word "life" with them; talk about their home, their plans or the things they want.
 - Reply in one or two short, warm sentences of plain text: no dashes, lists or markdown. Don't state prices or other figures yourself; the tools show them. You may repeat numbers the person said.
+- When you need one more detail before you can act, call ask_choices with one short question and two to four short answers: they tap one instead of typing. Don't also write the question in your reply, and don't ask in prose when a few answers would do.
 - When they ask you something ("is the Leica worth it over the Fuji?", "is that the V12?"), answer it in that same reply, in your own words and without prices or figures, as someone who knows these things well.
 - Say it all once: when you call tools, your words go with the calls; once the tools have run, add nothing unless a tool result tells you to say something or a question is still unanswered. Never list back what you started; the cards show it.
 - A home they describe: open home_builder, prefilled with everything they said (style, features, appliances, bedrooms, budget). If they say "just search", "that's enough" or similar, call search_homes instead.
@@ -895,6 +900,15 @@ async function runTool(ctx: DreamCtx, t: TranscriptEntry[], state: DreamState, n
     }
     case "ask_region":
       return askRegion(ctx, t, state);
+    case "ask_choices": {
+      const question = tidy(asStr(args.question, 200));
+      const options = [...new Set(asStrings(args.options).map(tidy))].slice(0, 4);
+      if (!question || options.length < 2) return "Need a question and at least two answers.";
+      await say(ctx, question);
+      const w: Widget = { kind: "choices", id: nextId(state, "choice"), options };
+      await show(ctx, t, state, w, `Asked "${question}" with the answers ${options.join(" / ")}.`);
+      return `Asked "${question}" with ${options.length} answers to tap. Wait for their answer.`;
+    }
     case "edit_list":
       return editList(ctx, t, state, args);
     case "price_item": {

@@ -495,6 +495,25 @@ describe("dream turn", () => {
     expect(text).toMatch(/^You keep picking|^Taking what you liked|^None of those landed/);
   });
 
+  it("asks with answers to tap, the question said as text first so any app shows it (owner, 2026-10-31)", async () => {
+    const t = await signIn("ada@example.com");
+    concierge = [[fc("ask_choices", { question: "New or used?", options: ["New", "Used", "Either", "Used"] })], [message("")]];
+    const { events } = await turn(t, { type: "message", text: "find me a porsche 911" });
+    const said = events.filter((e) => e.type === "text").map((e) => e.text);
+    expect(said).toEqual(["New or used?"]);
+    const [w] = widgets(events, "choices");
+    expect(w.options).toEqual(["New", "Used", "Either"]);
+    // The question comes before its answers.
+    expect(events.findIndex((e) => e.type === "text")).toBeLessThan(events.findIndex((e) => e.type === "widget"));
+  });
+
+  it("shows no answers card for a question with fewer than two answers", async () => {
+    const t = await signIn("ada@example.com");
+    concierge = [[fc("ask_choices", { question: "Colour?", options: ["Black"] })], [message("")]];
+    const { events } = await turn(t, { type: "message", text: "a porsche" });
+    expect(widgets(events, "choices")).toEqual([]);
+  });
+
   it("trims concierge sentences that state numbers the facts don't hold", async () => {
     const t = await signIn("ada@example.com");
     await liveIn(t, "MT", "Malta");
