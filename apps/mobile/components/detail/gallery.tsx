@@ -65,6 +65,11 @@ export function PageDots({ count, x, width, glass = true }: { count: number; x: 
 
 type AnimatedStyle = Animated.WithAnimatedValue<StyleProp<ViewStyle>>;
 
+/** A fresh request for each viewer close, including a return to the same photo. */
+export interface GalleryReturn {
+  readonly index: number;
+}
+
 /**
  * The hero as a paging gallery of real photos. It snaps a page at a time with momentum; the dots track the offset
  * continuously. While the card-to-detail zoom runs (`live` false) it shows the current photo alone, cover-fitted
@@ -72,13 +77,14 @@ type AnimatedStyle = Animated.WithAnimatedValue<StyleProp<ViewStyle>>;
  * zoom lands. `drift` is the parallax transform for the photo layer; `children` (the shade) sit above the photos
  * and under the dots.
  */
-export function HeroGallery({ photos, width, height, topInset, live, index, onIndex, onOpen, drift, children }: {
+export function HeroGallery({ photos, width, height, topInset, live, index, returnTo, onIndex, onOpen, drift, children }: {
   photos: MediaImage[];
   width: number;
   height: number;
   topInset: number;
   live: boolean;
   index: number;
+  returnTo?: GalleryReturn | null;
   onIndex(i: number): void;
   onOpen(i: number): void;
   drift?: AnimatedStyle;
@@ -87,6 +93,8 @@ export function HeroGallery({ photos, width, height, topInset, live, index, onIn
   const reduced = useReducedMotion();
   const x = useRef(new Animated.Value(index * width)).current;
   const pager = useRef<ScrollView | null>(null);
+  const photoButtons = useRef<Array<View | null>>([]);
+  const returned = useRef<GalleryReturn | null>(null);
   // The page the pager is on, as it last told the parent; a different `index` prop means someone else moved it.
   const at = useRef(index);
   // Where the pager starts. A constant: a contentOffset that followed the page would yank a swipe at its halfway point.
@@ -114,6 +122,23 @@ export function HeroGallery({ photos, width, height, topInset, live, index, onIn
   useEffect(() => {
     pager.current?.scrollTo({ x: at.current * width, animated: false });
   }, [width]);
+
+  // Web's Modal restores focus to its original opener during passive cleanup. That can scroll an old photo
+  // back into view. Run after that cleanup, returning focus and the pager to the photo the viewer closed on.
+  useEffect(() => {
+    if (native || !returnTo || returned.current === returnTo || !live) return;
+    const selected = returnTo.index;
+    if (!Number.isInteger(selected) || selected < 0 || selected >= photos.length || !Number.isFinite(width) || width <= 0) return;
+    const button = photoButtons.current[selected] as unknown as HTMLElement | null | undefined;
+    const currentPager = pager.current;
+    if (!button?.isConnected || typeof button.focus !== "function" || !currentPager) return;
+    // Consume the request once: a later resize or ordinary swipe must not restore this old selection again.
+    returned.current = returnTo;
+    at.current = selected;
+    button.focus({ preventScroll: true });
+    currentPager.scrollTo({ x: selected * width, animated: false });
+    onIndex(selected);
+  }, [returnTo, live, width, photos.length, onIndex]);
 
   const onScroll = useMemo(
     () =>
@@ -151,6 +176,7 @@ export function HeroGallery({ photos, width, height, topInset, live, index, onIn
             {photos.map((img, i) => (
               <Pressable
                 key={img.url}
+                ref={(button) => { photoButtons.current[i] = button; }}
                 accessibilityRole="imagebutton"
                 accessibilityLabel={`Photo ${i + 1} of ${photos.length}`}
                 accessibilityHint="Opens it full screen"
