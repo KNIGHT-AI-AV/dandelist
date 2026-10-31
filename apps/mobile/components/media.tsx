@@ -1,9 +1,10 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { Image } from "expo-image";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useReducer, useRef, useState, type Dispatch, type ReactNode } from "react";
 import { Animated, Easing, PanResponder, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { selectMediaHero } from "../lib/media-hero";
 import { useReducedMotion } from "../lib/motion";
+import { createSlideshow, nextSlideshowIndex, slideshowReducer, slideshowSignature, type SlideRecord, type SlideshowEvent } from "../lib/slideshow-state";
 import { type, usePalette } from "../lib/theme";
 import { Embed } from "./embed";
 import { Photo } from "./lux";
@@ -60,6 +61,57 @@ export function Model3D({ model, style }: { model: Model3d; style?: StyleProp<Vi
   );
 }
 
+/** A record keeps this same full-size Image instance when it becomes the committed underlay. */
+function SlideshowLayer({ record, ready, interval, reduced, dispatch }: { record: SlideRecord; ready: boolean; interval: number; reduced: boolean; dispatch: Dispatch<SlideshowEvent> }) {
+  const source = useRef({ uri: record.image.url }).current;
+  const fade = useRef(new Animated.Value(0)).current;
+  const drift = useRef(new Animated.Value(0)).current;
+  const started = useRef(false);
+
+  useEffect(() => {
+    if (!ready || started.current) return;
+    started.current = true;
+    let live = true;
+    const run = Animated.timing(fade, { toValue: 1, duration: reduced ? 400 : 1100, easing: Easing.out(Easing.cubic), useNativeDriver: true });
+    run.start(({ finished }) => {
+      if (!live) return;
+      if (finished) fade.setValue(1);
+      dispatch({ type: "finish", record, finished });
+    });
+    return () => {
+      live = false;
+      run.stop();
+      dispatch({ type: "cancel", record });
+    };
+  }, [ready, reduced, fade, record, dispatch]);
+
+  useEffect(() => {
+    if (!ready) return;
+    drift.setValue(0);
+    const run = Animated.timing(drift, { toValue: reduced ? 0 : 1, duration: interval + 1100, easing: Easing.linear, useNativeDriver: true });
+    run.start();
+    return () => run.stop();
+  }, [ready, reduced, interval, drift]);
+
+  // Alternate the drift direction so consecutive shots don't move the same way.
+  const dir = record.index % 2 === 0 ? 1 : -1;
+  const scale = drift.interpolate({ inputRange: [0, 1], outputRange: [1.02, 1.1] });
+  const translateX = drift.interpolate({ inputRange: [0, 1], outputRange: [0, 14 * dir] });
+  return (
+    <Animated.View style={[StyleSheet.absoluteFill, { opacity: fade, transform: [{ scale }, { translateX }] }]}>
+      <Image
+        source={source}
+        recyclingKey={`${record.epoch}:${record.attempt}`}
+        style={StyleSheet.absoluteFill}
+        contentFit="cover"
+        accessibilityIgnoresInvertColors
+        onDisplay={() => dispatch({ type: "display", record })}
+        onError={() => dispatch({ type: "error", record })}
+      />
+    </Animated.View>
+  );
+}
+
 /**
  * Real photographs of a place, one after another: each drifts slowly (a Ken Burns move) and crossfades into the
  * next, with thin progress lines like a magazine's story view. Reduced motion keeps the crossfade and drops the drift.
@@ -67,50 +119,43 @@ export function Model3D({ model, style }: { model: Model3d; style?: StyleProp<Vi
 export function Slideshow({ images, interval = 5200, style, children }: { images: MediaImage[]; interval?: number; style?: StyleProp<ViewStyle>; children?: ReactNode }) {
   const p = usePalette();
   const reduced = useReducedMotion();
-  const [index, setIndex] = useState(0);
-  const fade = useRef(new Animated.Value(1)).current;
-  const drift = useRef(new Animated.Value(0)).current;
+  const [state, dispatch] = useReducer(slideshowReducer, images, createSlideshow);
+  // React retries this render before committing: old metadata/layers never accompany a new semantic deck.
+  if (state.signature !== slideshowSignature(images)) dispatch({ type: "deck", images });
   const progress = useRef(new Animated.Value(0)).current;
+  const nextIndex = nextSlideshowIndex(state);
+  const cycling = nextIndex !== undefined;
 
   useEffect(() => {
-    if (images.length < 2) return;
-    fade.setValue(0);
-    drift.setValue(0);
-    progress.setValue(0);
-    const run = Animated.parallel([
-      Animated.timing(fade, { toValue: 1, duration: reduced ? 400 : 1100, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
-      Animated.timing(drift, { toValue: reduced ? 0 : 1, duration: interval + 1100, easing: Easing.linear, useNativeDriver: true }),
-      Animated.timing(progress, { toValue: 1, duration: interval, easing: Easing.linear, useNativeDriver: false }),
-    ]);
-    run.start();
-    const t = setTimeout(() => setIndex((i) => (i + 1) % images.length), interval);
-    return () => {
-      run.stop();
-      clearTimeout(t);
-    };
-  }, [index, images.length, interval, reduced, fade, drift, progress]);
+    if (!cycling) return;
+    const clock = setInterval(() => dispatch({ type: "tick", epoch: state.epoch }), interval);
+    return () => clearInterval(clock);
+  }, [state.epoch, interval, cycling]);
 
-  if (!images.length) return <Photo />;
-  const current = images[index]!;
-  const previous = images[(index - 1 + images.length) % images.length]!;
-  // Alternate the drift direction so consecutive shots don't move the same way.
-  const dir = index % 2 === 0 ? 1 : -1;
-  const scale = drift.interpolate({ inputRange: [0, 1], outputRange: [1.02, 1.1] });
-  const translateX = drift.interpolate({ inputRange: [0, 1], outputRange: [0, 14 * dir] });
+  useEffect(() => {
+    progress.setValue(0);
+    if (!state.shown) return;
+    const run = Animated.timing(progress, { toValue: 1, duration: interval, easing: Easing.linear, useNativeDriver: false });
+    run.start();
+    return () => run.stop();
+  }, [state.shown, interval, progress]);
+
+  const layers = [state.shown, state.candidate?.record].filter((record): record is SlideRecord => !!record);
+  const current = state.shown?.image;
+  const index = state.shown?.index ?? -1;
+  const preload = nextIndex !== undefined && nextIndex !== state.candidate?.record.index ? state.images[nextIndex] : undefined;
 
   return (
     <View style={[{ overflow: "hidden", backgroundColor: p.bg }, style]}>
-      {images.length > 1 ? <Image source={{ uri: previous.url }} style={StyleSheet.absoluteFill} contentFit="cover" /> : null}
-      <Animated.View style={[StyleSheet.absoluteFill, { opacity: fade, transform: [{ scale }, { translateX }] }]}>
-        <Image source={{ uri: current.url }} style={StyleSheet.absoluteFill} contentFit="cover" accessibilityIgnoresInvertColors />
-      </Animated.View>
-      {/* Preload the next shot so the crossfade never shows an empty frame. */}
-      {images.length > 1 ? <Image source={{ uri: images[(index + 1) % images.length]!.url }} style={{ width: 1, height: 1, opacity: 0, position: "absolute" }} /> : null}
+      {!state.images.length ? <Photo /> : null}
+      {layers.map((record) => <SlideshowLayer key={`${record.epoch}:${record.attempt}`} record={record} ready={record === state.shown || state.candidate?.phase === "fading"} interval={interval} reduced={reduced} dispatch={dispatch} />)}
+      {/* Cache hint only: readiness belongs to the matching full-size node's onDisplay. */}
+      {preload ? <Image source={{ uri: preload.url }} style={{ width: 1, height: 1, opacity: 0, position: "absolute" }} /> : null}
       {children}
-      {images.length > 1 ? (
+      {state.images.length > 1 ? (
         <View pointerEvents="none" style={{ position: "absolute", top: 12, left: 14, right: 14, flexDirection: "row", gap: 4 }}>
-          {images.map((img, i) => (
-            <View key={img.url} style={{ flex: 1, height: 2, borderRadius: 1, backgroundColor: p.onPhotoTrack, overflow: "hidden" }}>
+          {state.images.map((img, i) => (
+            <View key={`${i}:${img.url}`} style={{ flex: 1, height: 2, borderRadius: 1, backgroundColor: p.onPhotoTrack, overflow: "hidden" }}>
               <Animated.View
                 style={{
                   height: 2,
@@ -122,13 +167,13 @@ export function Slideshow({ images, interval = 5200, style, children }: { images
           ))}
         </View>
       ) : null}
-      {!current.generated ? (
+      {current && !current.generated ? (
         <View style={{ position: "absolute", right: 12, bottom: 10, maxWidth: "70%" }}>
           <PhotoCredit image={current} />
         </View>
-      ) : (
+      ) : current ? (
         <Credit>{creditFor(current)}</Credit>
-      )}
+      ) : null}
     </View>
   );
 }
