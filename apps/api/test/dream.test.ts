@@ -91,6 +91,8 @@ let huntCount: number;
 let huntList: { url: string; title: string; price: number; currency: string }[] = [];
 let refineReply: Record<string, unknown> | null;
 let researchKeys: { key: string; place: string }[];
+/** What the maker's price list says about the model: false for one it no longer sells new. */
+let carSoldNew: boolean;
 
 const reply = (output: unknown[]) => Response.json({ id: `resp_${metaCalls.length}`, output, usage: { input_tokens: 800, output_tokens: 120 } });
 const message = (text: string, urls: string[] = []) => ({ type: "message", content: [{ type: "output_text", text, annotations: urls.map((url) => ({ type: "url_citation", url })) }] });
@@ -194,6 +196,7 @@ const fakeMeta = (async (_url: string, init: RequestInit) => {
     return reply([
       message(
         JSON.stringify({
+          sold_new: carSoldNew,
           source_url: `${IP}.36/mb-config`,
           currency: "USD",
           model_name: "Mercedes-AMG G 63",
@@ -252,6 +255,7 @@ beforeEach(async () => {
   huntCount = 0;
   refineReply = null;
   researchKeys = [];
+  carSoldNew = true;
   apifyCalls = [];
   webCalls = [];
   app = makeApp();
@@ -536,6 +540,18 @@ describe("dream turn", () => {
     expect(widgets((await turn(t, { type: "message", text: "eight things" })).events, "item")).toHaveLength(6);
   });
 
+  it("hunts a thing once per conversation: said again, even with other case and accents, it keeps its card (owner, 2026-10-31: \"Duplicate items\")", async () => {
+    const t = await signIn("ada@example.com");
+    concierge = [[fc("price_item", { items: ["Rolex day date 40 green ombré Roman"] })], [message("On it.")]];
+    const first = await turn(t, { type: "message", text: "Rolex day date 40 green ombré Roman" });
+    expect(widgets(first.events, "item")).toHaveLength(1);
+    concierge = [[fc("price_item", { items: ["rolex Day Date 40 green ombre roman", "a Leica Q3"] })], [message("Your Rolex is above.")]];
+    const second = await turn(t, { type: "message", text: "Rolex day date 40 green ombré Roman and a Leica Q3" }, first.sessionId);
+    expect(widgets(second.events, "item").map((w) => w.text)).toEqual(["a Leica Q3"]);
+    const told = metaCalls.flatMap((c) => (Array.isArray(c.input) ? c.input : [])).find((i: Ev) => i?.type === "function_call_output" && /Not hunted again/.test(i.output));
+    expect(told.output).toContain('"rolex Day Date 40 green ombre roman"');
+  });
+
   it("suggests a change to their list on a card, sees the list as quoted data, and moves nothing until they apply", async () => {
     const t = await signIn("ada@example.com");
     const add = async (name: string, kind: string, upfrontCents: number) =>
@@ -628,6 +644,17 @@ describe("dream turn", () => {
     const wish = widgets(done.events, "wish_ready")[0].wish;
     expect(wish).toMatchObject({ upfrontCents: Math.round((186550 + 1300) * 0.92 * 100), status: "verified", currency: "EUR", region: "Malta" });
     expect(wish.keep.map((l: Ev) => l.label)).toEqual(expect.arrayContaining(["Insurance", "Fuel", "Maintenance", "Registration and road licence"]));
+  });
+
+  it("shows real used listings, not a builder, for a model the maker no longer makes (owner, 2026-10-31: the DB11)", async () => {
+    const t = await signIn("ada@example.com");
+    await liveIn(t, "MT", "Malta");
+    carSoldNew = false;
+    concierge = [[fc("car_builder", { make: "Aston Martin", model: "DB11", notes: "" })], [message("")]];
+    const { events } = await turn(t, { type: "message", text: "an Aston Martin DB11" });
+    expect(widgets(events, "car_builder")).toHaveLength(0);
+    expect(events.some((e: Ev) => e.type === "text" && e.text === "The Aston Martin DB11 isn't made new any more, so here are real ones for sale.")).toBe(true);
+    expect(events.some((e: Ev) => e.type === "step" && e.text === "The Aston Martin DB11 isn't sold new any more")).toBe(true);
   });
 
   it("keeps custom car parts across reload, blocks incomplete wishes and forwards the full build to search", async () => {

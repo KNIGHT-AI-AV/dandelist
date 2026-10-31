@@ -112,6 +112,7 @@ export async function homeBuilder(ctx: DreamCtx, id: string, c: HomeCriteria, re
 }
 
 const CONFIG = strictObject({
+  sold_new: { type: "boolean", description: "False when the maker no longer sells this model new: discontinued, or replaced by a successor." },
   source_url: { type: "string", description: "The official configurator, build-and-price page or price list where you read the prices." },
   currency: { type: "string" },
   model_name: { type: "string" },
@@ -123,6 +124,7 @@ const CONFIG = strictObject({
 });
 const priced = z.object({ name: z.string().trim().min(1).max(80), price: z.number().min(0).max(1e8) });
 const configSchema = z.object({
+  sold_new: z.boolean().optional(),
   source_url: z.string().max(2000),
   currency: z.string().max(8),
   model_name: z.string().max(120),
@@ -144,7 +146,7 @@ const slug = (s: string) =>
  * Prices a car build from the maker's own pages: Muse Spark finds the configurator or price list, our server opens it
  * and checks each price is on it. A price the page doesn't show stays in the build, marked as an estimate.
  */
-export async function carBuilder(ctx: DreamCtx, id: string, make: string, model: string, notes: string): Promise<{ widget: Extract<Widget, { kind: "car_builder" }>; build: CarBuildState } | null> {
+export async function carBuilder(ctx: DreamCtx, id: string, make: string, model: string, notes: string): Promise<{ widget: Extract<Widget, { kind: "car_builder" }>; build: CarBuildState } | "not sold new" | null> {
   const name = (model.toLowerCase().startsWith(make.toLowerCase()) ? model : `${make} ${model}`).trim();
   await ctx.step("config", "running", `Finding the ${name} price list on the maker's site`);
   const first = await ctx.meta.responses({
@@ -171,6 +173,12 @@ export async function carBuilder(ctx: DreamCtx, id: string, make: string, model:
     return null;
   }
   const cfg = parsed.data;
+  // A model the maker no longer makes can only be bought used: a configurator for it would price a car no one sells
+  // (owner, 2026-10-31: the DB11, replaced by the DB12, opened a builder).
+  if (cfg.sold_new === false) {
+    await ctx.step("config", "done", `The ${name} isn't sold new any more`);
+    return "not sold new";
+  }
   const page = ctx.budget.pages(1) ? await readListing(cfg.source_url, ctx.web) : null;
   const shows = (price: number) => !!page?.ok && price > 0 && pageShowsPrice({ text: page.text, structuredPrices: page.prices }, price);
   const source = (/^[A-Za-z]{3}$/.test(cfg.currency) ? cfg.currency : "USD").toUpperCase();
