@@ -82,17 +82,18 @@ export function CurrencyChips() {
 /**
  * The income fader: a face, the income rolling on the odometer, the line saying how comfortably it carries the list,
  * and the track. Notches are round numbers in the chosen currency; each one ticks (a haptic on phones, a soft click
- * on the web). The welcome's "What would it take?" and the money page both use it.
+ * on the web). The welcome's "What would it take?" and the money page both use it. `needCents` is the income the
+ * list needs to be comfortable (lib/comfort.ts needOf).
  */
-export function IncomeFader({ incomeCents, totalCents, keepPerYearCents = 0, onChange, size = 52, compact = false }: { incomeCents: number; totalCents: number; keepPerYearCents?: number; onChange(cents: number): void; size?: number; compact?: boolean }) {
+export function IncomeFader({ incomeCents, needCents, onChange, size = 52, compact = false }: { incomeCents: number; needCents: number; onChange(cents: number): void; size?: number; compact?: boolean }) {
   const p = usePalette();
   const money = useMoney();
   const reduced = useReducedMotion();
   // The far left always reads horrid and the far right ritzy, however small or large the list.
-  const steps = useMemo(() => incomeSteps(money.rate, money.unit, fullRange(totalCents, keepPerYearCents)), [money.rate, money.unit, totalCents, keepPerYearCents]);
-  const stage = stageOf(incomeCents, totalCents, keepPerYearCents);
+  const steps = useMemo(() => incomeSteps(money.rate, money.unit, fullRange(needCents)), [money.rate, money.unit, needCents]);
+  const stage = stageOf(incomeCents, needCents);
   // A new face lands with the firmer haptic.
-  const newFace = (from: number, to: number) => stageOf(from, totalCents, keepPerYearCents).index !== stageOf(to, totalCents, keepPerYearCents).index;
+  const newFace = (from: number, to: number) => stageOf(from, needCents).index !== stageOf(to, needCents).index;
 
   const figure = <Odometer cents={incomeCents} format={money.format} size={size} family="bodoni" smallPrefix tracking={-0.02 * size} mode={reduced ? "instant" : "ui"} />;
   const line = <Text accessibilityLiveRegion="polite" numberOfLines={1} style={[compact ? type.callout : type.title3, { fontFamily: fonts.titleItalic, color: p.accentText, textAlign: compact ? "left" : "center" }]}>{stage.line}</Text>;
@@ -139,7 +140,7 @@ export function IncomeFader({ incomeCents, totalCents, keepPerYearCents = 0, onC
  * to 100 million a year in the chosen currency, and the face and the line say how comfortably that income carries
  * the whole list. `note` says what the list leaves out of its total (a priceless wish).
  */
-export function Comfort({ incomeCents, totalCents, keepPerYearCents = 0, note, onChange, onDone }: { incomeCents: number; totalCents: number; keepPerYearCents?: number; note?: string; onChange(cents: number): void; onDone(): void }) {
+export function Comfort({ incomeCents, needCents, note, onChange, onDone }: { incomeCents: number; needCents: number; note?: string; onChange(cents: number): void; onDone(): void }) {
   const p = usePalette();
   const t = useType();
   const { width } = useWindowDimensions();
@@ -154,7 +155,7 @@ export function Comfort({ incomeCents, totalCents, keepPerYearCents = 0, note, o
         <Text style={[type.callout, { color: p.ink2, textAlign: "center" }]}>Slide to a year's income and see how comfortably it carries everything on your list.</Text>
       </Rise>
       <Rise delay={60} style={{ gap: layout.stack.tight }}>
-        <IncomeFader incomeCents={incomeCents} totalCents={totalCents} keepPerYearCents={keepPerYearCents} onChange={onChange} />
+        <IncomeFader incomeCents={incomeCents} needCents={needCents} onChange={onChange} />
         {note ? <Text style={[type.footnote, { color: p.ink3, textAlign: "center" }]}>{note}</Text> : null}
       </Rise>
       <Rise delay={160}>

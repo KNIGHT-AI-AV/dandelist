@@ -18,9 +18,8 @@ import { TitleSequence } from "../components/welcome/title";
 import { useAuth, useSignInOptions, type ProviderId, type SignInOption } from "../lib/auth";
 import type { Step as AgentStep } from "../lib/agent";
 import { ease, native, spring, useReducedMotion } from "../lib/motion";
-import { faderIncome } from "../lib/comfort";
+import { faderIncome, needOf, poolEntry } from "../lib/comfort";
 import { ANSWERED_ROUNDS, chosen as chosenBy, groupsFor, pickPair, unseenCount, usablePairs, votingDone, type Vote, type WishPair } from "../lib/pairs";
-import { recurringBreakdown } from "@dandelist/cost";
 import { thoughtOf } from "../lib/reveal";
 import { play, preloadSounds } from "../lib/sound";
 import { layout, type, usePalette, useTheme } from "../lib/theme";
@@ -400,7 +399,8 @@ export default function Welcome() {
 
   const total = listTotal(state);
   const items = listed(state);
-  const keepPerYear = recurringBreakdown(items).perYear;
+  // The income the list needs to be comfortable: each card on the price matrix, its running costs included.
+  const need = needOf(items.map(poolEntry));
   // The fader step carries its own total in the faces, and needs the room the meter would take on a phone.
   const metered = step.kind === "vote" || step.kind === "when" || step.kind === "agent";
   const canGoBack = steps.canGoBack() && step.kind !== "title" && step.kind !== "theme";
@@ -487,9 +487,8 @@ export default function Welcome() {
     case "comfort":
       body = (
         <Comfort
-          incomeCents={faderIncome({ totalCents: total, keepPerYearCents: keepPerYear, selectedIncomeCents: state.incomeCents, hasPricedItems: items.some((e) => e.worth !== "priceless") })}
-          totalCents={Math.max(total, 1)}
-          keepPerYearCents={keepPerYear}
+          incomeCents={faderIncome({ needCents: need, selectedIncomeCents: state.incomeCents, hasPricedItems: items.some((e) => e.worth !== "priceless") })}
+          needCents={need}
           note={state.wish?.worth === "priceless" ? `${wishTitle} is priceless, so it isn't in the total.` : undefined}
           onChange={(c) => patch((s) => ({ ...s, incomeCents: c }))}
           onDone={() => {

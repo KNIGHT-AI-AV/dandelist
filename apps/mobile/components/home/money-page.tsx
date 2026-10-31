@@ -3,7 +3,7 @@ import { router } from "expo-router";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Pressable, ScrollView, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { comfortableIncome } from "../../lib/comfort";
+import { comfortableIncome, needOf, wishEntry } from "../../lib/comfort";
 import { useMoney } from "../../lib/currency";
 import { biggest, keepLines, tierTotals } from "../../lib/money-summary";
 import { fonts, layout, radius, space, type, usePalette, useType } from "../../lib/theme";
@@ -67,9 +67,11 @@ export function MoneyPage() {
   const total = upfrontCashCents(items);
   const aside = pricelessAside(wishes);
   const keep = recurringBreakdown(items);
-  const comfortable = comfortableIncome(total, keep.perYear);
+  // Each wish needs the income its kind of purchase takes comfortably, its running costs included (lib/comfort.ts).
+  const need = useMemo(() => needOf(wishes.map(wishEntry)), [wishes]);
+  const comfortable = comfortableIncome(need);
   const [income, setIncome] = useState(comfortable);
-  // A new wish moves the comfortable income; the fader follows until someone moves it.
+  // A new or changed wish moves the comfortable income; the fader follows until someone moves it.
   const [touched, setTouched] = useState(false);
   useEffect(() => {
     if (!touched) setIncome(comfortable);
@@ -137,8 +139,7 @@ export function MoneyPage() {
         </Text>
         <IncomeFader
           incomeCents={income}
-          totalCents={total}
-          keepPerYearCents={keep.perYear}
+          needCents={need}
           size={44}
           onChange={(c) => {
             setTouched(true);
