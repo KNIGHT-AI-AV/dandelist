@@ -53,9 +53,24 @@ const makeApp = (remember: boolean) =>
     remember,
   });
 
+let epochHold: { started: () => void; released: Promise<void> } | null;
+
 beforeEach(async () => {
   const pg = new PGlite();
-  db = { query: (t, p) => pg.query(t, p) as never, exec: (s) => pg.exec(s) };
+  epochHold = null;
+  db = {
+    query: (t, p) => {
+      // A test can hold the next memory epoch read before it reaches the database, as a slow pooled connection would.
+      const hold = epochHold;
+      if (hold && t.startsWith("select memory_epoch from users")) {
+        epochHold = null;
+        hold.started();
+        return hold.released.then(() => pg.query(t, p)) as never;
+      }
+      return pg.query(t, p) as never;
+    },
+    exec: (s) => pg.exec(s),
+  };
   await migrate(db);
   mail = [];
   calls = [];
@@ -63,6 +78,16 @@ beforeEach(async () => {
   gate = null;
   app = makeApp(true);
 });
+
+/** Holds the next memory epoch read before it goes out: `asked` resolves when it is asked for. */
+function holdEpochRead() {
+  let started!: () => void;
+  let release!: () => void;
+  const asked = new Promise<void>((r) => (started = r));
+  const released = new Promise<void>((r) => (release = r));
+  epochHold = { started, released };
+  return { asked, release };
+}
 
 const call = async (method: string, path: string, token: string | null, body?: unknown) =>
   app.request(path, {
@@ -320,6 +345,28 @@ describe("in the conversation", () => {
     // The earlier message was still read after its reply; only what it would add was dropped. Bob is untouched.
     expect(memoryCalls()).toHaveLength(2);
     expect((await readMemories(db, bob.id)).map((m) => m.text)).toEqual(["loves Porsches"]);
+  });
+
+  it("finishes reading the message's memory epoch before the turn does anything else, however slow that read is (review of #147)", async () => {
+    const ada = await signIn("ada@example.com");
+    const read = holdEpochRead();
+    const held = holdReply();
+    memoryReplies.push({ add: ["prefers vintage cars to new ones"], forget: [] });
+    const turn = say(ada.token, "I only like old cars, honestly");
+    await read.asked;
+    // The read hasn't gone out yet: nothing of the turn has started, the model least of all.
+    await new Promise((r) => setTimeout(r, 50));
+    expect(calls).toEqual([]);
+    expect((await db.query<{ n: number }>("select count(*)::int as n from dream_sessions where user_id = $1", [ada.id])).rows[0]!.n).toBe(0);
+    read.release();
+    await held.entered;
+    // A Forget during the reply still wins, and what she says after it is remembered.
+    await call("DELETE", "/me/memories", ada.token);
+    held.open();
+    await turn;
+    memoryReplies.push({ add: ["avoids long-haul flights"], forget: [] });
+    await say(ada.token, "We never fly long-haul, the kids hate it");
+    expect(await settled(ada.id, 1)).toEqual(["avoids long-haul flights"]);
   });
 
   it("keeps a removed line out, reworded too, when the message before the removal is still being answered", async () => {

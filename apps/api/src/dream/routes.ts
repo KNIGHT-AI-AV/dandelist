@@ -169,10 +169,12 @@ export function dreamRoutes(deps: DreamDeps) {
     const body = turnBody.safeParse(await c.req.json().catch(() => null));
     if (!body.success) return c.json({ error: "That message couldn't be read. Try again." }, 400);
     const userId = c.get("userId");
-    // Admitted now, as the message arrives (review of #147): what it says may be remembered only under the memory epoch
-    // read here, so a Forget pressed while the reply is still being written or saved wins over it.
+    // Admitted first, as the message arrives (review of #147): what it says may be remembered only under the memory epoch
+    // read here, and the read is done before the turn does anything else (on a pool it could go out after the turn's own
+    // queries), so a Forget pressed while the reply is still being written or saved wins over it. A read that fails only
+    // means nothing from this message is remembered.
     const admitted = deps.remember && body.data.action.type === "message" ? memoryEpoch(db, userId) : null;
-    void admitted?.catch(() => undefined);
+    await admitted?.catch(() => undefined);
     const now = deps.now();
     try {
       await assertBudget(db, caps, now);
