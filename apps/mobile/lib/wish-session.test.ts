@@ -49,8 +49,8 @@ describe("wish store account sessions", () => {
 
   it("applies current-session loading, error, recovery and sequential functional updates", () => {
     const initial = createWishSession("A", empty());
-    const loading = updateWishSession(initial, initial.scope, (value) => ({ ...value, status: "loading" }));
-    const failed = updateWishSession(loading, initial.scope, (value) => ({ ...value, status: "error", error: "Try again" }));
+    const loading = updateWishSession(initial, initial.scope, (value): State => ({ ...value, status: "loading" }));
+    const failed = updateWishSession(loading, initial.scope, (value): State => ({ ...value, status: "error", error: "Try again" }));
     expect(failed.value).toEqual({ wishes: [], status: "error", error: "Try again" });
     const loaded = updateWishSession(failed, initial.scope, () => ready("A-existing"));
     const added = updateWishSession(loaded, initial.scope, (value) => ({ ...value, wishes: ["A-added", ...value.wishes] }));
