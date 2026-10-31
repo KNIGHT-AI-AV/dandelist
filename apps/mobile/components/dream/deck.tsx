@@ -14,15 +14,21 @@ const MAX_TILT = 12;
 /** One listing as a full-bleed card: its own photographs (a slideshow when there are several), price, facts, source. */
 function ListingCard({ l }: { l: Listing }) {
   const p = usePalette();
+  const { fontScale } = useWindowDimensions();
+  const hasSlideshow = l.images.length > 1;
+  // Reserve Slideshow's bottom inset, one scaled credit line and an 8px gap before its credit appears.
+  const detailsBottom = hasSlideshow ? 10 + type.figure.lineHeight * fontScale + 8 : 20;
   return (
     <View style={{ flex: 1, borderRadius: radius.lg, overflow: "hidden", backgroundColor: p.surface }}>
-      {l.images.length > 1 ? (
-        <Slideshow images={l.images} interval={3800} style={StyleSheet.absoluteFill} />
+      {hasSlideshow ? (
+        <Slideshow images={l.images} interval={3800} style={StyleSheet.absoluteFill}>
+          <Shade from={0.38} />
+        </Slideshow>
       ) : (
         <GlassReveal uri={l.images[0]?.url ?? null} standby={require("../../assets/standby/life.jpg")} stage="clear" treatment="swirl" finish={!!l.images[0]?.generated} style={StyleSheet.absoluteFill} />
       )}
-      <Shade from={0.38} />
-      <View style={{ position: "absolute", left: 20, right: 20, bottom: 20, gap: 8 }}>
+      {!hasSlideshow ? <Shade from={0.38} /> : null}
+      <View style={{ position: "absolute", left: 20, right: 20, bottom: detailsBottom, gap: 8 }}>
         <Text style={[type.title2, { color: p.ink }]} numberOfLines={2}>
           {l.title}
         </Text>
