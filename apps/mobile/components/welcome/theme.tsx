@@ -8,6 +8,7 @@ import { DandyAvatar } from "../dandy-avatar";
 import { Eyebrow, Glass, Grain, PrimaryButton, Shade } from "../lux";
 import { Odometer, dollars } from "../odometer";
 import { GlassReveal } from "../reveal";
+import { SongNote } from "../song-note";
 
 const MOOD: Record<ThemeId, number> = {
   emerald: require("../../assets/themes/emerald.jpg"),
@@ -31,7 +32,7 @@ const CYCLE_MS = 2600;
  * screen, the list's total and its Dandy included. The old look crossfades into the new one (no dip to black), the
  * autoplay runs one pass and stops at the first touch, and a sideways swipe anywhere moves one look along (owner,
  * 2026-10-28: "the whole app needs to be swipe friendly"). Choosing applies the theme before an account exists, so
- * the first thing they own is the look.
+ * the first thing they own is the look. Each look's song is named in small print at the bottom (components/song-note.tsx).
  */
 export function ThemeChooser({ totalCents, onDone, cta = "Make it mine" }: { totalCents: number; onDone(id: ThemeId): void; cta?: string }) {
   const reduced = useReducedMotion();
@@ -159,7 +160,11 @@ function Body({ id, totalCents, held, onPick, onChoose, cta, roll }: { id: Theme
         })}
       </View>
       <PrimaryButton label={held ? `${cta}: ${THEMES[id].name}` : cta} commit onPress={onChoose} />
-      <Text style={[type.footnote, { color: p.ink3, textAlign: "center" }]}>Swipe to try another. You can change it any time.</Text>
+      {/* Under the small print, the look's own song: a hint, never explained (lib/theme-songs.ts). */}
+      <View style={{ gap: 6 }}>
+        <Text style={[type.footnote, { color: p.ink3, textAlign: "center" }]}>Swipe to try another. You can change it any time.</Text>
+        <SongNote id={id} />
+      </View>
     </View>
   );
 }
