@@ -33,9 +33,14 @@ if [ -n "${DEVELOPER_DIR:-}" ]; then
   export DEVELOPER_DIR
 fi
 IOS_SDK="$(xcrun --sdk iphoneos --show-sdk-version)"
-say "Xcode: $(xcodebuild -version | tr '\n' ' '); iOS SDK $IOS_SDK"
-# A 27.1 job must really build against the iOS 27.1 SDK (Mac Team Attack's review): anything else stops here.
-if [ -n "${DEVELOPER_DIR:-}" ] && [ "$IOS_SDK" != "27.1" ]; then echo "Xcode 27.1 reports iOS SDK $IOS_SDK, not 27.1" >&2; exit 2; fi
+XCODE_VERSION="$(xcodebuild -version | tr '\n' ' ')"
+say "Xcode: $XCODE_VERSION; iOS SDK $IOS_SDK"
+# A 27.1 job must really be Xcode 27.1 (27A9275) building against the iOS 27.1 SDK (Mac Team Attack's review), so no
+# other 27.1.x slips in: anything else stops here.
+if [ -n "${DEVELOPER_DIR:-}" ]; then
+  [ "$IOS_SDK" = "27.1" ] || { echo "Xcode 27.1 reports iOS SDK $IOS_SDK, not 27.1" >&2; exit 2; }
+  case "$XCODE_VERSION" in *"Build version 27A9275"*) ;; *) echo "not Xcode 27.1 build 27A9275: $XCODE_VERSION" >&2; exit 2 ;; esac
+fi
 
 mkdir -p "$JOB"/{secrets,private_keys,kc,home,tmp,logs,out,cache}
 KC="$JOB/kc/dandelist-build.keychain-db"
