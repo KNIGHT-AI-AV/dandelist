@@ -1,6 +1,9 @@
 /**
- * What leaves the web build for PostHog, made safe (review of #139): sign-in pages send nothing, and every address is
- * cut to its origin and path, so a sign-in link's one-time ticket or any other query never reaches PostHog.
+ * What leaves the web build for PostHog, made safe (review of #139): sign-in pages send nothing, and every address the
+ * SDK attaches, wherever it attaches it, is cut to its origin and path, so a sign-in link's one-time ticket or any other
+ * query never reaches PostHog. That covers event properties, the person properties the SDK sets once (initial and
+ * session-entry addresses it keeps in its own storage), and addresses inside replay data (page records and navigation
+ * events).
  */
 
 /** Sign-in pages carry one-time tickets: nothing is captured or recorded while one is open. */
@@ -17,22 +20,38 @@ export function bareUrl(value: unknown): unknown {
   }
 }
 
-const URL_KEYS = ["$current_url", "$referrer", "$initial_referrer", "$initial_current_url", "$prev_pageview_url", "url", "href"];
+/** Any key that can hold an address: $current_url, $referrer, $initial_*, $session_entry_*, href, url and the like. */
+const ADDRESS_KEY = /url|referrer|href/i;
+/** Deep enough for replay data (a snapshot's data, its payload, its node attributes), shallow enough to stay cheap. */
+const MAX_DEPTH = 8;
+
+/** Cuts every address under `value`, in place, to its origin and path. */
+function scrubDeep(value: unknown, depth = 0): void {
+  if (!value || typeof value !== "object" || depth > MAX_DEPTH) return;
+  if (Array.isArray(value)) {
+    for (const item of value) scrubDeep(item, depth + 1);
+    return;
+  }
+  const obj = value as Record<string, unknown>;
+  for (const key of Object.keys(obj)) {
+    const v = obj[key];
+    if (typeof v === "string") {
+      if (ADDRESS_KEY.test(key)) obj[key] = bareUrl(v);
+    } else if (v && typeof v === "object") scrubDeep(v, depth + 1);
+  }
+}
+
+/** The capture result the SDK hands before_send: properties, plus person properties it may set at the top level. */
+type Captured = { properties?: Record<string, unknown>; $set?: unknown; $set_once?: unknown };
 
 /** Every event, replays included, on its way out: dropped on the sign-in pages, and every address cut to its path. */
-export function scrub<T extends { properties?: Record<string, unknown> } | null>(event: T): T | null {
+export function scrub<T extends Captured | null>(event: T): T | null {
   if (!event) return event;
   const props = event.properties ?? {};
   const path = typeof props.$pathname === "string" ? props.$pathname : typeof window !== "undefined" ? window.location.pathname : "";
   if (privatePath(path)) return null;
-  for (const key of URL_KEYS) if (key in props) props[key] = bareUrl(props[key]);
-  for (const key of Object.keys(props)) if (key.startsWith("$set") && props[key] && typeof props[key] === "object") for (const k of URL_KEYS) if (k in (props[key] as Record<string, unknown>)) (props[key] as Record<string, unknown>)[k] = bareUrl((props[key] as Record<string, unknown>)[k]);
-  // A replay's own page records (rrweb's meta events, type 4) carry the address too.
-  const snaps = props.$snapshot_data;
-  if (Array.isArray(snaps)) for (const snap of snaps) if (snap && typeof snap === "object" && (snap as { type?: number }).type === 4) {
-    const data = (snap as { data?: { href?: unknown } }).data;
-    if (data && "href" in data) data.href = bareUrl(data.href);
-  }
+  scrubDeep(props);
+  scrubDeep(event.$set);
+  scrubDeep(event.$set_once);
   return event;
 }
-
