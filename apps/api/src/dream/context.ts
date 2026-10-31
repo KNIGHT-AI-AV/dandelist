@@ -3,6 +3,8 @@ import type { Meta } from "../agent/agent";
 import type { Fetcher } from "../agent/tools";
 import type { Arrangeable } from "../arrange";
 import type { Db } from "../db";
+import type { JobView } from "./jobs";
+import type { DreamState, TranscriptEntry } from "./types";
 
 /** Per-turn ceilings, so one message can't run up an unbounded bill or keep a phone waiting for minutes. */
 export const MAX_TOOL_CALLS_PER_TURN = 10;
@@ -82,6 +84,14 @@ export interface DreamCtx {
   name?: string;
   /** The person's list in its order (wishes.ts listWishes), so the Dandy can suggest changes to it. Theirs alone. */
   list?: Arrangeable[];
+  /**
+   * Starts slow work as a job beside the conversation (jobs.ts) and returns at once; the job works on a copy of `t`
+   * and `state` as they are now and folds what it made back in when it ends. Missing (tests, scripts): the work runs
+   * inline, as part of the turn.
+   */
+  spawn?: (t: TranscriptEntry[], state: DreamState, lane: string, label: string, work: (ctx: DreamCtx, t: TranscriptEntry[], state: DreamState) => Promise<unknown>) => string;
+  /** The jobs running in this conversation now, for the concierge to know about and talk over. */
+  running?: () => JobView[];
 }
 
 /** Strict JSON schema helpers in the shape Meta's Responses API takes. */

@@ -105,9 +105,12 @@ export type DreamAction =
   | { type: "region"; home: NonNullable<LifeContext["home"]> };
 
 export type DreamEvent =
+  /** First on every turn: the conversation it belongs to, so an app that loses the stream can catch up on it. */
+  | { type: "start"; sessionId: string }
   | { type: "text"; text: string }
   | { type: "step"; id: string; state: "running" | "done"; text: string }
   | { type: "widget"; widget: Widget }
   | { type: "life"; life: LifeContext }
   | { type: "error"; message: string }
-  | { type: "done"; sessionId: string };
+  /** The turn or the last job ended. `seq` is this event's place in the session's event log; `running` counts jobs still working. */
+  | { type: "done"; sessionId: string; seq?: number; running?: number };

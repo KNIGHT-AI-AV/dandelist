@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
 import { agentRoutes, type AgentDeps } from "./agent/routes";
+import { Alive } from "./alive";
 import { serverError } from "./analytics";
 import { authRoutes, requireAuth, type AuthVars } from "./auth";
 import { dreamRoutes } from "./dream/routes";
@@ -22,6 +23,9 @@ export interface AppDeps extends AgentDeps {
 
 export function createApp(deps: AppDeps) {
   const app = new Hono<{ Variables: AuthVars }>();
+  // Work that outlives its request keeps the instance awake through one request to itself (alive.ts).
+  const alive = deps.alive ?? new Alive({ origin: deps.oauth?.apiUrl });
+  deps = { ...deps, alive };
   const { db } = deps;
 
   app.use("*", cors({ origin: deps.webOrigins, allowHeaders: ["Authorization", "Content-Type"], allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE"] }));
@@ -33,6 +37,11 @@ export function createApp(deps: AppDeps) {
     serverError(err, (c.get("userId") as string | undefined) ?? null, { path: c.req.path, method: c.req.method });
     return c.json({ error: "Something went wrong." }, 500);
   });
+  app.use("*", async (c, next) => {
+    alive.noteOrigin(new URL(c.req.url).origin);
+    await next();
+  });
+  app.get("/internal/hold", async (c) => c.body(null, await alive.wait(c.req.header("x-hold"))));
 
   app.get("/healthz", async (c) => {
     await db.query("select 1");

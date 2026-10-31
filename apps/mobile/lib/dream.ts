@@ -68,7 +68,7 @@ export async function dreamTurn(apiStream: ApiStream, sessionId: string | null, 
       buffer = buffer.slice(cut + 2);
       if (!data) continue;
       const e = JSON.parse(data) as DreamEvent;
-      if (e.type === "done") session = e.sessionId;
+      if (e.type === "done" || e.type === "start") session = e.sessionId;
       onEvent(e);
     }
   }
@@ -152,11 +152,22 @@ export interface SessionEntry {
   widget?: { kind: Widget["kind"]; id: string };
 }
 
-/** A saved conversation (GET /dream/sessions/:id): its transcript and the widgets it still holds. */
+/** A piece of the Dandy's work still running on the server (api dream/jobs.ts); a turn in flight has no label. */
+export interface RunningJob {
+  id: string;
+  label: string;
+}
+
+/**
+ * A saved conversation (GET /dream/sessions/:id): its transcript and the widgets it still holds, what is still running
+ * and the event log's number to follow it from.
+ */
 export interface SessionDetail {
   id: string;
   transcript: SessionEntry[];
   widgets: Widget[];
+  running?: RunningJob[];
+  seq?: number;
 }
 
 /** A conversation touched within this long is picked up again when the chat opens; an older one stays in history. */
@@ -188,6 +199,19 @@ export async function loadSession(api: Api, id: string): Promise<SessionDetail> 
   if (!res?.ok) throw await failure(res, "Couldn't open that conversation.");
   return (await res.json()) as SessionDetail;
 }
+
+/**
+ * What a conversation's turns and background jobs showed after `after` (GET /dream/sessions/:id/events). The server
+ * holds the request up to 20 s for something new while work runs. `gap`: some were missed, so load the session again.
+ */
+export async function sessionEvents(api: Api, id: string, after: number, signal?: AbortSignal): Promise<{ events: { seq: number; event: DreamEvent }[]; seq: number; gap: boolean; running: RunningJob[] }> {
+  const res = await api(`/dream/sessions/${encodeURIComponent(id)}/events?after=${after}`, { signal });
+  if (!res.ok) throw await failure(res, "Couldn't follow that conversation.");
+  return (await res.json()) as { events: { seq: number; event: DreamEvent }[]; seq: number; gap: boolean; running: RunningJob[] };
+}
+
+/** A request that died with the connection (the app went to the background, the phone changed networks). */
+export const lostConnection = (e: unknown): boolean => /fetch failed|network|connection|timed out|socket|offline/i.test(e instanceof Error ? e.message : String(e ?? ""));
 
 /** Deletes a conversation for good. One that is already gone counts as deleted. */
 export async function deleteSession(api: Api, id: string): Promise<void> {

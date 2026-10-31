@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Text, View } from "react-native";
 import { getRun, retakePhoto, startHunt, type Answer, type Draft, type FoundPhoto, type PriceOption, type Run, type Step, type WishQuestion, type WorthCard } from "../../lib/agent";
 import { useAuth } from "../../lib/auth";
+import { getSecret, setSecret } from "../../lib/storage";
 import { useMoney } from "../../lib/currency";
 import { useDandy } from "../../lib/dandy";
 import { haptic } from "../../lib/motion";
@@ -54,6 +55,17 @@ interface Hunt {
 // card the hunt of an earlier chat's.
 const hunts = new Map<string, Hunt>();
 const POLL_MS = 1500;
+/**
+ * The hunt a card started is remembered across app restarts for a day, so a card that comes back follows its own hunt
+ * (which ran on with the app closed) instead of starting another that lands at another price (owner, 2026-10-31:
+ * "Not to mention different pricing").
+ */
+const HUNT_KEEP_MS = 24 * 60 * 60 * 1000;
+function huntKey(id: string): string {
+  let h = 5381;
+  for (let i = 0; i < id.length; i++) h = ((h * 33) ^ id.charCodeAt(i)) >>> 0;
+  return `dandelist.hunt.${h.toString(36)}`;
+}
 const fresh = (draft: Draft | null = null, price = false): Hunt => ({ run: null, draft, edits: {}, error: null, ...(price ? { price } : {}) });
 
 /** What the Dandy is doing right now, in one short line: the server's own line for the newest step. */
@@ -117,16 +129,32 @@ export function HuntCard({ id: item, text, watched = true, onPhase, onShowOnList
       try {
         const run = await startHunt(api, wish);
         keep({ ...fresh(draft, price), run });
+        void setSecret(huntKey(id), JSON.stringify({ run: run.id, at: Date.now() })).catch(() => undefined);
       } catch (e) {
         keep({ ...fresh(draft, price), error: sorry(e) });
       }
     },
-    [api, keep],
+    [api, keep, id],
   );
 
-  // Starts the moment the item appears, unless this item already has a hunt.
+  // Starts the moment the item appears, unless this item already has a hunt: in this session, or remembered from before
+  // the app closed.
   useEffect(() => {
-    if (!hunts.has(id)) void start({ text });
+    if (hunts.has(id)) return;
+    let gone = false;
+    void (async () => {
+      try {
+        const saved = JSON.parse((await getSecret(huntKey(id))) ?? "null") as { run?: string; at?: number } | null;
+        if (saved?.run && Date.now() - (saved.at ?? 0) < HUNT_KEEP_MS) {
+          const run = await getRun(api, saved.run);
+          if (!gone && !hunts.has(id)) return keep({ ...fresh(), run });
+        }
+      } catch {
+        // Nothing remembered, or that hunt is gone: hunt afresh.
+      }
+      if (!gone && !hunts.has(id)) void start({ text });
+    })();
+    return () => void (gone = true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 

@@ -25,6 +25,8 @@ import {
   askingWidget,
   dreamTurn,
   feedFromSession,
+  lostConnection,
+  sessionEvents,
   idleTooLong,
   loadSession,
   shouldResume,
@@ -206,6 +208,68 @@ export function ChatPage() {
     [push],
   );
 
+  // ---- the Dandy's background work (api dream/jobs.ts)
+
+  // Slow work (a car or home search, a builder, what a pick costs to keep) runs on the server beside the conversation
+  // and keeps going with the app closed (owner, 2026-10-31: "users need to be able to leave the app completely and it
+  // still works"). The chat follows its event log while it runs, and catches up when the app comes back.
+  const following = useRef<AbortController | null>(null);
+  const followJobs = useCallback(
+    (sid: string, after: number) => {
+      following.current?.abort();
+      const ctrl = new AbortController();
+      following.current = ctrl;
+      const mine = gen.current;
+      void (async () => {
+        let seq = after;
+        let misses = 0;
+        while (!ctrl.signal.aborted && gen.current === mine && session.current === sid) {
+          try {
+            const r = await sessionEvents(auth.api, sid, seq, ctrl.signal);
+            misses = 0;
+            if (r.gap) {
+              // Missed some (or the server restarted): the saved conversation is the truth.
+              void recoverRef.current(sid);
+              return;
+            }
+            for (const { seq: n, event } of r.events) {
+              seq = n;
+              if (gen.current === mine && session.current === sid) handle(event);
+            }
+            if (!r.running.length) break;
+          } catch {
+            if (ctrl.signal.aborted) return;
+            // A dropped connection is tried again, more slowly each time; coming back to the app starts afresh.
+            misses++;
+            await new Promise((r) => setTimeout(r, Math.min(15_000, 1_000 * 2 ** misses)));
+          }
+        }
+        if (following.current === ctrl) following.current = null;
+      })();
+    },
+    [auth.api, handle],
+  );
+
+  /** Shows the conversation as the server has it, with what's still running, and follows it until that's done. */
+  const recover = useCallback(
+    async (sid: string) => {
+      const mine = gen.current;
+      try {
+        const s = await loadSession(auth.api, sid);
+        if (gen.current !== mine || session.current !== sid) return;
+        const rows: FeedItem[] = (s.running ?? []).filter((j) => j.label).map((j) => ({ id: `job_${j.id}`, kind: "step", text: j.label, state: "running" }));
+        instant.current = true;
+        setFeed([...feedFromSession(s, nextId), ...rows]);
+        if (s.running?.length) followJobs(sid, s.seq ?? 0);
+      } catch {
+        // The next return to the app tries again.
+      }
+    },
+    [auth.api, followJobs],
+  );
+  const recoverRef = useRef(recover);
+  recoverRef.current = recover;
+
   // ---- turns: one at a time, in the order they were asked for
 
   const pump = useCallback(async () => {
@@ -230,7 +294,14 @@ export function ChatPage() {
     const onEvent = (e: DreamEvent) => {
       if (gen.current !== mine) return;
       lastActive.current = Date.now();
+      // Known from the first event, so a stream that breaks can still be caught up on.
+      if (e.type === "start" && session.current !== e.sessionId) setSession(e.sessionId);
       if (e.type === "step" && e.state === "running" && task) updateTask(task, e.text);
+      // The turn is done but its jobs work on: follow them from here.
+      if (e.type === "done" && e.running) {
+        setSession(e.sessionId);
+        followJobs(e.sessionId, e.seq ?? 0);
+      }
       handle(e);
     };
     try {
@@ -238,8 +309,13 @@ export function ChatPage() {
       if (gen.current === mine && sid) setSession(sid);
     } catch (e) {
       if (gen.current === mine && !ctrl.signal.aborted) {
-        haptic.error();
-        push({ id: nextId(), kind: "agent", text: friendly(e, "I couldn't answer just now. Try again."), fresh: true });
+        const sid = session.current;
+        // The server finishes the turn with the phone gone: catch up on it instead of asking for it again.
+        if (sid && lostConnection(e)) void recover(sid);
+        else {
+          haptic.error();
+          push({ id: nextId(), kind: "agent", text: friendly(e, "I couldn't answer just now. Try again."), fresh: true });
+        }
       }
     } finally {
       if (late) clearTimeout(late);
@@ -247,8 +323,10 @@ export function ChatPage() {
       if (running.current === ctrl) running.current = null;
       if (gen.current === mine) {
         lastActive.current = Date.now();
-        // A step left running by a turn that stopped part way settles, so nothing spins forever.
-        setFeed((f) => (f.some((x) => x.kind === "step" && x.state === "running") ? f.map((x) => (x.kind === "step" && x.state === "running" ? { ...x, state: "done" } : x)) : f));
+        // A step left running by a turn that stopped part way settles, so nothing spins forever; a background job's row
+        // runs on until its own end comes in.
+        const stale = (x: FeedItem) => x.kind === "step" && x.state === "running" && !x.id.startsWith("job_");
+        setFeed((f) => (f.some(stale) ? f.map((x) => (stale(x) && x.kind === "step" ? { ...x, state: "done" } : x)) : f));
         if (!queue.current.length) {
           busyRef.current = false;
           setBusy(false);
@@ -258,7 +336,7 @@ export function ChatPage() {
         void pump();
       }
     }
-  }, [auth.apiStream, handle, push, setSession, refreshHistory]);
+  }, [auth.apiStream, handle, push, setSession, refreshHistory, followJobs, recover]);
 
   const send = useCallback(
     (action: DreamAction, echo?: string) => {
@@ -303,6 +381,8 @@ export function ChatPage() {
     queue.current = [];
     running.current?.abort();
     running.current = null;
+    following.current?.abort();
+    following.current = null;
     busyRef.current = false;
     setBusy(false);
     setQuiet(false);
@@ -334,8 +414,10 @@ export function ChatPage() {
         const s = await loadSession(auth.api, id);
         if (gen.current !== mine) return;
         instant.current = true;
-        setFeed(feedFromSession(s, nextId));
+        const rows: FeedItem[] = (s.running ?? []).filter((j) => j.label).map((j) => ({ id: `job_${j.id}`, kind: "step", text: j.label, state: "running" }));
+        setFeed([...feedFromSession(s, nextId), ...rows]);
         setSession(s.id);
+        if (s.running?.length) followJobs(s.id, s.seq ?? 0);
       } catch (e) {
         if (gen.current !== mine) return;
         if (!opts.quiet) push({ id: nextId(), kind: "agent", text: friendly(e, "I couldn't open that conversation. Try again."), fresh: true });
@@ -344,7 +426,7 @@ export function ChatPage() {
         lastActive.current = Date.now();
       }
     },
-    [auth.api, leave, push, setSession],
+    [auth.api, leave, push, setSession, followJobs],
   );
 
   startNewRef.current = () => startNew();
@@ -374,10 +456,16 @@ export function ChatPage() {
   useEffect(() => {
     const back = () => {
       const now = Date.now();
-      if (!ready || busyRef.current || !idleTooLong(lastActive.current, now)) return;
-      lastActive.current = now;
-      void refreshHistory();
-      startNew();
+      if (!ready) return;
+      if (!busyRef.current && idleTooLong(lastActive.current, now)) {
+        lastActive.current = now;
+        void refreshHistory();
+        startNew();
+        return;
+      }
+      // What the Dandy did while the app was away: replies, cards and jobs that finished meanwhile.
+      const sid = session.current;
+      if (sid && !running.current) void recover(sid);
     };
     if (Platform.OS === "web") {
       if (typeof document === "undefined") return;
@@ -387,7 +475,7 @@ export function ChatPage() {
     }
     const sub = AppState.addEventListener("change", (s) => s === "active" && back());
     return () => sub.remove();
-  }, [ready, refreshHistory, startNew]);
+  }, [ready, refreshHistory, startNew, recover]);
 
   // History belongs to this page: turning away closes it and sends any delete still waiting.
   useEffect(() => {
