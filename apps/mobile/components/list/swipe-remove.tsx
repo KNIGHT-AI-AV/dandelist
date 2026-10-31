@@ -20,7 +20,7 @@ const RETURN_AFTER_MS = 700;
 type A11yChild = ReactElement<{ accessibilityActions?: readonly AccessibilityActionInfo[]; onAccessibilityAction?: (e: AccessibilityActionEvent) => void }>;
 
 /** "#B4402C" as "180, 64, 44", for a tint of the danger colour. */
-function rgbOf(hex: string): string {
+export function rgbOf(hex: string): string {
   const h = hex.replace("#", "");
   return [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16)).join(", ");
 }

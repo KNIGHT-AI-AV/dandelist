@@ -86,6 +86,9 @@ function Card({ w, index, g, scrollY, listTop, focus, width, fresh, onOpen, onQu
   const x = useRef(new Animated.Value(0)).current;
   const crossed = useRef(false);
   const startedAt = useRef(0);
+  // A card still here a moment after it left was kept (removing asks first) or the removal failed: it comes back.
+  const comeBack = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(comeBack.current), []);
   const pages = usePageSwipe();
   const latest = useRef({ w, onRemove, pages });
   latest.current = { w, onRemove, pages };
@@ -112,7 +115,10 @@ function Card({ w, index, g, scrollY, listTop, focus, width, fresh, onOpen, onQu
           const { pages: ring } = latest.current;
           const outcome = swipeOutcome({ dx: gs.dx, vx: gs.vx, width, removeAt: REMOVE_AT, ms: Date.now() - startedAt.current, pages: !!ring });
           if (outcome === "remove") {
-            Animated.timing(x, { toValue: Math.sign(gs.dx || gs.vx) * width * 1.1, duration: 200, easing: ease.out, useNativeDriver: native }).start(() => latest.current.onRemove(latest.current.w));
+            Animated.timing(x, { toValue: Math.sign(gs.dx || gs.vx) * width * 1.1, duration: 200, easing: ease.out, useNativeDriver: native }).start(() => {
+              latest.current.onRemove(latest.current.w);
+              comeBack.current = setTimeout(() => Animated.spring(x, { toValue: 0, ...spring.snap, useNativeDriver: native }).start(), 700);
+            });
             return;
           }
           Animated.spring(x, { toValue: 0, ...spring.snap, useNativeDriver: native }).start();
