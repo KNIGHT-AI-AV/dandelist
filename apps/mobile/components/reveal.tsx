@@ -29,13 +29,13 @@ export function GlassReveal({ uri, standby, stage, treatment = "pane", finish = 
   const blur = treatment === "swirl" ? 2.5 * k : treatment === "pane" ? 12 * k : treatment === "film" ? 14 * k : 18 * k;
   const bend = treatment === "swirl" ? 24 * k : treatment === "frost" ? 10 * k : 0;
   const drift = 24 * Math.sin(time * 0.15);
-  const picture = (src: string, opacity: number, events?: { onLoad(): void; onError(): void }) =>
+  const picture = (src: string, opacity: number, events?: { onLoad(): void; onError(): void }, transition = "opacity 300ms cubic-bezier(0.23,1,0.32,1)") =>
     h("img", {
       src,
       alt: "",
       draggable: false,
       ...events,
-      style: { position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: focus ? `${focus.x * 100}% ${focus.y * 100}%` : "50% 50%", opacity, transition: "opacity 300ms cubic-bezier(0.23,1,0.32,1)" },
+      style: { position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: focus ? `${focus.x * 100}% ${focus.y * 100}%` : "50% 50%", opacity, transition },
     });
 
   return (
@@ -63,7 +63,10 @@ export function GlassReveal({ uri, standby, stage, treatment = "pane", finish = 
             transform: `scale(${1 + 0.04 * k})`,
           },
         },
-        picture(asset(standby), ready ? 0 : 1),
+        // The standby stays fully drawn beneath while the picture fades in over it, and goes only once the fade is done:
+        // fading both at once let the dark page show through halfway (owner, 2026-10-31: the screen blacking out on
+        // the image). Gone after, so a picture with clear parts (a car render) never shows the standby through them.
+        picture(asset(standby), ready ? 0 : 1, undefined, ready ? "opacity 0ms linear 320ms" : "none"),
         uri && !pic.failed ? picture(uri, ready ? 1 : 0, { onLoad: pic.onLoad, onError: pic.onError }) : null,
       )}
       {treatment === "swirl" && k > 0.01

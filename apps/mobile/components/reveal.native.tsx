@@ -107,16 +107,43 @@ export function GlassReveal({ uri, standby, stage, treatment = "pane", finish = 
   const picture = ready ? found : waiting;
   const onLayout = (e: LayoutChangeEvent) => setSize({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height });
   const clear = clarity >= 0.999;
+  // The plain picture is drawn beneath the glass from the moment it arrives, and the glass steps aside only once that
+  // picture is on screen. Swapping the glass for an image that then faded in from nothing showed the dark page for a
+  // beat as the glass cleared (owner, 2026-10-31: "the screen is still blacking out on the image after like the first
+  // second").
+  const shown = ready ? uri! : "standby";
+  const [drawn, setDrawn] = useState<string | null>(null);
+  const plain = clear || !effect || ready;
+  const glass = !!effect && !!picture && size.width > 0 && !(clear && drawn === shown);
+  // The glass crops like the plain picture beneath it (cover, about the same focus), so nothing shifts as it steps aside.
+  const rect = (() => {
+    if (!picture || !size.width) return { x: 0, y: 0, width: size.width, height: size.height };
+    const scale = Math.max(size.width / picture.width(), size.height / picture.height());
+    const width = picture.width() * scale;
+    const height = picture.height() * scale;
+    return { x: (size.width - width) * (focus?.x ?? 0.5), y: (size.height - height) * (focus?.y ?? 0.5), width, height };
+  })();
 
   return (
     <View style={[{ overflow: "hidden", backgroundColor: p.bg }, style]} onLayout={onLayout}>
-      {clear || !effect ? (
-        <Image source={ready ? { uri: uri! } : standby} style={StyleSheet.absoluteFill} contentFit="cover" contentPosition={focus ? { left: `${focus.x * 100}%`, top: `${focus.y * 100}%` } : "center"} blurRadius={clear ? 0 : 24} transition={{ duration: 300, effect: "cross-dissolve" }} />
-      ) : picture && size.width > 0 ? (
+      {plain ? (
+        <Image
+          source={ready ? { uri: uri! } : standby}
+          style={StyleSheet.absoluteFill}
+          contentFit="cover"
+          contentPosition={focus ? { left: `${focus.x * 100}%`, top: `${focus.y * 100}%` } : "center"}
+          blurRadius={effect || clear ? 0 : 24}
+          // Beneath the glass it must be fully drawn the moment the glass leaves, so it never fades in; without the glass
+          // (no shader on this device) it still cross-dissolves from the standby.
+          transition={effect ? 0 : { duration: 300, effect: "cross-dissolve" }}
+          onDisplay={() => setDrawn(shown)}
+        />
+      ) : null}
+      {glass ? (
         <Canvas style={StyleSheet.absoluteFill}>
           <Fill>
             <Shader source={effect} uniforms={{ size: [size.width, size.height], time, clarity, mode: MODE[treatment] }}>
-              <ImageShader image={picture} fit="cover" rect={{ x: 0, y: 0, width: size.width, height: size.height }} tx="clamp" ty="clamp" />
+              <ImageShader image={picture} fit="fill" rect={rect} tx="clamp" ty="clamp" />
             </Shader>
           </Fill>
         </Canvas>
