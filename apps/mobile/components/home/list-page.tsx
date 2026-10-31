@@ -17,7 +17,8 @@ import { useWishes, type Wish } from "../../lib/wishes";
 import { countLine, counted, worthOf } from "../../lib/worth";
 import { rememberCard, type Rect } from "../../lib/zoom";
 import { DandyAvatar } from "../dandy-avatar";
-import { dockRoom } from "../inputs";
+import { dockRoom, useKeyboardLift } from "../inputs";
+import { DOCK_KEYBOARD_GAP, DOCK_REST_GAP } from "../inputs/tokens";
 import { ActionSheet, SheetRow } from "../list/action-sheet";
 import { delayFor } from "../list/choreo";
 import { Presence, Rise } from "../list/presence";
@@ -73,12 +74,17 @@ const errorText = (e: unknown, fallback: string) => (e instanceof Error ? e.mess
  * The field at the bottom has focus on the list: the list steps back and the Dandy comes forward with a few ideas,
  * so the page turns into the Dandy's own space while the words are typed (owner, recording 03).
  */
-function FocusVeil({ on, ideas, onIdea }: { on: boolean; ideas: string[]; onIdea(text: string): void }) {
+function FocusVeil({ on, ideas, dock, onIdea }: { on: boolean; ideas: string[]; /** The composer's own height. */ dock: number; onIdea(text: string): void }) {
   const p = usePalette();
   const t = useType();
   const dandy = useDandy();
   const reduced = useReducedMotion();
+  const insets = useSafeAreaInsets();
   const v = useRef(new Animated.Value(0)).current;
+  // The ideas sit just above the composer and ride the keyboard with it, on the keyboard's own curve. Pinned at a
+  // share of the screen, they slid behind the composer once an iPhone keyboard lifted it (owner, 2026-10-31).
+  const rest = insets.bottom + DOCK_REST_GAP;
+  const lift = useKeyboardLift(rest, DOCK_KEYBOARD_GAP);
   // Stays touchable while it fades out, so a tap on an idea that blurs the field still lands.
   const [live, setLive] = useState(false);
   useEffect(() => {
@@ -89,7 +95,7 @@ function FocusVeil({ on, ideas, onIdea }: { on: boolean; ideas: string[]; onIdea
   return (
     <Animated.View pointerEvents={on || live ? "auto" : "none"} style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, opacity: v }}>
       <Pressable accessibilityLabel="Close" onPress={Keyboard.dismiss} style={{ flex: 1, backgroundColor: `rgba(${p.bgRgb}, 0.86)` }} />
-      <Animated.View pointerEvents="box-none" style={{ position: "absolute", left: 0, right: 0, bottom: "34%", alignItems: "center", gap: layout.stack.base, paddingHorizontal: layout.gutter(400), transform: [{ translateY: v.interpolate({ inputRange: [0, 1], outputRange: [16, 0] }) }] }}>
+      <Animated.View pointerEvents="box-none" style={{ position: "absolute", left: 0, right: 0, bottom: rest + dock + space[24], alignItems: "center", gap: layout.stack.base, paddingHorizontal: layout.gutter(400), transform: [{ translateY: Animated.add(lift, v.interpolate({ inputRange: [0, 1], outputRange: [16, 0] })) }] }}>
         <DandyAvatar dandy={dandy} size={44} />
         <Text style={[t.title2, { color: p.ink, textAlign: "center", fontFamily: fonts.titleItalic }]}>{`What should ${dandy.name} find for you?`}</Text>
         <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: space[8] }}>
@@ -256,7 +262,7 @@ export function ListPage() {
         </View>
       </Animated.ScrollView>
 
-      <FocusVeil on={home.focused} ideas={suggestions.items} onIdea={(i) => home.ask(i)} />
+      <FocusVeil on={home.focused} ideas={suggestions.items} dock={home.dock || layout.control.primary} onIdea={(i) => home.ask(i)} />
 
       {quick && quickWish ? (
         <ActionSheet
