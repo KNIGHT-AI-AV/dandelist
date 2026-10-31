@@ -6,7 +6,7 @@ import { useMoney } from "../../lib/currency";
 import { useDandy } from "../../lib/dandy";
 import { usePress } from "../../lib/motion";
 import { QUOTES } from "../../lib/quotes";
-import { adoptAmend, adoptRecheck, amendWish, dismissRecheck, recheckWish, useRechecks, type Recheck } from "../../lib/rechecks";
+import { adoptAmend, adoptRecheck, amendWish, dismissRecheck, recheckWish, useAccount, useRechecks, type Recheck } from "../../lib/rechecks";
 import { fonts, layout, radius, space, type, usePalette } from "../../lib/theme";
 import { useWishes } from "../../lib/wishes";
 import { hostOf } from "../../lib/words";
@@ -118,7 +118,7 @@ function Outcome({ r }: { r: Recheck }) {
 export function DandyArea({ onOpen }: { onOpen(): void }) {
   const p = usePalette();
   const dandy = useDandy();
-  const tasks = useTasks();
+  const tasks = useTasks(useAccount());
   const checks = useRechecks();
   const press = usePress(0.985);
   const [turn, setTurn] = useState(0);

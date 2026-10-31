@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from "react";
+import { useMemo, useSyncExternalStore } from "react";
 
 /**
  * What the Dandy is doing right now, for the list's Dandy area (owner, recording 03: "live tasks the agent is doing,
@@ -10,6 +10,8 @@ export interface Task {
   /** Present tense, a few words: "Checking the price of the Leica Q3". */
   text: string;
   startedAt: number;
+  /** The account whose things the line names (a saved wish's name, say): no one else sees it. */
+  account?: string;
 }
 
 let tasks: readonly Task[] = [];
@@ -17,9 +19,9 @@ let seq = 0;
 const listeners = new Set<() => void>();
 const emit = () => listeners.forEach((l) => l());
 
-export function startTask(text: string): string {
+export function startTask(text: string, account?: string): string {
   const id = `t${++seq}`;
-  tasks = [...tasks, { id, text, startedAt: Date.now() }];
+  tasks = [...tasks, { id, text, startedAt: Date.now(), ...(account ? { account } : {}) }];
   emit();
   return id;
 }
@@ -51,8 +53,13 @@ const subscribe = (l: () => void) => {
   return () => void listeners.delete(l);
 };
 
-export function useTasks(): readonly Task[] {
-  return useSyncExternalStore(subscribe, () => tasks, () => tasks);
+/**
+ * The tasks on screen. Given the account signed in now (null when nobody is), a line naming another account's things
+ * is left out from the first render after a sign-in change, before its work has stopped and ended it (review of #131).
+ */
+export function useTasks(account?: string | null): readonly Task[] {
+  const all = useSyncExternalStore(subscribe, () => tasks, () => tasks);
+  return useMemo(() => (account === undefined ? all : all.filter((t) => t.account === undefined || t.account === account)), [all, account]);
 }
 
 /** For tests. */
