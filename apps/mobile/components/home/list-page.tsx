@@ -1,11 +1,11 @@
-import { recurringBreakdown, upfrontCashCents } from "@dandelist/cost";
+import { upfrontCashCents } from "@dandelist/cost";
 import { router } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Animated, Keyboard, Pressable, RefreshControl, Text, View, useWindowDimensions, type ScrollView } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { adoptWelcome, priceFirstWish } from "../../lib/adopt";
 import { useAuth } from "../../lib/auth";
-import { comfortableIncome } from "../../lib/comfort";
+import { comfortableIncome, needOf, wishEntry } from "../../lib/comfort";
 import { useMoney } from "../../lib/currency";
 import { useDandy } from "../../lib/dandy";
 import { ease, haptic, native, useReducedMotion } from "../../lib/motion";
@@ -172,10 +172,9 @@ export function ListPage() {
   };
 
   // A priceless wish is on the list but in no sum; the count beside the total says how many (lib/worth.ts).
-  const items = counted(visible).map((w) => w.item);
-  const total = upfrontCashCents(items);
-  const keepPerYear = recurringBreakdown(items).perMonth * 12;
-  const income = comfortableIncome(total, keepPerYear);
+  const total = upfrontCashCents(counted(visible).map((w) => w.item));
+  // Each wish needs the income its kind of purchase takes comfortably, its running costs included (lib/comfort.ts).
+  const income = useMemo(() => comfortableIncome(needOf(visible.map(wishEntry))), [visible]);
   const count = countLine(visible);
   const loading = (status === "loading" || status === "idle") && wishes.length === 0;
 

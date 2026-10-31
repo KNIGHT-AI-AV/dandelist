@@ -2,14 +2,15 @@ import { PGlite } from "@electric-sql/pglite";
 import { beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../src/app";
 import { migrate, type Db } from "../src/db";
-import { DESCRIBES_PER_USER_PER_DAY, SEARCHES_PER_USER_PER_DAY, tidyAbout, tidyTags } from "../src/describe";
+import { DESCRIBES_PER_USER_PER_DAY, SEARCHES_PER_USER_PER_DAY, clampShare, tidyAbout, tidyComfort, tidyTags } from "../src/describe";
+import { writeLife } from "../src/dream/life";
 
 // ---------------------------------------------------------------- fixtures: a fake Meta
 
 type Body = Record<string, any>;
 let metaCalls: Body[];
 /** What the fake model answers to a describe call, given the wishes it was sent. */
-let describeReply: (wishes: { ref: string; name: string }[]) => unknown;
+let describeReply: (wishes: { ref: string; name: string; tier: string }[]) => unknown;
 /** What the fake model answers to a search call, given the wishes it was sent. */
 let searchReply: (q: string, wishes: { ref: string; name: string }[]) => unknown;
 let metaStatus: number;
@@ -23,7 +24,7 @@ const fakeMeta = (async (_url: string, init: RequestInit) => {
   if (metaStatus !== 200) return new Response("busy", { status: metaStatus });
   const format = body.text?.format?.name;
   const input = String(body.input);
-  if (format === "wish_about") return reply(describeReply(JSON.parse(input.slice(input.indexOf("\n") + 1))));
+  if (format === "wish_about") return reply(describeReply(JSON.parse(input.slice(input.indexOf("Wishes:\n") + 8))));
   if (format === "wish_matches") {
     const q = JSON.parse(input.slice("Search: ".length, input.indexOf("\n"))) as string;
     const wishes = input.slice(input.indexOf("Wishes:\n") + 8).split("\n").map((l) => JSON.parse(l));
@@ -65,6 +66,7 @@ beforeEach(async () => {
       ref: w.ref,
       about: `${w.name} — something they want.`,
       tags: ["Travel", "travel", "  Trips!  ", "a", "b", "c", "d"],
+      comfort: { category: "thing", financing: "cash", share: 0.08, why: "A thing — about a month's pay." },
     })),
   });
   searchReply = () => ({ refs: [] });
@@ -84,13 +86,16 @@ async function signIn(email: string) {
   return ((await res.json()) as { accessToken: string }).accessToken;
 }
 
-async function addWish(token: string, name: string, kind = "buy", details?: Record<string, unknown>) {
+async function addWish(token: string, name: string, kind = "buy", details?: Record<string, unknown>, more: Record<string, unknown> = {}) {
   clock = new Date(clock.getTime() + 1000);
-  const res = await call("POST", "/wishes", token, { name, kind, upfrontCents: 100_000, ...(details ? { details } : {}) });
+  const res = await call("POST", "/wishes", token, { name, kind, upfrontCents: 100_000, ...(details ? { details } : {}), ...more });
   return ((await res.json()) as { wish: { id: string } }).wish.id;
 }
 
-type Wire = { id: string; name: string; details: { about?: string; tags?: string[] } };
+/** A judgment as the route saves it, for a wish judged at `tier`. */
+const judged = (tier: string, at: string) => ({ category: "thing", financing: "cash", share: 0.08, why: "A thing, about a month's pay.", tier, at });
+
+type Wire = { id: string; name: string; details: { about?: string; tags?: string[]; comfort?: Record<string, unknown> } };
 const list = async (token: string) => ((await (await call("GET", "/wishes", token)).json()) as { wishes: Wire[] }).wishes;
 const ledger = async (kind: string) => (await db.query<{ n: string | number }>("select count(*) as n from spend_ledger where kind = $1", [kind])).rows[0]!.n;
 
@@ -102,7 +107,7 @@ describe("POST /wishes/describe", () => {
     const bo = await signIn("bo@example.com");
     const trip = await addWish(ada, "A month in Lisbon", "visit");
     const car = await addWish(ada, "Mercedes G-Wagon");
-    const done = await addWish(ada, "Rolex Submariner", "buy", { about: "A diving watch.", tags: ["watch"] });
+    const done = await addWish(ada, "Rolex Submariner", "buy", { about: "A diving watch.", tags: ["watch"], comfort: judged("nice", "2026-10-28T00:00:00.000Z") });
     const theirs = await addWish(bo, "Private security", "do");
 
     const res = await call("POST", "/wishes/describe", ada, { ids: [trip, car, done, theirs, trip] });
@@ -123,8 +128,10 @@ describe("POST /wishes/describe", () => {
     const lisbon = mine.find((w) => w.id === trip)!;
     expect(lisbon.details.about).toBe("A month in Lisbon, something they want.");
     expect(lisbon.details.tags).toEqual(["travel", "trips", "a", "b", "c"]);
-    // Already described: left exactly as it was.
-    expect(mine.find((w) => w.id === done)!.details).toEqual({ about: "A diving watch.", tags: ["watch"] });
+    // The same call judged its share of a year's income, for the tier it has.
+    expect(lisbon.details.comfort).toEqual(judged("nice", clock.toISOString()));
+    // Already described and judged: left exactly as it was.
+    expect(mine.find((w) => w.id === done)!.details).toEqual({ about: "A diving watch.", tags: ["watch"], comfort: judged("nice", "2026-10-28T00:00:00.000Z") });
     // The other person's wish is untouched.
     expect((await list(bo))[0]!.details.about).toBeUndefined();
     expect(Number(await ledger("describe"))).toBe(1);
@@ -136,7 +143,7 @@ describe("POST /wishes/describe", () => {
     const car = await addWish(ada, "Mercedes G-Wagon", "buy", { agent });
     await call("POST", "/wishes/describe", ada, { ids: [car] });
     const saved = (await list(ada))[0]!;
-    expect(saved.details).toMatchObject({ agent, about: "Mercedes G-Wagon, something they want." });
+    expect(saved.details).toMatchObject({ agent, about: "Mercedes G-Wagon, something they want.", comfort: { category: "thing", share: 0.08, tier: "nice" } });
 
     metaCalls = [];
     const again = await call("POST", "/wishes/describe", ada, { ids: [car] });
@@ -188,6 +195,135 @@ describe("POST /wishes/describe", () => {
     metaStatus = 429;
     expect((await call("POST", "/wishes/describe", ada, { ids: [id] })).status).toBe(429);
     expect((await list(ada))[0]!.details.about).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------- comfort
+
+describe("POST /wishes/describe judges each wish's share of a year's income", () => {
+  /** The wishes the fake model was last sent, as it read them. */
+  const sentWishes = () => {
+    const input = String(metaCalls.at(-1)!.input);
+    return JSON.parse(input.slice(input.indexOf("Wishes:\n") + 8)) as Record<string, unknown>[];
+  };
+
+  it("from what it is, its tier, its running costs and where they want to live", async () => {
+    const ada = await signIn("ada@example.com");
+    const { rows } = await db.query<{ id: string }>("select id from users where email = $1", ["ada@example.com"]);
+    await writeLife(db, rows[0]!.id, { home: { country: "MT", label: "Malta" } }, "settings", clock);
+    const car = await addWish(ada, "Mercedes-AMG G 63", "own", undefined, { tier: "must", upfrontCents: 24_100_000, recurring: [{ label: "Insurance", amountCents: 125_000, period: "month" }, { amountCents: 25_000, period: "week" }] });
+    const watch = await addWish(ada, "Patek Philippe Nautilus", "buy", undefined, { tier: "dream", upfrontCents: 7_500_000 });
+    describeReply = (wishes) => ({
+      wishes: wishes.map((w) =>
+        w.name.startsWith("Mercedes")
+          ? { ref: w.ref, about: "A luxury SUV.", tags: ["car"], comfort: { category: "vehicle", financing: "loan", share: 0.14, why: "A family car — a real need." } }
+          : { ref: w.ref, about: "A luxury watch.", tags: ["watch"], comfort: { category: "thing", financing: "cash", share: 0.05, why: "A dream, so a small share." } },
+      ),
+    });
+
+    const res = await call("POST", "/wishes/describe", ada, { ids: [car, watch] });
+    expect(res.status).toBe(200);
+    expect(String(metaCalls[0]!.input).startsWith("Wants to live in: Malta (MT)\n")).toBe(true);
+    expect(sentWishes()).toEqual([
+      { ref: "w1", name: "Mercedes-AMG G 63", kind: "own", tier: "must", priceUsd: 241_000, runningUsdPerYear: 28_000, running: [{ label: "Insurance", usdPerYear: 15_000 }, { label: "Running cost", usdPerYear: 13_000 }] },
+      { ref: "w2", name: "Patek Philippe Nautilus", kind: "buy", tier: "dream", priceUsd: 75_000 },
+    ]);
+    const mine = await list(ada);
+    const at = clock.toISOString();
+    expect(mine.find((w) => w.id === car)!.details.comfort).toEqual({ category: "vehicle", financing: "loan", share: 0.14, why: "A family car, a real need.", tier: "must", at });
+    expect(mine.find((w) => w.id === watch)!.details.comfort).toEqual({ category: "thing", financing: "cash", share: 0.05, why: "A dream, so a small share.", tier: "dream", at });
+  });
+
+  it("says when it doesn't know where they want to live, and tells the model a wish is money", async () => {
+    const ada = await signIn("ada@example.com");
+    const id = await addWish(ada, "A million dollars", "buy", { worth: "money" });
+    await call("POST", "/wishes/describe", ada, { ids: [id] });
+    expect(String(metaCalls[0]!.input).startsWith("Wants to live in: not stated, so judge for the US\n")).toBe(true);
+    expect(sentWishes()[0]).toMatchObject({ name: "A million dollars", worth: "money" });
+  });
+
+  it("holds a share out of range to its bounds", async () => {
+    const ada = await signIn("ada@example.com");
+    const big = await addWish(ada, "Hermès Birkin");
+    const small = await addWish(ada, "Cartier Love bracelet");
+    const percent = await addWish(ada, "Leica M11");
+    const shares: Record<string, number> = { "Hermès Birkin": 0.9, "Cartier Love bracelet": 0.0001, "Leica M11": 8 };
+    describeReply = (wishes) => ({ wishes: wishes.map((w) => ({ ref: w.ref, about: `${w.name}.`, tags: [], comfort: { category: "thing", financing: "mortgage", share: shares[w.name], why: "" } })) });
+    await call("POST", "/wishes/describe", ada, { ids: [big, small, percent] });
+    const mine = await list(ada);
+    const comfort = (id: string) => mine.find((w) => w.id === id)!.details.comfort;
+    expect(comfort(big)).toMatchObject({ share: 0.35, financing: "cash" });
+    expect(comfort(small)).toMatchObject({ share: 0.02 });
+    expect(comfort(percent)).toMatchObject({ share: 0.08 });
+  });
+
+  it("drops a judgment it can't read, keeping the description, so the app falls back to its matrix", async () => {
+    const ada = await signIn("ada@example.com");
+    const junk: Record<string, unknown> = {
+      Spaceship: { category: "spaceship", financing: "cash", share: 0.08, why: "" },
+      Lots: { category: "thing", financing: "cash", share: "lots", why: "" },
+      Negative: { category: "thing", financing: "cash", share: -0.1, why: "" },
+      Missing: undefined,
+      "Bad financing": { category: "thing", financing: "lease", share: 0.08, why: "" },
+    };
+    const ids: string[] = [];
+    for (const name of Object.keys(junk)) ids.push(await addWish(ada, name));
+    describeReply = (wishes) => ({ wishes: wishes.map((w) => ({ ref: w.ref, about: `${w.name} described.`, tags: ["x"], ...(junk[w.name] === undefined ? {} : { comfort: junk[w.name] }) })) });
+    expect((await call("POST", "/wishes/describe", ada, { ids })).status).toBe(200);
+    const mine = await list(ada);
+    expect(mine).toHaveLength(5);
+    for (const w of mine) {
+      expect(w.details.about).toBe(`${w.name} described.`);
+      expect(w.details.comfort).toBeUndefined();
+    }
+  });
+
+  it("judges a wish described before judgments existed, keeping its words", async () => {
+    const ada = await signIn("ada@example.com");
+    const old = await addWish(ada, "Rolex Submariner", "buy", { about: "A diving watch.", tags: ["watch"] });
+    describeReply = (wishes) => ({ wishes: wishes.map((w) => ({ ref: w.ref, about: "New words.", tags: ["new"], comfort: { category: "thing", financing: "cash", share: 0.07, why: "Steady." } })) });
+    const out = (await (await call("POST", "/wishes/describe", ada, { ids: [old] })).json()) as { wishes: { id: string; details: Wire["details"] }[] };
+    expect(out.wishes).toHaveLength(1);
+    expect(out.wishes[0]!.details).toEqual({ about: "A diving watch.", tags: ["watch"], comfort: { category: "thing", financing: "cash", share: 0.07, why: "Steady.", tier: "nice", at: clock.toISOString() } });
+  });
+
+  it("judges a wish again once its tier changes, and only then", async () => {
+    const ada = await signIn("ada@example.com");
+    const id = await addWish(ada, "Rolex Submariner", "buy", { about: "A diving watch.", tags: ["watch"], comfort: judged("nice", "2026-10-28T00:00:00.000Z") });
+    expect(await (await call("POST", "/wishes/describe", ada, { ids: [id] })).json()).toEqual({ wishes: [] });
+    expect(metaCalls).toHaveLength(0);
+
+    expect((await call("PATCH", `/wishes/${id}`, ada, { tier: "dream" })).status).toBe(200);
+    describeReply = (wishes) => ({ wishes: wishes.map((w) => ({ ref: w.ref, about: "Ignored.", tags: [], comfort: { category: "thing", financing: "cash", share: 0.05, why: "Now a dream." } })) });
+    await call("POST", "/wishes/describe", ada, { ids: [id] });
+    expect(metaCalls).toHaveLength(1);
+    expect(sentWishes()[0]).toMatchObject({ tier: "dream" });
+    expect((await list(ada))[0]!.details).toMatchObject({ about: "A diving watch.", comfort: { share: 0.05, tier: "dream" } });
+  });
+});
+
+describe("tidying the model's judgment", () => {
+  it("reads a share as the fraction it means, held between 2% and 35%", () => {
+    expect(clampShare(0.08)).toBe(0.08);
+    expect(clampShare(8)).toBe(0.08);
+    expect(clampShare(12.5)).toBe(0.125);
+    expect(clampShare(0.9)).toBe(0.35);
+    expect(clampShare(250)).toBe(0.35);
+    expect(clampShare(0.001)).toBe(0.02);
+  });
+
+  it("pays for each kind the way it can be paid for, and drops what it can't read", () => {
+    const at = "2026-10-30T00:00:00.000Z";
+    const tidy = (category: string, financing: string) => tidyComfort({ category, financing, share: 0.1, why: "Because — reasons." }, "must", at);
+    expect(tidy("home", "mortgage")).toEqual({ category: "home", financing: "mortgage", share: 0.1, why: "Because, reasons.", tier: "must", at });
+    expect(tidy("home", "loan")!.financing).toBe("loan");
+    expect(tidy("vehicle", "mortgage")!.financing).toBe("loan");
+    expect(tidy("vehicle", "cash")!.financing).toBe("cash");
+    expect(tidy("thing", "loan")!.financing).toBe("cash");
+    expect(tidy("service", "mortgage")!.financing).toBe("cash");
+    expect(tidyComfort({ category: "thing", financing: "cash", share: Number.POSITIVE_INFINITY, why: "" }, "nice", at)).toBeNull();
+    expect(tidyComfort({ category: "thing", financing: "cash", share: 0, why: "" }, "nice", at)).toBeNull();
+    expect(tidyComfort(null, "nice", at)).toBeNull();
   });
 });
 
