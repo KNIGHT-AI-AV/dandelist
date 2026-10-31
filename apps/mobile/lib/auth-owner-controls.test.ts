@@ -129,10 +129,13 @@ async function fakeFetch(input: string | URL | Request, init: RequestInit = {}):
       await gate(`refresh:${body.refreshToken}`);
       if (refreshDown === "unreachable") throw new TypeError("Network request failed");
       if (refreshDown) return respond({ error: "Try again in a moment." }, refreshDown);
-      // Like the API, a refresh token works once: the session it named is revoked as the new one is issued.
+      // Like the API, a refresh token works once: the session it named is revoked as the new one is issued, and that
+      // session's access token is turned down from then on.
       const next = refreshes[body.refreshToken!];
       delete refreshes[body.refreshToken!];
-      return next ? respond(next) : respond({ error: "Sign in again." }, 401);
+      if (!next) return respond({ error: "Sign in again." }, 401);
+      expired.add(body.refreshToken!.replace(/^ref-/, "tok-"));
+      return respond(next);
     }
     case "/auth/logout":
       await gate(`logout:${bearer}`);
@@ -147,7 +150,12 @@ async function fakeFetch(input: string | URL | Request, init: RequestInit = {}):
       return respond({ nonce: "nonce-1" });
     case "/auth/apple/native":
       return respond(signIns[appleTokens[body.identityToken!]!]);
+    case "/ping":
+      await gate(`ping:${bearer}`);
+      if (!bearer || expired.has(bearer) || !owners[bearer]) return respond({ error: "Sign in again." }, 401);
+      return respond({ ok: true });
     case "/me":
+      await gate(`me:${bearer}`);
       if (!bearer || expired.has(bearer) || !owners[bearer]) return respond({ error: "Sign in again." }, 401);
       return respond({ user: owners[bearer] });
   }
@@ -395,6 +403,64 @@ describe("auth ownership boundaries (round40)", () => {
     expect(log.filter((l) => l.path === "/me").map((l) => l.bearer)).toEqual(["tok-ada-1", "tok-ada-1", "tok-ada-2", "tok-ada-2"]);
     expect(now().user?.id).toBe("ada");
     expect(store.map.get(REFRESH)).toBe("ref-ada-2");
+  });
+
+  it("sends a request again with the bearer its session renewed meanwhile, without another refresh (round41 S3)", async () => {
+    await mount();
+    await signInAs(ada);
+    expired.add("tok-ada-1");
+    refreshes["ref-ada-1"] = { accessToken: "tok-ada-2", refreshToken: "ref-ada-2" };
+    refreshes["ref-ada-2"] = { accessToken: "tok-ada-3", refreshToken: "ref-ada-3" };
+    // Two requests go out with tok-ada-1. The first one's 401 renews the session and its retry is held at the server;
+    // the second one's 401 comes back only after that renewal.
+    const late = hold("ping:tok-ada-1");
+    const retry = hold("me:tok-ada-2");
+    let second!: Promise<Response>;
+    let first!: Promise<Response>;
+    await act(async () => {
+      second = now().api("/ping");
+      await late.entered;
+      first = now().api("/me");
+      await retry.entered;
+    });
+    let answers!: Response[];
+    await act(async () => {
+      late.release();
+      const secondAnswer = await second;
+      retry.release();
+      answers = [await first, secondAnswer];
+    });
+    // A second refresh would have ended tok-ada-2 under the held retry.
+    expect(answers.map((a) => a.status)).toEqual([200, 200]);
+    expect(log.filter((l) => l.path === "/auth/refresh")).toHaveLength(1);
+    expect(await state()).toEqual({ status: "signedIn", user: "ada", sentAs: "tok-ada-2", answered: 200, stored: "ref-ada-2" });
+  });
+
+  it("keeps a session renewed again when an older bearer's retry is turned down (round41 S3)", async () => {
+    await mount();
+    await signInAs(ada);
+    expired.add("tok-ada-1");
+    refreshes["ref-ada-1"] = { accessToken: "tok-ada-2", refreshToken: "ref-ada-2" };
+    refreshes["ref-ada-2"] = { accessToken: "tok-ada-3", refreshToken: "ref-ada-3" };
+    const retry = hold("me:tok-ada-2");
+    let old!: Promise<Response>;
+    await act(async () => {
+      old = now().api("/me");
+      await retry.entered;
+    });
+    // tok-ada-2 lapses as well, and another request renews the session again, which ends tok-ada-2 for good.
+    expired.add("tok-ada-2");
+    let other!: Response;
+    await act(async () => void (other = await now().api("/ping")));
+    expect(other.status).toBe(200);
+    let answer!: Response;
+    await act(async () => {
+      retry.release();
+      answer = await old;
+    });
+    // The held request's own bearer is turned down; the session it belongs to, renewed meanwhile, stays.
+    expect(answer.status).toBe(401);
+    expect(await state()).toEqual({ status: "signedIn", user: "ada", sentAs: "tok-ada-3", answered: 200, stored: "ref-ada-3" });
   });
 
   it("hands a refresh whose new token can't be stored to its caller alone, and stores the next sign-in after it", async () => {

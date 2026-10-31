@@ -333,18 +333,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { [SIGN_IN]: at, ...rest } = init as RequestInit & { [SIGN_IN]?: number };
       // The session this request is sent under: a 401 may refresh or end only that one, never a newer sign-in's.
       const owner = session.current;
+      // The bearer the latest try carried: a 401 speaks for that bearer only.
+      let used: string | null = null;
       // Checked right where the bearer is read, for the first try and the retry after a refresh alike.
       const send = () => {
         if (at !== undefined && at !== signIn.at) throw new SignInChanged();
-        return doFetch(`${API_URL}${path}`, { ...rest, headers: { ...(rest.headers ?? {}), Authorization: `Bearer ${access.current ?? ""}` } });
+        used = access.current;
+        return doFetch(`${API_URL}${path}`, { ...rest, headers: { ...(rest.headers ?? {}), Authorization: `Bearer ${used ?? ""}` } });
       };
       let res = await send();
+      // Its session renewed the bearer while this was out: sent again with that one, not refreshed once more, which
+      // would end the renewed bearer that other requests may be carrying right now.
+      if (res.status === 401 && owner && session.current === owner && access.current !== used) res = await send();
       if (res.status === 401) {
         // Tried again only as its own, renewed session; a request bound to a sign-in that has moved on is refused.
         if ((await refresh(owner)) && session.current === owner) res = await send();
         else if (at !== undefined && at !== signIn.at) throw new SignInChanged();
       }
-      if (res.status === 401 && owner && session.current === owner) await clear();
+      // The session ends only when the bearer it holds now is the one turned down; a late 401 for an older one leaves it.
+      if (res.status === 401 && owner && session.current === owner && access.current === used) await clear();
       return res;
     },
     [refresh, clear],
