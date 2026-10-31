@@ -1146,7 +1146,7 @@ function buildChoices(b: CarBuildState): string {
 async function converse(ctx: DreamCtx, t: TranscriptEntry[], state: DreamState, message: string): Promise<void> {
   // What the message asks for, read on its own beside the concierge's first answer, so a want it skips gets asked for.
   const listed = wantsIn(ctx, message);
-  let res = await ctx.meta.responses({ instructions: [CONCIERGE, ctx.voice, ctx.notes].filter(Boolean).join("\n"), input: modelInput(ctx, t, state, message), tools: CONCIERGE_TOOLS });
+  let res = await ctx.meta.responses({ instructions: [CONCIERGE, ctx.voice, ctx.notes, ctx.memory].filter(Boolean).join("\n"), input: modelInput(ctx, t, state, message), tools: CONCIERGE_TOOLS });
   let spoken = false;
   const speak = async (text: string) => {
     const clean = brief(inCharacter(honest(paragraph(text), sayableFacts(t, state, ctx))));

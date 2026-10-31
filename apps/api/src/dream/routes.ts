@@ -16,6 +16,7 @@ import { Jobs, mergeChat, type ChatCopy } from "./jobs";
 import { TurnBudget, TurnLimitError, type ApifyConfig, type DreamCtx } from "./context";
 import { HISTORY_LIMIT, previewOf, summary, titleOf } from "./history";
 import { homeSchema, lifeBody, readLife, writeLife } from "./life";
+import { memoryFor, updateMemory } from "../memory";
 import { notesFor } from "../notes";
 import { listWishes } from "../wishes";
 import { Suggestions } from "./suggest";
@@ -200,6 +201,8 @@ export function dreamRoutes(deps: DreamDeps) {
     const life = await readLife(db, userId);
     // What they've told us about their wishes, for the concierge to keep in mind (notes.ts). Theirs alone.
     const notes = await notesFor(db, userId);
+    // What it remembers about them from earlier conversations (memory.ts). Theirs alone.
+    const memory = await memoryFor(db, userId);
     // Their list in its order, so the concierge can suggest a new order, a tier or a removal (edit_list).
     const list = await listWishes(db, userId);
     const stop = new AbortController();
@@ -235,6 +238,7 @@ export function dreamRoutes(deps: DreamDeps) {
         step: (id, state, text) => emit({ type: "step", id, state, text }),
         voice: voiceLine(body.data.persona),
         notes,
+        memory,
         name: body.data.name,
         list,
         running: () => jobs.list(sessionId).filter((j) => j.lane !== "turn"),
@@ -371,6 +375,13 @@ export function dreamRoutes(deps: DreamDeps) {
         }
         try {
           await save(base, { transcript, state }, before, { retire: turnId });
+          // What they said is read for anything worth remembering next time (memory.ts), after the reply is saved and
+          // without holding it up; a call that fails changes nothing.
+          if (deps.remember && body.data.action.type === "message") {
+            const meta = ctxFor(async () => {}, new TurnBudget(), new AbortController().signal).meta;
+            const remembering = updateMemory(meta, db, userId, body.data.action.text, sessionId, deps.now()).catch(() => undefined);
+            void (deps.alive?.keep(remembering) ?? remembering);
+          }
         } catch (e) {
           console.error("could not save dream session", sessionId, e);
         }

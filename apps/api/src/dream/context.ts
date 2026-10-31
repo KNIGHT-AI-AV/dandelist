@@ -78,6 +78,8 @@ export interface DreamCtx {
   step: (id: string, state: "running" | "done", text: string) => Promise<void>;
   /** The Dandy's voice line (agent/persona.ts), or empty. */
   voice?: string;
+  /** What the Dandy remembers about the person from earlier conversations, framed as data (memory.ts), or empty. */
+  memory?: string;
   /** The person's own notes on their wishes, framed as data for the concierge's instructions (notes.ts), or empty. */
   notes?: string;
   /** The Dandy's name as its owner typed it, passed to the model as data so it can introduce itself. */

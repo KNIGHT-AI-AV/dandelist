@@ -7,6 +7,7 @@ import { linkErrorMessage, useAuth, useSignInOptions, type LinkedIdentity } from
 import { CURRENCIES, useMoney } from "../../lib/currency";
 import { personaOf, useDandy } from "../../lib/dandy";
 import { symbolOf } from "../../lib/fx";
+import { fetchMemories, forgetAllMemories, forgetMemory, type Memory } from "../../lib/memory";
 import { haptic } from "../../lib/motion";
 import { useSoundsOn } from "../../lib/sound";
 import { fetchFacts, fetchHome, fetchIdentities, fetchStats, newFacts, saveHome, useProfile, type Facts, type Home, type Stats } from "../../lib/profile";
@@ -19,6 +20,7 @@ import { DeleteAccount } from "../settings/delete-account";
 import { FactsCard } from "../settings/facts";
 import { Card, Row, RowRule, Section } from "../settings/kit";
 import { LinkedAccounts } from "../settings/linked-accounts";
+import { MemoryCard } from "../settings/memory";
 import { NotificationSettings } from "../settings/notifications";
 import { PlacePicker, type Place } from "../settings/place-picker";
 import { placeLabel } from "../settings/places";
@@ -57,6 +59,10 @@ export function SettingsPage() {
   const [factsLoading, setFactsLoading] = useState(true);
   const [factsBusy, setFactsBusy] = useState(false);
   const [factsError, setFactsError] = useState<string | null>(null);
+  const [memories, setMemories] = useState<Memory[]>([]);
+  // The line being forgotten, or "all".
+  const [memoryBusy, setMemoryBusy] = useState<string | null>(null);
+  const [memoryError, setMemoryError] = useState<string | null>(null);
   const [identities, setIdentities] = useState<LinkedIdentity[] | null>(null);
   // undefined while loading, null when no place is chosen yet.
   const [home, setHome] = useState<Home | null | undefined>(undefined);
@@ -76,6 +82,7 @@ export function SettingsPage() {
       .then((f) => live && setFacts(f))
       .catch(() => {})
       .finally(() => live && setFactsLoading(false));
+    fetchMemories(auth.api).then((m) => live && setMemories(m)).catch(() => {});
     return () => {
       live = false;
     };
@@ -100,6 +107,20 @@ export function SettingsPage() {
       setFactsError(e instanceof Error ? e.message : "Nothing came to mind just now. Try again.");
     } finally {
       setFactsBusy(false);
+    }
+  };
+
+  /** Forgets one line the Dandy remembers, or every line (null). */
+  const forget = async (id: string | null) => {
+    setMemoryBusy(id ?? "all");
+    setMemoryError(null);
+    try {
+      setMemories(id ? await forgetMemory(auth.api, id) : await forgetAllMemories(auth.api));
+      haptic.success();
+    } catch (e) {
+      setMemoryError(e instanceof Error ? e.message : "Couldn't do that just now. Try again.");
+    } finally {
+      setMemoryBusy(null);
     }
   };
 
@@ -161,6 +182,10 @@ export function SettingsPage() {
 
         <Section title={`What ${dandy.name} has noticed`}>
           <FactsCard facts={facts} loading={factsLoading} busy={factsBusy} error={factsError} dandyName={dandy.name} onNew={askFacts} />
+        </Section>
+
+        <Section title={`What ${dandy.name} remembers`} hint={`What you tell ${dandy.name} in the chat that it keeps for next time, like who you buy for and what you love. Remove anything you'd rather it forgot.`}>
+          <MemoryCard memories={memories} busy={memoryBusy} error={memoryError} onForget={(id) => void forget(id)} onForgetAll={() => void forget(null)} />
         </Section>
 
         <Section title="Look">
