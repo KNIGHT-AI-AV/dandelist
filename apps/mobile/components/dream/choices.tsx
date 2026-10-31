@@ -12,7 +12,7 @@ export function Choices({ options, live, onChoose }: { options: string[]; live: 
   const [chosen, setChosen] = useState<string | null>(null);
   const open = live && !chosen;
   return (
-    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[8] }} accessibilityRole="radiogroup">
+    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[8] }}>
       {options.map((o) => (
         <Chip
           key={o}
