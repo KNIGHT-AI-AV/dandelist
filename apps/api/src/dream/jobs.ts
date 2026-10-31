@@ -30,6 +30,8 @@ export interface JobView {
 }
 
 interface Job extends JobView {
+  /** The seq its first event will take: everything from here on isn't in the saved conversation until it's folded in. */
+  first: number;
   stop: AbortController;
   /** Set when a newer job of the same lane replaced it: what it made is dropped. */
   replaced: boolean;
@@ -64,7 +66,7 @@ export class Jobs {
       old.replaced = true;
       old.stop.abort();
     }
-    const job: Job = { ...view, stop: new AbortController(), replaced: false };
+    const job: Job = { ...view, first: this.seq(session) + 1, stop: new AbortController(), replaced: false };
     jobs.set(view.id, job);
     return { signal: job.stop.signal, replaced: () => job.replaced };
   }
@@ -74,6 +76,16 @@ export class Jobs {
     const jobs = this.running.get(session);
     jobs?.delete(id);
     if (jobs && !jobs.size) this.running.delete(session);
+  }
+
+  /**
+   * Where an app that has just read the saved conversation follows the log from: just before the first event of the
+   * oldest work still running (none of which is saved yet), or the log's end when nothing runs. Read it under the
+   * session's lock (see lock), together with the saved conversation, so nothing is folded in between.
+   */
+  resumeFrom(session: string): number {
+    const firsts = [...(this.running.get(session)?.values() ?? [])].map((j) => j.first);
+    return firsts.length ? Math.min(...firsts) - 1 : this.seq(session);
   }
 
   /** The number of the last event in a session's log (0 before any). */

@@ -45,6 +45,20 @@ describe("jobs beside the conversation", () => {
     expect((await jobs.since("s1", 99, 0)).gap).toBe(true);
   });
 
+  it("tells a reloading app to follow from just before the oldest running work's first event", () => {
+    const jobs = new Jobs();
+    jobs.publish("s1", { type: "text", text: "saved already" });
+    jobs.add("s1", view("a", "car:x"));
+    jobs.publish("s1", { type: "step", id: "job_a", state: "running", text: "job a" });
+    jobs.add("s1", view("b", "home:y"));
+    jobs.publish("s1", { type: "step", id: "job_b", state: "running", text: "job b" });
+    expect(jobs.resumeFrom("s1")).toBe(1);
+    jobs.remove("s1", "a");
+    expect(jobs.resumeFrom("s1")).toBe(2);
+    jobs.remove("s1", "b");
+    expect(jobs.resumeFrom("s1")).toBe(jobs.seq("s1"));
+  });
+
   it("passes events on to listeners with the work that published them", () => {
     const jobs = new Jobs();
     const heard: string[] = [];

@@ -280,6 +280,10 @@ export function ChatPage() {
     const ctrl = new AbortController();
     running.current = ctrl;
     const isQuiet = next.action.type === "swipe";
+    // The turn's stream carries what running jobs show while it's open; following the log as well would show it twice.
+    // Its done says where to pick the log up again (review of #134).
+    following.current?.abort();
+    following.current = null;
     if (next.echo) {
       pinned.current = true;
       push({ id: nextId(), kind: "you", text: next.echo });

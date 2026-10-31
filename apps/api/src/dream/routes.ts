@@ -130,11 +130,16 @@ export function dreamRoutes(deps: DreamDeps) {
   app.get("/dream/sessions/:id", async (c) => {
     const id = z.string().uuid().safeParse(c.req.param("id"));
     if (!id.success) return c.json({ error: "That conversation wasn't found." }, 404);
-    const { rows } = await db.query<SessionRow>("select id, transcript, state from dream_sessions where id = $1 and user_id = $2", [id.data, c.get("userId")]);
-    if (!rows[0]) return c.json({ error: "That conversation wasn't found." }, 404);
-    const state = parse(rows[0].state) as DreamState;
+    // The saved conversation and where to follow its log from, read together: no job folds in between, so the app
+    // neither misses a card that isn't saved yet nor gets one twice (review of #134).
+    const read = await jobs.lock(id.data, async () => {
+      const { rows } = await db.query<SessionRow>("select id, transcript, state from dream_sessions where id = $1 and user_id = $2", [id.data, c.get("userId")]);
+      return { row: rows[0], seq: jobs.resumeFrom(id.data), running: jobs.list(id.data) };
+    });
+    if (!read.row) return c.json({ error: "That conversation wasn't found." }, 404);
+    const state = parse(read.row.state) as DreamState;
     const decks = Object.values(state.decks ?? {}).map(deckWidget);
-    return c.json({ id: rows[0].id, transcript: parse(rows[0].transcript), widgets: [...Object.values(state.widgets ?? {}), ...decks], running: jobs.list(id.data), seq: jobs.seq(id.data) });
+    return c.json({ id: read.row.id, transcript: parse(read.row.transcript), widgets: [...Object.values(state.widgets ?? {}), ...decks], running: read.running, seq: read.seq });
   });
 
   app.post("/dream/turn", async (c) => {
@@ -236,8 +241,7 @@ export function dreamRoutes(deps: DreamDeps) {
       let closed = false;
       const emit = async (e: DreamEvent) => {
         if (closed || replaced()) return;
-        // A line the job says stays in the conversation, like the concierge's own.
-        if (e.type === "text") jt.push({ role: "agent", text: e.text, at: deps.now().toISOString() });
+        // Lines the work keeps in the conversation it logs itself, as it does in a turn (runSearch, pickListing).
         jobs.publish(sessionId, e);
       };
       const jctx = { ...ctxFor(emit, new TurnBudget(Date.now() + JOB_WRAP_MS), AbortSignal.any([signal, own.signal])), life: from.life };
@@ -260,7 +264,7 @@ export function dreamRoutes(deps: DreamDeps) {
           jobs.publish(sessionId, { type: "error", message: friendly(e) });
         }
         // Whatever it made before it ended stays.
-        await save(jobBase, made, seen);
+        await save(jobBase, made, seen, { valid: () => !replaced(), retire: id });
       })()
         .catch((e) => console.error("could not finish dream job", sessionId, lane, e))
         .finally(() => {
@@ -273,8 +277,16 @@ export function dreamRoutes(deps: DreamDeps) {
     };
 
     /** Saves one piece of work's changes into the conversation as it stands now (jobs.ts mergeChat). */
-    const save = (from: DreamState, next: ChatCopy, seen: ReadonlySet<TranscriptEntry>) =>
+    /**
+     * `valid` is asked once the lock is held: a job replaced while it waited saves nothing. `retire` takes the job or turn
+     * off the running list inside the same lock, so a session view sees it either running and unsaved or saved and gone.
+     */
+    const save = (from: DreamState, next: ChatCopy, seen: ReadonlySet<TranscriptEntry>, opts: { valid?: () => boolean; retire?: string } = {}) =>
       jobs.lock(sessionId, async () => {
+        if (opts.valid && !opts.valid()) {
+          if (opts.retire) jobs.remove(sessionId, opts.retire);
+          return;
+        }
         const row = (await db.query<SessionRow>("select id, transcript, state from dream_sessions where id = $1 and user_id = $2", [sessionId, userId])).rows[0];
         if (!row) return; // deleted meanwhile
         const latest = { transcript: (parse(row.transcript) ?? []) as TranscriptEntry[], state: { ...emptyState(), ...((parse(row.state) as Partial<DreamState> | null) ?? {}) } };
@@ -287,6 +299,7 @@ export function dreamRoutes(deps: DreamDeps) {
           titleOf(merged.transcript),
           previewOf(merged.transcript),
         ]);
+        if (opts.retire) jobs.remove(sessionId, opts.retire);
       });
 
     const turn = (stream: SSEStreamingApi) =>
@@ -328,7 +341,7 @@ export function dreamRoutes(deps: DreamDeps) {
           await emit({ type: "error", message: friendly(e) });
         }
         try {
-          await save(base, { transcript, state }, before);
+          await save(base, { transcript, state }, before, { retire: turnId });
         } catch (e) {
           console.error("could not save dream session", sessionId, e);
         }

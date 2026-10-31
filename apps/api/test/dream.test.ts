@@ -1,6 +1,7 @@
 import { PGlite } from "@electric-sql/pglite";
 import { beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../src/app";
+import { Jobs } from "../src/dream/jobs";
 import { migrate, type Db } from "../src/db";
 import { isJudge, userCapUsd } from "../src/spend";
 import { brief, fallbackReason, honest, keepNote, sameThing, swipeSignal, tidy } from "../src/dream/agent";
@@ -238,7 +239,7 @@ let mail: { to: string; code: string }[];
 let app: ReturnType<typeof createApp>;
 const clock = new Date("2026-10-27T12:00:00Z");
 
-function makeApp(opts: { meta?: boolean; apify?: boolean; caps?: { dailyUsd: number; totalUsd: number }; jobStopMs?: number } = {}) {
+function makeApp(opts: { meta?: boolean; apify?: boolean; caps?: { dailyUsd: number; totalUsd: number }; jobStopMs?: number; jobs?: Jobs } = {}) {
   return createApp({
     db,
     mailer: { sendCode: async (to, code) => void mail.push({ to, code }) },
@@ -251,6 +252,7 @@ function makeApp(opts: { meta?: boolean; apify?: boolean; caps?: { dailyUsd: num
     webFetch: fakeWeb,
     ...(opts.apify ? { apify: { token: "apify-test", dailyUsd: 0.15 } } : {}),
     ...(opts.jobStopMs ? { jobStopMs: opts.jobStopMs } : {}),
+    ...(opts.jobs ? { jobs: opts.jobs } : {}),
   } as Parameters<typeof createApp>[0]);
 }
 
@@ -597,6 +599,64 @@ describe("dream turn", () => {
     expect(types.slice(ended + 1).filter((x) => x === "widget" || x === "text")).toEqual([]);
     const saved = (await (await call("GET", `/dream/sessions/${sessionId}`, t)).json()) as Ev;
     expect(saved.widgets.filter((w: Ev) => w.kind === "deck")).toEqual([]);
+  });
+
+  it("saves nothing from a search replaced while it waited to save (review of #134)", async () => {
+    const jobs = new Jobs();
+    app = makeApp({ jobs });
+    const t = await signIn("ada@example.com");
+    const db11 = (notes: string) => ({ make: "Aston Martin", model: "DB11", trim: "", colour: "", condition: "any", max_price: 0, currency: "", notes });
+    huntDelayMs = 150;
+    concierge = [[fc("search_cars", db11(""))], [message("On its way.")]];
+    const first = await call("POST", "/dream/turn", t, { sessionId: null, action: { type: "message", text: "an Aston Martin DB11" } });
+    const sessionId = ((await first.text()).split("\n").filter((l) => l.startsWith("data:")).map((l) => JSON.parse(l.slice(5)) as Ev).find((e) => e.type === "done")!).sessionId as string;
+    // Hold the session's save lock, so the first search finishes and then waits to fold in.
+    let release!: () => void;
+    void jobs.lock(sessionId, () => new Promise<void>((r) => (release = r)));
+    await new Promise((r) => setTimeout(r, 300));
+    // "V12": the same car again replaces the first search while it waits; this turn's own save waits on the lock too.
+    huntDelayMs = 0;
+    concierge = [[fc("search_cars", db11("V12"))], [message("Narrowing it to the V12.")]];
+    const second = turn(t, { type: "message", text: "V12" }, sessionId);
+    // Wait until the replacement has started beside the first search (both on the list, the first now replaced).
+    for (let i = 0; i < 200 && jobs.list(sessionId).filter((j) => j.lane.startsWith("car:")).length < 2; i++) await new Promise((r) => setTimeout(r, 10));
+    expect(jobs.list(sessionId).filter((j) => j.lane.startsWith("car:"))).toHaveLength(2);
+    release();
+    await second;
+    for (let i = 0; i < 100 && jobs.list(sessionId).length; i++) await new Promise((r) => setTimeout(r, 20));
+    const saved = (await (await call("GET", `/dream/sessions/${sessionId}`, t)).json()) as Ev;
+    // Both searches end the same way here (no listing shows its price), so the line appears once: the replacement's.
+    // The first search's line, said before it was replaced, was never saved.
+    expect(saved.transcript.filter((x: Ev) => /couldn't find live listings/.test(x.text))).toHaveLength(1);
+    expect(saved.running).toEqual([]);
+  });
+
+  it("follows a reload from before a running search's first event, so its card is neither skipped nor doubled (review of #134)", async () => {
+    const t = await signIn("ada@example.com");
+    await liveIn(t, "MT", "Malta");
+    huntDelayMs = 250;
+    concierge = [[fc("search_homes", VILLA_ARGS)], [message("Looking now.")]];
+    const res = await call("POST", "/dream/turn", t, { sessionId: null, action: { type: "message", text: "a modern sea-view villa" } });
+    const done = (await res.text()).split("\n").filter((l) => l.startsWith("data:")).map((l) => JSON.parse(l.slice(5)) as Ev).find((e) => e.type === "done")!;
+    // The app comes back mid-search: the saved conversation has no deck yet, and the cursor sits before the search's events.
+    const mid = (await (await call("GET", `/dream/sessions/${done.sessionId}`, t)).json()) as Ev;
+    expect(mid.running).toHaveLength(1);
+    expect(mid.widgets.filter((w: Ev) => w.kind === "deck")).toEqual([]);
+    const seen: Ev[] = [];
+    let after = mid.seq as number;
+    for (let i = 0; i < 100; i++) {
+      const body = (await (await call("GET", `/dream/sessions/${done.sessionId}/events?after=${after}`, t)).json()) as Ev;
+      for (const e of body.events as Ev[]) {
+        after = e.seq;
+        seen.push(e.event);
+      }
+      if (!body.running.length) break;
+    }
+    expect(seen.some((e) => e.type === "step" && e.state === "running" && /^job_/.test(e.id))).toBe(true);
+    expect(seen.filter((e) => e.type === "widget" && e.widget.kind === "deck")).toHaveLength(1);
+    const end = (await (await call("GET", `/dream/sessions/${done.sessionId}`, t)).json()) as Ev;
+    expect(end.widgets.filter((w: Ev) => w.kind === "deck")).toHaveLength(1);
+    expect(end.running).toEqual([]);
   });
 
   it("hands a single item to the item price research with the person's words", async () => {
