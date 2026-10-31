@@ -138,15 +138,14 @@ describe("a look's requests go as the sign-in that started it (review of #131)",
     const bound = bindToSignIn(auth.api, currentSignIn());
     server.expired.add("tok-ada-2");
     // Ada's bearer has expired: the request is refused, the refresh renews her bearer, and Bob's sign-in lands just as
-    // that refresh stores its token, before the retry goes out.
+    // that refresh stores its token, before the retry goes out. Bob's sign-in is in place the moment his bearer is, which
+    // is before his own token is stored: stored tokens are written one at a time (round40), so his waits behind Ada's.
     let landed: Promise<void> | null = null;
-    const bobIn = later();
     store.onSet = async (key, value) => {
-      if (key !== "dandelist.refresh") return;
-      if (value === "refresh-ada-3") {
-        landed = auth.redeemTicket("ticket-bob");
-        await bobIn.promise;
-      } else if (value === "refresh-bob") bobIn.resolve();
+      if (key !== "dandelist.refresh" || value !== "refresh-ada-3") return;
+      const before = currentSignIn();
+      landed = auth.redeemTicket("ticket-bob");
+      await until(() => currentSignIn() !== before);
     };
     await expect(bound("/agent/runs", { method: "POST", body: JSON.stringify({ draft: { title: "Leica Q3 43" } }) })).rejects.toBeInstanceOf(SignInChanged);
     await act(async () => {

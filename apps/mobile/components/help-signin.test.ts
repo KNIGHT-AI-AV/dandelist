@@ -163,14 +163,15 @@ describe("a help report's request goes as the sign-in its sheet was made under (
     await act(async () => auth.redeemTicket("ticket-bob"));
     await act(() => until(() => auth.user?.id === "bob"));
     expect(modal()).toBe(false);
-    // Only now does Ada's first try come back: 401. Her request refreshes (Bob's session, now) and would resend.
+    // Only now does Ada's first try come back: 401. It belongs to her session, so it neither refreshes Bob's (round40)
+    // nor goes again, as anyone.
     const n = server.log.length;
     await act(async () => first.answer(respond({ error: "Sign in again." }, 401)));
-    await act(() => until(() => server.log.slice(n).some((l) => l.path === "/auth/refresh")));
     await act(async () => {
       await settle();
       await settle();
     });
+    expect(server.log.slice(n).map((l) => l.path)).not.toContain("/auth/refresh");
     expect(helps()).toEqual(["tok-ada-2 ADA-SCREEN"]);
     // Bob stays signed in, and sees no sheet.
     expect(auth.user?.id).toBe("bob");

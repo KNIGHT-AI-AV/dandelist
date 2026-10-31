@@ -153,23 +153,28 @@ function appReturnUrl(): string {
  * dandelist://auth redirect gets nothing it can use. Hermes has no Web Crypto, so the randomness comes from expo-crypto
  * (the system generator on phones, crypto.getRandomValues on the web).
  */
-async function newChallenge(): Promise<string> {
+async function newChallenge(write: Write): Promise<string> {
   const verifier = Array.from(Crypto.getRandomBytes(32), (b) => b.toString(16).padStart(2, "0")).join("");
-  await setSecret(VERIFIER_KEY, verifier);
+  // In line with every other secret write, so the newest challenge's verifier is the one left stored.
+  await write(VERIFIER_KEY, verifier, () => true);
   const digest = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, verifier, { encoding: Crypto.CryptoEncoding.BASE64 });
   return digest.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
+/** A secret write, made only if `holds()` is still true when its turn comes. */
+type Write = (key: string, value: string | null, holds: () => boolean | Promise<boolean>) => Promise<void>;
+
 const startUrl = (provider: ProviderId, redirect: string, challenge: string) =>
   `${API_URL}/auth/oauth/${provider}/start?redirect=${encodeURIComponent(redirect)}&challenge=${challenge}`;
 
-let brokerPending = false;
+/** The phone sign-in sheet that is open, if one is; a sheet that closes clears only itself. */
+let broker: object | null = null;
 /**
  * True while a phone sign-in sheet is open. Android also delivers the return address to the router, which opens
  * /auth; that screen steps back and lets the waiting sign-in finish instead of racing it.
  */
 export function isBrokerPending(): boolean {
-  return brokerPending;
+  return broker !== null;
 }
 
 /** The sign-in options the API has turned on that work on this device, in display order; null while loading. */
@@ -206,99 +211,185 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<Status>("loading");
   const [user, setUser] = useState<User | null>(null);
   const access = useRef<string | null>(null);
-  const redemptions = useRef(new Map<string, Promise<void>>());
+  const redemptions = useRef(new Map<string, Promise<boolean>>());
   const linkRedemptions = useRef(new Map<string, Promise<LinkedIdentity[]>>());
+  // Who may change the session (review of round40): the latest sign-in, startup or sign-out to start. A response that
+  // comes back after a newer one started is dropped, the way a cancelled one would be. `session` is the committed
+  // session, named by the attempt that made it (0: none); its refreshes and requests belong to it alone. Kept apart from
+  // the public marker above, which moves only when the account does.
+  const attempts = useRef(0);
+  const session = useRef(0);
+  /** The committed session's refresh token, so a refresh never depends on a storage write that hasn't landed. */
+  const refreshToken = useRef<string | null>(null);
+  /** One refresh at a time per session: the server takes each refresh token once. */
+  const refreshing = useRef<{ session: number; done: Promise<boolean> } | null>(null);
+  const writes = useRef<Promise<void>>(Promise.resolve());
 
-  const takeTokens = useCallback(async (t: { accessToken: string; refreshToken: string; user?: User }) => {
-    access.current = t.accessToken;
-    // A sign-in names its account; a refresh keeps the one it refreshes.
-    if (t.user) bearerOf(t.user.id);
-    await setSecret(REFRESH_KEY, t.refreshToken);
-    if (t.user) setUser(t.user);
+  const start = useCallback(() => ++attempts.current, []);
+  const latest = useCallback((owner: number) => attempts.current === owner, []);
+
+  /** Secrets are written one after another, each only if its owner still holds when its turn comes. */
+  const write = useCallback<Write>((key, value, holds) => {
+    const run = writes.current.then(async () => {
+      if (await holds()) await setSecret(key, value);
+    });
+    writes.current = run.catch(() => undefined);
+    return run;
   }, []);
 
-  const refresh = useCallback(async (): Promise<boolean> => {
-    const refreshToken = await getSecret(REFRESH_KEY);
-    if (!refreshToken) return false;
-    const res = await post("/auth/refresh", { refreshToken }).catch(() => null);
-    if (!res?.ok) {
-      await setSecret(REFRESH_KEY, null);
-      return false;
-    }
-    await takeTokens(await res.json());
-    return true;
-  }, [takeTokens]);
+  /** Puts a sign-in's session in place in one step, unless a newer sign-in or sign-out started since `owner` did. */
+  const adopt = useCallback(
+    async (owner: number, t: { accessToken: string; refreshToken: string; user: User }) => {
+      if (!latest(owner)) return false;
+      session.current = owner;
+      // The account marker moves before the new bearer can be sent.
+      bearerOf(t.user.id);
+      access.current = t.accessToken;
+      refreshToken.current = t.refreshToken;
+      setUser(t.user);
+      setStatus("signedIn");
+      await write(REFRESH_KEY, t.refreshToken, () => session.current === owner);
+      return true;
+    },
+    [latest, write],
+  );
+
+  /** Signed out on this device: no bearer, no session, nothing stored. */
+  const clear = useCallback(() => {
+    session.current = 0;
+    access.current = null;
+    refreshToken.current = null;
+    bearerOf(null);
+    setUser(null);
+    setStatus("signedOut");
+    return write(REFRESH_KEY, null, () => session.current === 0);
+  }, [write]);
+
+  /** Renews committed session `owner`'s bearer; false when it can't. Only that same session's state ever changes. */
+  const refresh = useCallback(
+    (owner: number): Promise<boolean> => {
+      if (!owner || session.current !== owner) return Promise.resolve(false);
+      if (refreshing.current?.session === owner) return refreshing.current.done;
+      const token = refreshToken.current;
+      const done = (async () => {
+        if (!token) return false;
+        const res = await post("/auth/refresh", { refreshToken: token }).catch(() => null);
+        const body = res?.ok ? ((await res.json().catch(() => null)) as { accessToken?: string; refreshToken?: string } | null) : null;
+        // Another sign-in or a sign-out since: its session stands, untouched.
+        if (session.current !== owner) return false;
+        if (!body?.accessToken || !body.refreshToken) {
+          refreshToken.current = null;
+          await write(REFRESH_KEY, null, () => session.current === owner);
+          return false;
+        }
+        // A refresh renews the same account's bearer; the account marker stays.
+        access.current = body.accessToken;
+        refreshToken.current = body.refreshToken;
+        await write(REFRESH_KEY, body.refreshToken, () => session.current === owner);
+        // Renewed, and still the session in place once its token is stored.
+        return session.current === owner;
+      })();
+      refreshing.current = { session: owner, done };
+      void done.finally(() => {
+        if (refreshing.current?.done === done) refreshing.current = null;
+      });
+      return done;
+    },
+    [write],
+  );
 
   const call = useCallback(
     async (path: string, init: RequestInit = {}, streaming = false) => {
       // React Native's own fetch can't read a response stream; Expo's can. The web's fetch streams already.
       const doFetch = (streaming && Platform.OS !== "web" ? streamingFetch : fetch) as typeof fetch;
       const { [SIGN_IN]: at, ...rest } = init as RequestInit & { [SIGN_IN]?: number };
+      // The session this request is sent under: a 401 may refresh or end only that one, never a newer sign-in's.
+      const owner = session.current;
       // Checked right where the bearer is read, for the first try and the retry after a refresh alike.
       const send = () => {
         if (at !== undefined && at !== signIn.at) throw new SignInChanged();
         return doFetch(`${API_URL}${path}`, { ...rest, headers: { ...(rest.headers ?? {}), Authorization: `Bearer ${access.current ?? ""}` } });
       };
       let res = await send();
-      if (res.status === 401 && (await refresh())) res = await send();
       if (res.status === 401) {
-        bearerOf(null);
-        setUser(null);
-        setStatus("signedOut");
+        // Tried again only as its own, renewed session; a request bound to a sign-in that has moved on is refused.
+        if ((await refresh(owner)) && session.current === owner) res = await send();
+        else if (at !== undefined && at !== signIn.at) throw new SignInChanged();
       }
+      if (res.status === 401 && owner && session.current === owner) await clear();
       return res;
     },
-    [refresh],
+    [refresh, clear],
   );
   const api = useCallback((path: string, init: RequestInit = {}) => call(path, init), [call]);
   const apiStream = useCallback((path: string, init: RequestInit = {}) => call(path, init, true), [call]);
 
   useEffect(() => {
+    // The stored session is restored as one more attempt: a sign-in or sign-out that starts meanwhile wins.
+    const owner = start();
     (async () => {
-      if (await refresh()) {
-        const me = await api("/me");
-        if (me.ok) {
-          const { user } = (await me.json()) as { user: User };
-          bearerOf(user.id);
-          setUser(user);
-          setStatus("signedIn");
-          return;
-        }
+      const stored = await getSecret(REFRESH_KEY);
+      const res = stored ? await post("/auth/refresh", { refreshToken: stored }).catch(() => null) : null;
+      const tokens = res?.ok ? ((await res.json().catch(() => null)) as { accessToken?: string; refreshToken?: string } | null) : null;
+      let me: User | null = null;
+      if (tokens?.accessToken && tokens.refreshToken) {
+        const r = await fetch(`${API_URL}/me`, { headers: { Authorization: `Bearer ${tokens.accessToken}` } }).catch(() => null);
+        me = r?.ok ? (((await r.json().catch(() => null)) as { user?: User } | null)?.user ?? null) : null;
       }
-      setStatus("signedOut");
+      if (!latest(owner)) {
+        if (!session.current) setStatus((s) => (s === "loading" ? "signedOut" : s));
+        return;
+      }
+      if (me && tokens?.accessToken && tokens.refreshToken) {
+        await adopt(owner, { accessToken: tokens.accessToken, refreshToken: tokens.refreshToken, user: me });
+        return;
+      }
+      // A refresh the server turned down leaves nothing to keep; a renewed token whose account didn't load is kept for
+      // next time, as before.
+      if (stored) await write(REFRESH_KEY, tokens?.refreshToken ?? null, () => latest(owner) && !session.current);
+      if (latest(owner)) setStatus("signedOut");
     })();
-  }, [refresh, api]);
+  }, [start, latest, adopt, write]);
 
-  /** Signs in with the body every sign-in route returns: { user, accessToken, refreshToken }. */
+  /** Signs in with the body every sign-in route returns: { user, accessToken, refreshToken }. False when superseded. */
   const finishSignIn = useCallback(
-    async (res: Response | null) => {
+    async (owner: number, res: Response | null) => {
       if (!res) throw new Error("Can't reach Dandelist. Check your connection.");
       if (!res.ok) throw new Error(await errorMessage(res));
-      await takeTokens(await res.json());
-      setStatus("signedIn");
+      return adopt(owner, (await res.json()) as { accessToken: string; refreshToken: string; user: User });
     },
-    [takeTokens],
+    [adopt],
   );
 
-  const redeemTicket = useCallback(
-    (ticket: string) => {
-      // Android can hand the same return address to both the sign-in sheet and the router; a ticket works only once,
-      // so both share one redemption.
+  /**
+   * Redeems a provider ticket for attempt `owner` (a sheet's own sign-in), or as its own attempt (a page that came
+   * back with the ticket). Android can hand the same return address to both the sign-in sheet and the router; a ticket
+   * works only once, so both share the first redemption and its attempt.
+   */
+  const redeem = useCallback(
+    (ticket: string, owner?: number): Promise<boolean> => {
       let pending = redemptions.current.get(ticket);
       if (!pending) {
-        pending = (async () => {
+        const mine = owner ?? start();
+        const p: Promise<boolean> = (async () => {
           const verifier = await getSecret(VERIFIER_KEY);
           if (!verifier) throw new Error("That sign-in has expired. Try again.");
-          await finishSignIn(await post("/auth/oauth/redeem", { ticket, verifier }).catch(() => null));
-          await setSecret(VERIFIER_KEY, null);
+          const took = await finishSignIn(mine, await post("/auth/oauth/redeem", { ticket, verifier }).catch(() => null));
+          // Only this sign-in's own verifier goes: a newer one may have stored its own since.
+          if (took) await write(VERIFIER_KEY, null, async () => (await getSecret(VERIFIER_KEY)) === verifier);
+          return took;
         })();
-        redemptions.current.set(ticket, pending);
-        pending.catch(() => redemptions.current.delete(ticket));
+        pending = p;
+        redemptions.current.set(ticket, p);
+        p.catch(() => {
+          if (redemptions.current.get(ticket) === p) redemptions.current.delete(ticket);
+        });
       }
       return pending;
     },
-    [finishSignIn],
+    [start, finishSignIn, write],
   );
+  const redeemTicket = useCallback((ticket: string) => redeem(ticket).then(() => undefined), [redeem]);
 
   const redeemLink = useCallback(
     (ticket: string) => {
@@ -311,15 +402,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const res = await api("/auth/link/redeem", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ticket, verifier }) }).catch(() => null);
           if (!res) throw new Error("Can't reach Dandelist. Check your connection.");
           if (!res.ok) throw new LinkError(await errorMessage(res), res.status === 409 ? "taken" : "failed");
-          await setSecret(VERIFIER_KEY, null);
+          await write(VERIFIER_KEY, null, async () => (await getSecret(VERIFIER_KEY)) === verifier);
           return ((await res.json()) as { identities: LinkedIdentity[] }).identities;
         })();
-        linkRedemptions.current.set(ticket, pending);
-        pending.catch(() => linkRedemptions.current.delete(ticket));
+        const p = pending;
+        linkRedemptions.current.set(ticket, p);
+        p.catch(() => {
+          if (linkRedemptions.current.get(ticket) === p) linkRedemptions.current.delete(ticket);
+        });
       }
       return pending;
     },
-    [api],
+    [api, write],
   );
 
   const linkWith = useCallback(
@@ -344,7 +438,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!res.ok) throw new Error(await errorMessage(res));
         return ((await res.json()) as { identities: LinkedIdentity[] }).identities;
       }
-      const challenge = await newChallenge();
+      const challenge = await newChallenge(write);
       const web = Platform.OS === "web";
       const back = web ? `${globalThis.location.origin}/auth/callback` : appReturnUrl();
       const res = await api(`/auth/link/${option.id}`, { ...json, body: JSON.stringify({ redirect: back, challenge }) }).catch(() => null);
@@ -356,7 +450,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         globalThis.location.assign(url);
         return new Promise<LinkedIdentity[] | null>(() => {});
       }
-      brokerPending = true;
+      const sheet = {};
+      broker = sheet;
       try {
         const result = await WebBrowser.openAuthSessionAsync(url, back);
         if (result.type !== "success") return null;
@@ -367,10 +462,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (message) throw new Error(message);
         return null;
       } finally {
-        brokerPending = false;
+        if (broker === sheet) broker = null;
       }
     },
-    [api, redeemLink],
+    [api, redeemLink, write],
   );
 
   const value = useMemo<Auth>(
@@ -388,38 +483,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!res.ok) throw new Error(await errorMessage(res));
       },
       async verifyEmail(email, code) {
-        const res = await post("/auth/email/verify", { email, code }).catch(() => null);
-        if (!res) throw new Error("Can't reach Dandelist. Check your connection.");
-        if (!res.ok) throw new Error(await errorMessage(res));
-        await takeTokens(await res.json());
-        setStatus("signedIn");
+        const owner = start();
+        // A code that lands after a newer sign-in or a sign-out simply ends, the way a cancelled one would.
+        await finishSignIn(owner, await post("/auth/email/verify", { email, code }).catch(() => null));
       },
       async signInWith(provider) {
-        const challenge = await newChallenge();
+        // One attempt from the challenge through the sheet to the ticket: a newer sign-in or a sign-out supersedes it.
+        const owner = start();
+        const challenge = await newChallenge(write);
+        if (!latest(owner)) return false;
         if (Platform.OS === "web") {
           // A full-page trip: the provider returns to the API, which returns here at /auth/callback with a ticket.
           globalThis.location.assign(startUrl(provider, `${globalThis.location.origin}/auth/callback`, challenge));
           return new Promise<boolean>(() => {});
         }
         const back = appReturnUrl();
-        brokerPending = true;
+        const sheet = {};
+        broker = sheet;
         try {
           const result = await WebBrowser.openAuthSessionAsync(startUrl(provider, back, challenge), back);
           if (result.type !== "success") return false;
           const { queryParams } = Linking.parse(result.url);
           const ticket = typeof queryParams?.ticket === "string" ? queryParams.ticket : null;
-          if (ticket) {
-            await redeemTicket(ticket);
-            return true;
-          }
+          if (ticket) return await redeem(ticket, owner);
           const message = signInErrorMessage(typeof queryParams?.error === "string" ? queryParams.error : "failed");
           if (message) throw new Error(message);
           return false;
         } finally {
-          brokerPending = false;
+          if (broker === sheet) broker = null;
         }
       },
       async signInWithApple() {
+        const owner = start();
         // A single-use nonce from the API. The sheet hands it to Apple unchanged, Apple signs it into the identity
         // token, and the API accepts that token once, so a captured token can't be replayed.
         const nonceRes = await fetch(`${API_URL}/auth/apple/nonce`).catch(() => null);
@@ -439,19 +534,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!credential.identityToken) throw new Error("Sign in with Apple didn't go through. Try again.");
         // Apple shares the name only the first time, so it goes up with that first sign-in.
         const fullName = credential.fullName ? { givenName: credential.fullName.givenName, familyName: credential.fullName.familyName } : null;
-        await finishSignIn(await post("/auth/apple/native", { identityToken: credential.identityToken, fullName }).catch(() => null));
-        return true;
+        if (!latest(owner)) return false;
+        return finishSignIn(owner, await post("/auth/apple/native", { identityToken: credential.identityToken, fullName }).catch(() => null));
       },
       async signOut() {
-        if (access.current) await post("/auth/logout", {}, access.current).catch(() => null);
-        access.current = null;
-        bearerOf(null);
-        await setSecret(REFRESH_KEY, null);
-        setUser(null);
-        setStatus("signedOut");
+        // Anything still signing in is superseded, and this device signs out at once. Only the bearer it held is revoked
+        // on the server afterwards, so that request coming back can't touch a sign-in made meanwhile.
+        start();
+        const token = access.current;
+        await clear();
+        if (token) await post("/auth/logout", {}, token).catch(() => null);
       },
     }),
-    [status, user, api, apiStream, takeTokens, redeemTicket, linkWith, redeemLink, finishSignIn],
+    [status, user, api, apiStream, start, latest, write, clear, redeem, redeemTicket, linkWith, redeemLink, finishSignIn],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
