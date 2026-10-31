@@ -502,6 +502,8 @@ export async function quickFind(meta: Meta, input: QuickInput, ctx: QuickContext
   // The hunt names what the wish was understood as once it is read (find.ts); until then, no raw words on show.
   await step({ type: "note", text: "Reading your wish", at: at() });
 
+  // The model's own effort: at low effort it answered in 7.5 s against 12.6 s (p50), but found a card for 7 of 12 wishes
+  // against 10, with shops refusing the server (A/B, 2026-10-31). A card that comes is worth the five seconds.
   const res = await within(
     meta.responses({
       instructions: QUICK,
