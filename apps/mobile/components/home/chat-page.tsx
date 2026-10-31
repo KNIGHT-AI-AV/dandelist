@@ -534,8 +534,10 @@ export function ChatPage() {
         // A change to their own list: nothing moves until they tap Apply.
         return <ListChangeCard w={w} onShowOnList={home.showOnList} />;
       case "choices":
-        // The answers to the question above, to tap instead of typing.
-        return <Choices options={w.options} live={live} onChoose={(o) => send({ type: "message", text: o }, o)} />;
+        // The answers to the question above, to tap instead of typing: only while it's the question the Dandy is waiting
+        // on, the newest tool with nothing said after it. A typed answer or a newer question closes it, and a reopened
+        // chat whose last word is this question can still answer it (review R44-CHOICES-OWNER).
+        return <Choices options={w.options} live={asking === w.id} onChoose={(o) => send({ type: "message", text: o }, o)} />;
       case "region_picker":
         // Only when the Dandy asks: where they live otherwise comes from Settings.
         return <RegionPicker current={life?.home ?? w.current} onPick={(place) => send({ type: "region", home: place }, `I'll live in ${place.label}.`)} />;

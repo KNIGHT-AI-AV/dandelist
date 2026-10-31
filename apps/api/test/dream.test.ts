@@ -507,6 +507,24 @@ describe("dream turn", () => {
     expect(events.findIndex((e) => e.type === "text")).toBeLessThan(events.findIndex((e) => e.type === "widget"));
   });
 
+  it("saves the question as an ordinary line before its answers, so a reopened chat shows both in order (review R44-CHOICES-PERSIST)", async () => {
+    const t = await signIn("ada@example.com");
+    concierge = [[fc("ask_choices", { question: "New or used?", options: ["New", "**", "Used"] })], [message("")]];
+    const { events, sessionId } = await turn(t, { type: "message", text: "find me a porsche 911" });
+    // Said once live, whatever is saved.
+    expect(events.filter((e) => e.type === "text").map((e) => e.text)).toEqual(["New or used?"]);
+    const [w] = widgets(events, "choices");
+    // A label tidied away to nothing is dropped before the count.
+    expect(w.options).toEqual(["New", "Used"]);
+    const saved = (await (await call("GET", `/dream/sessions/${sessionId}`, t)).json()) as Ev;
+    const rows = saved.transcript.map((e: Ev) => ({ role: e.role, text: e.text, widget: e.widget?.id ?? null }));
+    const q = rows.findIndex((r: Ev) => r.text === "New or used?");
+    expect(rows[q]).toEqual({ role: "agent", text: "New or used?", widget: null });
+    expect(rows[q + 1]).toMatchObject({ role: "agent", widget: w.id });
+    expect(rows.filter((r: Ev) => r.text === "New or used?")).toHaveLength(1);
+    expect(saved.widgets.find((x: Ev) => x.id === w.id)).toEqual(w);
+  });
+
   it("shows no answers card for a question with fewer than two answers", async () => {
     const t = await signIn("ada@example.com");
     concierge = [[fc("ask_choices", { question: "Colour?", options: ["Black"] })], [message("")]];

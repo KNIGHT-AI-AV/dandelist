@@ -902,9 +902,11 @@ async function runTool(ctx: DreamCtx, t: TranscriptEntry[], state: DreamState, n
       return askRegion(ctx, t, state);
     case "ask_choices": {
       const question = tidy(asStr(args.question, 200));
-      const options = [...new Set(asStrings(args.options).map(tidy))].slice(0, 4);
+      const options = [...new Set(asStrings(args.options).map(tidy).filter(Boolean))].slice(0, 4);
       if (!question || options.length < 2) return "Need a question and at least two answers.";
+      // An ordinary line, said once and saved, so an older app shows it and a reopened chat keeps it above its answers.
       await say(ctx, question);
+      log(t, { role: "agent", text: question, at: ctx.now().toISOString() });
       const w: Widget = { kind: "choices", id: nextId(state, "choice"), options };
       await show(ctx, t, state, w, `Asked "${question}" with the answers ${options.join(" / ")}.`);
       return `Asked "${question}" with ${options.length} answers to tap. Wait for their answer.`;
