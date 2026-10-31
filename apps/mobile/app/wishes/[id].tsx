@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { Animated, Linking, PanResponder, Pressable, StyleSheet, Text, View, useWindowDimensions, type NativeScrollEvent, type NativeSyntheticEvent, type ScrollView, type ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Atmosphere } from "../../components/atmosphere";
-import { HeroGallery } from "../../components/detail/gallery";
+import { HeroGallery, type GalleryReturn } from "../../components/detail/gallery";
 import { CONTROL_TOP, HERO_SHADE, PARALLAX } from "../../components/detail/metrics";
 import { WishNote } from "../../components/detail/note";
 import { Recheck } from "../../components/detail/recheck";
@@ -79,6 +79,7 @@ export default function WishDetail() {
   const [settled, setSettled] = useState(!zoom);
   const [photoIndex, setPhotoIndex] = useState(0);
   const [viewing, setViewing] = useState<(ViewerFrom & { key: number }) | null>(null);
+  const [returnedPhoto, setReturnedPhoto] = useState<GalleryReturn | null>(null);
   // A retake is looking for a better photo: light crosses the one there until the new one lands.
   const [retaking, setRetaking] = useState(false);
   const scrollY = useRef(new Animated.Value(0)).current;
@@ -248,7 +249,7 @@ export default function WishDetail() {
             }}
           >
             {gallery ? (
-              <HeroGallery photos={photos} width={winW} height={HERO} topInset={insets.top} live={settled} index={photoIndex} onIndex={setPhotoIndex} onOpen={openPhoto} drift={drift}>
+              <HeroGallery photos={photos} width={winW} height={HERO} topInset={insets.top} live={settled} index={photoIndex} returnTo={returnedPhoto} onIndex={setPhotoIndex} onOpen={openPhoto} drift={drift}>
                 <Shade from={HERO_SHADE} />
               </HeroGallery>
             ) : (
@@ -358,7 +359,7 @@ export default function WishDetail() {
         <IconButton icon="back" label="Back" onPress={back} />
       </Animated.View>
       <Grain />
-      {viewing ? <PhotoViewer key={viewing.key} photos={photos} from={viewing} reduced={reduced} onSettle={setPhotoIndex} onClose={() => setViewing(null)} /> : null}
+      {viewing ? <PhotoViewer key={viewing.key} photos={photos} from={viewing} reduced={reduced} onSettle={setPhotoIndex} onClose={(index) => { setViewing(null); setReturnedPhoto({ index }); }} /> : null}
     </View>
   );
 }
