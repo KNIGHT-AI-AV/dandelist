@@ -414,7 +414,53 @@ describe("dream turn", () => {
     expect(metaCalls.filter((m) => m.text?.format?.name === "listing_candidates").length).toBe(hunts);
   });
 
-  it("refines after five swipes, explains in one line and deals a new round without repeats", async () => {
+  it("ends a deck on the best card they liked, as the wish, instead of searching again (owner, 2026-10-31)", async () => {
+    const t = await signIn("ada@example.com");
+    await liveIn(t, "MT", "Malta");
+    concierge = [[fc("search_homes", VILLA_ARGS)], [message("")]];
+    const first = await turn(t, { type: "message", text: "just search" });
+    const deck = widgets(first.events, "deck")[0];
+    const liked = deck.cards.find((c: Ev) => c.facts.includes("Sea view") && c.images.length);
+    let last: Ev[] = [];
+    for (const [i, card] of deck.cards.entries()) {
+      const r = await turn(t, { type: "swipe", widgetId: deck.id, listingId: card.id, verdict: card.id === liked.id ? "yes" : "no" }, first.sessionId);
+      // Nothing happens until the last card: no second deck dealt mid-swipe.
+      if (i < deck.cards.length - 1) expect(r.events.map((e) => e.type)).toEqual(["start", "done"]);
+      last = r.events;
+    }
+    expect(widgets(last, "deck")).toEqual([]);
+    expect(widgets(last, "wish_ready")[0].wish).toMatchObject({ name: liked.title, url: liked.url });
+    expect(metaCalls.some((m) => m.text?.format?.name === "refined_criteria")).toBe(false);
+  });
+
+  it("ends a deck on its best card when they say that's enough, without asking the model", async () => {
+    const t = await signIn("ada@example.com");
+    await liveIn(t, "MT", "Malta");
+    concierge = [[fc("search_homes", VILLA_ARGS)], [message("")]];
+    const first = await turn(t, { type: "message", text: "just search" });
+    const deck = widgets(first.events, "deck")[0];
+    await turn(t, { type: "swipe", widgetId: deck.id, listingId: deck.cards[0].id, verdict: "no" }, first.sessionId);
+    const calls = metaCalls.length;
+    const { events } = await turn(t, { type: "message", text: "That’s enough, show me the best match." }, first.sessionId);
+    const best = deck.cards.slice(1).find((c: Ev) => c.images.length) ?? deck.cards[1];
+    expect(widgets(events, "wish_ready")[0].wish).toMatchObject({ name: best.title, url: best.url });
+    // No concierge turn was spent on it: only the pricing's own research calls, never the chat model.
+    expect(metaCalls.slice(calls).some((m) => String(m.instructions ?? "").startsWith("You are the person's Dandy"))).toBe(false);
+  });
+
+  it("gives a picked card that came without a photo one from Wikimedia Commons", async () => {
+    const t = await signIn("ada@example.com");
+    await liveIn(t, "MT", "Malta");
+    concierge = [[fc("search_homes", VILLA_ARGS)], [message("")]];
+    const first = await turn(t, { type: "message", text: "just search" });
+    const deck = widgets(first.events, "deck")[0];
+    const blocked = deck.cards.find((c: Ev) => c.url === `${IP}.25/blocked`);
+    expect(blocked.images).toEqual([]);
+    const { events } = await turn(t, { type: "pick", widgetId: deck.id, listingId: blocked.id }, first.sessionId);
+    expect(widgets(events, "wish_ready")[0].wish.images).toMatchObject([{ url: "https://upload.wikimedia.org/villa.jpg", source: "Wikimedia Commons" }]);
+  });
+
+  it("deals a new round without repeats when every card was passed on, explaining in one line", async () => {
     const t = await signIn("ada@example.com");
     await liveIn(t, "MT", "Malta");
     concierge = [[fc("search_homes", VILLA_ARGS)], [message("")]];
@@ -422,12 +468,8 @@ describe("dream turn", () => {
     const deck = widgets(first.events, "deck")[0];
     const seenUrls = deck.cards.map((c: Ev) => c.url);
     let last: Ev[] = [];
-    for (const [i, card] of deck.cards.slice(0, 5).entries()) {
-      const verdict = card.facts.includes("Sea view") ? "yes" : "no";
-      const r = await turn(t, { type: "swipe", widgetId: deck.id, listingId: card.id, verdict }, first.sessionId);
-      if (i < 4) expect(r.events.map((e) => e.type)).toEqual(["start", "done"]);
-      last = r.events;
-    }
+    for (const card of deck.cards) last = (await turn(t, { type: "swipe", widgetId: deck.id, listingId: card.id, verdict: "no" }, first.sessionId)).events;
+    expect(widgets(last, "wish_ready")).toEqual([]);
     expect(last.find((e) => e.type === "text")!.text).toBe("You keep picking sea views, so I'm dropping inland homes.");
     const next = widgets(last, "deck")[0];
     expect(next.round).toBe(2);
@@ -447,10 +489,10 @@ describe("dream turn", () => {
     const first = await turn(t, { type: "message", text: "just search" });
     const deck = widgets(first.events, "deck")[0];
     let last: Ev[] = [];
-    for (const card of deck.cards.slice(0, 5)) last = (await turn(t, { type: "swipe", widgetId: deck.id, listingId: card.id, verdict: "yes" }, first.sessionId)).events;
+    for (const card of deck.cards) last = (await turn(t, { type: "swipe", widgetId: deck.id, listingId: card.id, verdict: "no" }, first.sessionId)).events;
     const text = last.find((e) => e.type === "text")!.text as string;
     expect(text).not.toMatch(/2\.2|7 bedrooms/);
-    expect(text).toMatch(/^You keep picking|^Taking what you liked/);
+    expect(text).toMatch(/^You keep picking|^Taking what you liked|^None of those landed/);
   });
 
   it("trims concierge sentences that state numbers the facts don't hold", async () => {
