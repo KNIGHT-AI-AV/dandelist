@@ -16,7 +16,7 @@ import { Jobs, mergeChat, type ChatCopy } from "./jobs";
 import { TurnBudget, TurnLimitError, type ApifyConfig, type DreamCtx } from "./context";
 import { HISTORY_LIMIT, previewOf, summary, titleOf } from "./history";
 import { homeSchema, lifeBody, readLife, writeLife } from "./life";
-import { memoryFor, updateMemory } from "../memory";
+import { MEMORY_DEADLINE_MS, memoryFor, updateMemory } from "../memory";
 import { notesFor } from "../notes";
 import { listWishes } from "../wishes";
 import { Suggestions } from "./suggest";
@@ -378,7 +378,8 @@ export function dreamRoutes(deps: DreamDeps) {
           // What they said is read for anything worth remembering next time (memory.ts), after the reply is saved and
           // without holding it up; a call that fails changes nothing.
           if (deps.remember && body.data.action.type === "message") {
-            const meta = ctxFor(async () => {}, new TurnBudget(), new AbortController().signal).meta;
+            // Its own hard stop (review of #147): the request is aborted at the deadline and nothing is written after it.
+            const meta = ctxFor(async () => {}, new TurnBudget(), AbortSignal.timeout(MEMORY_DEADLINE_MS)).meta;
             const remembering = updateMemory(meta, db, userId, body.data.action.text, sessionId, deps.now()).catch(() => undefined);
             void (deps.alive?.keep(remembering) ?? remembering);
           }

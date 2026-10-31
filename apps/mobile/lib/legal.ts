@@ -31,7 +31,7 @@ export const PRIVACY: LegalSection[] = [
       "To price a wish, we send what you typed, and the answers you give to its questions, to Meta's Model API, which runs the Muse Spark model. The agent then searches the web and reads sellers' pages to check prices.",
       "If you say a wish instead of typing it, the recording goes to Meta's Model API to be written down. We don't store the recording.",
       "When you ask for facts about your list in Settings, we send your wishes and the place you would like to live, so the agent can write them.",
-      "In the chat, your Dandy keeps a few short lines about you for next time, such as who you buy for or what you love, read from what you tell it. It never keeps contact details or what you earn or owe. You can see and remove each line in Settings, and they are deleted with your account.",
+      "In the chat, your Dandy keeps a few short lines about you for next time, such as who you buy for or what you love, read from what you tell it. It is told to leave out your health, beliefs, income, debts and contact details, and lines that look like an address, a phone number, an email or a money figure are dropped. You can see and remove each line in Settings, and they are deleted with your account.",
       "We don't send your email address or name to Meta. We use Meta's standard models, not the modes that let Meta train on your data.",
     ],
   },

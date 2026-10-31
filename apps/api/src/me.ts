@@ -8,7 +8,7 @@ import { requireAuth, type AuthVars } from "./auth";
 import type { Db } from "./db";
 import { readLife } from "./dream/life";
 import { avatarKeyFor, type MediaType } from "./media-store";
-import { readMemories } from "./memory";
+import { forgetMemories, readMemories } from "./memory";
 import { PROVIDERS, listIdentities, type Provider } from "./oauth";
 import { RateLimiter } from "./ratelimit";
 import { SpendLimitError, assertBudget, assertUserBudget, recordSpend, userCapUsd, withHold } from "./spend";
@@ -217,11 +217,11 @@ export function meRoutes(deps: AgentDeps) {
   app.get("/memories", async (c) => c.json({ memories: await readMemories(db, c.get("userId")) }));
   app.delete("/memories/:id", async (c) => {
     const id = z.string().uuid().safeParse(c.req.param("id"));
-    if (id.success) await db.query("delete from dream_memories where user_id = $1 and id = $2", [c.get("userId"), id.data]);
+    if (id.success) await forgetMemories(db, c.get("userId"), id.data);
     return c.json({ memories: await readMemories(db, c.get("userId")) });
   });
   app.delete("/memories", async (c) => {
-    await db.query("delete from dream_memories where user_id = $1", [c.get("userId")]);
+    await forgetMemories(db, c.get("userId"));
     return c.json({ memories: [] });
   });
 

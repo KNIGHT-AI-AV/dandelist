@@ -6,7 +6,7 @@ vi.mock("node:dns/promises", async (importOriginal) => ({ ...(await importOrigin
 import type { Meta } from "../src/agent/agent";
 import { createApp } from "../src/app";
 import { migrate, type Db } from "../src/db";
-import { MEMORY_HEADING, MEMORY_LINE, MEMORY_MAX, cleanMemory, memoryBlock, readMemories, updateMemory } from "../src/memory";
+import { MEMORY_HEADING, MEMORY_LINE, MEMORY_MAX, cleanMemory, forgetMemories, memoryBlock, readMemories, updateMemory } from "../src/memory";
 
 /**
  * What the Dandy remembers between conversations (owner, 2026-10-31: "retain that memory and retain its personality"):
@@ -100,6 +100,14 @@ describe("a line kept", () => {
     for (const bad of ["email is ada@example.com", "call them on +44 20 7946 0958", "account 12345678", "earns about 200k a year", "has a mortgage to pay off", "see https://example.com", "", 42]) {
       expect(cleanMemory(bad)).toBeNull();
     }
+    // The bypasses Codex named (review of #147), and their kin: a street address, pay in words, money owed.
+    for (const bad of ["lives at 123 Maple Street", "home is 4 Rue de la Paix Ave", "annual pay is eighty thousand dollars", "makes two hundred thousand a year", "owes money on the car", "gets a big bonus every December"]) {
+      expect(cleanMemory(bad)).toBeNull();
+    }
+    // What the memory is for still passes (control).
+    for (const good of ["buys for their wife; her birthday is in June", "their wife loves French design", "would rather have one big trip a year than several small ones", "avoids long-haul flights", "loves vintage watches, especially from the 60s"]) {
+      expect(cleanMemory(good)).toBe(good);
+    }
   });
 
   it("reaches the concierge as data: each line a JSON string under the heading", () => {
@@ -156,6 +164,71 @@ describe("updating the memory from what they said", () => {
       updateMemory(memoryMeta([answer]), db, ada, "Old cars are just better made", null, new Date("2026-10-31T08:00:01Z")),
     ]);
     expect((await readMemories(db, ada)).map((m) => m.text)).toEqual(["prefers vintage cars to new ones"]);
+  });
+});
+
+/** A Meta whose answers wait until the test lets each one go. */
+function heldMeta() {
+  const waiting: ((answer: unknown) => void)[] = [];
+  const meta: Meta = { responses: () => new Promise((resolve) => waiting.push((answer) => resolve({ text: JSON.stringify(answer) } as never))) };
+  const release = async (answer: unknown) => {
+    for (let i = 0; i < 50 && !waiting.length; i++) await new Promise((r) => setTimeout(r, 5));
+    waiting.shift()!(answer);
+  };
+  return { meta, release };
+}
+
+describe("Forget against an update already waiting on the model (review of #147)", () => {
+  it("keeps Forget everything: an older answer that lands after it writes nothing", async () => {
+    const ada = await signIn("ada@example.com");
+    const bob = await signIn("bob@example.com");
+    const now = new Date("2026-10-31T08:00:00Z");
+    await updateMemory(memoryMeta([{ add: ["loves Porsches"], forget: [] }]), db, bob.id, "I've always loved Porsches, always", null, now);
+    const held = heldMeta();
+    const pending = updateMemory(held.meta, db, ada.id, "I only like old cars, honestly", null, now);
+    // She forgets everything while that read waits on the model.
+    expect(((await (await call("DELETE", "/me/memories", ada.token)).json()) as { memories: unknown[] }).memories).toEqual([]);
+    await held.release({ add: ["prefers vintage cars to new ones"], forget: [] });
+    expect(await pending).toEqual({ added: [], forgot: [] });
+    expect(await readMemories(db, ada.id)).toEqual([]);
+    // Bob's line was never touched, and a message she sends after Forget is remembered as usual (controls).
+    expect((await readMemories(db, bob.id)).map((m) => m.text)).toEqual(["loves Porsches"]);
+    await updateMemory(memoryMeta([{ add: ["avoids long-haul flights"], forget: [] }]), db, ada.id, "We never fly long-haul, the kids hate it", null, new Date("2026-10-31T09:00:00Z"));
+    expect((await readMemories(db, ada.id)).map((m) => m.text)).toEqual(["avoids long-haul flights"]);
+  });
+
+  it("keeps forgetting one line: an older answer can't put it back, reworded or not", async () => {
+    const ada = await signIn("ada@example.com");
+    await updateMemory(memoryMeta([{ add: ["prefers vintage cars to new ones", "avoids long-haul flights"], forget: [] }]), db, ada.id, "I only like old cars and hate long flights", null, new Date("2026-10-31T08:00:00Z"));
+    const vintage = (await readMemories(db, ada.id)).find((m) => m.text.startsWith("prefers"))!;
+    const held = heldMeta();
+    const pending = updateMemory(held.meta, db, ada.id, "Old cars, always old cars", null, new Date("2026-10-31T09:00:00Z"));
+    await call("DELETE", `/me/memories/${vintage.id}`, ada.token);
+    await held.release({ add: ["prefers classic cars over new ones"], forget: [vintage.id] });
+    expect((await pending).added).toEqual([]);
+    expect((await readMemories(db, ada.id)).map((m) => m.text)).toEqual(["avoids long-haul flights"]);
+  });
+
+  it("gives up on a model that doesn't answer in time, frees the next update, and writes nothing later", async () => {
+    const ada = await signIn("ada@example.com");
+    const held = heldMeta();
+    const stuck = updateMemory(held.meta, db, ada.id, "I only like old cars, honestly", null, new Date(), { deadlineMs: 30 });
+    await expect(stuck).rejects.toThrow("ran out of time");
+    // The next update for her isn't stuck behind it.
+    await updateMemory(memoryMeta([{ add: ["avoids long-haul flights"], forget: [] }]), db, ada.id, "We never fly long-haul, the kids hate it", null, new Date());
+    // The late answer, when it finally comes, is dropped.
+    await held.release({ add: ["prefers vintage cars to new ones"], forget: [] });
+    await new Promise((r) => setTimeout(r, 20));
+    expect((await readMemories(db, ada.id)).map((m) => m.text)).toEqual(["avoids long-haul flights"]);
+  });
+
+  it("forgets with the epoch moved first, so nothing read before it writes after it", async () => {
+    const ada = await signIn("ada@example.com");
+    const epoch = async () => (await db.query<{ memory_epoch: number }>("select memory_epoch from users where id = $1", [ada.id])).rows[0]!.memory_epoch;
+    expect(await epoch()).toBe(0);
+    await forgetMemories(db, ada.id);
+    await forgetMemories(db, ada.id, "00000000-0000-0000-0000-000000000000");
+    expect(await epoch()).toBe(2);
   });
 });
 

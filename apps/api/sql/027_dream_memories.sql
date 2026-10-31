@@ -11,3 +11,5 @@ create table if not exists dream_memories (
   created_at timestamptz not null default now()
 );
 create index if not exists dream_memories_user on dream_memories (user_id, created_at desc);
+-- Moves on every Forget (memory.ts forgetMemories): an update read before it never writes after it (review of #147).
+alter table users add column if not exists memory_epoch integer not null default 0;

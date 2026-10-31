@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
+// Only the request helpers here; the hook's sign-in ownership is tested with the real AuthProvider in memory-owner.test.ts.
+vi.mock("./auth", () => ({ useAuth: () => ({}), currentSignIn: () => 0, bindToSignIn: <T>(api: T) => api }));
 import { fetchMemories, forgetAllMemories, forgetMemory } from "./memory";
 
 const lines = [{ id: "m1", text: "prefers vintage cars to new ones", createdAt: "2026-10-31T08:00:00.000Z" }];
