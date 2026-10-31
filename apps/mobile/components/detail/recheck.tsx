@@ -6,6 +6,7 @@ import { useAuth } from "../../lib/auth";
 import { formatCents } from "../../lib/money";
 import { ease, haptic, native, step, useReducedMotion } from "../../lib/motion";
 import { POLL_MS, elapsed, newPricePatch, pickOption, priceChange, stepLine } from "../../lib/recheck";
+import { holdWish, useAccount } from "../../lib/rechecks";
 import { layout, radius, type, usePalette, useType } from "../../lib/theme";
 import { useWishes, type Wish } from "../../lib/wishes";
 import { AgentDot, ErrorLine, Eyebrow, Glass, PrimaryButton, QuietButton } from "../lux";
@@ -60,11 +61,12 @@ export function Recheck({ wish }: { wish: Wish }) {
   const working = phase === "reading" || phase === "running";
   const clock = useClock(working ? since : null);
   // The list's Dandy area shows the check as one of its live tasks while it runs.
+  const account = useAccount();
   useEffect(() => {
     if (!working) return;
-    const id = startTask(`Checking the price of ${wish.name}`);
+    const id = startTask(`Checking the price of ${wish.name}`, account ?? undefined);
     return () => endTask(id);
-  }, [working, wish.name]);
+  }, [working, wish.name, account]);
 
   const fail = (e: unknown) => {
     if (!alive.current) return;
@@ -124,11 +126,14 @@ export function Recheck({ wish }: { wish: Wish }) {
     setSaving(true);
     setSaveError(null);
     try {
-      const res = await api(`/wishes/${wish.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(newPricePatch(wish, run, option)) }).catch(() => null);
-      if (!res) throw new Error("Can't reach Dandelist. Check your connection.");
-      if (!res.ok) throw new Error(((await res.json().catch(() => null)) as { error?: string } | null)?.error ?? "Couldn't save the new price.");
-      await reload();
-      if (alive.current) setPhase("saved");
+      // The one save of this wish in flight (lib/rechecks.ts): while the Dandy is saving it, a press here does nothing.
+      const saved = await holdWish(wish.id, async () => {
+        const res = await api(`/wishes/${wish.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(newPricePatch(wish, run, option)) }).catch(() => null);
+        if (!res) throw new Error("Can't reach Dandelist. Check your connection.");
+        if (!res.ok) throw new Error(((await res.json().catch(() => null)) as { error?: string } | null)?.error ?? "Couldn't save the new price.");
+        await reload();
+      });
+      if (saved && alive.current) setPhase("saved");
     } catch (e) {
       if (alive.current) setSaveError((e as Error).message);
     } finally {

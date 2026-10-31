@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Atmosphere } from "../../components/atmosphere";
 import { HeroGallery, type GalleryReturn } from "../../components/detail/gallery";
 import { CONTROL_TOP, HERO_SHADE, PARALLAX } from "../../components/detail/metrics";
+import { AmendWish } from "../../components/detail/amend";
 import { WishNote } from "../../components/detail/note";
 import { Recheck } from "../../components/detail/recheck";
 import { RetakePhoto } from "../../components/detail/retake";
@@ -52,7 +53,8 @@ const SECTIONS = 5;
  * body `stack.base`, and lines of body `stack.tight`.
  */
 export default function WishDetail() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  // `amend` opens with the field to tell the Dandy what they meant already focused (the list's quick actions).
+  const { id, amend } = useLocalSearchParams<{ id: string; amend?: string }>();
   const auth = useAuth();
   const { wishes, status, remove } = useWishes();
   const p = usePalette();
@@ -297,6 +299,13 @@ export default function WishDetail() {
           <Animated.View style={enter(2)}>
             <WishNote key={w.id} wish={w} onReveal={(dy) => scroller.current?.scrollTo({ y: Math.max(0, scrollTop.current + dy), animated: true })} />
           </Animated.View>
+
+          {/* Tell the Dandy what they meant, and hunt it again with their words. Money and the priceless have no hunt. */}
+          {worth ? null : (
+            <Animated.View style={enter(2)}>
+              <AmendWish key={w.id} wish={w} autoFocus={amend === "1"} onReveal={(dy) => scroller.current?.scrollTo({ y: Math.max(0, scrollTop.current + dy), animated: true })} />
+            </Animated.View>
+          )}
 
           {/* Source: who sells it, how the price was found, and the check. Something priceless has none. */}
           <Animated.View style={[{ gap: layout.stack.base, ...(worth === "priceless" ? { display: "none" as const } : null) }, enter(3)]}>

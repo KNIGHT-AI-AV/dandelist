@@ -119,6 +119,7 @@ export function ListPage() {
   const pager = usePager();
   const money = useMoney();
   const label = useCardLabel();
+  const dandy = useDandy();
   // The same three ideas the chat offers, made from their list and where they live.
   const suggestions = useSuggestions();
   const { wishes, status, error, reload, add, setTier } = useWishes();
@@ -161,9 +162,10 @@ export function ListPage() {
     if (status === "error" && error && wishes.length) showError(error);
   }, [status, error]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const openWish = (w: Wish, at?: Rect) => {
+  /** Opens a wish; `amend` opens it with the field to tell the Dandy what they meant already focused. */
+  const openWish = (w: Wish, at?: Rect, amend = false) => {
     if (at) rememberCard(w.id, at);
-    router.push(`/wishes/${w.id}`);
+    router.push(amend ? `/wishes/${w.id}?amend=1` : `/wishes/${w.id}`);
   };
   const openQuick = (w: Wish, at: Rect) => {
     haptic.select();
@@ -287,6 +289,7 @@ export function ListPage() {
           {worthOf(quickWish) ? null : (
             <Rise delay={delayFor(3)}>
               <SheetRow label="Check the price again" onPress={() => closeQuick(() => void recheckWish(auth.api, quickWish, reload))} />
+              <SheetRow label={`Tell ${dandy.name} what you meant`} onPress={() => closeQuick(() => openWish(quickWish, quick.at, true))} />
             </Rise>
           )}
           <Rise delay={delayFor(4)}>

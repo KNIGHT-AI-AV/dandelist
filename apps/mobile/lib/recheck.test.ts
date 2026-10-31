@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { PriceOption } from "./agent";
-import { elapsed, newPricePatch, pickOption, priceChange, sinceWhen, stepLine } from "./recheck";
+import { amendPatch, elapsed, newPricePatch, pickOption, priceChange, sinceWhen, stepLine } from "./recheck";
 
 // Local noon, so the calendar day is the same in every time zone the tests run in.
 const day = (month: number, date: number) => new Date(2026, month - 1, date, 12).toISOString();
@@ -106,6 +106,14 @@ describe("newPricePatch", () => {
     expect(patch.upfrontCents).toBe(587_000);
     expect(patch.recurring).toBeUndefined();
     expect(patch.details.agent).toMatchObject({ runId: "run-2", seller: "Leica Store", status: "verified", checkedAt: day(11, 3), imageUrl: "https://img.example.com/q3.jpg", media, explanation: "Still the body alone." });
+  });
+
+  it("takes what the person meant in full when they amend: the new name, price, seller and the new find's own photo", () => {
+    const blackDial = { kind: "product" as const, images: [{ url: "https://img.example.com/q3-black.jpg", source: "leica-camera.com" }] };
+    const patch = amendPatch(wish, { id: "run-4", result: { options: [], explanation: "", note: "", horizonYears: 5 } }, option({ label: "Leica Q3 43", seller: "B&H", url: "https://bhphotovideo.com/q3-43", upfrontCents: 649_500, imageUrl: "https://img.example.com/q3-black.jpg", media: blackDial }), "  Leica Q3 43  ");
+    expect(patch.name).toBe("Leica Q3 43");
+    expect(patch.upfrontCents).toBe(649_500);
+    expect(patch.details.agent).toMatchObject({ runId: "run-4", seller: "B&H", url: "https://bhphotovideo.com/q3-43", imageUrl: "https://img.example.com/q3-black.jpg", media: blackDial });
   });
 
   it("replaces running costs only when the agent itemised new ones, and drops non-web links", () => {

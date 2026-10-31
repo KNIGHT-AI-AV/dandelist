@@ -54,6 +54,31 @@ interface Auth {
 
 const AuthContext = createContext<Auth | null>(null);
 
+/**
+ * Which sign-in the app's bearer belongs to (review of #131): a number that moves the moment another account's bearer,
+ * or none, is put in place, in the same step and before anything can send with it, and never for a refresh of the same
+ * account's. Work started under one sign-in binds its requests to it (bindToSignIn): they refuse to send once it moved.
+ */
+let signIn = { account: null as string | null, at: 0 };
+const SIGN_IN = Symbol("sign-in");
+export const currentSignIn = (): number => signIn.at;
+/** Whose bearer the app holds from now on; the same account again (a refresh, a second sign-in) changes nothing. */
+function bearerOf(account: string | null): void {
+  if (account !== signIn.account) signIn = { account, at: signIn.at + 1 };
+}
+
+/** Thrown instead of sending a request whose sign-in has moved on. */
+export class SignInChanged extends Error {
+  constructor() {
+    super("Signed in as someone else since.");
+  }
+}
+
+/** `api` bound to the sign-in `at`: each request, and its retry after a refresh, is refused once that sign-in moved on. */
+export function bindToSignIn(api: (path: string, init?: RequestInit) => Promise<Response>, at: number) {
+  return (path: string, init: RequestInit = {}) => api(path, { ...init, [SIGN_IN]: at } as RequestInit);
+}
+
 async function errorMessage(res: Response): Promise<string> {
   try {
     const body = (await res.json()) as { error?: string };
@@ -186,6 +211,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const takeTokens = useCallback(async (t: { accessToken: string; refreshToken: string; user?: User }) => {
     access.current = t.accessToken;
+    // A sign-in names its account; a refresh keeps the one it refreshes.
+    if (t.user) bearerOf(t.user.id);
     await setSecret(REFRESH_KEY, t.refreshToken);
     if (t.user) setUser(t.user);
   }, []);
@@ -206,11 +233,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async (path: string, init: RequestInit = {}, streaming = false) => {
       // React Native's own fetch can't read a response stream; Expo's can. The web's fetch streams already.
       const doFetch = (streaming && Platform.OS !== "web" ? streamingFetch : fetch) as typeof fetch;
-      const send = () =>
-        doFetch(`${API_URL}${path}`, { ...init, headers: { ...(init.headers ?? {}), Authorization: `Bearer ${access.current ?? ""}` } });
+      const { [SIGN_IN]: at, ...rest } = init as RequestInit & { [SIGN_IN]?: number };
+      // Checked right where the bearer is read, for the first try and the retry after a refresh alike.
+      const send = () => {
+        if (at !== undefined && at !== signIn.at) throw new SignInChanged();
+        return doFetch(`${API_URL}${path}`, { ...rest, headers: { ...(rest.headers ?? {}), Authorization: `Bearer ${access.current ?? ""}` } });
+      };
       let res = await send();
       if (res.status === 401 && (await refresh())) res = await send();
       if (res.status === 401) {
+        bearerOf(null);
         setUser(null);
         setStatus("signedOut");
       }
@@ -226,7 +258,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (await refresh()) {
         const me = await api("/me");
         if (me.ok) {
-          setUser(((await me.json()) as { user: User }).user);
+          const { user } = (await me.json()) as { user: User };
+          bearerOf(user.id);
+          setUser(user);
           setStatus("signedIn");
           return;
         }
@@ -411,6 +445,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       async signOut() {
         if (access.current) await post("/auth/logout", {}, access.current).catch(() => null);
         access.current = null;
+        bearerOf(null);
         await setSecret(REFRESH_KEY, null);
         setUser(null);
         setStatus("signedOut");
