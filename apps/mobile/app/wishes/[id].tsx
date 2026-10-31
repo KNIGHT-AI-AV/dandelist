@@ -19,6 +19,7 @@ import { Statement, Take } from "../../components/statement";
 import { useAuth } from "../../lib/auth";
 import { webOnly } from "../../lib/dream";
 import { realPhotos, showsGallery, trimBottom } from "../../lib/gallery";
+import { selectMediaHero } from "../../lib/media-hero";
 import { FLICK, ease, native, spring, step, useReducedMotion } from "../../lib/motion";
 import { layout, radius, type, usePalette, useType } from "../../lib/theme";
 import { useWishes, type Wish } from "../../lib/wishes";
@@ -209,6 +210,9 @@ export default function WishDetail() {
   });
   const photos = realPhotos(pictured?.media);
   const gallery = showsGallery(pictured?.media);
+  const selectedHero = selectMediaHero(pictured?.media);
+  // Only the rendered cutout moves its real original's credit above the shade. Generated-image labels stay inside.
+  const cutoutCaption = !gallery && selectedHero.kind === "cutout" && !selectedHero.original?.generated ? selectedHero.original : undefined;
   // The photo drifts down at a fraction of the scroll, so the page slides over it. Transform only; off under reduced motion.
   const drift = reduced ? undefined : { transform: [{ translateY: scrollY.interpolate({ inputRange: [0, HERO], outputRange: [0, HERO * PARALLAX], extrapolate: "clamp" }) }] };
   const openPhoto = (index: number) =>
@@ -257,7 +261,7 @@ export default function WishDetail() {
             ) : (
               <>
                 <Animated.View style={[StyleSheet.absoluteFill, drift]}>
-                  <MediaHero media={pictured?.media} fallbackUri={pictured?.imageUrl} kind={w.kind} glyph={savedGlyph(w, money.symbol)} style={StyleSheet.absoluteFill} />
+                  <MediaHero media={pictured?.media} fallbackUri={pictured?.imageUrl} kind={w.kind} glyph={savedGlyph(w, money.symbol)} style={StyleSheet.absoluteFill} showCutoutCredit={!cutoutCaption} />
                 </Animated.View>
                 <Shade from={HERO_SHADE} />
               </>
@@ -280,8 +284,8 @@ export default function WishDetail() {
               <PhotoCredit image={photos[photoIndex]} />
             </Swap>
           ) : (
-            // A single photo is credited the same way; a 3D model and a cut-out carry their own credit.
-            <PhotoCredit image={!pictured?.media?.model3d && !pictured?.media?.cutout ? pictured?.media?.images[0] : null} />
+            // The cutout's matched original uses this caption layer; other media keep their existing credit.
+            <PhotoCredit image={cutoutCaption ?? (!pictured?.media?.model3d && !pictured?.media?.cutout ? pictured?.media?.images[0] : null)} />
           )}
           <RetakePhoto wish={w} onBusy={setRetaking} />
         </Animated.View>

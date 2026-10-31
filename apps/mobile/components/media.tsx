@@ -2,8 +2,8 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Image } from "expo-image";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Animated, Easing, PanResponder, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
+import { selectMediaHero } from "../lib/media-hero";
 import { useReducedMotion } from "../lib/motion";
-import { cutoutSourceImage } from "../lib/photo-credit";
 import { type, usePalette } from "../lib/theme";
 import { Embed } from "./embed";
 import { Photo } from "./lux";
@@ -205,22 +205,24 @@ export function TiltObject({ uri, style, credit, image }: { uri: string; style?:
 }
 
 /** Picks the richest way to show a wish: a 3D model, a slideshow of a place, a turnable cutout, or the photo. */
-export function MediaHero({ media, fallbackUri, kind, style, glyph, children }: { media?: Media; fallbackUri?: string | null; kind?: string; style?: StyleProp<ViewStyle>; glyph?: string; children?: ReactNode }) {
-  if (media?.model3d) return <Model3D model={media.model3d} style={style} />;
-  if (media && (media.kind === "place" || media.kind === "experience") && media.images.length > 1) {
+export function MediaHero({ media, fallbackUri, kind, style, glyph, children, showCutoutCredit = true }: { media?: Media; fallbackUri?: string | null; kind?: string; style?: StyleProp<ViewStyle>; glyph?: string; children?: ReactNode; showCutoutCredit?: boolean }) {
+  const selected = selectMediaHero(media);
+  if (selected.kind === "model") return <Model3D model={selected.model} style={style} />;
+  if (selected.kind === "slideshow") {
     return (
-      <Slideshow images={media.images} style={style}>
+      <Slideshow images={selected.images} style={style}>
         {children}
       </Slideshow>
     );
   }
-  if (media?.cutout) {
-    const original = cutoutSourceImage(media.images, media.cutout.from);
-    return <TiltObject uri={media.cutout.url} style={style} credit={original ? creditFor(original) : undefined} image={original} />;
+  if (selected.kind === "cutout") {
+    // A detail caption can credit the original outside its shade; other consumers keep the internal credit.
+    const original = showCutoutCredit ? selected.original : undefined;
+    return <TiltObject uri={selected.cutout.url} style={style} credit={original ? creditFor(original) : undefined} image={original} />;
   }
   return (
     <View style={style}>
-      <Photo uri={media?.images[0]?.url ?? fallbackUri} kind={kind} glyph={glyph} />
+      <Photo uri={selected.image?.url ?? fallbackUri} kind={kind} glyph={glyph} />
       {children}
     </View>
   );
