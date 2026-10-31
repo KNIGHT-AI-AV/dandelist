@@ -1,6 +1,7 @@
 import { serve } from "@hono/node-server";
 import { closeAnalytics } from "./analytics";
 import { createApp } from "./app";
+import { sweepHelp } from "./help";
 import { loadSeed } from "./archive/seed";
 import { migrate, openDb } from "./db";
 import { readEnv } from "./env";
@@ -20,7 +21,7 @@ for (const [name, id, secret] of [
   if (!!id !== !!secret) console.warn(`${name} sign-in needs both its client id and its client secret; it stays off`);
 }
 
-const app = createApp({
+const deps: Parameters<typeof createApp>[0] = {
   db,
   mailer: env.RESEND_API_KEY ? resendMailer(env.RESEND_API_KEY, env.MAIL_FROM) : consoleMailer(),
   jwtSecret: env.JWT_SECRET,
@@ -47,11 +48,17 @@ const app = createApp({
     apple: { servicesId: env.APPLE_SERVICES_ID, bundleId: env.APPLE_BUNDLE_ID || undefined },
     facebook: env.FACEBOOK_APP_ID && env.FACEBOOK_APP_SECRET ? { appId: env.FACEBOOK_APP_ID, appSecret: env.FACEBOOK_APP_SECRET } : undefined,
   },
-});
+};
+const app = createApp(deps);
 
 serve({ fetch: app.fetch, port: env.PORT }, (info) => console.log(`dandelist api listening on ${info.port}`));
 // What PostHog has queued goes before the process does (a deploy stops the old instance with SIGTERM).
 process.once("SIGTERM", () => void closeAnalytics().finally(() => process.exit(0)));
+
+// Help reports' private copies: deletions and uploads that failed are retried, at start and every five minutes.
+const sweep = () => void sweepHelp(deps).catch((e) => console.warn("help sweep failed", e instanceof Error ? e.message : e));
+sweep();
+setInterval(sweep, 5 * 60_000).unref();
 
 // The master list loads after the server is up, so a large seed never delays a deploy's health check.
 void loadSeed(db)

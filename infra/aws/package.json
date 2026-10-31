@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test": "node --import tsx --test help-args.test.ts",
     "whoami": "tsx whoami.ts",
     "provision": "tsx up.ts",
     "migrate": "tsx migrate.ts",

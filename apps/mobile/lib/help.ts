@@ -1,22 +1,20 @@
+import type { HelpDiagnostics } from "@dandelist/catalogue";
 import * as Application from "expo-application";
-import { useSyncExternalStore } from "react";
 import { Dimensions, Platform } from "react-native";
 import { analytics } from "./analytics";
+import { keptLines, noteLine } from "./help-sheet";
 import type { Api } from "./profile";
 
 /**
  * Help reports (owner, 2026-10-31: "a help icon so that it takes a direct state of everything on the application ...
  * if I see an issue, I can just press a button and then immediately go to this chat and talk to you and you could
- * literally see it with pictures"). The app adds what only it knows: where it is, the device and build, the last
- * errors and warnings it logged, and what its parts registered (addToHelp). The server adds the latest conversation,
- * the list and the last hunts, and keeps it all private for the team (apps/api/src/help.ts).
+ * literally see it with pictures"). The app adds a fixed list of diagnostics (packages/catalogue/src/help.ts): where it
+ * is, the device and build, and the last errors and warnings it logged in this sign-in, with anything shaped like a
+ * credential cut out. The server adds the latest conversation, the list and the last hunts, and keeps it all private
+ * for the team (apps/api/src/help.ts). The sheet and its sign-in ownership live in lib/help-sheet.ts.
  */
 
-const LOG_KEEP = 40;
-type Line = { at: string; level: "error" | "warn"; text: string };
-const lines: Line[] = [];
 let kept = false;
-
 const json = (v: unknown) => {
   try {
     return JSON.stringify(v).slice(0, 300);
@@ -33,24 +31,16 @@ export function keepLogs(): void {
   for (const level of ["error", "warn"] as const) {
     const original = console[level].bind(console);
     console[level] = (...args: unknown[]) => {
-      lines.push({ at: new Date().toISOString(), level, text: args.map(show).join(" ").slice(0, 600) });
-      if (lines.length > LOG_KEEP) lines.shift();
+      noteLine(level, args.map(show).join(" "));
       original(...args);
     };
   }
 }
 
-const parts = new Map<string, () => unknown>();
-/** Adds a part of the app's own state to every report while it's mounted; returns the function that takes it out. */
-export function addToHelp(name: string, read: () => unknown): () => void {
-  parts.set(name, read);
-  return () => void parts.delete(name);
-}
-
-/** Everything the app itself can say about where it is now. */
-export function helpState(route: string): Record<string, unknown> {
+/** The diagnostics the app sends with a report: nothing beyond the shared list. */
+export function helpState(route: string): HelpDiagnostics {
   const { width, height, scale, fontScale } = Dimensions.get("window");
-  const state: Record<string, unknown> = {
+  return {
     route,
     platform: Platform.OS,
     os: String(Platform.Version),
@@ -58,48 +48,21 @@ export function helpState(route: string): Record<string, unknown> {
     build: Application.nativeBuildVersion ?? null,
     window: { width, height, scale, fontScale },
     at: new Date().toISOString(),
-    logs: [...lines],
+    logs: keptLines(),
   };
-  for (const [name, read] of parts) {
-    try {
-      state[name] = read();
-    } catch (e) {
-      state[name] = `unreadable: ${String(e)}`;
-    }
-  }
-  return state;
 }
 
-/** Sends a report with the screen's picture (a JPEG in base64, or none); answers with its id and the code to quote. */
-export async function sendHelp(api: Api, state: Record<string, unknown>, screenshot?: string | null): Promise<{ id: string; code: string }> {
+/**
+ * Sends a report, as the sheet `key` names (so sending it again after a failure is the same report), with the screen's
+ * picture (a JPEG in base64, or none); answers with its id and the code to quote.
+ */
+export async function sendHelp(api: Api, state: HelpDiagnostics, screenshot: string | null, key: string): Promise<{ id: string; code: string }> {
   const replay = analytics.sessionId();
   const res = await api("/help", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ state, ...(screenshot ? { screenshot } : {}), ...(replay ? { replay } : {}) }),
+    body: JSON.stringify({ key, state, ...(screenshot ? { screenshot } : {}), ...(replay ? { replay } : {}) }),
   }).catch(() => null);
   if (!res?.ok) throw new Error(((await res?.json().catch(() => null)) as { error?: string } | null)?.error ?? "Couldn't send it. Try again.");
   return (await res.json()) as { id: string; code: string };
-}
-
-// The one help sheet: opened from the bar's help button or Settings, shown by <HelpHost /> (components/help.tsx).
-type Asking = { shot: string | null } | null;
-let asking: Asking = null;
-const listeners = new Set<() => void>();
-const set = (next: Asking) => {
-  asking = next;
-  listeners.forEach((l) => l());
-};
-/** Opens the help sheet with the picture taken a moment before (or none). */
-export const openHelp = (shot: string | null) => set({ shot });
-export const closeHelp = () => set(null);
-export function useHelpAsking(): Asking {
-  return useSyncExternalStore(
-    (l) => {
-      listeners.add(l);
-      return () => void listeners.delete(l);
-    },
-    () => asking,
-    () => asking,
-  );
 }

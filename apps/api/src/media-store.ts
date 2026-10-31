@@ -12,8 +12,10 @@ export interface MediaStore {
   /** Stores a profile photo under its own key (see avatarKeyFor). */
   putAvatar(key: string, bytes: Uint8Array, type: MediaType): Promise<void>;
   get(key: string): Promise<{ bytes: Uint8Array; type: MediaType } | null>;
-  /** A help report's file under help/ (help.ts): kept private, never served by /media. */
-  putPrivate?(key: string, bytes: Uint8Array, type: string): Promise<void>;
+  /** A help report's file under help/ (help.ts): kept private, never served by /media. Throws for any other key. */
+  putPrivate(key: string, bytes: Uint8Array, type: string): Promise<void>;
+  /** Removes a help report's file once its account is deleted (help.ts). Throws for any other key. */
+  deletePrivate(key: string): Promise<void>;
   /**
    * Removes a profile photo. Only avatar keys can be deleted: the agent's pictures are shared between everyone whose
    * wish shows them, so nothing a person does can remove one.
@@ -29,6 +31,11 @@ export const AVATAR_KEY = /^av-[a-f0-9]{64}\.(png|jpg|webp)$/;
 /** A help report's files: help/<report id>/report.json or screen.jpg. Never matches isStoredKey, so /media never serves one. */
 export const HELP_KEY = /^[0-9a-f-]{36}\/(report\.json|screen\.jpg)$/;
 export const isStoredKey = (key: string) => MEDIA_KEY.test(key) || AVATAR_KEY.test(key);
+/** Only a help report's own files can be written or removed privately: a wrong key is a bug, never a quiet no-op. */
+const helpKey = (key: string) => {
+  if (!HELP_KEY.test(key)) throw new Error(`not a help report key: ${key}`);
+  return key;
+};
 export const typeOfKey = (key: string): MediaType => (key.endsWith(".png") ? "image/png" : key.endsWith(".webp") ? "image/webp" : "image/jpeg");
 
 export const keyFor = (bytes: Uint8Array, type: MediaType) => `${createHash("sha256").update(bytes).digest("hex")}.${EXT[type]}`;
@@ -54,7 +61,10 @@ export function memoryMediaStore(publicBase: string): MediaStore & { objects: Ma
       if (AVATAR_KEY.test(key)) objects.set(key, bytes);
     },
     async putPrivate(key, bytes) {
-      if (HELP_KEY.test(key)) objects.set(`help/${key}`, bytes);
+      objects.set(`help/${helpKey(key)}`, bytes);
+    },
+    async deletePrivate(key) {
+      objects.delete(`help/${helpKey(key)}`);
     },
     async get(key) {
       const bytes = objects.get(key);
@@ -81,9 +91,11 @@ export function fileMediaStore(dir: string, publicBase: string): MediaStore {
       await writeFile(join(dir, key), bytes);
     },
     async putPrivate(key, bytes) {
-      if (!HELP_KEY.test(key)) return;
-      await mkdir(join(dir, "help", key.split("/")[0]!), { recursive: true });
+      await mkdir(join(dir, "help", helpKey(key).split("/")[0]!), { recursive: true });
       await writeFile(join(dir, "help", key), bytes);
+    },
+    async deletePrivate(key) {
+      await rm(join(dir, "help", helpKey(key)), { force: true });
     },
     async get(key) {
       if (!isStoredKey(key)) return null;
@@ -113,8 +125,11 @@ export async function s3MediaStore(bucket: string, region: string, publicBase: s
       await s3.send(new PutObjectCommand({ Bucket: bucket, Key: s3Path(key), Body: bytes, ContentType: type, CacheControl: "public, max-age=31536000, immutable" }));
     },
     async putPrivate(key, bytes, type) {
-      if (!HELP_KEY.test(key)) return;
-      await s3.send(new PutObjectCommand({ Bucket: bucket, Key: `help/${key}`, Body: bytes, ContentType: type, CacheControl: "private, no-store" }));
+      await s3.send(new PutObjectCommand({ Bucket: bucket, Key: `help/${helpKey(key)}`, Body: bytes, ContentType: type, CacheControl: "private, no-store" }));
+    },
+    async deletePrivate(key) {
+      // S3 answers a delete of a missing object with success, so a retry after a partial delete is safe.
+      await s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: `help/${helpKey(key)}` }));
     },
     async get(key) {
       if (!isStoredKey(key)) return null;
