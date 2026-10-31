@@ -19,6 +19,7 @@ let mail: { to: string; code: string }[];
 let app: ReturnType<typeof createApp>;
 let calls: Record<string, any>[];
 let memoryReplies: { add: string[]; forget: string[] }[];
+let gate: { enter: () => void; opened: Promise<void> } | null;
 
 const reply = (output: unknown[]) => Response.json({ id: `resp_${calls.length}`, output, usage: { input_tokens: 400, output_tokens: 40 } });
 const message = (text: string) => ({ type: "message", content: [{ type: "output_text", text, annotations: [] }] });
@@ -28,6 +29,11 @@ const fakeMeta = (async (_url: string, init: RequestInit) => {
   const format = body.text?.format?.name;
   if (format === "wants") return reply([message(JSON.stringify({ wants: [] }))]);
   if (format === "dandy_memory") return reply([message(JSON.stringify(memoryReplies.shift() ?? { add: [], forget: [] }))]);
+  if (gate) {
+    const held = gate;
+    held.enter();
+    await held.opened;
+  }
   return reply([message("Lovely, noted.")]);
 }) as unknown as typeof fetch;
 const noWeb = (async () => new Response("<html>Not found</html>", { status: 404, headers: { "content-type": "text/html" } })) as unknown as typeof fetch;
@@ -54,6 +60,7 @@ beforeEach(async () => {
   mail = [];
   calls = [];
   memoryReplies = [];
+  gate = null;
   app = makeApp(true);
 });
 
@@ -79,6 +86,15 @@ const say = async (token: string, text: string, sessionId: string | null = null)
 async function settled(userId: string, lines: number) {
   for (let i = 0; i < 100 && (await readMemories(db, userId)).length !== lines; i++) await new Promise((r) => setTimeout(r, 10));
   return (await readMemories(db, userId)).map((m) => m.text);
+}
+/** Holds the conversation's next reply: `entered` resolves as its model call arrives, and it answers once `open()`ed. */
+function holdReply() {
+  let enter!: () => void;
+  let open!: () => void;
+  const entered = new Promise<void>((r) => (enter = r));
+  const opened = new Promise<void>((r) => (open = r));
+  gate = { enter, opened };
+  return { entered, open: () => ((gate = null), open()) };
 }
 const memoryCalls = () => calls.filter((c) => c.text?.format?.name === "dandy_memory");
 const conciergeCalls = () => calls.filter((c) => Array.isArray(c.tools) && c.tools.some((t: { name?: string }) => t.name === "price_item"));
@@ -283,6 +299,44 @@ describe("in the conversation", () => {
     const last = conciergeCalls().at(-1)!;
     expect(last.instructions).toContain(MEMORY_HEADING);
     expect(last.instructions).toContain(JSON.stringify("buys for their wife; her birthday is in June"));
+  });
+
+  it("takes the message's memory epoch as it arrives: Forget everything pressed before its reply lands keeps it out (review of #147)", async () => {
+    const ada = await signIn("ada@example.com");
+    const bob = await signIn("bob@example.com");
+    await updateMemory(memoryMeta([{ add: ["loves Porsches"], forget: [] }]), db, bob.id, "I've always loved Porsches, always", null, new Date("2026-10-31T08:00:00Z"));
+    // Her message is in and its reply is still with the model when she forgets everything.
+    const held = holdReply();
+    memoryReplies.push({ add: ["prefers vintage cars to new ones"], forget: [] });
+    const turn = say(ada.token, "I only like old cars, honestly");
+    await held.entered;
+    expect(((await (await call("DELETE", "/me/memories", ada.token)).json()) as { memories: unknown[] }).memories).toEqual([]);
+    held.open();
+    await turn;
+    // What she says after Forget is remembered as usual, its update running after the earlier one's (one at a time).
+    memoryReplies.push({ add: ["avoids long-haul flights"], forget: [] });
+    await say(ada.token, "We never fly long-haul, the kids hate it");
+    expect(await settled(ada.id, 1)).toEqual(["avoids long-haul flights"]);
+    // The earlier message was still read after its reply; only what it would add was dropped. Bob is untouched.
+    expect(memoryCalls()).toHaveLength(2);
+    expect((await readMemories(db, bob.id)).map((m) => m.text)).toEqual(["loves Porsches"]);
+  });
+
+  it("keeps a removed line out, reworded too, when the message before the removal is still being answered", async () => {
+    const ada = await signIn("ada@example.com");
+    await updateMemory(memoryMeta([{ add: ["prefers vintage cars to new ones", "avoids long-haul flights"], forget: [] }]), db, ada.id, "I only like old cars and hate long flights", null, new Date("2026-10-31T07:00:00Z"));
+    const vintage = (await readMemories(db, ada.id)).find((m) => m.text.startsWith("prefers"))!;
+    const held = holdReply();
+    memoryReplies.push({ add: ["prefers classic cars over new ones"], forget: [] });
+    const turn = say(ada.token, "Classic cars are the only ones worth having");
+    await held.entered;
+    await call("DELETE", `/me/memories/${vintage.id}`, ada.token);
+    held.open();
+    await turn;
+    memoryReplies.push({ add: ["buys for their wife; her birthday is in June"], forget: [] });
+    await say(ada.token, "Something for my wife, her birthday is in June");
+    expect((await settled(ada.id, 2)).sort()).toEqual(["avoids long-haul flights", "buys for their wife; her birthday is in June"]);
+    expect(memoryCalls()).toHaveLength(2);
   });
 
   it("makes no memory call for a short reply or when remembering is off (control)", async () => {

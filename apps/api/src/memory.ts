@@ -114,18 +114,23 @@ export async function forgetMemories(db: Db, userId: string, id?: string): Promi
 /** A statement that runs only while the person's memory epoch is still `epoch`, with their row held while it does. */
 const whileEpoch = (sql: string) => `with ok as (select 1 from users where id = $1 and memory_epoch = $2 for share) ${sql}`;
 
+/** The person's memory epoch as it is now: what was said at this moment may be remembered only while it holds. */
+export const memoryEpoch = (db: Db, userId: string): Promise<number | undefined> =>
+  db.query<{ memory_epoch: number }>("select memory_epoch from users where id = $1", [userId]).then((r) => r.rows[0]?.memory_epoch);
+
 /**
  * Updates `userId`'s memory from what they just said: one model call, then the lines it adds or forgets. A call that
  * fails or passes `deadlineMs` changes nothing, and nothing said before a Forget is written after it. At most
- * MEMORY_ADD lines are added per message and MEMORY_MAX kept, the newest.
+ * MEMORY_ADD lines are added per message and MEMORY_MAX kept, the newest. `admitted` is the epoch read when the
+ * message arrived (memoryEpoch), for a caller that does other work first; without it, the call is the arrival.
  */
-export function updateMemory(meta: Meta, db: Db, userId: string, said: string, sessionId: string | null, now: Date, opts: { deadlineMs?: number } = {}): Promise<{ added: string[]; forgot: string[] }> {
+export function updateMemory(meta: Meta, db: Db, userId: string, said: string, sessionId: string | null, now: Date, opts: { admitted?: Promise<number | undefined>; deadlineMs?: number } = {}): Promise<{ added: string[]; forgot: string[] }> {
   const none = { added: [] as string[], forgot: [] as string[] };
   const message = said.trim();
   if (message.length < MEMORY_MIN_MESSAGE) return Promise.resolve(none);
-  // Admitted now, as the message arrives (review of #147): the epoch is read before this update waits behind another,
-  // so a Forget pressed while it waits still wins over what was said before it.
-  const admitted = db.query<{ memory_epoch: number }>("select memory_epoch from users where id = $1", [userId]).then((r) => r.rows[0]?.memory_epoch);
+  // Admitted as the message arrives (review of #147): the epoch is read before this update waits behind another, or
+  // earlier by the caller, so a Forget pressed while it waits still wins over what was said before it.
+  const admitted = opts.admitted ?? memoryEpoch(db, userId);
   // Its failure surfaces when the update runs, not while it waits in the queue.
   void admitted.catch(() => undefined);
   const run = async () => {
