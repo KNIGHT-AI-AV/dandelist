@@ -33,8 +33,10 @@ const CYCLE_MS = 2600;
  * autoplay runs one pass and stops at the first touch, and a sideways swipe anywhere moves one look along (owner,
  * 2026-10-28: "the whole app needs to be swipe friendly"). Choosing applies the theme before an account exists, so
  * the first thing they own is the look. Each look's song is named in small print at the bottom (components/song-note.tsx).
+ * The welcome shows it first, before there is a list (owner, 2026-10-31), so with no `totalCents` the card that shows
+ * the list's total stays out.
  */
-export function ThemeChooser({ totalCents, onDone, cta = "Make it mine" }: { totalCents: number; onDone(id: ThemeId): void; cta?: string }) {
+export function ThemeChooser({ totalCents, onDone, cta = "Make it mine" }: { totalCents: number | null; onDone(id: ThemeId): void; cta?: string }) {
   const reduced = useReducedMotion();
   const theme = useTheme();
   const start = Math.max(0, THEME_ORDER.indexOf(theme.id));
@@ -114,7 +116,7 @@ export function ThemeChooser({ totalCents, onDone, cta = "Make it mine" }: { tot
   );
 }
 
-function Body({ id, totalCents, held, onPick, onChoose, cta, roll }: { id: ThemeId; totalCents: number; held: boolean; onPick(i: number): void; onChoose(): void; cta: string; roll: boolean }) {
+function Body({ id, totalCents, held, onPick, onChoose, cta, roll }: { id: ThemeId; totalCents: number | null; held: boolean; onPick(i: number): void; onChoose(): void; cta: string; roll: boolean }) {
   const p = usePalette();
   const t = useType();
   const insets = useSafeAreaInsets();
@@ -133,14 +135,16 @@ function Body({ id, totalCents, held, onPick, onChoose, cta, roll }: { id: Theme
           </Text>
         </View>
         <Text style={[type.title3, { fontFamily: fonts.titleItalic, color: p.ink2 }]}>{THEMES[id].mood}</Text>
-        <Glass style={{ padding: layout.cardPad, gap: 4, borderRadius: radius.lg }}>
-          <Eyebrow color={p.accentText}>Your Dandelist</Eyebrow>
-          <Odometer cents={totalCents} format={dollars} size={t.title1.fontSize ?? 34} family="bodoni" smallPrefix tracking={-0.34} color={p.ink} rollOnMount={first.current ? "cinema" : false} />
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 4 }}>
-            <DandyAvatar dandy={dandy} size={22} />
-            <Text style={[type.figure, { color: p.ink2 }]}>{`Curated by ${dandy.name}`}</Text>
-          </View>
-        </Glass>
+        {totalCents !== null ? (
+          <Glass style={{ padding: layout.cardPad, gap: 4, borderRadius: radius.lg }}>
+            <Eyebrow color={p.accentText}>Your Dandelist</Eyebrow>
+            <Odometer cents={totalCents} format={dollars} size={t.title1.fontSize ?? 34} family="bodoni" smallPrefix tracking={-0.34} color={p.ink} rollOnMount={first.current ? "cinema" : false} />
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 4 }}>
+              <DandyAvatar dandy={dandy} size={22} />
+              <Text style={[type.figure, { color: p.ink2 }]}>{`Curated by ${dandy.name}`}</Text>
+            </View>
+          </Glass>
+        ) : null}
       </View>
       {/* Nine looks across one row: 34 pt swatches with 44 pt reach. Swiping anywhere does the same. */}
       <View style={{ flexDirection: "row", gap: 5, justifyContent: "center" }} accessibilityRole="radiogroup" accessibilityLabel="Theme">
