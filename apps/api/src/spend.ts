@@ -1,3 +1,4 @@
+import { aiGeneration } from "./analytics";
 import type { Usage } from "@dandelist/meta";
 import type { Db } from "./db";
 
@@ -156,6 +157,8 @@ export async function assertBudget(db: Db, caps: SpendCaps, now: Date): Promise<
 }
 
 export async function recordSpend(db: Db, userId: string | null, kind: string, usage: Usage, costUsd: number, now: Date): Promise<void> {
+  // Every model call is also an AI Observability generation in PostHog (analytics.ts).
+  aiGeneration(userId, kind, usage, costUsd);
   await db.query(
     "insert into spend_ledger (user_id, model, kind, input_tokens, output_tokens, searches, cost_usd, created_at) values ($1, $2, $3, $4, $5, $6, $7, $8)",
     [userId, usage.model, kind, usage.inputTokens, usage.outputTokens, usage.searches, costUsd.toFixed(6), now.toISOString()],

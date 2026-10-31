@@ -69,3 +69,21 @@ describe("wish store account sessions", () => {
     expect(rolledBack.scope).toBe(before.scope);
   });
 });
+
+describe("events told under the sign-in that made the change (review of #139)", () => {
+  it("runs only while the sign-in that started the change is still the current one", async () => {
+    const { whileCurrent } = await import("./wish-session");
+    const a = createWishSession("ada", []).scope;
+    let current = a;
+    const told: string[] = [];
+    whileCurrent(() => current, a, () => told.push("same sign-in"));
+    // A late answer after Bob signs in, after a sign-out, or after Ada signs in again: nothing is told.
+    current = createWishSession("bob", []).scope;
+    whileCurrent(() => current, a, () => told.push("after bob"));
+    current = createWishSession(null, []).scope;
+    whileCurrent(() => current, a, () => told.push("after sign-out"));
+    current = createWishSession("ada", []).scope;
+    whileCurrent(() => current, a, () => told.push("after ada again"));
+    expect(told).toEqual(["same sign-in"]);
+  });
+});

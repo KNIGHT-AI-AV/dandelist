@@ -6,6 +6,7 @@ import { View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { Reminders } from "../components/home/reminders";
 import { UpdatePrompt } from "../components/update-prompt";
+import { AnalyticsProvider } from "../lib/analytics";
 import { AuthProvider } from "../lib/auth";
 import { CurrencyProvider } from "../lib/currency";
 import { useAppFonts } from "../lib/fonts";
@@ -28,6 +29,7 @@ function Root() {
   return (
     <SafeAreaProvider>
       <AuthProvider>
+        <AnalyticsProvider>
         <CurrencyProvider>
           <WishProvider>
             <StatusBar style={p.scheme === "dark" ? "light" : "dark"} />
@@ -45,6 +47,7 @@ function Root() {
             </NavigationTheme>
           </WishProvider>
         </CurrencyProvider>
+        </AnalyticsProvider>
       </AuthProvider>
     </SafeAreaProvider>
   );
