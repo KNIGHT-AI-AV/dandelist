@@ -1,3 +1,4 @@
+import { reportProblem } from "../help";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { ScrollView, Switch, Text, View, useWindowDimensions } from "react-native";
@@ -185,7 +186,8 @@ export function SettingsPage() {
 
         <Section title="Account">
           <Card>
-            <Row first label="Privacy & Terms" onPress={() => router.push("/legal")} />
+            <Row first label="Report a problem" onPress={reportProblem} hint="Sends the app's state and your latest conversation to the Dandelist team" />
+            <Row label="Privacy & Terms" onPress={() => router.push("/legal")} />
             <Row label="Sign out" onPress={() => void auth.signOut()} />
             <Row
               label="Delete account"

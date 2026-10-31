@@ -4,7 +4,7 @@
  * Unmodified path data; rendered with Dandelist's existing stroke weight and colors.
  * Full upstream MIT notice is below and displayed by the app's legal page.
  */
-export type IconName = "back" | "forward" | "arrow" | "close" | "plus" | "check" | "send" | "mic" | "search" | "heart" | "palette" | "music" | "musicOff";
+export type IconName = "back" | "forward" | "arrow" | "close" | "plus" | "check" | "send" | "mic" | "search" | "heart" | "palette" | "music" | "musicOff" | "help";
 
 export const ICON_PATHS: Record<IconName, readonly string[]> = {
   "back": [
@@ -58,6 +58,11 @@ export const ICON_PATHS: Record<IconName, readonly string[]> = {
     "M13 17a3 3 0 1 0 6 0a3 3 0 0 0 -6 0",
     "M9 17v-13h10v13",
     "M9 8h10"
+  ],
+  "help": [
+    "M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0",
+    "M12 17l0 .01",
+    "M12 13.5a1.5 1.5 0 0 1 1 -1.5a2.6 2.6 0 1 0 -3 -4"
   ],
   "musicOff": [
     "M3 17a3 3 0 1 0 6 0a3 3 0 1 0 -6 0",

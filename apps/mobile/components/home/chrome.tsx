@@ -15,6 +15,7 @@ import { ListeningStrip, MicButton, useVoiceWish } from "../voice/say-wish";
 import { useHome } from "./bridge";
 import { offsetNode, usePager } from "./pager";
 import { SoundButton } from "../sound-button";
+import { HelpButton } from "../help";
 import { ProfileAvatar } from "./profile-avatar";
 
 /** What each page is called, for the dots' screen-reader names and the page headings. */
@@ -59,6 +60,8 @@ const PALETTE_FROM = 360;
  * of the 350 a 390 pt phone leaves inside its gutters. Narrower, sound stays the switch in settings.
  */
 const SOUND_FROM = 388;
+/** From here the help button fits too: 346 plus its 44 pt target inside the 390 a 430 pt phone leaves. Narrower, help is a row in settings. */
+const HELP_FROM = 430;
 /** The space between the palette's touch area and the photo's, so one thumb never lands on both. */
 const PALETTE_GAP = 12;
 
@@ -113,6 +116,7 @@ export function TopBar() {
           {width >= PALETTE_FROM ? (
             // The note and the palette side by side, each its own 44 pt target; the gap keeps the palette off the photo.
             <View pointerEvents="box-none" style={{ flexDirection: "row", alignItems: "center" }}>
+              {width >= HELP_FROM ? <HelpButton /> : null}
               {width >= SOUND_FROM ? <SoundButton /> : null}
               <PaletteButton />
             </View>
