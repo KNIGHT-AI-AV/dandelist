@@ -354,7 +354,7 @@ export function dreamRoutes(deps: DreamDeps) {
         const missed = body.data.after === undefined ? [] : jobs.after(sessionId, body.data.after);
         const unlisten = jobs.listen(sessionId, (l) => void (l.origin !== turnId && send(l.event, l.seq)));
         for (const l of missed) void send(l.event, l.seq);
-        await send({ type: "start", sessionId });
+        await send({ type: "start", sessionId, log: jobs.seq(sessionId) });
         const ctx = ctxFor(emit, new TurnBudget(), stop.signal);
         let timer: ReturnType<typeof setTimeout> | undefined;
         const late = new Promise<"late">((resolve) => (timer = setTimeout(() => resolve("late"), TURN_STOP_MS)));

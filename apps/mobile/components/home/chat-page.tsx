@@ -17,6 +17,7 @@ import { KeyboardScroll, dockRoom } from "../inputs";
 import { Glass, Icon, PrimaryButton } from "../lux";
 import { Rise } from "../welcome/kit";
 import { endTask, startTask, updateTask } from "../../lib/activity";
+import { Delivery } from "../../lib/chat-delivery";
 import { useAuth } from "../../lib/auth";
 import { useDandy } from "../../lib/dandy";
 import { listedWish } from "../../lib/listed";
@@ -36,6 +37,7 @@ import {
   type DreamEvent,
   type Numbered,
   type FeedItem,
+  type SessionDetail,
   type LifeContext,
   type Widget,
 } from "../../lib/dream";
@@ -144,14 +146,26 @@ export function ChatPage() {
   const dandyRef = useRef(dandy);
   dandyRef.current = dandy;
 
-  // The highest event number seen in this conversation, from a turn's stream or the log (api dream/jobs.ts): the
-  // next turn and the follower both pick up after it, so nothing is missed between them.
-  const seen = useRef(0);
+  // Who shows the conversation's events, and each once (lib/chat-delivery.ts, review of #134): the open turn's stream,
+  // the follower reading the log while background work runs, or a reload of the saved conversation, one at a time.
+  const io = useRef({ show: (_: DreamEvent) => {}, reset: (_: SessionDetail) => {}, api: auth.api });
+  const delivery = useMemo(
+    () =>
+      new Delivery({
+        show: (e) => io.current.show(e),
+        reset: (s) => io.current.reset(s),
+        events: (sid, after, signal) => sessionEvents(io.current.api, sid, after, signal),
+        load: (sid) => loadSession(io.current.api, sid),
+        current: () => session.current,
+        wait: (ms) => new Promise((r) => setTimeout(r, ms)),
+      }),
+    [],
+  );
   const setSession = useCallback((id: string | null) => {
-    if (id !== session.current) seen.current = 0;
+    if (id !== session.current) delivery.seen = 0;
     session.current = id;
     setSessionIdState(id);
-  }, []);
+  }, [delivery]);
 
   // Deleting the open conversation starts a new one (startNew is defined further down).
   const startNewRef = useRef<() => void>(() => {});
@@ -217,67 +231,16 @@ export function ChatPage() {
 
   // Slow work (a car or home search, a builder, what a pick costs to keep) runs on the server beside the conversation
   // and keeps going with the app closed (owner, 2026-10-31: "users need to be able to leave the app completely and it
-  // still works"). The chat follows its event log while it runs, and catches up when the app comes back.
-  const following = useRef<AbortController | null>(null);
-  const followJobs = useCallback(
-    (sid: string, after: number) => {
-      following.current?.abort();
-      const ctrl = new AbortController();
-      following.current = ctrl;
-      const mine = gen.current;
-      void (async () => {
-        let seq = Math.max(after, seen.current);
-        let misses = 0;
-        while (!ctrl.signal.aborted && gen.current === mine && session.current === sid) {
-          try {
-            const r = await sessionEvents(auth.api, sid, seq, ctrl.signal);
-            misses = 0;
-            if (r.gap) {
-              // Missed some (or the server restarted): the saved conversation is the truth.
-              void recoverRef.current(sid);
-              return;
-            }
-            for (const { seq: n, event } of r.events) {
-              seq = n;
-              seen.current = Math.max(seen.current, n);
-              if (gen.current === mine && session.current === sid) handle(event);
-            }
-            if (!r.running.length) break;
-          } catch {
-            if (ctrl.signal.aborted) return;
-            // A dropped connection is tried again, more slowly each time; coming back to the app starts afresh.
-            misses++;
-            await new Promise((r) => setTimeout(r, Math.min(15_000, 1_000 * 2 ** misses)));
-          }
-        }
-        if (following.current === ctrl) following.current = null;
-      })();
-    },
-    [auth.api, handle],
-  );
+  // still works"). The chat follows its event log while it runs, and catches up when the app comes back; `delivery`
+  // decides which of those shows what.
 
-  /** Shows the conversation as the server has it, with what's still running, and follows it until that's done. */
-  const recover = useCallback(
-    async (sid: string) => {
-      const mine = gen.current;
-      try {
-        const s = await loadSession(auth.api, sid);
-        if (gen.current !== mine || session.current !== sid) return;
-        const rows: FeedItem[] = (s.running ?? []).filter((j) => j.label).map((j) => ({ id: `job_${j.id}`, kind: "step", text: j.label, state: "running" }));
-        instant.current = true;
-        setFeed([...feedFromSession(s, nextId), ...rows]);
-        // What running work has shown that isn't saved yet goes on top, once; then the log from its end.
-        for (const e of s.pending ?? []) handle(e);
-        seen.current = s.seq ?? 0;
-        if (s.running?.length) followJobs(sid, s.seq ?? 0);
-      } catch {
-        // The next return to the app tries again.
-      }
-    },
-    [auth.api, followJobs],
-  );
-  const recoverRef = useRef(recover);
-  recoverRef.current = recover;
+  /** The conversation as the server saved it, with a row for each piece of work still running. */
+  const showSaved = useCallback((s: SessionDetail) => {
+    instant.current = true;
+    const rows: FeedItem[] = (s.running ?? []).filter((j) => j.label).map((j) => ({ id: `job_${j.id}`, kind: "step", text: j.label, state: "running" }));
+    setFeed([...feedFromSession(s, nextId), ...rows]);
+  }, []);
+  io.current = { show: handle, reset: showSaved, api: auth.api };
 
   // ---- turns: one at a time, in the order they were asked for
 
@@ -289,10 +252,9 @@ export function ChatPage() {
     const ctrl = new AbortController();
     running.current = ctrl;
     const isQuiet = next.action.type === "swipe";
-    // The turn's stream carries what running jobs show while it's open; following the log as well would show it twice.
-    // Its done says where to pick the log up again (review of #134).
-    following.current?.abort();
-    following.current = null;
+    // The turn's stream carries what running jobs show while it's open, starting with what the app missed; nothing else
+    // shows events until it ends (review of #134).
+    const turn = delivery.beginTurn();
     if (next.echo) {
       pinned.current = true;
       push({ id: nextId(), kind: "you", text: next.echo });
@@ -305,28 +267,26 @@ export function ChatPage() {
     let task: string | null = isQuiet ? null : startTask(taskFor(next.action));
     const late = isQuiet ? setTimeout(() => (task = startTask(taskFor(next.action))), 700) : null;
     const onEvent = (e: Numbered) => {
-      if (gen.current !== mine) return;
+      if (gen.current !== mine || !turn.take(e)) return;
       lastActive.current = Date.now();
       // Known from the first event, so a stream that breaks can still be caught up on.
       if (e.type === "start" && session.current !== e.sessionId) setSession(e.sessionId);
-      if (e.seq) seen.current = Math.max(seen.current, e.seq);
       if (e.type === "step" && e.state === "running" && task) updateTask(task, e.text);
-      // The turn is done but its jobs work on: follow them from here.
-      if (e.type === "done" && e.running) {
-        setSession(e.sessionId);
-        followJobs(e.sessionId, Math.max(e.seq ?? 0, seen.current));
-      }
       handle(e);
     };
     try {
       // The stream begins with anything the app missed since the last number it saw.
-      const sid = await dreamTurn(auth.apiStream, session.current, next.action, onEvent, { signal: ctrl.signal, name: dandyRef.current.name, ...(session.current ? { after: seen.current } : {}) });
-      if (gen.current === mine && sid) setSession(sid);
+      const sid = await dreamTurn(auth.apiStream, session.current, next.action, onEvent, { signal: ctrl.signal, name: dandyRef.current.name, ...(session.current ? { after: turn.after } : {}) });
+      if (gen.current === mine) {
+        if (sid) setSession(sid);
+        // The turn is done but its jobs work on: follow them from here.
+        turn.end(session.current);
+      }
     } catch (e) {
       if (gen.current === mine && !ctrl.signal.aborted) {
         const sid = session.current;
         // The server finishes the turn with the phone gone: catch up on it instead of asking for it again.
-        if (sid && lostConnection(e)) void recover(sid);
+        if (sid && lostConnection(e)) void delivery.recover(sid);
         else {
           haptic.error();
           push({ id: nextId(), kind: "agent", text: friendly(e, "I couldn't answer just now. Try again."), fresh: true });
@@ -351,7 +311,7 @@ export function ChatPage() {
         void pump();
       }
     }
-  }, [auth.apiStream, handle, push, setSession, refreshHistory, followJobs, recover]);
+  }, [auth.apiStream, handle, push, setSession, refreshHistory, delivery]);
 
   const send = useCallback(
     (action: DreamAction, echo?: string) => {
@@ -396,8 +356,7 @@ export function ChatPage() {
     queue.current = [];
     running.current?.abort();
     running.current = null;
-    following.current?.abort();
-    following.current = null;
+    delivery.leave();
     busyRef.current = false;
     setBusy(false);
     setQuiet(false);
@@ -407,7 +366,7 @@ export function ChatPage() {
     // Card ids start again in every conversation, so what the last one saved is forgotten with it.
     setSavedFrom({});
     setSession(null);
-  }, [setSession]);
+  }, [setSession, delivery]);
 
   const startNew = useCallback(
     (fresh = true) => {
@@ -425,16 +384,12 @@ export function ChatPage() {
       setHistoryOpen(false);
       setOpening(true);
       const mine = gen.current;
+      const token = delivery.claim();
       try {
         const s = await loadSession(auth.api, id);
         if (gen.current !== mine) return;
-        instant.current = true;
-        const rows: FeedItem[] = (s.running ?? []).filter((j) => j.label).map((j) => ({ id: `job_${j.id}`, kind: "step", text: j.label, state: "running" }));
-        setFeed([...feedFromSession(s, nextId), ...rows]);
         setSession(s.id);
-        for (const e of s.pending ?? []) handle(e);
-        seen.current = s.seq ?? 0;
-        if (s.running?.length) followJobs(s.id, s.seq ?? 0);
+        delivery.restore(token, s.id, s);
       } catch (e) {
         if (gen.current !== mine) return;
         if (!opts.quiet) push({ id: nextId(), kind: "agent", text: friendly(e, "I couldn't open that conversation. Try again."), fresh: true });
@@ -443,7 +398,7 @@ export function ChatPage() {
         lastActive.current = Date.now();
       }
     },
-    [auth.api, leave, push, setSession, followJobs],
+    [auth.api, leave, push, setSession, delivery],
   );
 
   startNewRef.current = () => startNew();
@@ -482,7 +437,7 @@ export function ChatPage() {
       }
       // What the Dandy did while the app was away: replies, cards and jobs that finished meanwhile.
       const sid = session.current;
-      if (sid && !running.current) void recover(sid);
+      if (sid && !running.current) void delivery.recover(sid);
     };
     if (Platform.OS === "web") {
       if (typeof document === "undefined") return;
@@ -492,7 +447,7 @@ export function ChatPage() {
     }
     const sub = AppState.addEventListener("change", (s) => s === "active" && back());
     return () => sub.remove();
-  }, [ready, refreshHistory, startNew, recover]);
+  }, [ready, refreshHistory, startNew, delivery]);
 
   // History belongs to this page: turning away closes it and sends any delete still waiting.
   useEffect(() => {

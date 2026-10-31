@@ -688,6 +688,9 @@ describe("dream turn", () => {
     expect(deck).toBeLessThan(events.findIndex((e) => e.type === "start"));
     const numbers = events.filter((e) => typeof e.seq === "number").map((e) => e.seq as number);
     expect([...numbers].sort((a, b) => a - b)).toEqual(numbers);
+    // Start says where the log stood once the missed events were taken (the app's count resets to it after a restart).
+    const start = events.findIndex((e) => e.type === "start");
+    expect(events[start]!.log).toBe(Math.max(...events.slice(0, start).map((e) => e.seq as number)));
   });
 
   it("runs everything inline for an app that doesn't follow the event log (TestFlight builds up to 26)", async () => {
