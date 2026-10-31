@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../src/app";
 import { migrate, type Db } from "../src/db";
 import { isJudge, userCapUsd } from "../src/spend";
-import { brief, fallbackReason, honest, keepNote, swipeSignal, tidy } from "../src/dream/agent";
+import { brief, fallbackReason, honest, keepNote, sameThing, swipeSignal, tidy } from "../src/dream/agent";
 import { MAX_TOOL_CALLS_PER_TURN, TurnBudget, TurnLimitError, searchResults } from "../src/dream/context";
 import { looksLikeListing, namesCar, priceIn } from "../src/dream/hunt";
 import { carKeep, homeKeep, maintenancePercent, serviceLines, type Fx, type Rate } from "../src/dream/keep";
@@ -91,6 +91,10 @@ let huntCount: number;
 let huntList: { url: string; title: string; price: number; currency: string }[] = [];
 let refineReply: Record<string, unknown> | null;
 let researchKeys: { key: string; place: string }[];
+/** What the maker's price list says about the model: false for one it no longer sells new. */
+let carSoldNew: boolean;
+/** The trims the maker's answer lists: an answer for a model no longer made usually has none. */
+let carTrims: { name: string; price: number }[];
 
 const reply = (output: unknown[]) => Response.json({ id: `resp_${metaCalls.length}`, output, usage: { input_tokens: 800, output_tokens: 120 } });
 const message = (text: string, urls: string[] = []) => ({ type: "message", content: [{ type: "output_text", text, annotations: urls.map((url) => ({ type: "url_citation", url })) }] });
@@ -194,10 +198,11 @@ const fakeMeta = (async (_url: string, init: RequestInit) => {
     return reply([
       message(
         JSON.stringify({
+          sold_new: carSoldNew,
           source_url: `${IP}.36/mb-config`,
           currency: "USD",
           model_name: "Mercedes-AMG G 63",
-          trims: [{ name: "G 63", price: 186550 }],
+          trims: carTrims,
           colours: [
             { name: "Obsidian Black metallic", price: 0 },
             { name: "MANUFAKTUR Night Black Magno", price: 6500 },
@@ -252,6 +257,8 @@ beforeEach(async () => {
   huntCount = 0;
   refineReply = null;
   researchKeys = [];
+  carSoldNew = true;
+  carTrims = [{ name: "G 63", price: 186550 }];
   apifyCalls = [];
   webCalls = [];
   app = makeApp();
@@ -536,6 +543,43 @@ describe("dream turn", () => {
     expect(widgets((await turn(t, { type: "message", text: "eight things" })).events, "item")).toHaveLength(6);
   });
 
+  it("tells things apart in any script and catches two spellings of one thing in a single message (review of #128)", async () => {
+    const t = await signIn("ada@example.com");
+    concierge = [[fc("price_item", { items: ["キヤノン EOS R5", "セイコー アストロン", "a Leica Q3", "A LEICA Q3!", "Lèica Q3"] })], [message("On it.")]];
+    const first = await turn(t, { type: "message", text: "キヤノン EOS R5, セイコー アストロン and a Leica Q3" });
+    expect(widgets(first.events, "item").map((w) => w.text)).toEqual(["キヤノン EOS R5", "セイコー アストロン", "a Leica Q3"]);
+    concierge = [[fc("price_item", { items: ["セイコー アストロン", "ソニー α7 IV", "???", "東京旅行", "京都旅行", "कान"] })], [message("On it.")]];
+    const second = await turn(t, { type: "message", text: "セイコー アストロン and ソニー α7 IV" }, first.sessionId);
+    // The Seiko keeps its card; the rest are new. Text with no letters or digits has no key, so it is never taken for
+    // another; two trips that differ by a character, and two Hindi words that differ by a vowel sign, are two things.
+    expect(widgets(second.events, "item").map((w) => w.text)).toEqual(["ソニー α7 IV", "???", "東京旅行", "京都旅行", "कान"]);
+    concierge = [[fc("price_item", { items: ["किन", "東京 watch", "京都 watch"] })], [message("On it.")]];
+    const third = await turn(t, { type: "message", text: "किन, 東京 watch, 京都 watch" }, first.sessionId);
+    expect(widgets(third.events, "item").map((w) => w.text)).toEqual(["किन", "東京 watch", "京都 watch"]);
+  });
+
+  it("gives every script its own key and none to text without letters or digits", () => {
+    expect(sameThing("キヤノン EOS R5")).toBe("キヤノン eos r5");
+    expect(sameThing("ガ")).not.toBe(sameThing("カ"));
+    expect(sameThing("कान")).not.toBe(sameThing("किन"));
+    expect(sameThing("東京 watch")).not.toBe(sameThing("京都 watch"));
+    expect(sameThing("Rolex Day-Date 40 Green Ombré")).toBe(sameThing("rolex day date 40 green ombre"));
+    expect(sameThing("The Leica Q3")).toBe("leica q3");
+    expect(sameThing("!!!")).toBe("");
+  });
+
+  it("hunts a thing once per conversation: said again, even with other case and accents, it keeps its card (owner, 2026-10-31: \"Duplicate items\")", async () => {
+    const t = await signIn("ada@example.com");
+    concierge = [[fc("price_item", { items: ["Rolex day date 40 green ombré Roman"] })], [message("On it.")]];
+    const first = await turn(t, { type: "message", text: "Rolex day date 40 green ombré Roman" });
+    expect(widgets(first.events, "item")).toHaveLength(1);
+    concierge = [[fc("price_item", { items: ["rolex Day Date 40 green ombre roman", "a Leica Q3"] })], [message("Your Rolex is above.")]];
+    const second = await turn(t, { type: "message", text: "Rolex day date 40 green ombré Roman and a Leica Q3" }, first.sessionId);
+    expect(widgets(second.events, "item").map((w) => w.text)).toEqual(["a Leica Q3"]);
+    const told = metaCalls.flatMap((c) => (Array.isArray(c.input) ? c.input : [])).find((i: Ev) => i?.type === "function_call_output" && /Not hunted again/.test(i.output));
+    expect(told.output).toContain('"rolex Day Date 40 green ombre roman"');
+  });
+
   it("suggests a change to their list on a card, sees the list as quoted data, and moves nothing until they apply", async () => {
     const t = await signIn("ada@example.com");
     const add = async (name: string, kind: string, upfrontCents: number) =>
@@ -628,6 +672,32 @@ describe("dream turn", () => {
     const wish = widgets(done.events, "wish_ready")[0].wish;
     expect(wish).toMatchObject({ upfrontCents: Math.round((186550 + 1300) * 0.92 * 100), status: "verified", currency: "EUR", region: "Malta" });
     expect(wish.keep.map((l: Ev) => l.label)).toEqual(expect.arrayContaining(["Insurance", "Fuel", "Maintenance", "Registration and road licence"]));
+  });
+
+  it("shows real used listings, not a builder, for a model the maker no longer makes (owner, 2026-10-31: the DB11)", async () => {
+    const t = await signIn("ada@example.com");
+    await liveIn(t, "MT", "Malta");
+    // The maker's answer for a model it no longer makes, as it usually comes: no current trims at all.
+    carSoldNew = false;
+    carTrims = [];
+    concierge = [[fc("car_builder", { make: "Aston Martin", model: "DB11", notes: "" })], [message("")]];
+    const { events } = await turn(t, { type: "message", text: "an Aston Martin DB11" });
+    expect(widgets(events, "car_builder")).toHaveLength(0);
+    expect(events.some((e: Ev) => e.type === "text" && e.text === "The Aston Martin DB11 isn't made new any more, so here are real ones for sale.")).toBe(true);
+    expect(events.some((e: Ev) => e.type === "step" && e.text === "The Aston Martin DB11 isn't sold new any more")).toBe(true);
+    // The listings it hunts are used ones.
+    expect(events.some((e: Ev) => e.type === "step" && e.text === "Searching the web for used Aston Martin DB11")).toBe(true);
+  });
+
+  it("still says it couldn't read the maker's prices, and hunts new or used, when an answer on sale lists no trims", async () => {
+    const t = await signIn("ada@example.com");
+    await liveIn(t, "MT", "Malta");
+    carTrims = [];
+    concierge = [[fc("car_builder", { make: "Aston Martin", model: "DB12", notes: "" })], [message("")]];
+    const { events } = await turn(t, { type: "message", text: "an Aston Martin DB12" });
+    expect(widgets(events, "car_builder")).toHaveLength(0);
+    expect(events.some((e: Ev) => e.type === "text" && e.text === "I couldn't read the maker's prices for the Aston Martin DB12, so here are real ones for sale.")).toBe(true);
+    expect(events.some((e: Ev) => e.type === "step" && e.text === "Searching the web for Aston Martin DB12")).toBe(true);
   });
 
   it("keeps custom car parts across reload, blocks incomplete wishes and forwards the full build to search", async () => {
