@@ -24,7 +24,7 @@ vi.mock("expo-crypto", () => ({}));
 vi.mock("expo-linking", () => ({}));
 vi.mock("expo-web-browser", () => ({}));
 
-type Held = { as: string; answer: () => void };
+type Held = { as: string; answer: (name?: string) => void };
 const server = vi.hoisted(() => ({ log: [] as string[], held: [] as Held[], hold: new Set<string>(), unknown: [] as string[] }));
 const respond = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 const profileOf = (who: string, name = who === "tok-ada" ? "Ada Lovelace" : "Bob Marley") => ({ email: `${who}@example.com`, name, avatarKey: null, avatarUrl: null, createdAt: "2026-10-01T00:00:00.000Z" });
@@ -43,7 +43,7 @@ async function fakeFetch(input: string | URL | Request, init: RequestInit = {}):
   if (path === "/me/profile") {
     const body = method === "PATCH" ? profileOf(bearer, (JSON.parse(String(init.body)) as { name: string }).name) : profileOf(bearer);
     // Held for the test to answer when it says: an answer already on its way when the account changes.
-    if (server.hold.has(`${method} ${bearer}`)) return new Promise((resolve) => server.held.push({ as: `${method} ${bearer}`, answer: () => resolve(respond({ profile: body })) }));
+    if (server.hold.has(`${method} ${bearer}`)) return new Promise((resolve) => server.held.push({ as: `${method} ${bearer}`, answer: (name) => resolve(respond({ profile: name ? { ...body, name } : body })) }));
     return respond({ profile: body });
   }
   server.unknown.push(`${method} ${path}`);
@@ -71,10 +71,11 @@ async function until(done: () => boolean) {
   for (let i = 0; i < 50 && !done(); i++) await settle();
   expect(done()).toBe(true);
 }
-const answer = (as: string) => {
+/** Lets a held answer go, with another name than the account's own when `name` is given. */
+const answer = (as: string, name?: string) => {
   const i = server.held.findIndex((h) => h.as === as);
   expect(i).toBeGreaterThan(-1);
-  server.held.splice(i, 1)[0]!.answer();
+  server.held.splice(i, 1)[0]!.answer(name);
 };
 
 describe("the shared profile belongs to the sign-in that asked for it (Codex's 35-profile-owner-backlog)", () => {
@@ -146,11 +147,13 @@ describe("the shared profile belongs to the sign-in that asked for it (Codex's 3
     // A second load went out for the new sign-in rather than waiting on the first, which is still held.
     expect(server.log.filter((l) => l.startsWith("GET /me/profile"))).toEqual(["GET /me/profile as tok-ada", "GET /me/profile as tok-ada"]);
     const from = shown.length;
+    // The old sign-in's answer carries a name of its own (review of #146), so showing it would show.
     await act(async () => {
-      answer("GET tok-ada");
+      answer("GET tok-ada", "Ada Byron");
       await settle();
     });
     expect(shown.slice(from).every((x) => x === "ada: Ada Lovelace")).toBe(true);
+    expect(shown.some((x) => x.includes("Ada Byron"))).toBe(false);
     expect(mounts).toBe(1);
   });
 });
