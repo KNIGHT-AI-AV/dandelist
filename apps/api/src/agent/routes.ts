@@ -47,6 +47,8 @@ export interface AgentDeps extends AuthDeps {
   archive?: Archive | null;
   /** Keeps the instance awake while work outlives its request (alive.ts). */
   alive?: Alive;
+  /** Updates what the Dandy remembers after each message (memory.ts): on in the server, off in tests that don't ask. */
+  remember?: boolean;
 }
 
 const IMAGE_MODEL = "muse-image-1.0";
