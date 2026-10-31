@@ -73,6 +73,11 @@ export type Widget =
    * things like reorder"): the whole new order, tier moves and removals. Nothing changes until they tap Apply.
    */
   | { kind: "list_change"; id: string; title: string; order: string[]; tiers: { id: string; tier: "must" | "nice" | "dream" }[]; remove: string[] }
+  /**
+   * A question's answers to tap (owner, 2026-10-31: "simple click options or questions"). The question itself goes out
+   * as text just before it, so an app that doesn't know this card still shows the question.
+   */
+  | { kind: "choices"; id: string; options: string[] }
   | {
       kind: "wish_ready";
       id: string;
