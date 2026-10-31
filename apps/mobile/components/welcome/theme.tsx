@@ -142,12 +142,12 @@ function Body({ id, totalCents, held, onPick, onChoose, cta, roll }: { id: Theme
         </Glass>
       </View>
       {/* Nine looks across one row: 34 pt swatches with 44 pt reach. Swiping anywhere does the same. */}
-      <View style={{ flexDirection: "row", gap: 5, justifyContent: "center" }} accessibilityRole="radiogroup">
+      <View style={{ flexDirection: "row", gap: 5, justifyContent: "center" }} accessibilityRole="radiogroup" accessibilityLabel="Theme">
         {THEME_ORDER.map((tid, i) => {
           const tp = THEMES[tid].palette;
           const on = tid === id;
           return (
-            <Pressable key={tid} accessibilityRole="radio" accessibilityState={{ selected: on }} accessibilityLabel={THEMES[tid].name} onPress={() => onPick(i)} hitSlop={5} style={{ width: 34, height: 44, alignItems: "center", justifyContent: "center" }}>
+            <Pressable key={tid} accessibilityRole="radio" aria-checked={on} accessibilityState={{ checked: on }} accessibilityLabel={THEMES[tid].name} onPress={() => onPick(i)} hitSlop={5} style={{ width: 34, height: 44, alignItems: "center", justifyContent: "center" }}>
               <View style={{ width: 34, height: 34, borderRadius: 17, padding: 3, borderWidth: on ? 1.5 : 1, borderColor: on ? p.accentText : p.line }}>
                 <View style={{ flex: 1, borderRadius: 14, overflow: "hidden", flexDirection: "row", transform: [{ rotate: "-35deg" }] }}>
                   <View style={{ flex: 1, backgroundColor: tp.bg }} />
