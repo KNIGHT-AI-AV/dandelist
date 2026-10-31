@@ -147,7 +147,7 @@ function Body({ id, totalCents, held, onPick, onChoose, cta, roll }: { id: Theme
           const tp = THEMES[tid].palette;
           const on = tid === id;
           return (
-            <Pressable key={tid} accessibilityRole="radio" accessibilityState={{ checked: on }} accessibilityLabel={THEMES[tid].name} onPress={() => onPick(i)} hitSlop={5} style={{ width: 34, height: 44, alignItems: "center", justifyContent: "center" }}>
+            <Pressable key={tid} accessibilityRole="radio" aria-checked={on} accessibilityState={{ checked: on }} accessibilityLabel={THEMES[tid].name} onPress={() => onPick(i)} hitSlop={5} style={{ width: 34, height: 44, alignItems: "center", justifyContent: "center" }}>
               <View style={{ width: 34, height: 34, borderRadius: 17, padding: 3, borderWidth: on ? 1.5 : 1, borderColor: on ? p.accentText : p.line }}>
                 <View style={{ flex: 1, borderRadius: 14, overflow: "hidden", flexDirection: "row", transform: [{ rotate: "-35deg" }] }}>
                   <View style={{ flex: 1, backgroundColor: tp.bg }} />
