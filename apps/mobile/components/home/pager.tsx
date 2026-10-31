@@ -3,6 +3,7 @@ import { Animated, Keyboard, PanResponder, Platform, StyleSheet, View, useWindow
 import { noteDrag } from "../../lib/drag-guard";
 import { haptic, native, useReducedMotion } from "../../lib/motion";
 import { PAGES, PAGE_COUNT, landing, mod, nearest, type PageId } from "../../lib/pager";
+import { pagesStill } from "../../lib/swipe-intent";
 
 /** Critically damped, about a third of a second: the page arrives without bouncing (Apple: damping 1, response 0.35). */
 const SETTLE = { mass: 1, stiffness: 322, damping: 35.9 };
@@ -22,6 +23,14 @@ export interface Pager {
 
 const Ctx = createContext<Pager | null>(null);
 const Grab = createContext<{ grab(): number; release(target: number, velocity: number): void } | null>(null);
+/** For a card that takes its own sideways swipe inside the ring (lib/swipe-intent.ts). */
+export interface PageSwipe {
+  /** Whether the pages have been still long enough for a card to take a sideways drag. */
+  still(): boolean;
+  /** Turns the page the way a finger moving in `dir` (1 right, -1 left) would. */
+  turn(dir: 1 | -1): void;
+}
+const Swipe = createContext<PageSwipe | null>(null);
 
 export function usePager(): Pager {
   const ctx = useContext(Ctx);
@@ -32,6 +41,11 @@ export function usePager(): Pager {
 /** The page in front, or null outside the ring (a pushed screen such as New wish). */
 export function useFrontPage(): PageId | null {
   return useContext(Ctx)?.page ?? null;
+}
+
+/** The ring's side of a card's own swipe, or null outside the ring. */
+export function usePageSwipe(): PageSwipe | null {
+  return useContext(Swipe);
 }
 
 /**
@@ -48,6 +62,8 @@ export function PagerProvider({ initial, onPage, children }: { initial: PageId; 
   const live = useRef(start);
   const target = useRef(start);
   const [page, setPage] = useState<PageId>(initial);
+  // When the pages last started moving (a swipe taken, a page set going), so a card can leave the next swipe to them.
+  const movedAt = useRef(0);
   useEffect(() => {
     const id = pos.addListener(({ value }) => (live.current = value));
     return () => pos.removeListener(id);
@@ -57,6 +73,7 @@ export function PagerProvider({ initial, onPage, children }: { initial: PageId; 
     (to: number, velocity = 0) => {
       const changed = Math.round(to) !== Math.round(target.current);
       target.current = to;
+      movedAt.current = Date.now();
       const id = PAGES[mod(to)]!;
       setPage(id);
       if (changed) {
@@ -84,15 +101,20 @@ export function PagerProvider({ initial, onPage, children }: { initial: PageId; 
   const next = useCallback((step: 1 | -1) => go(PAGES[mod(Math.round(target.current) + step)]!), [go]);
 
   const grab = useCallback(() => {
+    movedAt.current = Date.now();
     pos.stopAnimation();
     return live.current;
   }, [pos]);
 
   const value = useMemo<Pager>(() => ({ page, pos, width, go, next }), [page, pos, width, go, next]);
   const grabber = useMemo(() => ({ grab, release: settle }), [grab, settle]);
+  // A finger moving left brings the next page, as the ring's own swipe does.
+  const swipe = useMemo<PageSwipe>(() => ({ still: () => pagesStill(movedAt.current, Date.now()), turn: (dir) => next(dir === 1 ? -1 : 1) }), [next]);
   return (
     <Ctx.Provider value={value}>
-      <Grab.Provider value={grabber}>{children}</Grab.Provider>
+      <Grab.Provider value={grabber}>
+        <Swipe.Provider value={swipe}>{children}</Swipe.Provider>
+      </Grab.Provider>
     </Ctx.Provider>
   );
 }
@@ -104,7 +126,8 @@ export function offsetNode(pos: Animated.Value, i: number): Animated.AnimatedAdd
 
 /**
  * The pages, side by side on a ring. A sideways swipe anywhere turns them, unless something under the finger claims
- * the swipe first (a wish card's own swipe to remove), the way a photo carousel inside a feed does. On the web a
+ * the swipe first (a wish card's own swipe to remove, which it leaves to the ring for a moment after the pages move),
+ * the way a photo carousel inside a feed does. On the web a
  * trackpad's sideways scroll and the arrow keys turn them too.
  */
 export function PagerView({ pages }: { pages: Record<PageId, ReactNode> }) {
