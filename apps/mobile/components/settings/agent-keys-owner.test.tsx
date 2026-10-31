@@ -34,9 +34,9 @@ vi.mock("../../lib/theme", () => ({
   type: { body: {}, footnote: {} },
   usePalette: () => ({ ink: "black", ink3: "grey", track: "white", danger: "red" }),
 }));
-vi.mock("../inputs", () => ({ Field: (props: Record<string, unknown>) => createElement("field", props) }));
+vi.mock("../inputs", () => ({ Field: (props: Record<string, unknown>) => createElement("input", props) }));
 vi.mock("../lux", () => ({
-  ErrorLine: ({ children }: { children?: ReactNode }) => createElement("error", null, children),
+  ErrorLine: ({ children }: { children?: ReactNode }) => createElement("output", null, children),
   PrimaryButton: (props: Record<string, unknown>) => createElement("button", props, String(props.label)),
   QuietButton: (props: Record<string, unknown>) => createElement("button", props, String(props.label)),
 }));
@@ -157,7 +157,7 @@ async function release(key: string) {
   expect(index).toBeGreaterThanOrEqual(0);
   await act(async () => { held.splice(index, 1)[0]!.release(); });
 }
-const field = () => root!.root.findByType("field");
+const field = () => root!.root.findByType("input");
 const button = (label: string) => root!.root.findAllByType("button").find((node) => node.props.label === label)!;
 async function name(value: string) {
   await act(async () => { field().props.onChangeText(value); });
@@ -226,14 +226,14 @@ describe("AgentKeys waits for and belongs to its signed-in owner", () => {
     expect(shown()).toContain("MCP server");
     expect(shown()).toContain("Make a key");
     expect(shown()).not.toContain("Ada agent");
-    expect(root!.root.findByType("error").props.children).toBeNull();
+    expect(root!.root.findByType("output").props.children).toBeNull();
   });
 
   it("still displays an actual current-owner list failure", async () => {
     listErrors.set(ada, "Current keys unavailable.");
     await mount();
     expect(auth!.user?.id).toBe(ada);
-    expect(root!.root.findByType("error").props.children).toBe("Current keys unavailable.");
+    expect(root!.root.findByType("output").props.children).toBe("Current keys unavailable.");
   });
 
   it.each(["success", "error"] as const)("drops an old GET %s after another account replaces it", async (outcome) => {
@@ -291,7 +291,7 @@ describe("AgentKeys waits for and belongs to its signed-in owner", () => {
     expect(currentSignIn()).toBe(generation);
     expect(auth!.user?.id).toBe(ada);
     expect(shown()).toContain("Ada agent");
-    expect(root!.root.findByType("error").props.children).toBeNull();
+    expect(root!.root.findByType("output").props.children).toBeNull();
   });
 
   it("does not retry an old owner's held 401 as the replacement account", async () => {
@@ -304,7 +304,7 @@ describe("AgentKeys waits for and belongs to its signed-in owner", () => {
     expect(calls("GET").map((request) => request.account)).toEqual([ada, bob]);
     expect(calls("POST", "/auth/refresh")).toHaveLength(1);
     expect(shown()).toContain("Bob agent");
-    expect(root!.root.findByType("error").props.children).toBeNull();
+    expect(root!.root.findByType("output").props.children).toBeNull();
   });
 
   it("does not reset a current panel or reload it for a same-account sign-in", async () => {
