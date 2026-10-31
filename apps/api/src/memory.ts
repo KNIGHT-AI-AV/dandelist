@@ -63,6 +63,8 @@ const NEVER = [
   /\b\d{1,6}\s+(?:[a-z]+\s+){0,4}(?:street|st|avenue|ave|road|rd|lane|ln|drive|dr|boulevard|blvd|way|court|ct|place|pl|terrace|close|crescent|square|sq)\b/i,
   /\b(?:salary|salaries|income|earns?|earning|paid|pay|payslip|wages?|bonus|debts?|owes?|loans?|mortgage|savings|net worth|password|passport|social security)\b/i,
   /\b(?:thousand|million|billion|grand|k)\b[^.]*\b(?:a|per|every)\s+(?:year|month|week)\b/i,
+  // A money figure in any ordinary form: "$5000", "€ 200", "5,000 dollars", "200 USD", "50k".
+  /[$€£¥₹]\s?\d|\d[\d,.]*\s?(?:k\b|dollars?|bucks|euros?|pounds?|quid|yen|usd|eur|gbp|cad|aud)\b/i,
 ];
 
 /** A line as kept: one line of plain text, cut at a word to MEMORY_LINE characters; null when it is empty or holds what a line never may. */
@@ -114,15 +116,20 @@ const whileEpoch = (sql: string) => `with ok as (select 1 from users where id = 
 
 /**
  * Updates `userId`'s memory from what they just said: one model call, then the lines it adds or forgets. A call that
- * fails or passes `deadlineMs` changes nothing, and nothing it read before a Forget is written after it. At most
+ * fails or passes `deadlineMs` changes nothing, and nothing said before a Forget is written after it. At most
  * MEMORY_ADD lines are added per message and MEMORY_MAX kept, the newest.
  */
 export function updateMemory(meta: Meta, db: Db, userId: string, said: string, sessionId: string | null, now: Date, opts: { deadlineMs?: number } = {}): Promise<{ added: string[]; forgot: string[] }> {
   const none = { added: [] as string[], forgot: [] as string[] };
+  const message = said.trim();
+  if (message.length < MEMORY_MIN_MESSAGE) return Promise.resolve(none);
+  // Admitted now, as the message arrives (review of #147): the epoch is read before this update waits behind another,
+  // so a Forget pressed while it waits still wins over what was said before it.
+  const admitted = db.query<{ memory_epoch: number }>("select memory_epoch from users where id = $1", [userId]).then((r) => r.rows[0]?.memory_epoch);
+  // Its failure surfaces when the update runs, not while it waits in the queue.
+  void admitted.catch(() => undefined);
   const run = async () => {
-    const message = said.trim();
-    if (message.length < MEMORY_MIN_MESSAGE) return none;
-    const epoch = (await db.query<{ memory_epoch: number }>("select memory_epoch from users where id = $1", [userId])).rows[0]?.memory_epoch;
+    const epoch = await admitted;
     if (epoch === undefined) return none;
     const current = await readMemories(db, userId);
     let timer: ReturnType<typeof setTimeout> | undefined;

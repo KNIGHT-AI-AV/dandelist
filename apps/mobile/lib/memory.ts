@@ -57,6 +57,14 @@ export function useMemories(active: boolean): Omit<View, "account" | "at"> & { f
       .catch(() => {});
   }, [active, account, api]);
 
+  // Nothing answers into a list that is gone (review of #147, nonblocking): no success after Settings unmounts.
+  useEffect(
+    () => () => {
+      owner.current = null;
+    },
+    [],
+  );
+
   const forget = useCallback(
     async (id: string | null) => {
       const me = owner.current;

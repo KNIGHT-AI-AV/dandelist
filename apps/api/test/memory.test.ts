@@ -104,8 +104,12 @@ describe("a line kept", () => {
     for (const bad of ["lives at 123 Maple Street", "home is 4 Rue de la Paix Ave", "annual pay is eighty thousand dollars", "makes two hundred thousand a year", "owes money on the car", "gets a big bonus every December"]) {
       expect(cleanMemory(bad)).toBeNull();
     }
+    // A money figure in its ordinary forms (review of #147, second round).
+    for (const bad of ["Keeps $5000 in checking.", "spends about € 200 a month on wine", "saving 5,000 dollars for a trip", "has 200 USD put aside", "gift budget is 50k", "keeps £300 for birthdays"]) {
+      expect(cleanMemory(bad)).toBeNull();
+    }
     // What the memory is for still passes (control).
-    for (const good of ["buys for their wife; her birthday is in June", "their wife loves French design", "would rather have one big trip a year than several small ones", "avoids long-haul flights", "loves vintage watches, especially from the 60s"]) {
+    for (const good of ["buys for their wife; her birthday is in June", "their wife loves French design", "would rather have one big trip a year than several small ones", "avoids long-haul flights", "loves vintage watches, especially from the 60s", "takes 3 trips a year", "has a 1965 Rolex they treasure"]) {
       expect(cleanMemory(good)).toBe(good);
     }
   });
@@ -194,6 +198,41 @@ describe("Forget against an update already waiting on the model (review of #147)
     // Bob's line was never touched, and a message she sends after Forget is remembered as usual (controls).
     expect((await readMemories(db, bob.id)).map((m) => m.text)).toEqual(["loves Porsches"]);
     await updateMemory(memoryMeta([{ add: ["avoids long-haul flights"], forget: [] }]), db, ada.id, "We never fly long-haul, the kids hate it", null, new Date("2026-10-31T09:00:00Z"));
+    expect((await readMemories(db, ada.id)).map((m) => m.text)).toEqual(["avoids long-haul flights"]);
+  });
+
+  it("admits an update as its message arrives: one waiting behind another when Forget is pressed writes nothing either", async () => {
+    const ada = await signIn("ada@example.com");
+    const bob = await signIn("bob@example.com");
+    const now = new Date("2026-10-31T08:00:00Z");
+    await updateMemory(memoryMeta([{ add: ["loves Porsches"], forget: [] }]), db, bob.id, "I've always loved Porsches, always", null, now);
+    const held = heldMeta();
+    // A is out with the model; B, said before Forget too, waits behind A.
+    const first = updateMemory(held.meta, db, ada.id, "I only like old cars, honestly", null, now);
+    const second = updateMemory(held.meta, db, ada.id, "My wife's birthday is in June", null, new Date("2026-10-31T08:01:00Z"));
+    await call("DELETE", "/me/memories", ada.token);
+    await held.release({ add: ["prefers vintage cars to new ones"], forget: [] });
+    await held.release({ add: ["buys for their wife; her birthday is in June"], forget: [] });
+    expect((await first).added).toEqual([]);
+    expect((await second).added).toEqual([]);
+    expect(await readMemories(db, ada.id)).toEqual([]);
+    // Bob untouched; something said after Forget is remembered (controls).
+    expect((await readMemories(db, bob.id)).map((m) => m.text)).toEqual(["loves Porsches"]);
+    await updateMemory(memoryMeta([{ add: ["avoids long-haul flights"], forget: [] }]), db, ada.id, "We never fly long-haul, the kids hate it", null, new Date("2026-10-31T09:00:00Z"));
+    expect((await readMemories(db, ada.id)).map((m) => m.text)).toEqual(["avoids long-haul flights"]);
+  });
+
+  it("admits at arrival for a targeted Forget too", async () => {
+    const ada = await signIn("ada@example.com");
+    await updateMemory(memoryMeta([{ add: ["prefers vintage cars to new ones", "avoids long-haul flights"], forget: [] }]), db, ada.id, "I only like old cars and hate long flights", null, new Date("2026-10-31T08:00:00Z"));
+    const vintage = (await readMemories(db, ada.id)).find((m) => m.text.startsWith("prefers"))!;
+    const held = heldMeta();
+    const first = updateMemory(held.meta, db, ada.id, "Old cars, always old cars", null, new Date("2026-10-31T09:00:00Z"));
+    const second = updateMemory(held.meta, db, ada.id, "Classic cars are the only ones worth having", null, new Date("2026-10-31T09:01:00Z"));
+    await call("DELETE", `/me/memories/${vintage.id}`, ada.token);
+    await held.release({ add: [], forget: [] });
+    await held.release({ add: ["prefers classic cars over new ones"], forget: [] });
+    await Promise.all([first, second]);
     expect((await readMemories(db, ada.id)).map((m) => m.text)).toEqual(["avoids long-haul flights"]);
   });
 

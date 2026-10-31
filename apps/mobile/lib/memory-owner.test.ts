@@ -143,6 +143,18 @@ describe("the memory list belongs to the sign-in that loaded it (review of #147)
     expect(shown.at(-1)).toBe("ada: none");
   });
 
+  it("reports no success into a Settings page that has gone (review of #147, nonblocking)", async () => {
+    server.hold.add("DELETE /me/memories/a1 as tok-ada");
+    let forgetting!: Promise<boolean>;
+    await act(async () => void (forgetting = memory.forget("a1")));
+    await act(async () => root?.unmount());
+    root = null;
+    release("DELETE /me/memories/a1 as tok-ada");
+    // The line was forgotten on the server, as she asked; nothing is told it succeeded, so no haptic plays.
+    expect(await forgetting).toBe(false);
+    expect(server.lines.ada!.map((l) => l.id)).toEqual(["a2"]);
+  });
+
   it("shows none of Ada's lines from the first commit after Bob replaces her, and her late answers change nothing", async () => {
     // Ada forgets one line; its answer is held. Bob signs in over her (no sign-out between), and his list is held too.
     server.hold.add("DELETE /me/memories/a1 as tok-ada");
