@@ -24,6 +24,7 @@ import { useDandy } from "../../lib/dandy";
 import { listedWish } from "../../lib/listed";
 import { takeQueuedWishes } from "../../lib/wish-queue";
 import {
+  askingChoices,
   askingWidget,
   dreamTurn,
   feedFromSession,
@@ -483,6 +484,7 @@ export function ChatPage() {
     });
   }, []);
   const asking = useMemo(() => askingWidget(feed), [feed]);
+  const choosing = useMemo(() => askingChoices(feed), [feed]);
   const rows = useMemo(() => rowsOf(feed), [feed]);
   const lastSteps = useMemo(() => {
     for (let i = rows.length - 1; i >= 0; i--) if ("steps" in rows[i]!) return rows[i]!.key;
@@ -535,9 +537,10 @@ export function ChatPage() {
         return <ListChangeCard w={w} onShowOnList={home.showOnList} />;
       case "choices":
         // The answers to the question above, to tap instead of typing: only while it's the question the Dandy is waiting
-        // on, the newest tool with nothing said after it. A typed answer or a newer question closes it, and a reopened
-        // chat whose last word is this question can still answer it (review R44-CHOICES-OWNER).
-        return <Choices options={w.options} live={asking === w.id} onChoose={(o) => send({ type: "message", text: o }, o)} />;
+        // on, the newest one with nothing said after it, even with a hunt card opened beside it. A typed answer or a newer
+        // question closes it, and a reopened chat whose last word is this question can still answer it (review
+        // R44-CHOICES-OWNER).
+        return <Choices options={w.options} live={choosing === w.id} onChoose={(o) => send({ type: "message", text: o }, o)} />;
       case "region_picker":
         // Only when the Dandy asks: where they live otherwise comes from Settings.
         return <RegionPicker current={life?.home ?? w.current} onPick={(place) => send({ type: "region", home: place }, `I'll live in ${place.label}.`)} />;

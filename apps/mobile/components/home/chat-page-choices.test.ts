@@ -157,6 +157,16 @@ describe("answering Dandy's question with a tap (review R44-CHOICES-OWNER)", () 
     ]);
   });
 
+  it("keeps the question open when Dandy opens another tool beside it in the same reply", async () => {
+    await mount();
+    h.scripts.push([...ask("choice_1", "New or used?", ["New", "Used"]), { type: "widget", widget: { kind: "item", id: "item_1", text: "a Leica Q3" } }]);
+    await type("a porsche 911 and a leica");
+    expect(root!.root.findAll((n) => (n.type as unknown) === "HuntCard")).toHaveLength(1);
+    expect(rows().map(answerable)).toEqual([true]);
+    await type("used");
+    expect(rows().map(answerable)).toEqual([false]);
+  });
+
   it("leaves only the newest question open when another follows", async () => {
     await mount();
     h.scripts.push(ask("choice_1", "New or used?", ["New", "Used"]), ask("choice_2", "Which colour?", ["Black", "Silver"]));

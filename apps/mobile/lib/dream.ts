@@ -25,6 +25,19 @@ export function askingWidget(feed: readonly FeedItem[]): string | null {
   return null;
 }
 
+/**
+ * The question the Dandy is waiting on: the newest answers card, while nothing has been said after it. A tool it opens
+ * beside the question in the same reply, such as a hunt card for another thing they asked for, leaves it open.
+ */
+export function askingChoices(feed: readonly FeedItem[]): string | null {
+  for (let i = feed.length - 1; i >= 0; i--) {
+    const f = feed[i]!;
+    if (f.kind === "you") return null;
+    if (f.kind === "widget" && f.widget.kind === "choices") return f.widget.id;
+  }
+  return null;
+}
+
 type ApiStream = (path: string, init?: RequestInit) => Promise<Response>;
 type Api = ApiStream;
 
