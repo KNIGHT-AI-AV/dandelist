@@ -371,6 +371,7 @@ export function Chip({ label, selected = false, onPress, style }: { label: strin
     <Pressable
       accessibilityRole="button"
       accessibilityState={{ selected, disabled: !onPress }}
+      disabled={!onPress}
       onPress={onPress ? () => {
         haptic.select();
         onPress();

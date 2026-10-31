@@ -98,6 +98,7 @@ vi.mock("../../lib/dream", async (original) => ({
 }));
 
 const { ChatPage } = await import("./chat-page");
+const { Choices } = await import("../dream/choices");
 
 let root: ReactTestRenderer | null = null;
 const at = "2026-10-31T15:00:00Z";
@@ -116,7 +117,7 @@ async function mount() {
   await settle();
 }
 /** The answer rows on screen, in order, each with its chips. */
-const rows = () => root!.root.findAll((n) => (n.type as unknown) === "View" && n.props.accessibilityRole === "radiogroup");
+const rows = () => root!.root.findAllByType(Choices);
 const chips = (row: ReactTestInstance) => row.findAll((n) => (n.type as unknown) === "Chip");
 const answerable = (row: ReactTestInstance) => chips(row).some((c) => typeof c.props.onPress === "function");
 const said = () => root!.root.findAll((n) => (n.type as unknown) === "StreamText").map((n) => n.props.text as string);
