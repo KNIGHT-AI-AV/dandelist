@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Animated, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Animated, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { useAuth } from "../../lib/auth";
 import { haptic, usePress } from "../../lib/motion";
 import { NAME_MAX, pickAvatarImage, useProfile } from "../../lib/profile";
@@ -18,48 +18,83 @@ export function ProfileCard() {
   const auth = useAuth();
   const { profile, uploadAvatar, removeAvatar } = useProfile();
   const press = usePress(0.97);
-  const [busy, setBusy] = useState<"upload" | "remove" | null>(null);
+  const [busy, setBusy] = useState<"pick" | "upload" | "remove" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
-  // Held from the tap until the save ends, so a second tap while the picker opens never opens another.
-  const picking = useRef(false);
+  // One operation owns the picker, upload or removal, including its local web preview.
+  const operation = useRef<{ previewUrl: string | null } | null>(null);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      const pending = operation.current;
+      operation.current = null;
+      if (pending?.previewUrl) {
+        const url = pending.previewUrl;
+        pending.previewUrl = null;
+        URL.revokeObjectURL(url);
+      }
+    };
+  }, []);
 
   const change = async () => {
-    if (busy || picking.current) return;
-    picking.current = true;
+    if (!mounted.current || operation.current) return;
+    const token: { previewUrl: string | null } = { previewUrl: null };
+    operation.current = token;
+    setBusy("pick");
     setError(null);
     try {
       const image = await pickAvatarImage();
+      // Only the web picker creates an object URL owned by this operation; native and remote URIs stay intact.
+      token.previewUrl = Platform.OS === "web" && image?.preview?.startsWith("blob:") ? image.preview : null;
+      if (operation.current !== token) return;
       if (!image) return;
       setPreview(image.preview ?? null);
       setBusy("upload");
       await uploadAvatar(image);
-      haptic.success();
+      if (operation.current === token) haptic.success();
     } catch (e) {
-      haptic.error();
-      setError(e instanceof Error ? e.message : "Couldn't save that photo. Try another.");
+      if (operation.current === token) {
+        haptic.error();
+        setError(e instanceof Error ? e.message : "Couldn't save that photo. Try another.");
+      }
     } finally {
-      picking.current = false;
-      setPreview(null);
-      setBusy(null);
+      if (token.previewUrl) {
+        const url = token.previewUrl;
+        token.previewUrl = null;
+        URL.revokeObjectURL(url);
+      }
+      if (operation.current === token) {
+        operation.current = null;
+        setPreview(null);
+        setBusy(null);
+      }
     }
   };
   const remove = async () => {
+    if (!mounted.current || operation.current) return;
+    const token = { previewUrl: null };
+    operation.current = token;
     setError(null);
     setBusy("remove");
     try {
       await removeAvatar();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Couldn't remove the photo. Try again.");
+      if (operation.current === token) setError(e instanceof Error ? e.message : "Couldn't remove the photo. Try again.");
     } finally {
-      setBusy(null);
+      if (operation.current === token) {
+        operation.current = null;
+        setBusy(null);
+      }
     }
   };
 
+  const blocked = busy !== null;
   const name = profile?.name ?? null;
   return (
     <View style={{ alignItems: "center", gap: layout.stack.base }}>
-      <Pressable accessibilityRole="button" accessibilityLabel={profile?.avatarKey ? "Change your photo" : "Add a photo"} onPress={change} onPressIn={press.onPressIn} onPressOut={press.onPressOut}>
+      <Pressable accessibilityRole="button" accessibilityLabel={profile?.avatarKey ? "Change your photo" : "Add a photo"} accessibilityState={{ disabled: blocked, busy: busy === "pick" || busy === "upload" }} disabled={blocked} onPress={blocked ? undefined : change} onPressIn={press.onPressIn} onPressOut={press.onPressOut}>
         <Animated.View style={{ transform: [{ scale: press.scale }] }}>
           <ProfileAvatar size={AVATAR} preview={preview} />
           {busy === "upload" ? (
@@ -76,8 +111,8 @@ export function ProfileCard() {
         <Text style={[type.footnote, { color: p.ink3 }]}>{profile?.email ?? auth.user?.email ?? ""}</Text>
       </View>
       <View style={{ flexDirection: "row", gap: 10 }}>
-        <RowAction label={profile?.avatarKey ? "Change photo" : "Add a photo"} onPress={change} busy={busy === "upload"} />
-        {profile?.avatarKey ? <RowAction label="Remove" tone="quiet" onPress={remove} busy={busy === "remove"} accessibilityLabel="Remove your photo" /> : null}
+        <RowAction label={profile?.avatarKey ? "Change photo" : "Add a photo"} onPress={change} busy={busy === "pick" || busy === "upload"} disabled={blocked} />
+        {profile?.avatarKey ? <RowAction label="Remove" tone="quiet" onPress={remove} busy={busy === "remove"} disabled={blocked} accessibilityLabel="Remove your photo" /> : null}
       </View>
       <ErrorLine>{error}</ErrorLine>
     </View>
