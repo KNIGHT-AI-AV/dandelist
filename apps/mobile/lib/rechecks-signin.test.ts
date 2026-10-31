@@ -140,7 +140,7 @@ describe("a look's requests go as the sign-in that started it (review of #131)",
     // Ada's bearer has expired: the request is refused, the refresh renews her bearer, and Bob's sign-in lands just as
     // that refresh stores its token, before the retry goes out. Bob's sign-in is in place the moment his bearer is, which
     // is before his own token is stored: stored tokens are written one at a time (round40), so his waits behind Ada's.
-    let landed: Promise<void> | null = null;
+    let landed: Promise<boolean> | null = null;
     store.onSet = async (key, value) => {
       if (key !== "dandelist.refresh" || value !== "refresh-ada-3") return;
       const before = currentSignIn();

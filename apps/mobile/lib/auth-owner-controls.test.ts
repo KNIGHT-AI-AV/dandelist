@@ -5,38 +5,78 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 /**
  * The boundaries the round40 ownership fix changed, beside the five cases in auth-response-owner.test.ts: stored tokens
  * written one at a time with the newest owner's value last, a sign-out's revoke and a failed refresh that come back
- * after another sign-in, the stored session restored at startup against a sign-in made meanwhile, one refresh for two
- * 401s of the same session, and one redemption per ticket. The real AuthProvider; only storage, the platform and a
- * synthetic API stand in.
+ * after another sign-in, the stored session restored at startup against a sign-in or sign-out made meanwhile, one
+ * refresh for two 401s of the same session, and one redemption per ticket. Round41 adds the callers: the provider
+ * return screen when a newer sign-in starts or the person leaves it before its ticket finishes, and the Apple sheet for
+ * a sign-in that a newer one took over from. The real AuthProvider and return screen; only storage, the platform, the
+ * router, the Apple sheet and a synthetic API stand in.
  */
 const g = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean; IS_REACT_NATIVE_TEST_ENVIRONMENT?: boolean };
 g.IS_REACT_ACT_ENVIRONMENT = true;
 g.IS_REACT_NATIVE_TEST_ENVIRONMENT = true;
 
-// Device storage; a test can hold one refresh-token write before it lands, as a slow keychain would.
-const store = vi.hoisted(() => ({ map: new Map<string, string>(), slow: null as null | { value: string | null; entered: () => void; gate: Promise<void> } }));
+// Device storage; a test can hold one read or one write until it releases it, as a slow keychain would, or make one
+// write fail.
+const store = vi.hoisted(() => ({
+  map: new Map<string, string>(),
+  slowRead: null as null | { key: string; entered: () => void; gate: Promise<void> },
+  slow: null as null | { key: string; value: string | null; entered: () => void; gate: Promise<void> },
+  failing: null as null | { key: string; value: string },
+}));
 vi.mock("./storage", () => ({
-  getSecret: async (key: string) => store.map.get(key) ?? null,
+  getSecret: async (key: string) => {
+    const slow = store.slowRead;
+    if (slow?.key === key) {
+      store.slowRead = null;
+      slow.entered();
+      await slow.gate;
+    }
+    return store.map.get(key) ?? null;
+  },
   setSecret: async (key: string, value: string | null) => {
     const slow = store.slow;
-    if (slow && key === "dandelist.refresh" && slow.value === value) {
+    if (slow?.key === key && slow.value === value) {
       store.slow = null;
       slow.entered();
       await slow.gate;
     }
+    if (store.failing?.key === key && store.failing.value === value) throw new Error("The keychain refused the write.");
     if (value === null) store.map.delete(key);
     else store.map.set(key, value);
   },
 }));
-vi.mock("react-native", () => ({ Platform: { OS: "ios", select: (o: Record<string, unknown>) => o.ios ?? o.default } }));
+vi.mock("react-native", () => ({ ActivityIndicator: "ActivityIndicator", Platform: { OS: "ios", select: (o: Record<string, unknown>) => o.ios ?? o.default }, View: "View" }));
 vi.mock("expo/fetch", () => ({ fetch: (...a: Parameters<typeof fetch>) => fetch(...a) }));
 vi.mock("expo-constants", () => ({ default: { executionEnvironment: "standalone" }, ExecutionEnvironment: { StoreClient: "storeClient" } }));
-vi.mock("expo-apple-authentication", () => ({}));
+// The Apple sheet: what it was opened with, and the answer a test plans for it.
+const apple = vi.hoisted(() => ({ asked: [] as { nonce?: string }[], answer: null as null | (() => Promise<unknown>) }));
+vi.mock("expo-apple-authentication", () => ({
+  AppleAuthenticationScope: { FULL_NAME: 0, EMAIL: 1 },
+  signInAsync: async (options: { nonce?: string }) => {
+    apple.asked.push(options);
+    if (!apple.answer) throw new Error("No Apple answer was planned.");
+    return apple.answer();
+  },
+}));
 vi.mock("expo-crypto", () => ({}));
 vi.mock("expo-linking", () => ({}));
 vi.mock("expo-web-browser", () => ({}));
+// The router as the return screen uses it, and every place it was sent.
+const route = vi.hoisted(() => ({ params: {} as Record<string, string>, moves: [] as unknown[] }));
+vi.mock("expo-router", () => {
+  const router = { replace: (to: unknown) => void route.moves.push(to), back: () => void route.moves.push("back"), canGoBack: () => false };
+  return { useLocalSearchParams: () => route.params, useRouter: () => router };
+});
+vi.mock("./theme", () => ({ usePalette: () => ({ bg: "#000", ink: "#fff", ink2: "#ccc" }) }));
+vi.mock("../components/lux", () => ({ Backdrop: "Backdrop", Eyebrow: "Eyebrow", Grain: "Grain", Shade: "Shade" }));
+vi.mock("../components/atmosphere", () => ({ Atmosphere: "Atmosphere" }));
+// The return screen requires its backdrop photo, which Metro turns into a number; Node would read the .jpg as code.
+(require as unknown as { extensions: Record<string, (m: { exports: unknown }) => void> }).extensions[".jpg"] = (m) => {
+  m.exports = 1;
+};
 
 const { AuthProvider, useAuth } = await import("./auth");
+const { default: AuthReturn } = await import("../app/auth/callback");
 type User = { id: string; email: string };
 const REFRESH = "dandelist.refresh";
 const VERIFIER = "dandelist.oauth.verifier";
@@ -46,8 +86,9 @@ const signIns: Record<string, { accessToken: string; refreshToken: string; user:
   "ada@example.com": { accessToken: "tok-ada-1", refreshToken: "ref-ada-1", user: ada },
   "bob@example.com": { accessToken: "tok-bob-1", refreshToken: "ref-bob-1", user: bob },
 };
-const owners: Record<string, User> = { "tok-ada-1": ada, "tok-ada-2": ada, "tok-bob-1": bob };
+const owners: Record<string, User> = { "tok-ada-1": ada, "tok-ada-2": ada, "tok-ada-3": ada, "tok-bob-1": bob, "tok-bob-2": bob };
 const tickets: Record<string, string> = { "ticket-1": "bob@example.com", "ticket-2": "bob@example.com" };
+const appleTokens: Record<string, string> = { "apple-bob": "bob@example.com" };
 
 // The API: what each request carried, its answers, and holds that keep one answer back until released.
 let log: { method: string; path: string; bearer: string | null }[] = [];
@@ -84,20 +125,48 @@ async function fakeFetch(input: string | URL | Request, init: RequestInit = {}):
       return signIns[body.email!] ? respond(signIns[body.email!]) : respond({ error: "That code didn't work." }, 400);
     case "/auth/refresh": {
       await gate(`refresh:${body.refreshToken}`);
+      // Like the API, a refresh token works once: the session it named is revoked as the new one is issued.
       const next = refreshes[body.refreshToken!];
+      delete refreshes[body.refreshToken!];
       return next ? respond(next) : respond({ error: "Sign in again." }, 401);
     }
     case "/auth/logout":
       await gate(`logout:${bearer}`);
       return respond({});
-    case "/auth/oauth/redeem":
+    case "/auth/oauth/redeem": {
       await gate(`redeem:${body.ticket}`);
-      return respond(signIns[tickets[body.ticket!]!]);
+      const email = tickets[body.ticket!];
+      return email ? respond(signIns[email]) : respond({ error: "That sign-in didn't go through." }, 400);
+    }
+    case "/auth/apple/nonce":
+      await gate("nonce");
+      return respond({ nonce: "nonce-1" });
+    case "/auth/apple/native":
+      return respond(signIns[appleTokens[body.identityToken!]!]);
     case "/me":
       if (!bearer || expired.has(bearer) || !owners[bearer]) return respond({ error: "Sign in again." }, 401);
       return respond({ user: owners[bearer] });
   }
   throw new Error(`Unexpected request: ${method} ${url.pathname}`);
+}
+
+/** Holds the next read of `key` until released. */
+function slowRead(key: string) {
+  let entered!: () => void;
+  let release!: () => void;
+  const reading = new Promise<void>((r) => (entered = r));
+  store.slowRead = { key, entered, gate: new Promise<void>((r) => (release = r)) };
+  opens.push(() => release());
+  return { reading, release: () => release() };
+}
+/** Holds the next write of `value` under `key` until released. */
+function slowWrite(key: string, value: string | null) {
+  let entered!: () => void;
+  let release!: () => void;
+  const writing = new Promise<void>((r) => (entered = r));
+  store.slow = { key, value, entered, gate: new Promise<void>((r) => (release = r)) };
+  opens.push(() => release());
+  return { writing, release: () => release() };
 }
 
 let auth: ReturnType<typeof useAuth> | null = null;
@@ -110,10 +179,26 @@ const now = () => {
   if (!auth) throw new Error("The AuthProvider hasn't mounted.");
   return auth;
 };
-async function mount() {
+const tree = (onReturn: boolean) => createElement(AuthProvider, null, createElement(Probe), onReturn ? createElement(AuthReturn) : null);
+/** Opens the app; with a ticket, on the screen a provider sent the person back to with it. */
+async function mount(ticket?: string) {
+  route.params = ticket ? { ticket } : {};
   await act(async () => {
-    root = create(createElement(AuthProvider, null, createElement(Probe)), { unstable_isConcurrent: true } as unknown as Parameters<typeof create>[1]);
+    root = create(tree(!!ticket), { unstable_isConcurrent: true } as unknown as Parameters<typeof create>[1]);
   });
+}
+/** The person leaves the return screen; the app, and its AuthProvider, stay. */
+const leave = () => act(async () => root!.update(tree(false)));
+/** Lets every answer that isn't held come back. */
+const settle = () =>
+  act(async () => {
+    for (let i = 0; i < 10; i++) await new Promise((r) => setTimeout(r, 0));
+  });
+/** The app closes and opens again: a new AuthProvider restores whatever this device kept. */
+async function restart() {
+  await act(async () => root?.unmount());
+  await mount();
+  await settle();
 }
 const signInAs = (u: User) => act(async () => now().verifyEmail(u.email, "123456"));
 /** Where things stand, and the bearer the next request actually carries. */
@@ -124,11 +209,18 @@ async function state() {
   });
   return { status: now().status, user: now().user?.id ?? null, sentAs: log.at(-1)?.bearer ?? null, answered: res.status, stored: store.map.get(REFRESH) ?? null };
 }
+const asAda = { status: "signedIn", user: "ada", sentAs: "tok-ada-1", answered: 200, stored: "ref-ada-1" };
 const asBob = { status: "signedIn", user: "bob", sentAs: "tok-bob-1", answered: 200, stored: "ref-bob-1" };
 
 beforeEach(() => {
   store.map.clear();
+  store.slowRead = null;
   store.slow = null;
+  store.failing = null;
+  apple.asked = [];
+  apple.answer = null;
+  route.params = {};
+  route.moves = [];
   log = [];
   expired = new Set();
   refreshes = {};
@@ -149,14 +241,11 @@ afterEach(async () => {
 describe("auth ownership boundaries (round40)", () => {
   it("leaves a sign-out's empty storage last when the sign-in's own token write lands late", async () => {
     await mount();
-    let entered!: () => void;
-    let release!: () => void;
-    const writing = new Promise<void>((r) => (entered = r));
-    store.slow = { value: "ref-bob-1", entered, gate: new Promise<void>((r) => (release = r)) };
+    const storing = slowWrite(REFRESH, "ref-bob-1");
     let signing!: Promise<void>;
     await act(async () => {
       signing = now().verifyEmail(bob.email, "123456");
-      await writing;
+      await storing.writing;
     });
     // Bob is in place while his token is still being written, and signs out meanwhile.
     expect(now().status).toBe("signedIn");
@@ -164,7 +253,7 @@ describe("auth ownership boundaries (round40)", () => {
     await act(async () => void (out = now().signOut()));
     expect(now().status).toBe("signedOut");
     await act(async () => {
-      release();
+      storing.release();
       await signing;
       await out;
     });
@@ -213,7 +302,7 @@ describe("auth ownership boundaries (round40)", () => {
     expect(await state()).toEqual(asBob);
   });
 
-  it("doesn't restore the stored session over a sign-in made while it was being restored", async () => {
+  it("doesn't restore the stored session over a sign-in made while it was being restored, then or at the next start", async () => {
     store.map.set(REFRESH, "ref-ada-1");
     refreshes["ref-ada-1"] = { accessToken: "tok-ada-2", refreshToken: "ref-ada-2" };
     const restoring = hold("refresh:ref-ada-1");
@@ -221,26 +310,51 @@ describe("auth ownership boundaries (round40)", () => {
     expect(now().status).toBe("loading");
     await act(async () => void (await restoring.entered));
     await signInAs(bob);
-    await act(async () => {
-      restoring.release();
-      for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 0));
-    });
+    await act(async () => restoring.release());
+    await settle();
     expect(await state()).toEqual(asBob);
+    // Ada's renewed token was never stored over Bob's, so the next start opens his session, not hers.
+    refreshes["ref-ada-2"] = { accessToken: "tok-ada-3", refreshToken: "ref-ada-3" };
+    refreshes["ref-bob-1"] = { accessToken: "tok-bob-2", refreshToken: "ref-bob-2" };
+    await restart();
+    expect(await state()).toEqual({ status: "signedIn", user: "bob", sentAs: "tok-bob-2", answered: 200, stored: "ref-bob-2" });
   });
 
-  it("ends signed out, not still loading, when a sign-in that started during the restore fails", async () => {
+  it("ends signed out, not still loading, when a sign-in that started during the restore fails, and keeps the renewed token", async () => {
     store.map.set(REFRESH, "ref-ada-1");
     refreshes["ref-ada-1"] = { accessToken: "tok-ada-2", refreshToken: "ref-ada-2" };
     const restoring = hold("refresh:ref-ada-1");
     await mount();
     await act(async () => void (await restoring.entered));
     await act(async () => void (await now().verifyEmail("nobody@example.com", "000000").catch(() => undefined)));
-    await act(async () => {
-      restoring.release();
-      for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 0));
-    });
+    await act(async () => restoring.release());
+    await settle();
     expect(now().status).toBe("signedOut");
     expect(now().user).toBeNull();
+    // The server took ref-ada-1 for ref-ada-2. A sign-in that failed didn't sign Ada out of this device, so her renewed
+    // token is the one kept, and the next start opens her session with it.
+    expect(store.map.get(REFRESH)).toBe("ref-ada-2");
+    refreshes["ref-ada-2"] = { accessToken: "tok-ada-3", refreshToken: "ref-ada-3" };
+    await restart();
+    expect(await state()).toEqual({ status: "signedIn", user: "ada", sentAs: "tok-ada-3", answered: 200, stored: "ref-ada-3" });
+  });
+
+  it("keeps nothing of the restore when this device signs out while it is being restored, then or at the next start", async () => {
+    store.map.set(REFRESH, "ref-ada-1");
+    refreshes["ref-ada-1"] = { accessToken: "tok-ada-2", refreshToken: "ref-ada-2" };
+    const restoring = hold("refresh:ref-ada-1");
+    await mount();
+    await act(async () => void (await restoring.entered));
+    await act(async () => now().signOut());
+    await act(async () => restoring.release());
+    await settle();
+    expect(now().status).toBe("signedOut");
+    expect(store.map.has(REFRESH)).toBe(false);
+    // Had ref-ada-2 been kept, the next start would open Ada's session with it.
+    refreshes["ref-ada-2"] = { accessToken: "tok-ada-3", refreshToken: "ref-ada-3" };
+    await restart();
+    expect(now().status).toBe("signedOut");
+    expect(log.filter((l) => l.path === "/auth/refresh")).toHaveLength(1);
   });
 
   it("makes one refresh for two 401s of the same session, and sends both again renewed (control)", async () => {
@@ -259,21 +373,54 @@ describe("auth ownership boundaries (round40)", () => {
     expect(store.map.get(REFRESH)).toBe("ref-ada-2");
   });
 
+  it("hands a refresh whose new token can't be stored to its caller alone, and stores the next sign-in after it", async () => {
+    await mount();
+    await signInAs(ada);
+    expired.add("tok-ada-1");
+    refreshes["ref-ada-1"] = { accessToken: "tok-ada-2", refreshToken: "ref-ada-2" };
+    store.failing = { key: REFRESH, value: "ref-ada-2" };
+    const node = globalThis as unknown as { process: { on(e: string, f: (reason: unknown) => void): void; off(e: string, f: (reason: unknown) => void): void } };
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => void unhandled.push(reason);
+    node.process.on("unhandledRejection", onUnhandled);
+    let failed: unknown = null;
+    try {
+      await act(async () => {
+        await now()
+          .api("/me")
+          .catch((e: unknown) => void (failed = e));
+      });
+      await settle();
+    } finally {
+      node.process.off("unhandledRejection", onUnhandled);
+    }
+    expect((failed as Error | null)?.message).toBe("The keychain refused the write.");
+    expect(unhandled).toEqual([]);
+    // The writes carry on behind it: a sign-out and the next sign-in are stored as usual.
+    store.failing = null;
+    await act(async () => now().signOut());
+    expect(store.map.has(REFRESH)).toBe(false);
+    await signInAs(bob);
+    expect(await state()).toEqual(asBob);
+  });
+
   it("redeems a ticket once when it arrives twice, and signs in with it (control)", async () => {
     await mount();
     store.map.set(VERIFIER, "verifier-1");
     const redeeming = hold("redeem:ticket-1");
-    let first!: Promise<void>;
-    let second!: Promise<void>;
+    let first!: Promise<boolean>;
+    let second!: Promise<boolean>;
     await act(async () => {
       first = now().redeemTicket("ticket-1");
       second = now().redeemTicket("ticket-1");
       await redeeming.entered;
     });
+    let took!: boolean[];
     await act(async () => {
       redeeming.release();
-      await Promise.all([first, second]);
+      took = await Promise.all([first, second]);
     });
+    expect(took).toEqual([true, true]);
     expect(log.filter((l) => l.path === "/auth/oauth/redeem")).toHaveLength(1);
     expect(store.map.has(VERIFIER)).toBe(false);
     expect(await state()).toEqual(asBob);
@@ -283,18 +430,194 @@ describe("auth ownership boundaries (round40)", () => {
     await mount();
     store.map.set(VERIFIER, "verifier-1");
     const redeeming = hold("redeem:ticket-2");
-    let late!: Promise<void>;
+    let late!: Promise<boolean>;
     await act(async () => {
       late = now().redeemTicket("ticket-2");
       await redeeming.entered;
     });
     await signInAs(ada);
+    let took!: boolean;
     await act(async () => {
       redeeming.release();
-      await late;
+      took = await late;
     });
+    expect(took).toBe(false);
     expect(now().user?.id).toBe("ada");
     expect(store.map.get(VERIFIER)).toBe("verifier-1");
     expect(store.map.get(REFRESH)).toBe("ref-ada-1");
+  });
+
+  it("doesn't send a ticket whose sign-in a newer one took over from while its verifier was read", async () => {
+    await mount();
+    store.map.set(VERIFIER, "verifier-1");
+    const reading = slowRead(VERIFIER);
+    let late!: Promise<boolean>;
+    await act(async () => {
+      late = now().redeemTicket("ticket-1");
+      await reading.reading;
+    });
+    await signInAs(ada);
+    let took!: boolean;
+    await act(async () => {
+      reading.release();
+      took = await late;
+    });
+    expect(took).toBe(false);
+    expect(log.filter((l) => l.path === "/auth/oauth/redeem")).toHaveLength(0);
+    expect(await state()).toEqual(asAda);
+  });
+});
+
+describe("the provider return screen against a newer sign-in (round41)", () => {
+  it("opens the list once its ticket signs in (control)", async () => {
+    store.map.set(VERIFIER, "verifier-1");
+    await mount("ticket-1");
+    await settle();
+    expect(route.moves).toEqual(["/wishes"]);
+    expect(store.map.has(VERIFIER)).toBe(false);
+    expect(await state()).toEqual(asBob);
+  });
+
+  it("opens the sign-in page with an error when its ticket fails (control)", async () => {
+    store.map.set(VERIFIER, "verifier-1");
+    await mount("ticket-bad");
+    await settle();
+    expect(route.moves).toEqual([{ pathname: "/sign-in", params: { error: "failed" } }]);
+    expect(now().status).toBe("signedOut");
+  });
+
+  it.each([
+    ["stays on", "signs in", "ticket-1"],
+    ["stays on", "fails", "ticket-bad"],
+    ["leaves", "signs in", "ticket-1"],
+    ["leaves", "fails", "ticket-bad"],
+  ])("moves nothing when the person %s the return screen and signs in another way before its ticket %s", async (where, _, ticket) => {
+    store.map.set(VERIFIER, "verifier-1");
+    const redeeming = hold(`redeem:${ticket}`);
+    await mount(ticket);
+    await act(async () => void (await redeeming.entered));
+    if (where === "leaves") await leave();
+    await signInAs(ada);
+    await act(async () => redeeming.release());
+    await settle();
+    expect(route.moves).toEqual([]);
+    expect(store.map.get(VERIFIER)).toBe("verifier-1");
+    expect(await state()).toEqual(asAda);
+  });
+
+  it.each([
+    ["signs in", "ticket-1", asBob],
+    ["fails", "ticket-bad", { status: "signedOut", user: null, answered: 401, stored: null }],
+  ])("moves nothing when the person leaves the return screen before its ticket %s, and keeps what it did", async (_, ticket, after) => {
+    store.map.set(VERIFIER, "verifier-1");
+    const redeeming = hold(`redeem:${ticket}`);
+    await mount(ticket);
+    await act(async () => void (await redeeming.entered));
+    await leave();
+    await act(async () => redeeming.release());
+    await settle();
+    expect(route.moves).toEqual([]);
+    expect(await state()).toMatchObject(after);
+  });
+
+  it.each([
+    ["its session's token is stored", REFRESH, "ref-bob-1"],
+    ["its verifier is removed", VERIFIER, null],
+  ])("moves nothing for a ticket a newer sign-in took over from while %s, and keeps its session until that one lands", async (_, key, value) => {
+    store.map.set(VERIFIER, "verifier-1");
+    const held = slowWrite(key, value);
+    await mount("ticket-1");
+    await act(async () => void (await held.writing));
+    // Bob's session is in place while that write is still going on, and a newer sign-in starts.
+    expect(now().user?.id).toBe("bob");
+    const verifying = hold(`verify:${ada.email}`);
+    let newer!: Promise<void>;
+    await act(async () => {
+      newer = now().verifyEmail(ada.email, "123456");
+      await verifying.entered;
+    });
+    await act(async () => held.release());
+    await settle();
+    expect(route.moves).toEqual([]);
+    expect(await state()).toEqual(asBob);
+    await act(async () => {
+      verifying.release();
+      await newer;
+    });
+    expect(await state()).toEqual(asAda);
+    expect(route.moves).toEqual([]);
+  });
+});
+
+describe("Sign in with Apple against a newer sign-in (round41)", () => {
+  it("opens no Apple sheet for a nonce that comes back after a newer sign-in", async () => {
+    await mount();
+    const nonce = hold("nonce");
+    let late!: Promise<boolean>;
+    await act(async () => {
+      late = now().signInWithApple();
+      await nonce.entered;
+    });
+    await signInAs(bob);
+    let took!: boolean;
+    await act(async () => {
+      nonce.release();
+      took = await late;
+    });
+    expect(took).toBe(false);
+    expect(apple.asked).toEqual([]);
+    expect(await state()).toEqual(asBob);
+  });
+
+  it("signs in through the Apple sheet with the API's nonce (control)", async () => {
+    await mount();
+    apple.answer = async () => ({ identityToken: "apple-bob", fullName: null });
+    let took!: boolean;
+    await act(async () => void (took = await now().signInWithApple()));
+    expect(took).toBe(true);
+    expect(apple.asked.map((o) => o.nonce)).toEqual(["nonce-1"]);
+    expect(await state()).toEqual(asBob);
+  });
+
+  it("ends quietly when the person closes the Apple sheet (control)", async () => {
+    await mount();
+    apple.answer = async () => {
+      throw Object.assign(new Error("The person closed the sheet."), { code: "ERR_REQUEST_CANCELED" });
+    };
+    let took!: boolean;
+    await act(async () => void (took = await now().signInWithApple()));
+    expect(took).toBe(false);
+    expect(apple.asked).toHaveLength(1);
+    expect(log.filter((l) => l.path === "/auth/apple/native")).toHaveLength(0);
+    expect(now().status).toBe("signedOut");
+  });
+
+  it("reports an Apple sign-in a newer one took over from while its token was stored, and keeps it until that one lands", async () => {
+    await mount();
+    apple.answer = async () => ({ identityToken: "apple-bob", fullName: null });
+    const storing = slowWrite(REFRESH, "ref-bob-1");
+    let late!: Promise<boolean>;
+    await act(async () => {
+      late = now().signInWithApple();
+      await storing.writing;
+    });
+    const verifying = hold(`verify:${ada.email}`);
+    let newer!: Promise<void>;
+    await act(async () => {
+      newer = now().verifyEmail(ada.email, "123456");
+      await verifying.entered;
+    });
+    let took!: boolean;
+    await act(async () => {
+      storing.release();
+      took = await late;
+    });
+    expect(took).toBe(false);
+    expect(await state()).toEqual(asBob);
+    await act(async () => {
+      verifying.release();
+      await newer;
+    });
+    expect(await state()).toEqual(asAda);
   });
 });

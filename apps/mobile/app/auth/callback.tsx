@@ -17,7 +17,16 @@ export default function AuthReturn() {
   const p = usePalette();
   const params = useLocalSearchParams<{ ticket?: string; error?: string; intent?: string }>();
   const started = useRef(false);
+  /** Whether this screen is still there to move on from: a ticket that finishes after the person left it moves nothing. */
+  const here = useRef(true);
   const linking = params.intent === "link";
+
+  useEffect(() => {
+    here.current = true;
+    return () => {
+      here.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     // Wait for the stored session check, so it can't overwrite the new one.
@@ -50,9 +59,14 @@ export default function AuthReturn() {
       router.replace(error ? { pathname: "/sign-in", params: { error } } : "/");
       return;
     }
+    // False when a newer sign-in or a sign-out took over meanwhile: that one decides where to go, so this stays put.
     auth.redeemTicket(ticket).then(
-      () => router.replace("/wishes"),
-      () => router.replace({ pathname: "/sign-in", params: { error: "failed" } }),
+      (took) => {
+        if (took && here.current) router.replace("/wishes");
+      },
+      () => {
+        if (here.current) router.replace({ pathname: "/sign-in", params: { error: "failed" } });
+      },
     );
   }, [auth, router, params.ticket, params.error, linking]);
 
