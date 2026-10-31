@@ -1,4 +1,5 @@
 import type { Media } from "./agent";
+import type { Category, Financing } from "./comfort";
 import type { Item, Period } from "@dandelist/cost";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode, type SetStateAction } from "react";
 import { useAuth } from "./auth";
@@ -45,6 +46,11 @@ export interface WishDetails {
   worth?: "money" | "priceless";
   /** A priceless wish's line, written by the Dandy when it read the wish. */
   line?: string;
+  /**
+   * What the wish may take of a year's income, judged by the same call as `about` for the tier it had then: its kind
+   * of purchase, how it is paid for and the share (lib/comfort.ts does the sums). `why` is kept, not shown yet.
+   */
+  comfort?: { category: Category; financing: Financing; share: number; why: string; tier: WishTier; at: string };
 }
 
 export interface NewWish {

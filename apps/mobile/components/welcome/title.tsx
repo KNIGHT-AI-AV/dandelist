@@ -8,8 +8,7 @@ import { ease, native, useReducedMotion } from "../../lib/motion";
 import { play, preloadSounds } from "../../lib/sound";
 import { fonts, layout, type, usePalette } from "../../lib/theme";
 import { zoom } from "../../lib/viewport";
-import { recurringBreakdown } from "@dandelist/cost";
-import { comfortableIncome } from "../../lib/comfort";
+import { comfortableIncome, needOf, poolEntry } from "../../lib/comfort";
 import { hostOf, shortDate } from "../../lib/welcome";
 import { Grain, Shade, Wordmark } from "../lux";
 import { Odometer, dollars } from "../odometer";
@@ -135,8 +134,9 @@ export function TitleSequence({ hero, short, onDone }: { hero: Entry; short: boo
   const dateOut = range(6300, 7000, 1, 0);
   const rule = range(8000, 8900, 0, 1, ease.inOut);
   const line = range(8800, 9600);
-  // What it would take: the income that carries this wish comfortably, its running costs included.
-  const income = comfortableIncome(hero.upfrontCents, recurringBreakdown([hero]).perYear);
+  // What it would take: the income that carries this wish comfortably, its running costs included (a car on the
+  // car rules, not a month's pay).
+  const income = comfortableIncome(needOf([poolEntry(hero)]));
   const gutter = layout.gutter(width);
   const fade = out.interpolate({ inputRange: [0, 0.6, 1], outputRange: [1, 0.15, 0] });
   // The dissolve's reach: a circle from the touch point that covers the farthest corner.
