@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { Platform } from "react-native";
-import { API_URL, useAuth, type LinkedIdentity, type ProviderId } from "./auth";
+import { API_URL, bindToSignIn, currentSignIn, useAuth, type LinkedIdentity, type ProviderId } from "./auth";
 import type { PersonaId } from "./persona-state";
 
 /**
@@ -73,7 +73,8 @@ const json = (method: string, body: unknown): RequestInit => ({ method, headers:
 type Snapshot = { userId: string | null; profile: Profile | null };
 let snapshot: Snapshot = { userId: null, profile: null };
 const listeners = new Set<() => void>();
-let loading: { userId: string; promise: Promise<void> } | null = null;
+/** The load in flight, for the sign-in (auth.tsx currentSignIn) it was asked under. */
+let loading: { userId: string; at: number; promise: Promise<void> } | null = null;
 
 function publish(next: Snapshot) {
   snapshot = next;
@@ -85,16 +86,25 @@ const subscribe = (l: () => void) => {
 };
 const current = () => snapshot;
 
+/**
+ * Keeps an answer only while the sign-in that asked for it is still the one signed in (Codex's 35-profile-owner-backlog):
+ * a late answer for an account that signed out never replaces the profile of the one signed in now.
+ */
+function publishFor(at: number, next: Snapshot) {
+  if (currentSignIn() === at) publish(next);
+}
+
 function load(api: Api, userId: string): Promise<void> {
-  if (loading?.userId === userId) return loading.promise;
-  const promise = api("/me/profile")
+  const at = currentSignIn();
+  if (loading?.userId === userId && loading.at === at) return loading.promise;
+  const promise = bindToSignIn(api, at)("/me/profile")
     .then((r) => read<{ profile: Profile }>(r, "Couldn't load your profile."))
-    .then(({ profile }) => publish({ userId, profile }))
+    .then(({ profile }) => publishFor(at, { userId, profile }))
     .catch(() => {})
     .finally(() => {
       if (loading?.promise === promise) loading = null;
     });
-  loading = { userId, promise };
+  loading = { userId, at, promise };
   return promise;
 }
 
@@ -118,7 +128,11 @@ export function useProfile(): ProfileStore {
     if (snapshot.userId !== userId || !snapshot.profile) void load(api, userId);
   }, [userId, api]);
 
-  const keep = useCallback((p: Profile) => userId && publish({ userId, profile: p }), [userId]);
+  // A change goes as the sign-in that made it, and its answer is kept only while that sign-in lasts.
+  const asNow = useCallback(() => {
+    const at = currentSignIn();
+    return { send: bindToSignIn(api, at), keep: (p: Profile) => userId && publishFor(at, { userId, profile: p }) };
+  }, [api, userId]);
 
   const reload = useCallback(async () => {
     if (userId) await load(api, userId);
@@ -126,26 +140,29 @@ export function useProfile(): ProfileStore {
 
   const saveName = useCallback(
     async (name: string) => {
-      const res = await api("/me/profile", json("PATCH", { name: name.trim() || null })).catch(() => null);
+      const { send, keep } = asNow();
+      const res = await send("/me/profile", json("PATCH", { name: name.trim() || null })).catch(() => null);
       keep((await read<{ profile: Profile }>(res, "Couldn't save your name.")).profile);
     },
-    [api, keep],
+    [asNow],
   );
 
   const uploadAvatar = useCallback(
     async (image: PickedImage) => {
       if (image.size > MAX_AVATAR_BYTES) throw new Error("Choose a photo under 2 MB.");
+      const { send, keep } = asNow();
       // Phones send raw bytes, which React Native's fetch takes as an ArrayBufferView; the web sends a Blob.
-      const res = await api("/me/avatar", { method: "POST", headers: { "Content-Type": image.type }, body: image.body as BodyInit }).catch(() => null);
+      const res = await send("/me/avatar", { method: "POST", headers: { "Content-Type": image.type }, body: image.body as BodyInit }).catch(() => null);
       keep((await read<{ profile: Profile }>(res, "Couldn't save that photo.")).profile);
     },
-    [api, keep],
+    [asNow],
   );
 
   const removeAvatar = useCallback(async () => {
-    const res = await api("/me/avatar", { method: "DELETE" }).catch(() => null);
+    const { send, keep } = asNow();
+    const res = await send("/me/avatar", { method: "DELETE" }).catch(() => null);
     keep((await read<{ profile: Profile }>(res, "Couldn't remove the photo.")).profile);
-  }, [api, keep]);
+  }, [asNow]);
 
   return { profile, reload, saveName, uploadAvatar, removeAvatar };
 }
