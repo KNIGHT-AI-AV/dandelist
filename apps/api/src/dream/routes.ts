@@ -49,6 +49,8 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 export interface DreamDeps extends AgentDeps {
   /** The conversations' running jobs and event logs; one per server (tests pass their own). */
   jobs?: Jobs;
+  /** A job's hard stop in ms (JOB_STOP_MS; tests shorten it). */
+  jobStopMs?: number;
   /** Listing portals through Apify. Missing turns them off; the web search still runs. */
   apify?: ApifyConfig;
 }
@@ -228,19 +230,28 @@ export function dreamRoutes(deps: DreamDeps) {
       const jobBase = structuredClone(js);
       const jobBefore = new Set(jt);
       const { signal, replaced } = jobs.add(sessionId, { id, lane, label, startedAt: deps.now().toISOString() });
+      // Its own stop, for its time limit; a newer job in its lane stops it through `signal`.
+      const own = new AbortController();
+      // Set once the job has ended (on its own, at its time limit or replaced): from then on it shows nothing.
+      let closed = false;
       const emit = async (e: DreamEvent) => {
-        if (replaced()) return;
+        if (closed || replaced()) return;
         // A line the job says stays in the conversation, like the concierge's own.
         if (e.type === "text") jt.push({ role: "agent", text: e.text, at: deps.now().toISOString() });
         jobs.publish(sessionId, e);
       };
-      const jctx = { ...ctxFor(emit, new TurnBudget(Date.now() + JOB_WRAP_MS), signal), life: from.life };
+      const jctx = { ...ctxFor(emit, new TurnBudget(Date.now() + JOB_WRAP_MS), AbortSignal.any([signal, own.signal])), life: from.life };
       jobs.publish(sessionId, { type: "step", id: `job_${id}`, state: "running", text: label });
       const run = (async () => {
         let timer: ReturnType<typeof setTimeout> | undefined;
-        const late = new Promise<"late">((resolve) => (timer = setTimeout(() => resolve("late"), JOB_STOP_MS)));
+        const late = new Promise<"late">((resolve) => (timer = setTimeout(() => resolve("late"), deps.jobStopMs ?? JOB_STOP_MS)));
         const outcome = await Promise.race([work(jctx, jt, js).then(() => null, (e: unknown) => ({ e })), late]);
         clearTimeout(timer);
+        // Ended: anything still in flight stops spending, and whatever it resolves to later is neither shown nor saved.
+        closed = true;
+        own.abort();
+        const made = structuredClone({ transcript: jt, state: js });
+        const seen = new Set(made.transcript.filter((_, i) => jobBefore.has(jt[i]!)));
         if (replaced()) return;
         if (outcome === "late") jobs.publish(sessionId, { type: "error", message: friendly(new TurnLimitError("time")) });
         else if (outcome) {
@@ -248,8 +259,8 @@ export function dreamRoutes(deps: DreamDeps) {
           if (!(e instanceof SpendLimitError || e instanceof TurnLimitError)) console.error("dream job failed", sessionId, lane, e instanceof MetaApiError ? `${e.status} ${e.body.slice(0, 200)}` : e);
           jobs.publish(sessionId, { type: "error", message: friendly(e) });
         }
-        // Whatever it made before it stopped stays.
-        await save(jobBase, { transcript: jt, state: js }, jobBefore);
+        // Whatever it made before it ended stays.
+        await save(jobBase, made, seen);
       })()
         .catch((e) => console.error("could not finish dream job", sessionId, lane, e))
         .finally(() => {

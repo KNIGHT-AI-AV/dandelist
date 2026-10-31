@@ -88,6 +88,8 @@ type Call = { type: "function_call"; name: string; arguments: Record<string, unk
 let concierge: (unknown[] | ((body: Record<string, any>) => unknown[]))[];
 /** What the separate read of a message lists as its wants (dream/agent.ts wantsIn): none unless a test says so. */
 let wantsReply: { text: string; kind: string }[] = [];
+/** Holds the listing search back this long, to outlast a job's time limit. */
+let huntDelayMs = 0;
 let metaCalls: Record<string, any>[];
 let huntCount: number;
 let huntList: { url: string; title: string; price: number; currency: string }[] = [];
@@ -148,6 +150,7 @@ const fakeMeta = (async (_url: string, init: RequestInit) => {
   const instr = String(body.instructions ?? "");
   const tools = (body.tools ?? []).map((t: { name?: string; type: string }) => t.name ?? t.type);
   if (format === "listing_candidates") {
+    if (huntDelayMs) await new Promise((r) => setTimeout(r, huntDelayMs));
     // The model lists what it found, plus one URL it wrote from memory in the first round.
     return reply([message(JSON.stringify({ candidates: huntList === ROUND_1 ? [...ROUND_1, INVENTED] : huntList }), [`${IP}.25/blocked`])]);
   }
@@ -235,7 +238,7 @@ let mail: { to: string; code: string }[];
 let app: ReturnType<typeof createApp>;
 const clock = new Date("2026-10-27T12:00:00Z");
 
-function makeApp(opts: { meta?: boolean; apify?: boolean; caps?: { dailyUsd: number; totalUsd: number } } = {}) {
+function makeApp(opts: { meta?: boolean; apify?: boolean; caps?: { dailyUsd: number; totalUsd: number }; jobStopMs?: number } = {}) {
   return createApp({
     db,
     mailer: { sendCode: async (to, code) => void mail.push({ to, code }) },
@@ -247,6 +250,7 @@ function makeApp(opts: { meta?: boolean; apify?: boolean; caps?: { dailyUsd: num
     spendCaps: opts.caps ?? { dailyUsd: 10, totalUsd: 120 },
     webFetch: fakeWeb,
     ...(opts.apify ? { apify: { token: "apify-test", dailyUsd: 0.15 } } : {}),
+    ...(opts.jobStopMs ? { jobStopMs: opts.jobStopMs } : {}),
   } as Parameters<typeof createApp>[0]);
 }
 
@@ -258,6 +262,7 @@ beforeEach(async () => {
   metaCalls = [];
   concierge = [];
   wantsReply = [];
+  huntDelayMs = 0;
   huntCount = 0;
   refineReply = null;
   researchKeys = [];
@@ -574,6 +579,24 @@ describe("dream turn", () => {
     expect(saved.transcript.map((e: Ev) => e.text)).toEqual(expect.arrayContaining(["an Aston Martin DB11", "On its way.", "Is that the V12?", "The AMR is the V12."]));
     expect(saved.widgets.filter((w: Ev) => w.kind === "deck").map((w: Ev) => w.id)).toEqual(decks.map((d) => d.id));
     expect(saved.running).toEqual([]);
+  });
+
+  it("ends a job at its time limit: what it resolves to afterwards is neither shown nor saved (review of #134)", async () => {
+    app = makeApp({ jobStopMs: 60 });
+    huntDelayMs = 400;
+    const t = await signIn("ada@example.com");
+    concierge = [[fc("search_cars", { make: "Aston Martin", model: "DB11", trim: "", colour: "", condition: "any", max_price: 0, currency: "", notes: "" })], [message("On its way.")]];
+    const { events, sessionId } = await turn(t, { type: "message", text: "an Aston Martin DB11" });
+    expect(events.some((e) => e.type === "error" && /as far as I could get/.test(e.message))).toBe(true);
+    // The held-back search resolves well after the stop.
+    await new Promise((r) => setTimeout(r, 600));
+    const log = (await (await call("GET", `/dream/sessions/${sessionId}/events?after=0`, t)).json()) as Ev;
+    const types = (log.events as Ev[]).map((e) => e.event.type);
+    const ended = (log.events as Ev[]).findIndex((e) => e.event.type === "step" && e.event.state === "done" && /^job_/.test(e.event.id));
+    expect(ended).toBeGreaterThan(-1);
+    expect(types.slice(ended + 1).filter((x) => x === "widget" || x === "text")).toEqual([]);
+    const saved = (await (await call("GET", `/dream/sessions/${sessionId}`, t)).json()) as Ev;
+    expect(saved.widgets.filter((w: Ev) => w.kind === "deck")).toEqual([]);
   });
 
   it("hands a single item to the item price research with the person's words", async () => {

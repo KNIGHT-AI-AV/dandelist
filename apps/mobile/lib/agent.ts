@@ -278,3 +278,27 @@ export async function retakePhoto(api: Api, wish: { title: string; kind: Draft["
 export async function getRun(api: Api, id: string) {
   return (await read<{ run: Run }>(await api(`/agent/runs/${id}`).catch(() => null), "Lost track of the research.")).run;
 }
+
+/**
+ * A run by id, or null when the server says it's gone for good (404). Anything else that goes wrong (a dropped
+ * connection, a busy server, a sign-in to refresh) throws, so the caller can keep following it instead of starting over.
+ */
+export async function runIfKnown(api: Api, id: string): Promise<Run | null> {
+  const res = await api(`/agent/runs/${id}`).catch(() => null);
+  if (res?.status === 404) return null;
+  return (await read<{ run: Run }>(res, "Lost track of the research.")).run;
+}
+
+/**
+ * What a card that comes back does with the hunt it remembers (components/chat/hunt-card.tsx): show it, keep following it
+ * when the server can't answer just now, or hunt afresh only when the server says it's gone (review of #134: a dropped
+ * connection must not pay for a second hunt at another price).
+ */
+export async function resumeHunt(api: Api, id: string): Promise<{ kind: "run"; run: Run } | { kind: "follow" } | { kind: "fresh" }> {
+  try {
+    const run = await runIfKnown(api, id);
+    return run ? { kind: "run", run } : { kind: "fresh" };
+  } catch {
+    return { kind: "follow" };
+  }
+}

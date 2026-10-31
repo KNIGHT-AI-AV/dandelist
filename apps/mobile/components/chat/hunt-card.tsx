@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Text, View } from "react-native";
-import { getRun, retakePhoto, startHunt, type Answer, type Draft, type FoundPhoto, type PriceOption, type Run, type Step, type WishQuestion, type WorthCard } from "../../lib/agent";
+import { getRun, resumeHunt, retakePhoto, startHunt, type Answer, type Draft, type FoundPhoto, type PriceOption, type Run, type Step, type WishQuestion, type WorthCard } from "../../lib/agent";
 import { useAuth } from "../../lib/auth";
 import { getSecret, setSecret } from "../../lib/storage";
 import { useMoney } from "../../lib/currency";
@@ -61,6 +61,8 @@ const POLL_MS = 1500;
  * "Not to mention different pricing").
  */
 const HUNT_KEEP_MS = 24 * 60 * 60 * 1000;
+/** A remembered hunt the server hasn't answered for yet: polled like a running one until it does. */
+const following = (id: string): Run => ({ id, status: "running", steps: [], result: null, error: null, createdAt: "" }) as unknown as Run;
 function huntKey(id: string): string {
   let h = 5381;
   for (let i = 0; i < id.length; i++) h = ((h * 33) ^ id.charCodeAt(i)) >>> 0;
@@ -143,14 +145,19 @@ export function HuntCard({ id: item, text, watched = true, onPhase, onShowOnList
     if (hunts.has(id)) return;
     let gone = false;
     void (async () => {
+      let saved: { run?: string; at?: number } | null = null;
       try {
-        const saved = JSON.parse((await getSecret(huntKey(id))) ?? "null") as { run?: string; at?: number } | null;
-        if (saved?.run && Date.now() - (saved.at ?? 0) < HUNT_KEEP_MS) {
-          const run = await getRun(api, saved.run);
-          if (!gone && !hunts.has(id)) return keep({ ...fresh(), run });
-        }
+        saved = JSON.parse((await getSecret(huntKey(id))) ?? "null") as { run?: string; at?: number } | null;
       } catch {
-        // Nothing remembered, or that hunt is gone: hunt afresh.
+        // Nothing readable remembered: hunt afresh.
+      }
+      if (saved?.run && Date.now() - (saved.at ?? 0) < HUNT_KEEP_MS) {
+        const back = await resumeHunt(api, saved.run);
+        if (gone || hunts.has(id)) return;
+        if (back.kind === "run") return keep({ ...fresh(), run: back.run });
+        // The server can't answer just now: keep following the remembered hunt; the poll tries again until it does.
+        if (back.kind === "follow") return keep({ ...fresh(), run: following(saved.run) });
+        // Gone for good on the server: hunt afresh below.
       }
       if (!gone && !hunts.has(id)) void start({ text });
     })();
