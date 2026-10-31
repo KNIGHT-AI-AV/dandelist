@@ -103,3 +103,12 @@ export function newPricePatch(wish: Pick<Wish, "details">, run: Pick<Run, "id" |
     },
   };
 }
+
+/**
+ * The PATCH body for a wish the person told the Dandy more about ("the black dial, not the green"): the thing itself
+ * may have changed, so it takes the new name and the new find's own pictures, not only its price. Its tier stays.
+ */
+export function amendPatch(wish: Pick<Wish, "details">, run: Pick<Run, "id" | "result">, option: PriceOption, name: string): PricePatch & { name: string } {
+  const base = newPricePatch({ details: { ...wish.details, agent: undefined } }, run, option);
+  return { ...base, name: name.trim().slice(0, 200) };
+}

@@ -6,7 +6,7 @@ import { useMoney } from "../../lib/currency";
 import { useDandy } from "../../lib/dandy";
 import { usePress } from "../../lib/motion";
 import { QUOTES } from "../../lib/quotes";
-import { adoptRecheck, dismissRecheck, recheckWish, useRechecks, type Recheck } from "../../lib/rechecks";
+import { adoptAmend, adoptRecheck, amendWish, dismissRecheck, recheckWish, useRechecks, type Recheck } from "../../lib/rechecks";
 import { fonts, layout, radius, space, type, usePalette } from "../../lib/theme";
 import { useWishes } from "../../lib/wishes";
 import { hostOf } from "../../lib/words";
@@ -55,26 +55,42 @@ function Outcome({ r }: { r: Recheck }) {
       <View style={{ gap: space[8] }}>
         <Text style={[type.callout, { color: p.ink }]}>{o.message}</Text>
         <View style={{ flexDirection: "row", gap: space[8] }}>
-          {wish ? <QuietButton label="Try again" onPress={() => void recheckWish(api, wish, reload)} /> : null}
+          {wish ? <QuietButton label="Try again" onPress={() => void (r.said ? amendWish(api, wish, r.said) : recheckWish(api, wish, reload))} /> : null}
           <QuietButton label="Dismiss" onPress={() => dismissRecheck(r.wishId)} />
         </View>
       </View>
     );
   }
-  const down = o.option.upfrontCents < o.was;
-  const delta = Math.abs(o.option.upfrontCents - o.was);
   const use = async () => {
     if (!wish) return dismissRecheck(r.wishId);
     setBusy(true);
     setError(null);
     try {
-      await adoptRecheck(api, wish, reload);
+      await (o.kind === "amended" ? adoptAmend(api, wish, reload) : adoptRecheck(api, wish, reload));
     } catch (e) {
       setError((e as Error).message);
     } finally {
       setBusy(false);
     }
   };
+  if (o.kind === "amended") {
+    return (
+      <View style={{ gap: space[8] }}>
+        <Text style={[type.callout, { color: p.ink }]}>
+          {`${o.name}: `}
+          <Text style={{ color: p.accentText }}>{money.format(o.option.upfrontCents)}</Text>
+          {` at ${hostOf(o.option.url) || "the seller"}.`}
+        </Text>
+        {error ? <Text style={[type.footnote, { color: p.danger }]}>{error}</Text> : null}
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[8] }}>
+          <QuietButton label={busy ? "Saving..." : "Use it"} onPress={() => void use()} />
+          <QuietButton label="Keep the one I had" onPress={() => dismissRecheck(r.wishId)} />
+        </View>
+      </View>
+    );
+  }
+  const down = o.option.upfrontCents < o.was;
+  const delta = Math.abs(o.option.upfrontCents - o.was);
   return (
     <View style={{ gap: space[8] }}>
       <Text style={[type.callout, { color: p.ink }]}>
