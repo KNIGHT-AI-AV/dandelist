@@ -4,6 +4,7 @@ import { ease, haptic, spring, usePress, useReducedMotion } from "../../lib/moti
 import { layout, space, type, usePalette } from "../../lib/theme";
 import { Glass, Icon } from "../lux";
 import { caretColors, useToggle, webInput } from "./field";
+import { ECHO_MS, echoes } from "./logic";
 import { COMPOSER_IDLE_INSET, COMPOSER_INSET, COMPOSER_LINES, COMPOSER_PAD_Y, COMPOSER_SHRINK_MS, ICON, TARGET } from "./tokens";
 
 const AnimatedInput = Animated.createAnimatedComponent(TextInput);
@@ -89,11 +90,26 @@ export const Composer = forwardRef<TextInput, ComposerProps>(function Composer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);
 
+  // What was just sent, and when. iOS can commit a pending autocorrection after the send and hand the whole sent text
+  // straight back through onChangeText, refilling the field that was just cleared; the next message then carried the
+  // last one with it (owner, 2026-10-31: a Rolex already being found went again beside the DB11 typed after it).
+  const sent = useRef<{ text: string; at: number } | null>(null);
+  const change = (t: string) => {
+    const s = sent.current;
+    if (s && Date.now() - s.at < ECHO_MS && echoes(t, s.text)) {
+      input.current?.clear();
+      return;
+    }
+    onChangeText(t);
+  };
+
   const send = () => {
     const text = value.trim();
     if (!text || busy) return;
     haptic.select();
+    sent.current = { text, at: Date.now() };
     onSend(text);
+    input.current?.clear();
   };
 
   return (
@@ -104,7 +120,7 @@ export const Composer = forwardRef<TextInput, ComposerProps>(function Composer({
         <AnimatedInput
           ref={input}
           value={value}
-          onChangeText={onChangeText}
+          onChangeText={change}
           placeholder={placeholder}
           placeholderTextColor={p.ink3}
           accessibilityLabel={label}

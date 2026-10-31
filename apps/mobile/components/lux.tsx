@@ -119,15 +119,16 @@ export function Shade({ from, style, look = "photo" }: { from?: number; style?: 
 
 /**
  * The fade under floating controls (UI audit P0-7, HIG scroll-edge effect): content scrolling beneath a CTA or the
- * composer dissolves into the page instead of showing through.
+ * composer dissolves into the page instead of showing through. It is solid from about the control's middle down, so
+ * nothing reads beneath or around it (owner, 2026-10-31: chat lines showed under the composer on an iPhone).
  */
 export function EdgeFade({ height }: { height: number }) {
   const p = usePalette();
   return (
     <LinearGradient
       pointerEvents="none"
-      colors={[`rgba(${p.bgRgb}, 0)`, `rgba(${p.bgRgb}, 0.88)`, `rgba(${p.bgRgb}, 1)`]}
-      locations={[0, 0.55, 1]}
+      colors={[`rgba(${p.bgRgb}, 0)`, `rgba(${p.bgRgb}, 0.9)`, `rgba(${p.bgRgb}, 1)`]}
+      locations={[0, 0.4, 0.62]}
       style={{ position: "absolute", left: 0, right: 0, bottom: 0, height }}
     />
   );

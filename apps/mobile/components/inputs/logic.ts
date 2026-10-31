@@ -204,3 +204,15 @@ export function editMoney(prevText: string, nextText: string, sel?: Selection, m
 export function isEmail(text: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@.]{2,}$/.test(text.trim());
 }
+
+/** How long after a send a change that restates the sent words is taken for iOS handing them back, not typing. */
+export const ECHO_MS = 1000;
+
+/** True when `next` is the sent text coming back (an autocorrection may have changed a word): its opening matches. */
+export function echoes(next: string, sent: string): boolean {
+  const a = next.trim().toLowerCase();
+  const b = sent.trim().toLowerCase();
+  if (!a || !b) return false;
+  const head = Math.min(12, b.length);
+  return a.slice(0, head) === b.slice(0, head) && Math.abs(a.length - b.length) <= 4;
+}
