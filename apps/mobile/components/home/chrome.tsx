@@ -199,8 +199,8 @@ export function Dock() {
           placeholder={`Tell ${dandy.name} what you want...`}
           label={`Message ${dandy.name}`}
           busy={home.busy}
-          // The list's ideas show only when the composer is the list's own; in a spread it sits under the chat.
-          onFocusChange={(on) => home.setFocused(on && page === "list" && !spread)}
+          // Whether the list's ideas show follows the layout too (components/home/bridge.tsx).
+          onFocusChange={home.setFocused}
           idleAction={voice.supported ? <MicButton voice={voice} compact /> : undefined}
           cover={voice.phase !== "idle" ? <ListeningStrip voice={voice} /> : undefined}
         />
