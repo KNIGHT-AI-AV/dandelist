@@ -40,7 +40,8 @@ function focusLost(): boolean {
  * `claim` moves focus to the action when it changes and focus would otherwise be lost (the removed card took it with
  * it), and on phones whenever a screen reader is on, so Undo is one double-tap away.
  */
-export function Toast({ note, bottom, side, claim, onHold, onRelease }: { note: Note | null; bottom: number; side: number; claim: number; onHold(): void; onRelease(): void }) {
+/** `left` and `width`: the stretch of the window it centres in, the whole width unless given (one page of a spread). */
+export function Toast({ note, bottom, side, left = 0, width, claim, onHold, onRelease }: { note: Note | null; bottom: number; side: number; left?: number; width?: number; claim: number; onHold(): void; onRelease(): void }) {
   const p = usePalette();
   const reduced = useReducedMotion();
   const screenReader = useScreenReader();
@@ -86,7 +87,7 @@ export function Toast({ note, bottom, side, claim, onHold, onRelease }: { note: 
     <View
       accessibilityLiveRegion="polite"
       aria-live="polite"
-      style={{ position: "absolute", left: 0, right: 0, bottom, paddingHorizontal: side, alignItems: "center", pointerEvents: "box-none" }}
+      style={{ position: "absolute", left, ...(width === undefined ? { right: 0 } : { width }), bottom, paddingHorizontal: side, alignItems: "center", pointerEvents: "box-none" }}
     >
       {mounted && shown ? (
         <Animated.View

@@ -17,8 +17,12 @@ export interface Home {
   /** The docked composer's height, for the space under a page's content. */
   dock: number;
   setDock(height: number): void;
-  /** The field has focus on the list: the list steps back and the Dandy comes forward. */
+  /**
+   * The field has focus on the list: the list steps back and the Dandy comes forward. Only while the list is the page
+   * the field sits under: one page in view and the list in front (in a spread the field sits under the chat).
+   */
   focused: boolean;
+  /** The field took or lost focus, wherever it is. */
   setFocused(on: boolean): void;
   /** The docked composer's input, and a way to put the cursor in it (the chat's "Add another while you wait"). */
   composer: RefObject<TextInput | null>;
@@ -41,7 +45,11 @@ export function HomeProvider({ children }: { children: ReactNode }) {
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [dock, setDock] = useState(0);
-  const [focused, setFocused] = useState(false);
+  const [typing, setFocused] = useState(false);
+  // Worked out on every layout, not only when focus changes: unfolding to a spread while typing on the list moves the
+  // field under the chat and the list's ideas go with it, with the words kept; folding back brings them back (review
+  // R45-DUO-FOCUS-1).
+  const focused = typing && pager.page === "list" && pager.span === 1;
   const [shown, setShown] = useState<string | null>(null);
   const composer = useRef<TextInput | null>(null);
   const handler = useRef<((text: string) => void) | null>(null);

@@ -1,7 +1,7 @@
 import { upfrontCashCents } from "@dandelist/cost";
 import { router } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
-import { ScrollView, Text, View, useWindowDimensions } from "react-native";
+import { ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { DetailRow } from "../details/detail-row";
 import { SearchField } from "../details/search-field";
@@ -17,6 +17,7 @@ import { useWishes, type Wish, type WishTier } from "../../lib/wishes";
 import { TIER_LABEL, TIER_RANK } from "../../lib/words";
 import { counted } from "../../lib/worth";
 import { useTopRoom } from "./chrome";
+import { usePageSize } from "../../lib/page-size";
 
 /** The tiers in scale order: Must have, Would love, Someday. */
 const TIERS = (Object.keys(TIER_RANK) as WishTier[]).sort((a, b) => TIER_RANK[a] - TIER_RANK[b]);
@@ -50,7 +51,7 @@ function TierHeading({ tier, cents, count }: { tier: WishTier; cents: number; co
 export function DetailsPage() {
   const p = usePalette();
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
+  const { width } = usePageSize();
   const top = useTopRoom();
   const gutter = layout.gutter(width);
   const { wishes, status, remove } = useWishes();

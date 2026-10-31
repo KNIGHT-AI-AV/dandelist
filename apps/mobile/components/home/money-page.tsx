@@ -1,7 +1,7 @@
 import { recurringBreakdown, upfrontCashCents } from "@dandelist/cost";
 import { router } from "expo-router";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Pressable, ScrollView, Text, View, useWindowDimensions } from "react-native";
+import { Pressable, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { comfortableIncome, needOf, wishEntry } from "../../lib/comfort";
 import { useMoney } from "../../lib/currency";
@@ -13,6 +13,7 @@ import { counted, pricelessAside } from "../../lib/worth";
 import { Eyebrow, Glass, Hairline, Money, QuietButton } from "../lux";
 import { IncomeFader } from "../welcome/comfort";
 import { useTopRoom } from "./chrome";
+import { usePageSize } from "../../lib/page-size";
 
 /** Running costs shown before "Show all". */
 const KEEP_SHOWN = 5;
@@ -58,7 +59,7 @@ export function MoneyPage() {
   const t = useType();
   const money = useMoney();
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
+  const { width } = usePageSize();
   const top = useTopRoom();
   const gutter = layout.gutter(width);
   const { wishes } = useWishes();

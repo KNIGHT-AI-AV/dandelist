@@ -1,6 +1,6 @@
 import type { Listing } from "@dandelist/catalogue/dream";
 import { useRef, useState } from "react";
-import { Animated, PanResponder, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import { Animated, PanResponder, Pressable, StyleSheet, Text, View } from "react-native";
 import { ease, haptic, native, spring, useReducedMotion } from "../../lib/motion";
 import { moneyIn } from "../../lib/dream";
 import { fonts, radius, usePalette, type } from "../../lib/theme";
@@ -8,13 +8,14 @@ import { hostOf } from "../../lib/welcome";
 import { Eyebrow, Icon, Shade } from "../lux";
 import { Slideshow } from "../media";
 import { GlassReveal } from "../reveal";
+import { usePageSize } from "../../lib/page-size";
 
 const MAX_TILT = 12;
 
 /** One listing as a full-bleed card: its own photographs (a slideshow when there are several), price, facts, source. */
 function ListingCard({ l }: { l: Listing }) {
   const p = usePalette();
-  const { fontScale } = useWindowDimensions();
+  const { fontScale } = usePageSize();
   const hasSlideshow = l.images.length > 1;
   // Reserve Slideshow's bottom inset, one scaled credit line and an 8px gap before its credit appears.
   const detailsBottom = hasSlideshow ? 10 + type.figure.lineHeight * fontScale + 8 : 20;
@@ -58,7 +59,7 @@ function ListingCard({ l }: { l: Listing }) {
 export function SwipeDeck({ cards, onSwipe, onPick, onSearchNow, onEnough }: { cards: Listing[]; onSwipe(l: Listing, verdict: "yes" | "no"): void; onPick(l: Listing): void; onSearchNow(): void; onEnough(): void }) {
   const p = usePalette();
   const reduced = useReducedMotion();
-  const { width } = useWindowDimensions();
+  const { width } = usePageSize();
   const cardW = Math.min(width - 32, 520);
   const [index, setIndex] = useState(0);
   const x = useRef(new Animated.Value(0)).current;
