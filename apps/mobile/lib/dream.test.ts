@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { askingWidget, cleanSuggestions, dayPart, feedFromSession, greeting, idleTooLong, moneyIn, nameForApi, shouldResume, taskFor, webOnly, whenLabel, wishFrom, type FeedItem } from "./dream";
+import { askingChoices, askingWidget, cleanSuggestions, dayPart, feedFromSession, greeting, idleTooLong, moneyIn, nameForApi, shouldResume, taskFor, webOnly, whenLabel, wishFrom, type FeedItem } from "./dream";
 
 const base = { name: "Sea-view villa", kind: "own" as const, status: "verified" as const, images: [{ url: "https://example.com/v.jpg", source: "example.com" }], url: "https://example.com/villa", checkedAt: "2026-10-27T10:00:00Z" };
 
@@ -117,5 +117,21 @@ describe("the tool the Dandy is waiting on", () => {
     expect(askingWidget([...feed, { id: "f5", kind: "widget", widget: item }])).toBe("item_2");
     expect(askingWidget([...feed, { id: "f5", kind: "you", text: "Actually, a Porsche" }])).toBeNull();
     expect(askingWidget([])).toBeNull();
+  });
+
+  it("keeps a question's answers open beside a tool opened after it, until the person says something", () => {
+    const q = { kind: "choices" as const, id: "choice_1", options: ["New", "Used"] };
+    const q2 = { kind: "choices" as const, id: "choice_2", options: ["Black", "Silver"] };
+    const feed: FeedItem[] = [
+      { id: "f1", kind: "you", text: "A Porsche 911 and a Leica" },
+      { id: "f2", kind: "agent", text: "New or used?" },
+      { id: "f3", kind: "widget", widget: q, live: true },
+      { id: "f4", kind: "widget", widget: item, live: true },
+    ];
+    expect(askingWidget(feed)).toBe("item_2");
+    expect(askingChoices(feed)).toBe("choice_1");
+    expect(askingChoices([...feed, { id: "f5", kind: "widget", widget: q2 }])).toBe("choice_2");
+    expect(askingChoices([...feed, { id: "f5", kind: "you", text: "Used" }])).toBeNull();
+    expect(askingChoices([{ id: "f1", kind: "widget", widget: region }])).toBeNull();
   });
 });
