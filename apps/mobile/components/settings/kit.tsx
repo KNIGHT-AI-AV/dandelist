@@ -95,17 +95,19 @@ export function Row({
 }
 
 /** A small text action for the right of a row: Link, Unlink, Remove. */
-export function RowAction({ label, onPress, busy = false, tone = "ink", accessibilityLabel }: { label: string; onPress(): void; busy?: boolean; tone?: "ink" | "quiet" | "danger"; accessibilityLabel?: string }) {
+export function RowAction({ label, onPress, busy = false, disabled = false, tone = "ink", accessibilityLabel }: { label: string; onPress(): void; busy?: boolean; disabled?: boolean; tone?: "ink" | "quiet" | "danger"; accessibilityLabel?: string }) {
   const p = usePalette();
+  const blocked = busy || disabled;
   const color = tone === "danger" ? p.danger : tone === "quiet" ? p.ink2 : p.ink;
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? label}
-      accessibilityState={{ busy, disabled: busy }}
-      onPress={busy ? undefined : onPress}
+      accessibilityState={{ busy, disabled: blocked }}
+      disabled={blocked}
+      onPress={blocked ? undefined : onPress}
       hitSlop={8}
-      style={({ pressed }) => [{ minHeight: 44, minWidth: 64, paddingHorizontal: 14, alignItems: "center", justifyContent: "center", borderRadius: radius.control, borderCurve: "continuous", borderWidth: 1, borderColor: p.line, opacity: busy ? 0.5 : pressed ? 0.7 : 1 }]}
+      style={({ pressed }) => [{ minHeight: 44, minWidth: 64, paddingHorizontal: 14, alignItems: "center", justifyContent: "center", borderRadius: radius.control, borderCurve: "continuous", borderWidth: 1, borderColor: p.line, opacity: blocked ? 0.5 : pressed ? 0.7 : 1 }]}
     >
       <Text style={[type.label, { color }]}>{busy ? "..." : label}</Text>
     </Pressable>
