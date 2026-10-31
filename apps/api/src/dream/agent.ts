@@ -155,13 +155,18 @@ function nextId(state: DreamState, prefix: string): string {
   return `${prefix}_${state.counter}`;
 }
 
-/** One key per thing as the person wrote it: case, accents, punctuation and a leading article don't make another thing. */
+/**
+ * One key per thing as the person wrote it: case, accents on Latin letters, punctuation and a leading English article
+ * don't make another thing. Letters and digits of every script stay what they are (キヤノン and セイコー are two things;
+ * review of #128), and text with none at all gets no key, so it is never taken for something else.
+ */
 export const sameThing = (text: string) =>
   text
     .normalize("NFKD")
-    .replace(/[̀-ͯ]/g, "")
+    .replace(/(\p{Script=Latin})\p{M}+/gu, "$1")
+    .normalize("NFC")
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
     .trim()
     .replace(/^(?:a|an|the|my) /, "");
 
@@ -862,9 +867,18 @@ async function runTool(ctx: DreamCtx, t: TranscriptEntry[], state: DreamState, n
       if (!items.length) return "Say what the item is.";
       // A thing this conversation already handed over keeps its card: hunting it again showed a second card at another
       // price (owner, 2026-10-31: "Duplicate items", "Not to mention different pricing").
-      const handed = new Set(Object.values(state.widgets).flatMap((w) => (w.kind === "item" ? [sameThing(w.text)] : [])));
-      const fresh = items.filter((text) => !handed.has(sameThing(text)));
-      const again = items.filter((text) => handed.has(sameThing(text)));
+      // Each thing accepted counts at once, so two spellings of one thing in the same message make one card too.
+      const handed = new Set(Object.values(state.widgets).flatMap((w) => (w.kind === "item" && sameThing(w.text) ? [sameThing(w.text)] : [])));
+      const fresh: string[] = [];
+      const again: string[] = [];
+      for (const text of items) {
+        const key = sameThing(text);
+        if (key && handed.has(key)) again.push(text);
+        else {
+          fresh.push(text);
+          if (key) handed.add(key);
+        }
+      }
       for (const text of fresh) await show(ctx, t, state, { kind: "item", id: nextId(state, "item"), text }, `Handed "${text}" to the item price research.`);
       return [
         fresh.length ? `Opened the item price research for ${fresh.length === 1 ? "it" : `${fresh.length} things, each on its own card`}. It finds the real prices, so don't state any.` : "",

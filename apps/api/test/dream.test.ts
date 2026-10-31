@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../src/app";
 import { migrate, type Db } from "../src/db";
 import { isJudge, userCapUsd } from "../src/spend";
-import { brief, fallbackReason, honest, keepNote, swipeSignal, tidy } from "../src/dream/agent";
+import { brief, fallbackReason, honest, keepNote, sameThing, swipeSignal, tidy } from "../src/dream/agent";
 import { MAX_TOOL_CALLS_PER_TURN, TurnBudget, TurnLimitError, searchResults } from "../src/dream/context";
 import { looksLikeListing, namesCar, priceIn } from "../src/dream/hunt";
 import { carKeep, homeKeep, maintenancePercent, serviceLines, type Fx, type Rate } from "../src/dream/keep";
@@ -538,6 +538,25 @@ describe("dream turn", () => {
     expect(new Set(items.map((w) => w.id)).size).toBe(3);
     concierge = [[fc("price_item", { items: ["a", "b", "c", "d", "e", "f", "g", "h"].map((x) => `thing ${x}`) })], [message("On it.")]];
     expect(widgets((await turn(t, { type: "message", text: "eight things" })).events, "item")).toHaveLength(6);
+  });
+
+  it("tells things apart in any script and catches two spellings of one thing in a single message (review of #128)", async () => {
+    const t = await signIn("ada@example.com");
+    concierge = [[fc("price_item", { items: ["キヤノン EOS R5", "セイコー アストロン", "a Leica Q3", "A LEICA Q3!", "Lèica Q3"] })], [message("On it.")]];
+    const first = await turn(t, { type: "message", text: "キヤノン EOS R5, セイコー アストロン and a Leica Q3" });
+    expect(widgets(first.events, "item").map((w) => w.text)).toEqual(["キヤノン EOS R5", "セイコー アストロン", "a Leica Q3"]);
+    concierge = [[fc("price_item", { items: ["セイコー アストロン", "ソニー α7 IV", "???"] })], [message("On it.")]];
+    const second = await turn(t, { type: "message", text: "セイコー アストロン and ソニー α7 IV" }, first.sessionId);
+    // The Seiko keeps its card; the Sony is new; text with no letters or digits has no key, so it is never taken for another.
+    expect(widgets(second.events, "item").map((w) => w.text)).toEqual(["ソニー α7 IV", "???"]);
+  });
+
+  it("gives every script its own key and none to text without letters or digits", () => {
+    expect(sameThing("キヤノン EOS R5")).toBe("キヤノン eos r5");
+    expect(sameThing("ガ")).not.toBe(sameThing("カ"));
+    expect(sameThing("Rolex Day-Date 40 Green Ombré")).toBe(sameThing("rolex day date 40 green ombre"));
+    expect(sameThing("The Leica Q3")).toBe("leica q3");
+    expect(sameThing("!!!")).toBe("");
   });
 
   it("hunts a thing once per conversation: said again, even with other case and accents, it keeps its card (owner, 2026-10-31: \"Duplicate items\")", async () => {
