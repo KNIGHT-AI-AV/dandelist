@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Platform, Text, View } from "react-native";
 import { MCP_URL, lastUsedLine, listAgentKeys, makeAgentKey, revokeAgentKey, type AgentKey } from "../../lib/agent-keys";
-import { useAuth } from "../../lib/auth";
+import { bindToSignIn, currentSignIn, useAuth } from "../../lib/auth";
 import { haptic } from "../../lib/motion";
 import { fonts, layout, type, usePalette } from "../../lib/theme";
 import { Field } from "../inputs";
@@ -40,8 +40,19 @@ function Secret({ value }: { value: string }) {
  * cuts that agent off at once. A key reaches this account only.
  */
 export function AgentKeys() {
+  const { api, status, user } = useAuth();
+  const at = currentSignIn();
+  const send = useMemo(() => bindToSignIn(api, at), [api, at]);
+  // Home also mounts its off-screen Settings page while auth is loading. Wait for its owner before asking for keys.
+  if (status !== "signedIn" || !user) return null;
+  // Only this small panel resets, including its one-time value and revoke confirmation, when the sign-in changes.
+  return <AgentKeysPanel key={user.id + ":" + at} api={send} at={at} />;
+}
+
+function AgentKeysPanel({ api, at }: { api: ReturnType<typeof useAuth>["api"]; at: number }) {
   const p = usePalette();
-  const { api } = useAuth();
+  const mounted = useRef(false);
+  const current = useCallback(() => mounted.current && currentSignIn() === at, [at]);
   const [keys, setKeys] = useState<AgentKey[] | null>(null);
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
@@ -50,44 +61,54 @@ export function AgentKeys() {
   const [arming, setArming] = useState<string | null>(null);
 
   useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
     let live = true;
     listAgentKeys(api).then(
-      (k) => live && setKeys(k),
-      (e: Error) => live && setError(e.message),
+      (k) => live && current() && setKeys(k),
+      (e: Error) => live && current() && setError(e.message),
     );
     return () => {
       live = false;
     };
-  }, [api]);
+  }, [api, current]);
 
   const make = async () => {
-    if (busy || !name.trim()) return;
+    if (!current() || busy || !name.trim()) return;
     setBusy(true);
     setError(null);
     try {
       const made = await makeAgentKey(api, name);
+      if (!current()) return;
       setFresh(made.key);
       setKeys((k) => [made.record, ...(k ?? [])]);
       setName("");
       haptic.success();
     } catch (e) {
-      setError((e as Error).message);
+      if (current()) setError((e as Error).message);
     } finally {
-      setBusy(false);
+      if (current()) setBusy(false);
     }
   };
 
   // Two taps: the first only arms it.
   const revoke = async (id: string) => {
+    if (!current()) return;
     if (arming !== id) return setArming(id);
     setArming(null);
     setError(null);
     try {
       await revokeAgentKey(api, id);
+      if (!current()) return;
       setKeys((k) => (k ?? []).filter((x) => x.id !== id));
       haptic.success();
     } catch (e) {
-      setError((e as Error).message);
+      if (current()) setError((e as Error).message);
     }
   };
 
