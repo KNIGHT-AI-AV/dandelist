@@ -1,4 +1,5 @@
 import { serve } from "@hono/node-server";
+import { closeAnalytics } from "./analytics";
 import { createApp } from "./app";
 import { loadSeed } from "./archive/seed";
 import { migrate, openDb } from "./db";
@@ -49,6 +50,8 @@ const app = createApp({
 });
 
 serve({ fetch: app.fetch, port: env.PORT }, (info) => console.log(`dandelist api listening on ${info.port}`));
+// What PostHog has queued goes before the process does (a deploy stops the old instance with SIGTERM).
+process.once("SIGTERM", () => void closeAnalytics().finally(() => process.exit(0)));
 
 // The master list loads after the server is up, so a large seed never delays a deploy's health check.
 void loadSeed(db)

@@ -1,6 +1,8 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { HTTPException } from "hono/http-exception";
 import { agentRoutes, type AgentDeps } from "./agent/routes";
+import { serverError } from "./analytics";
 import { authRoutes, requireAuth, type AuthVars } from "./auth";
 import { dreamRoutes } from "./dream/routes";
 import { fxRoutes } from "./fx";
@@ -23,6 +25,14 @@ export function createApp(deps: AppDeps) {
   const { db } = deps;
 
   app.use("*", cors({ origin: deps.webOrigins, allowHeaders: ["Authorization", "Content-Type"], allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE"] }));
+
+  // An error no route handled: logged as before, and sent to PostHog error tracking with where it happened.
+  app.onError((err, c) => {
+    if (err instanceof HTTPException) return err.getResponse();
+    console.error(err);
+    serverError(err, (c.get("userId") as string | undefined) ?? null, { path: c.req.path, method: c.req.method });
+    return c.json({ error: "Something went wrong." }, 500);
+  });
 
   app.get("/healthz", async (c) => {
     await db.query("select 1");

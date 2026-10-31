@@ -12,6 +12,15 @@ export function createWishSession<T>(owner: string | null, value: T): WishSessio
   return { scope: { owner }, value };
 }
 
+/**
+ * Runs `fn` only while `scope` is still the current sign-in's: a completion that lands after a sign-out, or after
+ * someone else (or the same person again) signed in, does nothing (review of #139: an analytics event for one account
+ * must not be told under another's id).
+ */
+export function whileCurrent(current: () => WishSessionScope, scope: WishSessionScope, fn: () => void): void {
+  if (scope.owner !== null && current() === scope) fn();
+}
+
 /** An old completion cannot read or change the current session, even through a functional updater. */
 export function updateWishSession<T>(current: WishSession<T>, scope: WishSessionScope, update: (value: T) => T): WishSession<T> {
   if (scope.owner === null || current.scope !== scope) return current;
