@@ -291,7 +291,8 @@ async function signIn(email: string) {
 type Ev = Record<string, any>;
 async function turn(token: string, action: unknown, sessionId?: string): Promise<{ status: number; events: Ev[]; sessionId: string }> {
   // The app sends null on a first turn, so the tests do too.
-  const res = await call("POST", "/dream/turn", token, { sessionId: sessionId ?? null, action });
+  // As the app sends it: it follows the event log, so slow work runs as jobs (follow: true).
+  const res = await call("POST", "/dream/turn", token, { sessionId: sessionId ?? null, action, follow: true });
   if (res.status !== 200) return { status: res.status, events: [], sessionId: "" };
   const events = (await res.text())
     .split("\n")
@@ -608,7 +609,7 @@ describe("dream turn", () => {
     const db11 = (notes: string) => ({ make: "Aston Martin", model: "DB11", trim: "", colour: "", condition: "any", max_price: 0, currency: "", notes });
     huntDelayMs = 150;
     concierge = [[fc("search_cars", db11(""))], [message("On its way.")]];
-    const first = await call("POST", "/dream/turn", t, { sessionId: null, action: { type: "message", text: "an Aston Martin DB11" } });
+    const first = await call("POST", "/dream/turn", t, { sessionId: null, action: { type: "message", text: "an Aston Martin DB11" }, follow: true });
     const sessionId = ((await first.text()).split("\n").filter((l) => l.startsWith("data:")).map((l) => JSON.parse(l.slice(5)) as Ev).find((e) => e.type === "done")!).sessionId as string;
     // Hold the session's save lock, so the first search finishes and then waits to fold in.
     let release!: () => void;
@@ -636,7 +637,7 @@ describe("dream turn", () => {
     await liveIn(t, "MT", "Malta");
     huntDelayMs = 250;
     concierge = [[fc("search_homes", VILLA_ARGS)], [message("Looking now.")]];
-    const res = await call("POST", "/dream/turn", t, { sessionId: null, action: { type: "message", text: "a modern sea-view villa" } });
+    const res = await call("POST", "/dream/turn", t, { sessionId: null, action: { type: "message", text: "a modern sea-view villa" }, follow: true });
     const done = (await res.text()).split("\n").filter((l) => l.startsWith("data:")).map((l) => JSON.parse(l.slice(5)) as Ev).find((e) => e.type === "done")!;
     // The app comes back mid-search: the saved conversation has no deck yet, and the cursor sits before the search's events.
     const mid = (await (await call("GET", `/dream/sessions/${done.sessionId}`, t)).json()) as Ev;
@@ -657,6 +658,20 @@ describe("dream turn", () => {
     const end = (await (await call("GET", `/dream/sessions/${done.sessionId}`, t)).json()) as Ev;
     expect(end.widgets.filter((w: Ev) => w.kind === "deck")).toHaveLength(1);
     expect(end.running).toEqual([]);
+  });
+
+  it("runs everything inline for an app that doesn't follow the event log (TestFlight builds up to 26)", async () => {
+    const t = await signIn("ada@example.com");
+    await liveIn(t, "MT", "Malta");
+    concierge = [[fc("search_homes", VILLA_ARGS)], [message("")]];
+    const res = await call("POST", "/dream/turn", t, { sessionId: null, action: { type: "message", text: "a modern sea-view villa" } });
+    const events = (await res.text()).split("\n").filter((l) => l.startsWith("data:")).map((l) => JSON.parse(l.slice(5)) as Ev);
+    // The deck arrives in the turn's own stream, before its done, and nothing is left running.
+    const deckAt = events.findIndex((e) => e.type === "widget" && e.widget.kind === "deck");
+    expect(deckAt).toBeGreaterThan(-1);
+    expect(deckAt).toBeLessThan(events.findIndex((e) => e.type === "done"));
+    expect(events.find((e) => e.type === "done")).toMatchObject({ running: 0 });
+    expect(events.some((e) => e.type === "step" && /^job_/.test(e.id))).toBe(false);
   });
 
   it("hands a single item to the item price research with the person's words", async () => {

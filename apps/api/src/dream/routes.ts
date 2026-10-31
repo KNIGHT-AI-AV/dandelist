@@ -66,7 +66,12 @@ const actionSchema = z.discriminatedUnion("type", [
 ]);
 /** The Dandy's name as its owner typed it: one line of printable characters, so it can introduce itself. */
 export const dandyNameSchema = z.string().trim().min(1).max(24).regex(/^[^\p{C}]+$/u).optional();
-const turnBody = z.object({ sessionId: z.string().uuid().nullish(), action: actionSchema, persona: personaSchema, name: dandyNameSchema });
+/**
+ * `follow`: the app follows the session's event log after a turn (GET /dream/sessions/:id/events), so slow work can run
+ * as jobs beside the conversation. Apps from before that (TestFlight builds up to 26) leave it out, and their turns run
+ * everything inline as they always did, so their cards still arrive in the turn's own stream.
+ */
+const turnBody = z.object({ sessionId: z.string().uuid().nullish(), action: actionSchema, persona: personaSchema, name: dandyNameSchema, follow: z.boolean().optional() });
 const suggestQuery = z.object({ persona: personaSchema });
 
 type SessionRow = { id: string; transcript: unknown; state: unknown };
@@ -217,7 +222,7 @@ export function dreamRoutes(deps: DreamDeps) {
         name: body.data.name,
         list,
         running: () => jobs.list(sessionId).filter((j) => j.lane !== "turn"),
-        spawn: (t, st, lane, label, work) => spawn(ctx, t, st, lane, label, work),
+        ...(body.data.follow ? { spawn: (t: TranscriptEntry[], st: DreamState, lane: string, label: string, work: (c: DreamCtx, t: TranscriptEntry[], st: DreamState) => Promise<unknown>) => spawn(ctx, t, st, lane, label, work) } : {}),
       };
       return ctx;
     };

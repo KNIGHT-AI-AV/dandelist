@@ -42,7 +42,8 @@ export async function dreamTurn(apiStream: ApiStream, sessionId: string | null, 
   const res = await apiStream("/dream/turn", {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
-    body: JSON.stringify({ sessionId, action, persona: currentPersona(), name: nameForApi(opts.name) }),
+    // This app follows the event log after a turn, so the server may run slow work as jobs beside it.
+    body: JSON.stringify({ sessionId, action, persona: currentPersona(), name: nameForApi(opts.name), follow: true }),
     signal: opts.signal,
   });
   if (!res.ok || !res.body) {
