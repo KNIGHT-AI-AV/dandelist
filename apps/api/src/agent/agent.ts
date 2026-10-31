@@ -782,7 +782,17 @@ export interface ResearchContext {
    * the price checks and the photos to fit; whatever is still running then is left behind. Missing: no limit.
    */
   deadline?: number;
+  /** Meta's reasoning effort for every research call. Missing: RESEARCH_EFFORT. */
+  effort?: string;
 }
+
+/**
+ * The reasoning effort research runs at when its caller names none. Chosen by a live A/B through huntWish with shops
+ * refusing the server as they refuse App Runner (2026-10-31, six wishes each): at the model's default effort no research
+ * finished inside its 54 s and every card kept its single fast price; at low effort five of six finished with three or
+ * four options, at the same cost and length of hunt.
+ */
+export const RESEARCH_EFFORT: string | undefined = "low";
 
 /** What research keeps after its last tool round: the final answer, the price checks and the photos. */
 export const WRAP_UP_MS = 20_000;
@@ -854,6 +864,8 @@ export async function research(meta: Meta, ctx: ResearchContext): Promise<Resear
   // Kept for huntMedia's signature; the agent no longer looks for 3D models (owner, 2026-10-29: real photographs).
   const models = new Map<string, ModelCandidate>();
   const tools = [{ type: "web_search" }, GET_PAGE, FX_RATE, ...(ctx.shopping ? [SHOPPING_SEARCH] : [])];
+  const effort = ctx.effort ?? RESEARCH_EFFORT;
+  const reasoning = effort ? { reasoning: { effort } } : {};
   const logSearches = async (r: ResponsesResult) => {
     for (const query of r.searchQueries) await onStep({ type: "search", query, at: at() });
     if (!r.searchQueries.length && r.usage.searches) await onStep({ type: "search", query: `${r.usage.searches} web ${r.usage.searches === 1 ? "search" : "searches"}`, at: at(), line: "Searching the web" });
@@ -876,7 +888,7 @@ export async function research(meta: Meta, ctx: ResearchContext): Promise<Resear
     }
   };
 
-  let res = await meta.responses({ instructions: researchInstructions(ctx.now(), !!ctx.shopping, ctx.voice), input: brief(ctx.draft, ctx.answers, home), tools });
+  let res = await meta.responses({ instructions: researchInstructions(ctx.now(), !!ctx.shopping, ctx.voice), input: brief(ctx.draft, ctx.answers, home), tools, ...reasoning });
   await logSearches(res);
   let calls = 0;
   const runTool = async (name: string, args: string): Promise<string> => {
@@ -935,7 +947,7 @@ export async function research(meta: Meta, ctx: ResearchContext): Promise<Resear
         output: i < room ? await runTool(fc.name, fc.arguments) : "Tool budget reached. Answer with what you have.",
       })),
     );
-    const next = Number.isFinite(deadline) ? await within(chain({ previous_response_id: res.id, input: outputs, tools }), left() - WRAP_UP_MS) : await chain({ previous_response_id: res.id, input: outputs, tools });
+    const next = Number.isFinite(deadline) ? await within(chain({ previous_response_id: res.id, input: outputs, tools, ...reasoning }), left() - WRAP_UP_MS) : await chain({ previous_response_id: res.id, input: outputs, tools, ...reasoning });
     if (!next) {
       carried = outputs;
       break;
@@ -958,6 +970,7 @@ export async function research(meta: Meta, ctx: ResearchContext): Promise<Resear
       },
     ],
     text: { format: { type: "json_schema", name: "price_options", schema: OPTIONS_JSON, strict: true } },
+    ...reasoning,
   });
   const final = Number.isFinite(deadline) ? await within(answering, left() - 2_500) : await answering;
   if (!final) throw new ResearchTimeout();

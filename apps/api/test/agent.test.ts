@@ -1,6 +1,6 @@
 import { PGlite } from "@electric-sql/pglite";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanThought, json, unknownNumbers } from "../src/agent/agent";
+import { cleanThought, json, RESEARCH_EFFORT, unknownNumbers } from "../src/agent/agent";
 import { assertPublicUrl, htmlToText, pageNamesItem, pageShowsPrice, privateIp, sellerOwnsHost, structuredPrices } from "../src/agent/tools";
 
 // Shop hostnames resolve to a public documentation address, so no test touches real DNS.
@@ -245,6 +245,21 @@ describe("wish agent", () => {
     expect(run.steps[thoughtAt]).toMatchObject({ type: "note", text: "Peloton's own store sets the list price, so I'll read it there first:" });
     expect(run.steps[thoughtAt + 1]).toMatchObject({ type: "open" });
     expect(run.costUsd).toBeGreaterThan(0);
+  });
+
+  it("researches at low reasoning effort on every call: the first, each tool round and the answer (A/B, 2026-10-31)", async () => {
+    const t = await signIn("ada@example.com");
+    const { draft } = (await (await call("POST", "/agent/interpret", t, { text: "a peloton bike plus" })).json()) as { draft: unknown };
+    const start = await call("POST", "/agent/runs", t, { draft, answers: [] });
+    expect((await finished(t, ((await start.json()) as { run: { id: string } }).run.id)).status).toBe("done");
+    const first = metaCalls.findIndex((c) => String(c.instructions ?? "").startsWith("You are Dandelist's price researcher"));
+    const answer = metaCalls.findIndex((c) => (c.text as { format?: { name?: string } } | undefined)?.format?.name === "price_options");
+    expect(first).toBeGreaterThanOrEqual(0);
+    expect(answer).toBeGreaterThan(first);
+    const research = metaCalls.slice(first, answer + 1).filter((c, i) => i === 0 || typeof c.previous_response_id === "string");
+    expect(research.length).toBeGreaterThanOrEqual(2);
+    for (const c of research) expect(c.reasoning).toEqual({ effort: "low" });
+    expect(RESEARCH_EFFORT).toBe("low");
   });
 
   it("starts from the person's words, shows the fast card while it runs and ends with the research's, by question", async () => {
