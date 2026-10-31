@@ -2,7 +2,9 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { Animated, Keyboard, PanResponder, Platform, StyleSheet, View, useWindowDimensions } from "react-native";
 import { noteDrag } from "../../lib/drag-guard";
 import { haptic, native, useReducedMotion } from "../../lib/motion";
-import { PAGES, PAGE_COUNT, landing, mod, nearest, type PageId } from "../../lib/pager";
+import { PAGES, PAGE_COUNT, inView, landing, mod, nearestIn, type PageId } from "../../lib/pager";
+import { spreadOf } from "../../lib/spread";
+import { PageSizeProvider } from "../../lib/page-size";
 import { pagesStill } from "../../lib/swipe-intent";
 
 /** Critically damped, about a third of a second: the page arrives without bouncing (Apple: damping 1, response 0.35). */
@@ -12,11 +14,16 @@ const SLOP = 12;
 const SIDEWAYS = 1.4;
 
 export interface Pager {
-  /** The page in front (or on its way to the front). */
+  /** The page in front (or on its way to the front); in a spread, the one on the left. */
   page: PageId;
   /** Position in pages; never wraps, so motion is continuous all the way round. */
   pos: Animated.Value;
+  /** One page's width: the window's, or half of it in a spread. */
   width: number;
+  /** Pages side by side: 1, or 2 on a wide touch screen held sideways (lib/spread.ts). */
+  span: 1 | 2;
+  /** Whether a page is in view: the one in front, and in a spread the one beside it. */
+  shows(page: PageId): boolean;
   go(page: PageId): void;
   next(step: 1 | -1): void;
 }
@@ -38,9 +45,28 @@ export function usePager(): Pager {
   return ctx;
 }
 
-/** The page in front, or null outside the ring (a pushed screen such as New wish). */
-export function useFrontPage(): PageId | null {
-  return useContext(Ctx)?.page ?? null;
+/** Whether a page of the ring is in view, or null outside the ring (a pushed screen such as New wish). */
+export function usePageShown(page: PageId): boolean | null {
+  const ctx = useContext(Ctx);
+  return ctx ? ctx.shows(page) : null;
+}
+
+/** In a browser, whether its main pointer is a finger (an iPhone, an iPad) rather than a mouse or a trackpad. */
+const coarse = () => (typeof window !== "undefined" && typeof window.matchMedia === "function" ? window.matchMedia("(pointer: coarse)") : null);
+
+/** Whether the screen is worked with fingers: always in the app, and in a browser when coarse() says so. */
+function useTouchScreen(): boolean {
+  const [touch, setTouch] = useState(() => (Platform.OS === "web" ? !!coarse()?.matches : true));
+  useEffect(() => {
+    if (Platform.OS !== "web") return;
+    const query = coarse();
+    if (!query) return;
+    const on = () => setTouch(query.matches);
+    on();
+    query.addEventListener?.("change", on);
+    return () => query.removeEventListener?.("change", on);
+  }, []);
+  return touch;
 }
 
 /** The ring's side of a card's own swipe, or null outside the ring. */
@@ -53,7 +79,9 @@ export function usePageSwipe(): PageSwipe | null {
  * they move together frame by frame.
  */
 export function PagerProvider({ initial, onPage, children }: { initial: PageId; onPage?(page: PageId): void; children: ReactNode }) {
-  const { width } = useWindowDimensions();
+  const win = useWindowDimensions();
+  const span = spreadOf(win.width, win.height, useTouchScreen());
+  const width = win.width / span;
   const reduced = useReducedMotion();
   const start = PAGES.indexOf(initial);
   const pos = useRef(new Animated.Value(start)).current;
@@ -91,14 +119,22 @@ export function PagerProvider({ initial, onPage, children }: { initial: PageId; 
 
   const go = useCallback(
     (id: PageId) => {
-      const to = nearest(target.current, id);
+      // In a spread a page already in view stays where it is: the list's "Talk" with the Dandy beside it turns nothing.
+      const to = nearestIn(target.current, id, span);
       if (to === target.current) return;
       Keyboard.dismiss();
       settle(to);
     },
+    [settle, span],
+  );
+  // One page along, whatever is in view: a spread's arrow keys and swipes turn it a page at a time too.
+  const next = useCallback(
+    (step: 1 | -1) => {
+      Keyboard.dismiss();
+      settle(Math.round(target.current) + step);
+    },
     [settle],
   );
-  const next = useCallback((step: 1 | -1) => go(PAGES[mod(Math.round(target.current) + step)]!), [go]);
 
   const grab = useCallback(() => {
     movedAt.current = Date.now();
@@ -106,7 +142,8 @@ export function PagerProvider({ initial, onPage, children }: { initial: PageId; 
     return live.current;
   }, [pos]);
 
-  const value = useMemo<Pager>(() => ({ page, pos, width, go, next }), [page, pos, width, go, next]);
+  const shows = useCallback((id: PageId) => inView(PAGES.indexOf(id), PAGES.indexOf(page), span), [page, span]);
+  const value = useMemo<Pager>(() => ({ page, pos, width, span, shows, go, next }), [page, pos, width, span, shows, go, next]);
   const grabber = useMemo(() => ({ grab, release: settle }), [grab, settle]);
   // A finger moving left brings the next page, as the ring's own swipe does.
   const swipe = useMemo<PageSwipe>(() => ({ still: () => pagesStill(movedAt.current, Date.now()), turn: (dir) => next(dir === 1 ? -1 : 1) }), [next]);
@@ -131,7 +168,8 @@ export function offsetNode(pos: Animated.Value, i: number): Animated.AnimatedAdd
  * trackpad's sideways scroll and the arrow keys turn them too.
  */
 export function PagerView({ pages }: { pages: Record<PageId, ReactNode> }) {
-  const { pos, width, page, next } = usePager();
+  const { pos, width, span, shows, next } = usePager();
+  const { height } = useWindowDimensions();
   const grabber = useContext(Grab)!;
   const base = useRef(0);
   const box = useRef<View>(null);
@@ -197,22 +235,25 @@ export function PagerView({ pages }: { pages: Record<PageId, ReactNode> }) {
     () =>
       PAGES.map((id, i) => {
         const off = offsetNode(pos, i);
+        // Pages recede a little as they leave, so the one arriving reads as in front. In a spread both pages in view
+        // stand full size, side by side.
+        const inputRange = span === 2 ? [-1, 0, 1, 2] : [-1, 0, 1];
+        const full = span === 2 ? [1, 1] : [1];
         return {
           id,
           translateX: Animated.multiply(off, width),
-          // Pages recede a little as they leave, so the one arriving reads as in front.
-          scale: off.interpolate({ inputRange: [-1, 0, 1], outputRange: [0.94, 1, 0.94], extrapolate: "clamp" }),
-          opacity: off.interpolate({ inputRange: [-1, 0, 1], outputRange: [0.5, 1, 0.5], extrapolate: "clamp" }),
+          scale: off.interpolate({ inputRange, outputRange: [0.94, ...full, 0.94], extrapolate: "clamp" }),
+          opacity: off.interpolate({ inputRange, outputRange: [0.5, ...full, 0.5], extrapolate: "clamp" }),
         };
       }),
-    [pos, width],
+    [pos, width, span],
   );
 
   return (
     // On the web a drag that starts selecting text ends the gesture, so the ring doesn't select (fields still do).
     <View ref={box} style={[StyleSheet.absoluteFill, Platform.OS === "web" ? ({ overflow: "hidden", touchAction: "pan-y", userSelect: "none" } as object) : { overflow: "hidden" }]} {...pan.panHandlers}>
       {layers.map((l) => {
-        const front = l.id === page;
+        const front = shows(l.id);
         return (
           <Animated.View
             key={l.id}
@@ -220,9 +261,12 @@ export function PagerView({ pages }: { pages: Record<PageId, ReactNode> }) {
             accessibilityElementsHidden={!front}
             importantForAccessibility={front ? "auto" : "no-hide-descendants"}
             aria-hidden={!front}
-            style={[StyleSheet.absoluteFill, { opacity: l.opacity, transform: [{ translateX: l.translateX }, { scale: l.scale }] }]}
+            // One page wide from the left edge: the whole window, or its half of a spread, which lays out at that width.
+            style={{ position: "absolute", top: 0, bottom: 0, left: 0, width, opacity: l.opacity, transform: [{ translateX: l.translateX }, { scale: l.scale }] }}
           >
-            {pages[l.id]}
+            <PageSizeProvider width={width} height={height}>
+              {pages[l.id]}
+            </PageSizeProvider>
           </Animated.View>
         );
       })}

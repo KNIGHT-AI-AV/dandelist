@@ -83,7 +83,7 @@ vi.mock("./bridge", () => {
   };
 });
 vi.mock("./chrome", () => ({ useTopRoom: () => 0 }));
-vi.mock("./pager", () => ({ usePager: () => ({ page: "chat" }) }));
+vi.mock("./pager", () => ({ usePager: () => ({ page: "chat", shows: (id: string) => id === "chat" }) }));
 vi.mock("../../lib/dream", async (original) => ({
   ...(await original<typeof import("../../lib/dream")>()),
   // The turn's stream: each turn plays the next script, then ends.

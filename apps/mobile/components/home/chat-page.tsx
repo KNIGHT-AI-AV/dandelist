@@ -1,6 +1,6 @@
 import { router } from "expo-router";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Animated, AppState, Keyboard, Platform, Pressable, Text, View, useWindowDimensions, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent, type ScrollView } from "react-native";
+import { Animated, AppState, Keyboard, Platform, Pressable, Text, View, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent, type ScrollView } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Greeting } from "../chat/greeting";
 import { HistorySheet } from "../chat/history-sheet";
@@ -50,6 +50,7 @@ import { useWishes } from "../../lib/wishes";
 import { useChatInbox, useHome } from "./bridge";
 import { useTopRoom } from "./chrome";
 import { usePager } from "./pager";
+import { usePageSize } from "../../lib/page-size";
 
 let seq = 0;
 const nextId = () => `f${++seq}`;
@@ -110,7 +111,7 @@ function rowsOf(feed: FeedItem[]): Row[] {
 export function ChatPage() {
   const p = usePalette();
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
+  const { width } = usePageSize();
   const gutter = layout.gutter(width);
   const auth = useAuth();
   const { add, wishes } = useWishes();
@@ -449,10 +450,12 @@ export function ChatPage() {
     return () => sub.remove();
   }, [ready, refreshHistory, startNew, delivery]);
 
-  // History belongs to this page: turning away closes it and sends any delete still waiting.
+  // History belongs to this page: turning it out of view closes it and sends any delete still waiting. In a spread the
+  // chat can sit beside the list, still in view.
+  const inView = pager.shows("chat");
   useEffect(() => {
-    if (pager.page !== "chat" && historyOpen) setHistoryOpen(false);
-  }, [pager.page, historyOpen]);
+    if (!inView && historyOpen) setHistoryOpen(false);
+  }, [inView, historyOpen]);
   useEffect(() => {
     if (!historyOpen) flushHistory();
   }, [historyOpen, flushHistory]);
@@ -530,8 +533,8 @@ export function ChatPage() {
       }
       case "item":
         // Hunted at once, in place: no button between the wish and its card. Its waiting music plays only while the chat
-        // is the page in front.
-        return <HuntCard id={w.id} text={w.text} watched={pager.page === "chat"} onPhase={onPhase} onShowOnList={home.showOnList} />;
+        // is in view.
+        return <HuntCard id={w.id} text={w.text} watched={inView} onPhase={onPhase} onShowOnList={home.showOnList} />;
       case "list_change":
         // A change to their own list: nothing moves until they tap Apply.
         return <ListChangeCard w={w} onShowOnList={home.showOnList} />;

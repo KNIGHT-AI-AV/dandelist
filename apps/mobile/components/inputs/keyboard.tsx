@@ -1,11 +1,12 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type ReactNode } from "react";
-import { Animated, Dimensions, Keyboard, Platform, Pressable, ScrollView, StyleSheet, View, useWindowDimensions, type ScrollViewProps, type StyleProp, type ViewStyle } from "react-native";
+import { Animated, Dimensions, Keyboard, Platform, Pressable, ScrollView, StyleSheet, View, type ScrollViewProps, type StyleProp, type ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { layout } from "../../lib/theme";
 import { EdgeFade } from "../lux";
 import { RevealContext, type Reveal, type RevealTarget } from "./reveal";
 import { DOCK_FADE, DOCK_KEYBOARD_GAP, DOCK_REST_GAP, REVEAL_MARGIN } from "./tokens";
 import { useKeyboard, useKeyboardLift } from "./use-keyboard";
+import { usePageSize } from "../../lib/page-size";
 
 /** Runs `fn` once layout has caught up (two frames: the commit, then the native mount); returns a cancel. */
 function afterLayout(fn: () => void): () => void {
@@ -121,7 +122,7 @@ export function KeyboardLift({ rest, gap, style, children }: { rest: number; gap
  */
 export function KeyboardDock({ children, onHeight, fade = true, maxWidth = layout.list }: { children: ReactNode; onHeight?(height: number): void; fade?: boolean; maxWidth?: number }) {
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
+  const { width } = usePageSize();
   const rest = insets.bottom + DOCK_REST_GAP;
   const lift = useKeyboardLift(rest, DOCK_KEYBOARD_GAP);
   const [h, setH] = useState(0);
