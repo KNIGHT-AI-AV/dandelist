@@ -1,6 +1,6 @@
 import { PGlite } from "@electric-sql/pglite";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanThought, json, RESEARCH_EFFORT, unknownNumbers } from "../src/agent/agent";
+import { cleanThought, json, RESEARCH_EFFORT, fallbackExplanation, unknownNumbers } from "../src/agent/agent";
 import { assertPublicUrl, htmlToText, pageNamesItem, pageShowsPrice, privateIp, sellerOwnsHost, structuredPrices } from "../src/agent/tools";
 
 // Shop hostnames resolve to a public documentation address, so no test touches real DNS.
@@ -350,7 +350,8 @@ describe("wish agent", () => {
     const { draft } = (await (await call("POST", "/agent/interpret", t, { text: "a peloton bike plus" })).json()) as { draft: unknown };
     const start = await call("POST", "/agent/runs", t, { draft });
     const run = await finished(t, ((await start.json()) as { run: { id: string } }).run.id);
-    expect(run.result.explanation).toMatch(/asks the least upfront at \$1,500/);
+    // About the card's own option (the bike at $2,495), naming the cheaper one found elsewhere.
+    expect(run.result.explanation).toMatch(/^Peloton asks \$2,495, \$5,135 over 5 years with its running costs\. The lowest asking price found was \$1,500 from /);
     expect(unknownNumbers(run.result.explanation, { a: "$1,500 $2,495 $5,135 $1,500 5" })).toEqual([]);
   });
 
@@ -401,5 +402,31 @@ describe("the model's JSON answer", () => {
     expect(json('```json\n{"a":1}\n```')).toEqual({ a: 1 });
     expect(json('I\'ve gathered the prices. {"options":[{"label":"x"}],"note":""}')).toEqual({ options: [{ label: "x" }], note: "" });
     expect(() => json("I couldn't find anything.")).toThrow();
+  });
+});
+
+describe("the summary under a card when the model's own words can't be used", () => {
+  const fact = (seller: string, upfront: string, total: string, checked: boolean) => ({
+    label: `Rolex Sky-Dweller 18kt yellow gold Bright green dial m336238-0004 - ${seller}`,
+    seller,
+    price_source: checked ? "checked on the seller's page" : `listed by ${seller} in today's shopping search`,
+    upfront,
+    running_cost_per_month: "not recorded",
+    total_over_horizon: total,
+    spread_per_month: "$870",
+  });
+  const facts = (...options: ReturnType<typeof fact>[]) => ({ wish: "Rolex Sky-Dweller", horizon_years: 5, options }) as unknown as Parameters<typeof fallbackExplanation>[0];
+
+  it("speaks about the card's own option and names a lower price found elsewhere (owner, 2026-10-31)", () => {
+    expect(fallbackExplanation(facts(fact("Rolex", "$52,200", "$52,200", true), fact("Retail", "$51,400", "$51,400", false)))).toBe(
+      "Rolex asks $52,200. The lowest asking price found was $51,400 from Retail (listed by Retail in today's shopping search).",
+    );
+  });
+
+  it("says the least upfront when the card's own option is the cheapest, with its running costs over the years", () => {
+    expect(fallbackExplanation(facts(fact("Rolex", "$51,400", "$53,900", true), fact("Retail", "$52,200", "$52,200", false)))).toBe(
+      "Rolex asks the least upfront at $51,400, $53,900 over 5 years with its running costs.",
+    );
+    expect(fallbackExplanation(facts(fact("Retail", "$51,400", "$51,400", false)))).toBe("Retail asks $51,400 (listed by Retail in today's shopping search).");
   });
 });
