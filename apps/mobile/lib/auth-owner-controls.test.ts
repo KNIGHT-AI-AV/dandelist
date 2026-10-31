@@ -94,6 +94,8 @@ const appleTokens: Record<string, string> = { "apple-bob": "bob@example.com" };
 let log: { method: string; path: string; bearer: string | null }[] = [];
 let expired = new Set<string>();
 let refreshes: Record<string, { accessToken: string; refreshToken: string } | null> = {};
+/** When set, /auth/refresh can't be reached at all, or answers with this status instead. */
+let refreshDown: "unreachable" | number | null = null;
 let holds = new Map<string, { enter: () => void; gate: Promise<void> }>();
 let opens: (() => void)[] = [];
 const respond = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -125,6 +127,8 @@ async function fakeFetch(input: string | URL | Request, init: RequestInit = {}):
       return signIns[body.email!] ? respond(signIns[body.email!]) : respond({ error: "That code didn't work." }, 400);
     case "/auth/refresh": {
       await gate(`refresh:${body.refreshToken}`);
+      if (refreshDown === "unreachable") throw new TypeError("Network request failed");
+      if (refreshDown) return respond({ error: "Try again in a moment." }, refreshDown);
       // Like the API, a refresh token works once: the session it named is revoked as the new one is issued.
       const next = refreshes[body.refreshToken!];
       delete refreshes[body.refreshToken!];
@@ -224,6 +228,7 @@ beforeEach(() => {
   log = [];
   expired = new Set();
   refreshes = {};
+  refreshDown = null;
   holds = new Map();
   opens = [];
   auth = null;
@@ -355,6 +360,25 @@ describe("auth ownership boundaries (round40)", () => {
     await restart();
     expect(now().status).toBe("signedOut");
     expect(log.filter((l) => l.path === "/auth/refresh")).toHaveLength(1);
+  });
+
+  it.each([
+    ["can't be reached", "unreachable" as const, "ref-ada-1"],
+    ["answers with a server error", 503, "ref-ada-1"],
+    ["turns the token down", 401, null],
+  ])("keeps the stored session through a start when the API %s, unless it turned the token down", async (_, outage, kept) => {
+    store.map.set(REFRESH, "ref-ada-1");
+    refreshDown = outage;
+    await mount();
+    await settle();
+    expect(now().status).toBe("signedOut");
+    expect(store.map.get(REFRESH) ?? null).toBe(kept);
+    // The API is back: the next start opens Ada's session with the token that was kept.
+    refreshDown = null;
+    refreshes["ref-ada-1"] = { accessToken: "tok-ada-2", refreshToken: "ref-ada-2" };
+    await restart();
+    expect(now().status).toBe(kept ? "signedIn" : "signedOut");
+    expect(store.map.get(REFRESH) ?? null).toBe(kept ? "ref-ada-2" : null);
   });
 
   it("makes one refresh for two 401s of the same session, and sends both again renewed (control)", async () => {

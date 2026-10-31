@@ -370,10 +370,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await adopt(owner, { ...tokens, user: me });
         return;
       }
-      // Not put in place: a newer sign-in or a sign-out started meanwhile, or the account didn't load. The server has
-      // taken the stored token, so the renewed one is kept for next time all the same (nothing is, when the refresh
-      // didn't go through), unless a sign-in has committed or this device signed out since: each of those decides.
-      if (stored) await write(REFRESH_KEY, tokens?.refreshToken ?? null, () => keeper.current === kept);
+      // Not put in place: a newer sign-in or a sign-out started meanwhile, the account didn't load, or the refresh didn't
+      // go through. A renewed token is kept for next time all the same, since the server has taken the stored one. The
+      // stored one goes only when the server turned it down: with no connection or a server error it stays, so a start
+      // while offline doesn't sign the person out for good. Unless a sign-in has committed or this device signed out
+      // since: each of those decides the stored token itself.
+      const keep = tokens?.refreshToken ?? (res?.status === 401 ? null : stored);
+      if (stored && keep !== stored) await write(REFRESH_KEY, keep, () => keeper.current === kept);
       setStatus((s) => (s === "loading" ? "signedOut" : s));
     })();
   }, [start, latest, adopt, write]);
