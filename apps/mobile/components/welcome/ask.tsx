@@ -49,7 +49,7 @@ export function Ask({ ideas, initial, bottomInset, onSubmit }: { ideas: string[]
           <Text accessibilityRole="header" style={[t.title1, { color: p.ink }]}>
             What would you love to <Text style={{ fontFamily: fonts.displayItalic, color: p.accentText }}>have</Text>?
           </Text>
-          <Text style={[type.callout, { color: p.ink2, marginTop: layout.stack.tight }]}>Type it or say it, as plainly as you'd tell a friend. Your Dandy starts finding the real price while you keep going.</Text>
+          <Text style={[type.callout, { color: p.ink2, marginTop: layout.stack.tight }]}>Type it or say it.</Text>
         </Rise>
         <Rise delay={60}>
           <View>

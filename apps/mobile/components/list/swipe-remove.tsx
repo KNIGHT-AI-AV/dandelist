@@ -1,16 +1,14 @@
 import { Children, cloneElement, isValidElement, useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from "react";
 import { noteDrag } from "../../lib/drag-guard";
+import { swipeOutcome } from "../../lib/swipe-intent";
+import { usePageSwipe } from "../home/pager";
 import { Animated, PanResponder, Text, View, type AccessibilityActionEvent, type AccessibilityActionInfo, type StyleProp, type ViewStyle } from "react-native";
 import { Icon } from "../lux";
 import { ease, haptic, native, useReducedMotion } from "../../lib/motion";
 import { space, type, usePalette } from "../../lib/theme";
 
-/** Past this share of the row's width, letting go removes it. */
+/** Past this share of the row's width, letting go after a deliberate drag removes it (lib/swipe-intent.ts). */
 export const REMOVE_AT = 0.4;
-/** A flick this fast (px per ms), in the direction it travels, removes from a shorter drag. */
-export const FLICK_X = 0.5;
-/** ...but only once the row has moved this share of its width, so a twitch never removes anything. */
-const FLICK_MIN = 0.12;
 /** A drag only becomes a swipe past this many px, and only when clearly sideways. */
 const SLOP = 10;
 const SIDEWAYS = 1.6;
@@ -29,8 +27,10 @@ function rgbOf(hex: string): string {
 
 /**
  * Swipe a row left or right to remove it (owner, recording 03). The row follows the finger one to one and a removal
- * mark shows underneath on the side it moves away from. Past REMOVE_AT of the width, or on a fast flick, it flies off
- * and `onRemove` runs (the caller takes it from there, with its undo); otherwise it springs back, critically damped.
+ * mark shows underneath on the side it moves away from. Let go past REMOVE_AT of the width after a deliberate drag and
+ * it flies off and `onRemove` runs (the caller takes it from there, with its undo); otherwise it springs back,
+ * critically damped. Inside the ring of pages a quick flick turns the page instead, and right after the pages move
+ * the row leaves sideways drags to them (owner, 10-31: swiping between pages could throw a wish away).
  * A haptic marks the threshold each way. Screen readers get a "Remove" action on the row.
  *
  * It claims only clearly sideways drags, below anything else, so vertical scrolling and the pager's swipes beside
@@ -54,6 +54,10 @@ export function SwipeToRemove({ onRemove, label = "Remove", children, style }: {
   removeRef.current = onRemove;
   const reducedRef = useRef(reduced);
   reducedRef.current = reduced;
+  const pages = usePageSwipe();
+  const pagesRef = useRef(pages);
+  pagesRef.current = pages;
+  const startedAt = useRef(0);
 
   useEffect(() => () => clearTimeout(returnTimer.current), []);
   // Where the row really is, followed through a listener (a native animation reports back only to one), so a grab
@@ -92,9 +96,10 @@ export function SwipeToRemove({ onRemove, label = "Remove", children, style }: {
     };
     let base = 0;
     return PanResponder.create({
-      onMoveShouldSetPanResponder: (_e, g) => !gone.current && Math.abs(g.dx) > SLOP && Math.abs(g.dx) > Math.abs(g.dy) * SIDEWAYS,
+      onMoveShouldSetPanResponder: (_e, g) => !gone.current && Math.abs(g.dx) > SLOP && Math.abs(g.dx) > Math.abs(g.dy) * SIDEWAYS && (pagesRef.current?.still() ?? true),
       onPanResponderGrant: () => {
         noteDrag();
+        startedAt.current = Date.now();
         clearTimeout(returnTimer.current);
         x.stopAnimation();
         base = pos.current;
@@ -115,12 +120,14 @@ export function SwipeToRemove({ onRemove, label = "Remove", children, style }: {
       onPanResponderRelease: (_e, g) => {
         noteDrag();
         const at = base + g.dx;
-        const w = width.current;
         const dir: 1 | -1 = at >= 0 ? 1 : -1;
-        const far = w > 0 && Math.abs(at) >= w * REMOVE_AT;
-        const flick = w > 0 && Math.abs(g.vx) >= FLICK_X && Math.sign(g.vx) === dir && Math.abs(at) >= w * FLICK_MIN;
-        if (far || flick) flyOff(dir, g.vx);
-        else home(g.vx * 1000);
+        const ring = pagesRef.current;
+        const outcome = swipeOutcome({ dx: at, vx: g.vx, width: width.current, removeAt: REMOVE_AT, ms: Date.now() - startedAt.current, pages: !!ring });
+        if (outcome === "remove") flyOff(dir, g.vx);
+        else {
+          home(g.vx * 1000);
+          if (outcome === "page") ring?.turn(dir);
+        }
       },
       onPanResponderTerminate: () => home(),
       // Once a row has the swipe, the pager and the scroll view don't take it back mid-gesture.

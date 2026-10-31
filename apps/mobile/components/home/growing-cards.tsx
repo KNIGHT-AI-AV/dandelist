@@ -8,14 +8,15 @@ import { layout, space, type, usePalette } from "../../lib/theme";
 import type { Wish } from "../../lib/wishes";
 import { TIER_LABEL, agentLine } from "../../lib/words";
 import { isPriceless, priceWords } from "../../lib/worth";
+import { swipeOutcome } from "../../lib/swipe-intent";
 import type { Rect } from "../../lib/zoom";
 import { AgentDot, Money, Photo, Shade } from "../lux";
 import { savedGlyph } from "../worth";
 import { cardRanges, listHeight, type CardGeometry } from "./card-metrics";
+import { usePageSwipe } from "./pager";
 
-/** A swipe past this share of the width removes the card; a flick this fast (px/ms) does too. */
+/** A deliberate swipe past this share of the width removes the card (lib/swipe-intent.ts). */
 const REMOVE_AT = 0.35;
-const REMOVE_FLICK = 0.6;
 const NO_SELECT = Platform.OS === "web" ? ({ userSelect: "none" } as object) : null;
 /** The words over the photograph sit in this much of the card's foot. */
 const FOOT = 150;
@@ -78,19 +79,23 @@ function Card({ w, index, g, scrollY, listTop, focus, width, fresh, onOpen, onQu
     if (fresh) Animated.timing(enter, { toValue: 1, duration: 360, easing: ease.out, useNativeDriver: native }).start();
   }, [fresh, enter]);
 
-  // Swipe either way to remove (owner, recording 03). The card follows the finger; past a third of the width it
-  // leaves on release, otherwise it springs home. Only clearly sideways drags are taken, so scrolling still works,
-  // and taking them here keeps the page from turning under the card.
+  // Swipe either way to remove (owner, recording 03). The card follows the finger; let go past a third of the width
+  // after a deliberate drag and it leaves, otherwise it springs home. A quick flick turns the page instead, and right
+  // after the pages move the card leaves sideways drags to them (owner, 10-31: swiping between pages could throw a
+  // wish away). Only clearly sideways drags are taken, so scrolling still works.
   const x = useRef(new Animated.Value(0)).current;
   const crossed = useRef(false);
-  const latest = useRef({ w, onRemove });
-  latest.current = { w, onRemove };
+  const startedAt = useRef(0);
+  const pages = usePageSwipe();
+  const latest = useRef({ w, onRemove, pages });
+  latest.current = { w, onRemove, pages };
   const pan = useMemo(
     () =>
       PanResponder.create({
-        onMoveShouldSetPanResponder: (_e, gs) => Math.abs(gs.dx) > 8 && Math.abs(gs.dx) > Math.abs(gs.dy) * 1.6,
+        onMoveShouldSetPanResponder: (_e, gs) => Math.abs(gs.dx) > 8 && Math.abs(gs.dx) > Math.abs(gs.dy) * 1.6 && (latest.current.pages?.still() ?? true),
         onPanResponderGrant: () => {
           crossed.current = false;
+          startedAt.current = Date.now();
           noteDrag();
         },
         onPanResponderMove: (_e, gs) => {
@@ -104,10 +109,14 @@ function Card({ w, index, g, scrollY, listTop, focus, width, fresh, onOpen, onQu
         },
         onPanResponderRelease: (_e, gs) => {
           noteDrag();
-          const flicked = Math.abs(gs.vx) > REMOVE_FLICK && Math.sign(gs.vx) === Math.sign(gs.dx);
-          if (Math.abs(gs.dx) > width * REMOVE_AT || flicked) {
+          const { pages: ring } = latest.current;
+          const outcome = swipeOutcome({ dx: gs.dx, vx: gs.vx, width, removeAt: REMOVE_AT, ms: Date.now() - startedAt.current, pages: !!ring });
+          if (outcome === "remove") {
             Animated.timing(x, { toValue: Math.sign(gs.dx || gs.vx) * width * 1.1, duration: 200, easing: ease.out, useNativeDriver: native }).start(() => latest.current.onRemove(latest.current.w));
-          } else Animated.spring(x, { toValue: 0, ...spring.snap, useNativeDriver: native }).start();
+            return;
+          }
+          Animated.spring(x, { toValue: 0, ...spring.snap, useNativeDriver: native }).start();
+          if (outcome === "page") ring?.turn(gs.dx > 0 ? 1 : -1);
         },
         onPanResponderTerminate: () => Animated.spring(x, { toValue: 0, ...spring.snap, useNativeDriver: native }).start(),
         onPanResponderTerminationRequest: () => false,
