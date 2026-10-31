@@ -2,7 +2,7 @@ import { Image } from "expo-image";
 import { usePathname } from "expo-router";
 import { useEffect, useRef } from "react";
 import { Animated, Modal, Pressable, StyleSheet, Text, View } from "react-native";
-import { useAuth } from "../lib/auth";
+import { bindToSignIn, currentSignIn, useAuth } from "../lib/auth";
 import { helpState, sendHelp } from "../lib/help";
 import { askForHelp, closeHelp, sendSheet, useHelpOwner, useHelpSheet } from "../lib/help-sheet";
 import { haptic, ease, useReducedMotion } from "../lib/motion";
@@ -16,9 +16,9 @@ import { ReplayMask } from "./replay-mask";
  * ... I can just press a button ... you could literally see it with pictures"). Both ways in, the bar's button and the
  * Settings row (the way in on phones too narrow for the button), take the picture first, before anything covers the
  * screen, then ask; nothing is sent until they say so. The sheet, its picture and its answer belong to the sign-in that
- * opened it (lib/help-sheet.ts).
+ * opened it (lib/help-sheet.ts), and so does the report's request.
  */
-const ask = () => askForHelp(screenShot);
+const ask = () => askForHelp(screenShot, currentSignIn);
 
 export function HelpButton() {
   const p = usePalette();
@@ -70,7 +70,8 @@ export function HelpHost() {
     });
   };
   const send = async () => {
-    const outcome = await sendSheet((s) => sendHelp(api, helpState(route), s.shot, s.id));
+    // As the sign-in the sheet was made under, its retry after a refresh included (review of #140, lib/auth.tsx).
+    const outcome = await sendSheet((s) => sendHelp(bindToSignIn(api, s.signIn), helpState(route), s.shot, s.id), currentSignIn);
     if (outcome === "sent") haptic.success();
     else if (outcome === "failed") haptic.error();
   };

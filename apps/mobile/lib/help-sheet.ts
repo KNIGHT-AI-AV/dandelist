@@ -7,12 +7,19 @@ import { useEffect, useSyncExternalStore } from "react";
  * sign-in's own key, as lib/rechecks.ts keys its looks). Signing out, in as someone else, or out and back in as the
  * same person clears them all, and a picture or an answer that arrives after that is dropped. Log lines are kept with
  * anything shaped like a credential cut out (packages/catalogue/src/help.ts), and the server cuts them again.
+ *
+ * A sheet also keeps the sign-in generation it was made under (lib/auth.tsx currentSignIn, passed in as `signIn`), which
+ * moves the moment another account's bearer is in place, before React hears of it (review of #140): a picture taken, or
+ * a Send pressed, after it moved is dropped, and the report goes out bound to that generation (components/help.tsx), so
+ * its retry after a refresh never goes as whoever signed in since.
  */
 export interface Sheet {
   /** The sheet's own id, sent as the report's key: sending it again after a failure is the same report. */
   id: string;
   /** The sign-in it belongs to (setHelpOwner): the account, a colon, then that sign-in's own key. */
   owner: string;
+  /** The sign-in generation (lib/auth.tsx currentSignIn) it was made under: its report goes as that one or not at all. */
+  signIn: number;
   /** The screen as it was before the sheet opened, a JPEG in base64; null when none could be taken. */
   shot: string | null;
   phase: "ready" | "sending" | "sent";
@@ -73,10 +80,11 @@ export const keptLines = (): HelpLine[] => [...lines];
 
 /**
  * Takes the screen's picture with `take` and opens the sheet on it, for the sign-in it was taken in only: a picture
- * that comes back after someone signed out, or in as someone else, is dropped.
+ * that comes back after someone signed out, or in as someone else, is dropped. `signIn` reads the sign-in generation.
  */
-export async function askForHelp(take: () => Promise<string | null>): Promise<void> {
+export async function askForHelp(take: () => Promise<string | null>, signIn: () => number): Promise<void> {
   const mine = owner;
+  const at = signIn();
   if (!mine || taking === mine) return;
   taking = mine;
   let shot: string | null = null;
@@ -87,8 +95,8 @@ export async function askForHelp(take: () => Promise<string | null>): Promise<vo
   } finally {
     if (taking === mine) taking = null;
   }
-  if (owner !== mine) return;
-  set({ id: uuid(), owner: mine, shot, phase: "ready", code: null, error: null });
+  if (owner !== mine || signIn() !== at) return;
+  set({ id: uuid(), owner: mine, signIn: at, shot, phase: "ready", code: null, error: null });
 }
 
 /** Closes the sheet `id` names, or whatever sheet is open. */
@@ -97,13 +105,14 @@ export function closeHelp(id?: string): void {
 }
 
 /**
- * Sends the open sheet with `send`, which answers with the report's code. The answer lands on that sheet of that
- * sign-in only: closed, replaced or signed out meanwhile, it changes nothing. Says what became of it.
+ * Sends the open sheet with `send`, which answers with the report's code and must send as the sheet's own sign-in
+ * generation (s.signIn). A sheet made under an earlier generation isn't sent at all. The answer lands on that sheet of
+ * that sign-in only: closed, replaced or signed out meanwhile, it changes nothing. Says what became of it.
  */
-export async function sendSheet(send: (s: Sheet) => Promise<{ code: string }>): Promise<"sent" | "failed" | "dropped"> {
+export async function sendSheet(send: (s: Sheet) => Promise<{ code: string }>, signIn: () => number): Promise<"sent" | "failed" | "dropped"> {
   const s = sheet;
-  if (!s || s.owner !== owner || s.phase !== "ready") return "dropped";
-  const mine = () => sheet?.id === s.id && sheet.owner === owner;
+  if (!s || s.owner !== owner || s.phase !== "ready" || signIn() !== s.signIn) return "dropped";
+  const mine = () => sheet?.id === s.id && sheet.owner === owner && signIn() === s.signIn;
   set({ ...s, phase: "sending", error: null });
   try {
     const { code } = await send(s);

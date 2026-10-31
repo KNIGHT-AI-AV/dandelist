@@ -263,6 +263,36 @@ describe("deleting an account deletes its reports' private copies (review of #14
   });
 });
 
+describe("a picture landing after the account went, its report copy failing (review of #140, round 35 H1)", () => {
+  it("is deleted again, or queued until the sweep deletes it, and another person's report stays", async () => {
+    for (const failAgain of [false, true]) {
+      const ada = await signIn(`ada-late-${failAgain}@example.com`);
+      const bob = await signIn(`bob-late-${failAgain}@example.com`);
+      const b = await send(bob.token);
+      // Ada's picture is on its way when her account is deleted; the deletion finds nothing yet and its queue drains.
+      const held = store.hold("screen.jpg");
+      const sending = send(ada.token);
+      await held.waiting;
+      expect((await call("DELETE", "/me", ada.token)).status).toBe(204);
+      expect((await db.query("select id from help_deletions")).rows).toEqual([]);
+      // Then the picture lands, and the report copy behind it fails.
+      store.failPut.add("report.json");
+      if (failAgain) store.failDelete.add("screen.jpg");
+      held.open();
+      const sent = await sending;
+      expect(sent.stored).toBe("gone");
+      if (failAgain) {
+        expect(files(sent.id)).toEqual(["screen.jpg"]);
+        expect((await db.query<{ id: string }>("select id from help_deletions")).rows.map((r) => r.id)).toEqual([sent.id]);
+        expect(await sweep()).toEqual({ deleted: 1, stored: 0 });
+      }
+      expect(files(sent.id)).toEqual([]);
+      expect((await db.query("select id from help_deletions")).rows).toEqual([]);
+      expect(files(b.id)).toEqual(["report.json", "screen.jpg"]);
+    }
+  });
+});
+
 describe("a report is pending until both copies are stored (review of #140, H5)", () => {
   it("keeps a report whose picture didn't upload, says so, and stores it on a later sweep", async () => {
     const { token } = await signIn();

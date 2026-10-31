@@ -2,6 +2,7 @@ import type { HelpDiagnostics } from "@dandelist/catalogue";
 import * as Application from "expo-application";
 import { Dimensions, Platform } from "react-native";
 import { analytics } from "./analytics";
+import { SignInChanged } from "./auth";
 import { keptLines, noteLine } from "./help-sheet";
 import type { Api } from "./profile";
 
@@ -54,7 +55,8 @@ export function helpState(route: string): HelpDiagnostics {
 
 /**
  * Sends a report, as the sheet `key` names (so sending it again after a failure is the same report), with the screen's
- * picture (a JPEG in base64, or none); answers with its id and the code to quote.
+ * picture (a JPEG in base64, or none); answers with its id and the code to quote. `api` is bound to the sheet's sign-in
+ * (components/help.tsx): once that sign-in has moved on it sends nothing and throws SignInChanged, which passes through.
  */
 export async function sendHelp(api: Api, state: HelpDiagnostics, screenshot: string | null, key: string): Promise<{ id: string; code: string }> {
   const replay = analytics.sessionId();
@@ -62,7 +64,10 @@ export async function sendHelp(api: Api, state: HelpDiagnostics, screenshot: str
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ key, state, ...(screenshot ? { screenshot } : {}), ...(replay ? { replay } : {}) }),
-  }).catch(() => null);
+  }).catch((e: unknown) => {
+    if (e instanceof SignInChanged) throw e;
+    return null;
+  });
   if (!res?.ok) throw new Error(((await res?.json().catch(() => null)) as { error?: string } | null)?.error ?? "Couldn't send it. Try again.");
   return (await res.json()) as { id: string; code: string };
 }

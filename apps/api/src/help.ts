@@ -78,23 +78,28 @@ function cleaned(state: z.infer<typeof diagnostics>) {
 /**
  * Stores a report's private copies, picture first, so its report.json (what the team's reader lists) only appears once
  * both are in; then marks it complete and lets the row's picture go. A failed upload leaves it pending for a resend or
- * sweepHelp; a report whose account was deleted while its copies were on their way has them deleted again.
+ * sweepHelp. Whatever the uploads did, a report whose account was deleted while they were on their way has every copy
+ * that landed deleted again, queued until it has (review of #140: a picture can land after the deletion even when the
+ * report copy behind it fails).
  */
 async function finish(deps: HelpDeps, store: MediaStore, id: string): Promise<HelpAnswer> {
   const row = (await deps.db.query<{ report: unknown; status: string; screen: Uint8Array | null; has_screen: boolean }>("select report, status, screen, has_screen from help_reports where id = $1", [id])).rows[0];
   const answer = (stored: HelpAnswer["stored"]): HelpAnswer => ({ id, code: codeOf(id), stored, screen: row?.has_screen ?? false });
   if (!row) return answer("gone");
   if (row.status === "complete") return answer("complete");
+  let uploaded = true;
   try {
     if (row.screen) await store.putPrivate(`${id}/screen.jpg`, new Uint8Array(row.screen), "image/jpeg");
     await store.putPrivate(`${id}/report.json`, new TextEncoder().encode(JSON.stringify(parse(row.report), null, 1)), "application/json");
   } catch (e) {
-    warn(`help report ${id} is kept, pending: its private copies didn't store`, e);
-    return answer("pending");
+    warn(`help report ${id}: its private copies didn't all store`, e);
+    uploaded = false;
   }
-  const done = await deps.db.query("update help_reports set status = 'complete', screen = null where id = $1 returning id", [id]);
-  if (done.rows.length) return answer("complete");
-  // Its account went while the copies were being stored: they go again, and stay queued until they have.
+  // Checked after the uploads have settled, so no copy of this request's can land after it.
+  if (uploaded) {
+    const done = await deps.db.query("update help_reports set status = 'complete', screen = null where id = $1 returning id", [id]);
+    if (done.rows.length) return answer("complete");
+  } else if ((await deps.db.query("select 1 from help_reports where id = $1", [id])).rows.length) return answer("pending");
   await dropHelpCopies(deps, [id]);
   return answer("gone");
 }

@@ -32,7 +32,8 @@ const spies = vi.hoisted(() => ({ screenShot: vi.fn(), sendHelp: vi.fn(), api: a
 
 vi.mock("../lib/auth", async () => {
   const { useSyncExternalStore } = await import("react");
-  return { useAuth: () => ({ ...useSyncExternalStore(auth.subscribe, auth.get), api: spies.api }) };
+  // The request's binding to its sign-in has its own test against the real AuthProvider (help-signin.test.ts).
+  return { useAuth: () => ({ ...useSyncExternalStore(auth.subscribe, auth.get), api: spies.api }), currentSignIn: () => 1, bindToSignIn: <T>(api: T) => api };
 });
 vi.mock("../lib/help", () => ({ helpState: (route: string) => ({ route }), sendHelp: spies.sendHelp }));
 vi.mock("../lib/screen-shot", () => ({ screenShot: spies.screenShot }));
