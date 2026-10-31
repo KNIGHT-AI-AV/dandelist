@@ -3,9 +3,9 @@ import { CAP_FADE_MS, CAP_MS, CHIME_AT, FADE_IN_MS, FADE_OUT_MS, RAMP, waitingMu
 
 const LEVEL = 0.6;
 
-/** The waiting music with a fake loop player, fake haptics and chime, and vitest's clock. */
-function setup({ touched = true } = {}) {
-  const player = {
+/** A loop player that only remembers what it was told. */
+function fakePlayer() {
+  return {
     volume: 0,
     playing: false,
     plays: 0,
@@ -21,6 +21,11 @@ function setup({ touched = true } = {}) {
       this.seeks.push(s);
     },
   };
+}
+
+/** The waiting music with a fake loop player, fake haptics and chime, and vitest's clock. */
+function setup({ touched = true } = {}) {
+  const player = fakePlayer();
   const taps: { at: number; kind: Tap }[] = [];
   const chimes: number[] = [];
   const start = Date.now();
@@ -275,5 +280,105 @@ describe("the waiting ballad (owner, 2026-10-30)", () => {
     tick(2_000);
     expect(chimes).toHaveLength(1);
     expect(taps.filter((t) => t.kind === "success")).toHaveLength(1);
+  });
+});
+
+describe("each theme's own song (owner, 2026-10-30)", () => {
+  /** The waiting music with a fake player for each song, made when first asked for, as lib/sound.ts makes them. */
+  function songs() {
+    const players = new Map<string, ReturnType<typeof fakePlayer>>();
+    const dropped: string[] = [];
+    const music = waitingMusic(
+      {
+        loop: (song) => {
+          if (!players.has(song)) players.set(song, fakePlayer());
+          return players.get(song)!;
+        },
+        drop: (song) => dropped.push(song),
+        chime: () => {},
+        tap: () => {},
+        mayPlay: () => true,
+        now: Date.now,
+        later: (fn, ms) => setTimeout(fn, ms),
+        cancel: (timer) => clearTimeout(timer as ReturnType<typeof setTimeout>),
+      },
+      LEVEL,
+    );
+    music.set({ appActive: true, soundsOn: true, micOpen: false });
+    return { music, players, dropped, tick: (ms: number) => vi.advanceTimersByTime(ms) };
+  }
+
+  it("plays the song of the theme it is given, and the ballad until it is given one", () => {
+    const { music, players } = songs();
+    music.song("noir");
+    music.wait("a", true);
+    expect([...players.keys()]).toEqual(["noir"]);
+    expect(players.get("noir")!.playing).toBe(true);
+    expect(players.get("noir")!.seeks).toEqual([0]);
+
+    const before = songs();
+    before.music.wait("a", true);
+    expect([...before.players.keys()]).toEqual(["wait"]);
+    expect(before.players.get("wait")!.playing).toBe(true);
+  });
+
+  it("follows a theme changed mid-wait: the old song fades out, the new one starts from its top, and the old player goes", () => {
+    const { music, players, dropped, tick } = songs();
+    music.song("emerald");
+    music.wait("a", true);
+    tick(2_000);
+    const emerald = players.get("emerald")!;
+    expect(emerald.volume).toBeCloseTo(LEVEL, 5);
+    music.song("cognac");
+    tick(FADE_OUT_MS / 2);
+    expect(emerald.playing).toBe(true);
+    expect(emerald.volume).toBeGreaterThan(0);
+    expect(emerald.volume).toBeLessThan(LEVEL);
+    // A player resumed behind the music's back is paused unless its song is the one fading or playing.
+    expect(music.running("emerald")).toBe(true);
+    expect(music.running("cognac")).toBe(false);
+    expect(players.has("cognac")).toBe(false);
+    tick(FADE_OUT_MS);
+    expect(emerald.playing).toBe(false);
+    const cognac = players.get("cognac")!;
+    expect(cognac.playing).toBe(true);
+    expect(cognac.seeks).toEqual([0]);
+    expect(dropped).toEqual(["wait", "emerald"]);
+    tick(FADE_IN_MS + 100);
+    expect(cognac.volume).toBeCloseTo(LEVEL, 5);
+    expect(music.running("cognac")).toBe(true);
+    expect(music.running("emerald")).toBe(false);
+  });
+
+  it("carries on where it was if the theme comes back before the old song has gone", () => {
+    const { music, players, dropped, tick } = songs();
+    music.song("emerald");
+    music.wait("a", true);
+    tick(2_000);
+    music.song("noir");
+    tick(FADE_OUT_MS / 2);
+    music.song("emerald");
+    tick(FADE_IN_MS + 100);
+    const emerald = players.get("emerald")!;
+    expect(emerald.playing).toBe(true);
+    expect(emerald.seeks).toEqual([0]);
+    expect(emerald.volume).toBeCloseTo(LEVEL, 5);
+    expect(players.has("noir")).toBe(false);
+    expect(dropped).toEqual(["wait", "noir"]);
+  });
+
+  it("changes song quietly between waits, and makes the new one's player only when a wait needs it", () => {
+    const { music, players, dropped, tick } = songs();
+    music.song("ivory");
+    music.wait("a", true);
+    tick(2_000);
+    music.land("a");
+    tick(FADE_OUT_MS + 100);
+    music.song("riviera");
+    expect(dropped).toEqual(["wait", "ivory"]);
+    expect(players.has("riviera")).toBe(false);
+    music.wait("b", true);
+    expect(players.get("riviera")!.playing).toBe(true);
+    expect(players.get("ivory")!.playing).toBe(false);
   });
 });

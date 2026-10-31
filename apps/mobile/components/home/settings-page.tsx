@@ -23,6 +23,7 @@ import { PlacePicker, type Place } from "../settings/place-picker";
 import { placeLabel } from "../settings/places";
 import { NameField, ProfileCard } from "../settings/profile-card";
 import { StatsTiles } from "../settings/stats";
+import { SongNote } from "../song-note";
 import { useTopRoom } from "./chrome";
 import { usePager } from "./pager";
 
@@ -163,7 +164,7 @@ export function SettingsPage() {
 
         <Section title="Look">
           <Card>
-            <Row first label="Theme" value={THEMES[theme.id].name} onPress={() => router.push("/theme")} />
+            <Row first label="Theme" value={THEMES[theme.id].name} valueNote={<SongNote id={theme.id} align="end" />} onPress={() => router.push("/theme")} />
             <Row
               label="Sounds"
               accessory={<Switch accessibilityLabel="Sounds" value={soundsOn} onValueChange={setSoundsOn} trackColor={{ false: p.track, true: p.accent }} ios_backgroundColor={p.track} />}

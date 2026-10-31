@@ -30,12 +30,13 @@ export function RowRule() {
 
 /**
  * One row: a label with an optional line under it, a value or an accessory on the right, and a chevron when it opens
- * something. `danger` sets the label in the theme's warning colour.
+ * something. `valueNote` sits in small print under the value. `danger` sets the label in the theme's warning colour.
  */
 export function Row({
   label,
   detail,
   value,
+  valueNote,
   accessory,
   leading,
   onPress,
@@ -46,6 +47,7 @@ export function Row({
   label: string;
   detail?: string | null;
   value?: string | null;
+  valueNote?: ReactNode;
   accessory?: ReactNode;
   leading?: ReactNode;
   onPress?: () => void;
@@ -63,7 +65,14 @@ export function Row({
         <Text style={[type.body, { color: danger ? p.danger : p.ink }]}>{label}</Text>
         {detail ? <Text style={[type.footnote, { color: p.ink3 }]}>{detail}</Text> : null}
       </View>
-      {value ? (
+      {value && valueNote ? (
+        <View style={{ maxWidth: "50%", alignItems: "flex-end", gap: 2 }}>
+          <Text style={[type.callout, { color: p.ink2, textAlign: "right" }]} numberOfLines={1}>
+            {value}
+          </Text>
+          {valueNote}
+        </View>
+      ) : value ? (
         <Text style={[type.callout, { color: p.ink2, maxWidth: "50%", textAlign: "right" }]} numberOfLines={1}>
           {value}
         </Text>

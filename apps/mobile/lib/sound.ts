@@ -2,25 +2,40 @@ import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from "expo-aud
 import { useEffect, useState } from "react";
 import { Platform } from "react-native";
 import { getSecret, setSecret } from "./storage";
+import type { SongId } from "./theme-songs";
 
 /**
  * Dandelist's few sounds (owner, 2026-10-29: "high-quality felted cinematic sound effects, luxury"), made from scratch
- * by scripts/make-sounds.py: a felt piano chord as the name appears, air opening over the list's reveal, a felt piano
- * ballad that loops while a picture is being made (lib/waiting.ts), and a felted bell when it lands. They follow the
- * phone's silent switch, play under whatever else is playing without stopping it, never play into the microphone, and
- * can be turned off in settings. A sound never throws: it is never worth an error.
+ * by scripts/make-sounds.py: a felt piano chord as the name appears, air opening over the list's reveal, music that loops
+ * while a picture is being made (lib/waiting.ts), and a felted bell when it lands. The waiting music is the theme's own
+ * song, from scripts/make-theme-songs.py, or the felt piano ballad. They follow the phone's silent switch, play under
+ * whatever else is playing without stopping it, never play into the microphone, and can be turned off in settings. A
+ * sound never throws: it is never worth an error.
  */
-export type SoundId = "title" | "swell" | "wait" | "done";
+export type SoundId = "title" | "swell" | "done";
 
 const SOURCES: Record<SoundId, number> = {
   title: require("../assets/sounds/title.m4a"),
   swell: require("../assets/sounds/swell.m4a"),
-  wait: require("../assets/sounds/wait.m4a"),
   done: require("../assets/sounds/done.m4a"),
 };
-/** Each one sits under the phone's own sounds, so it reads as texture, never as an alert. The wait's is where it fades to. */
-const LEVEL: Record<SoundId, number> = { title: 0.7, swell: 0.45, wait: 0.6, done: 0.45 };
-export const WAIT_LEVEL = LEVEL.wait;
+/** The waiting loops, file for file with lib/theme-songs.ts. */
+const LOOPS: Record<SongId, number> = {
+  wait: require("../assets/sounds/wait.m4a"),
+  emerald: require("../assets/sounds/theme-emerald.m4a"),
+  bordeaux: require("../assets/sounds/theme-bordeaux.m4a"),
+  noir: require("../assets/sounds/theme-noir.m4a"),
+  ivory: require("../assets/sounds/theme-ivory.m4a"),
+  delina: require("../assets/sounds/theme-delina.m4a"),
+  sapphire: require("../assets/sounds/theme-sapphire.m4a"),
+  cognac: require("../assets/sounds/theme-cognac.m4a"),
+  amethyst: require("../assets/sounds/theme-amethyst.m4a"),
+  riviera: require("../assets/sounds/theme-riviera.m4a"),
+};
+/** Each one sits under the phone's own sounds, so it reads as texture, never as an alert. */
+const LEVEL: Record<SoundId, number> = { title: 0.7, swell: 0.45, done: 0.45 };
+/** Where the waiting music fades to. Every song is made at the ballad's loudness, so one level serves them all. */
+export const WAIT_LEVEL = 0.6;
 const KEY = "dandelist.sounds";
 
 let enabled = true;
@@ -30,6 +45,7 @@ let loaded = false;
 let micOpen = false;
 let ready: Promise<void> | null = null;
 const players = new Map<SoundId, AudioPlayer>();
+const loops = new Map<SongId, AudioPlayer>();
 const listeners = new Set<(on: boolean) => void>();
 const watchers = new Set<() => void>();
 const changed = () => watchers.forEach((w) => w());
@@ -88,9 +104,7 @@ function playerOf(id: SoundId): AudioPlayer | null {
     let player = players.get(id);
     if (!player) {
       player = createAudioPlayer(SOURCES[id]);
-      // The waiting loop starts silent and loops; lib/waiting.ts fades it.
-      if (id === "wait") player.loop = true;
-      player.volume = id === "wait" ? 0 : LEVEL[id];
+      player.volume = LEVEL[id];
       players.set(id, player);
     }
     return player;
@@ -99,8 +113,31 @@ function playerOf(id: SoundId): AudioPlayer | null {
   }
 }
 
-/** The waiting loop's player (lib/waiting.ts), made on first use. */
-export const loopPlayer = (): AudioPlayer | null => playerOf("wait");
+/** A waiting loop's player (lib/waiting.ts), made on first use. It loops, and starts silent for lib/waiting.ts to fade. */
+export function loopPlayer(song: SongId): AudioPlayer | null {
+  try {
+    let player = loops.get(song);
+    if (!player) {
+      player = createAudioPlayer(LOOPS[song]);
+      player.loop = true;
+      player.volume = 0;
+      loops.set(song, player);
+    }
+    return player;
+  } catch {
+    return null;
+  }
+}
+
+/** Lets a waiting loop's player go, once the theme has moved on to another song. */
+export function dropLoop(song: SongId): void {
+  const player = loops.get(song);
+  if (!player) return;
+  loops.delete(song);
+  try {
+    player.remove();
+  } catch {}
+}
 
 /** A browser refuses sound until the person has touched the page; asking anyway only fills its console. */
 export const mayPlay = () => Platform.OS !== "web" || (globalThis.navigator as { userActivation?: { hasBeenActive: boolean } } | undefined)?.userActivation?.hasBeenActive !== false;
@@ -110,8 +147,13 @@ export function preloadSounds(...ids: SoundId[]): void {
   void prepare().then(() => ids.forEach(playerOf));
 }
 
-/** Plays a sound from its start; nothing when sounds are off or the microphone is open. The loop has its own way in. */
-export function play(id: Exclude<SoundId, "wait">): void {
+/** Loads a waiting loop ahead of its wait. */
+export function preloadLoop(song: SongId): void {
+  void prepare().then(() => loopPlayer(song));
+}
+
+/** Plays a sound from its start; nothing when sounds are off or the microphone is open. The loops have their own way in. */
+export function play(id: SoundId): void {
   void prepare().then(async () => {
     if (!enabled || micOpen || !mayPlay()) return;
     const player = playerOf(id);

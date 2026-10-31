@@ -12,7 +12,13 @@ export { DEFAULT_THEME, THEMES, THEME_ORDER, serif, contrast, fonts, layout, rad
 export type { Palette, ThemeId, TypeRole } from "./palette";
 
 const KEY = "dandelist.theme";
-const ThemeContext = createContext<{ id: ThemeId; palette: Palette; set(id: ThemeId): void }>({ id: DEFAULT_THEME, palette: THEMES[DEFAULT_THEME].palette, set: () => {} });
+const ThemeContext = createContext<{
+  id: ThemeId;
+  palette: Palette;
+  set(id: ThemeId): void;
+  /** The person's own theme, which a ThemeScope's preview leaves as it is: what the waiting music follows. */
+  chosen: ThemeId;
+}>({ id: DEFAULT_THEME, palette: THEMES[DEFAULT_THEME].palette, set: () => {}, chosen: DEFAULT_THEME });
 
 /** Holds the chosen theme for the whole app and remembers it on this device. */
 export function ThemeProvider({ children }: { children: ReactNode }) {
@@ -24,7 +30,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     setId(next);
     void setSecret(KEY, next);
   }, []);
-  const value = useMemo(() => ({ id, palette: THEMES[id].palette, set }), [id, set]);
+  const value = useMemo(() => ({ id, palette: THEMES[id].palette, set, chosen: id }), [id, set]);
   return createElement(ThemeContext.Provider, { value }, children);
 }
 
