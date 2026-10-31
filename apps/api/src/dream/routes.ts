@@ -16,6 +16,7 @@ import { Jobs, mergeChat, type ChatCopy } from "./jobs";
 import { TurnBudget, TurnLimitError, type ApifyConfig, type DreamCtx } from "./context";
 import { HISTORY_LIMIT, previewOf, summary, titleOf } from "./history";
 import { homeSchema, lifeBody, readLife, writeLife } from "./life";
+import { MEMORY_DEADLINE_MS, memoryEpoch, memoryFor, updateMemory } from "../memory";
 import { notesFor } from "../notes";
 import { listWishes } from "../wishes";
 import { Suggestions } from "./suggest";
@@ -168,6 +169,12 @@ export function dreamRoutes(deps: DreamDeps) {
     const body = turnBody.safeParse(await c.req.json().catch(() => null));
     if (!body.success) return c.json({ error: "That message couldn't be read. Try again." }, 400);
     const userId = c.get("userId");
+    // Admitted first, as the message arrives (review of #147): what it says may be remembered only under the memory epoch
+    // read here, and the read is done before the turn does anything else (on a pool it could go out after the turn's own
+    // queries), so a Forget pressed while the reply is still being written or saved wins over it. A read that fails only
+    // means nothing from this message is remembered.
+    const admitted = deps.remember && body.data.action.type === "message" ? memoryEpoch(db, userId) : null;
+    await admitted?.catch(() => undefined);
     const now = deps.now();
     try {
       await assertBudget(db, caps, now);
@@ -200,6 +207,8 @@ export function dreamRoutes(deps: DreamDeps) {
     const life = await readLife(db, userId);
     // What they've told us about their wishes, for the concierge to keep in mind (notes.ts). Theirs alone.
     const notes = await notesFor(db, userId);
+    // What it remembers about them from earlier conversations (memory.ts). Theirs alone.
+    const memory = await memoryFor(db, userId);
     // Their list in its order, so the concierge can suggest a new order, a tier or a removal (edit_list).
     const list = await listWishes(db, userId);
     const stop = new AbortController();
@@ -235,6 +244,7 @@ export function dreamRoutes(deps: DreamDeps) {
         step: (id, state, text) => emit({ type: "step", id, state, text }),
         voice: voiceLine(body.data.persona),
         notes,
+        memory,
         name: body.data.name,
         list,
         running: () => jobs.list(sessionId).filter((j) => j.lane !== "turn"),
@@ -371,6 +381,14 @@ export function dreamRoutes(deps: DreamDeps) {
         }
         try {
           await save(base, { transcript, state }, before, { retire: turnId });
+          // What they said is read for anything worth remembering next time (memory.ts), after the reply is saved and
+          // without holding it up; a call that fails changes nothing.
+          if (admitted && body.data.action.type === "message") {
+            // Its own hard stop (review of #147): the request is aborted at the deadline and nothing is written after it.
+            const meta = ctxFor(async () => {}, new TurnBudget(), AbortSignal.timeout(MEMORY_DEADLINE_MS)).meta;
+            const remembering = updateMemory(meta, db, userId, body.data.action.text, sessionId, deps.now(), { admitted }).catch(() => undefined);
+            void (deps.alive?.keep(remembering) ?? remembering);
+          }
         } catch (e) {
           console.error("could not save dream session", sessionId, e);
         }

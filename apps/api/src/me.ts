@@ -8,6 +8,7 @@ import { requireAuth, type AuthVars } from "./auth";
 import type { Db } from "./db";
 import { readLife } from "./dream/life";
 import { avatarKeyFor, type MediaType } from "./media-store";
+import { forgetMemories, readMemories } from "./memory";
 import { PROVIDERS, listIdentities, type Provider } from "./oauth";
 import { RateLimiter } from "./ratelimit";
 import { SpendLimitError, assertBudget, assertUserBudget, recordSpend, userCapUsd, withHold } from "./spend";
@@ -140,7 +141,7 @@ export function meRoutes(deps: AgentDeps) {
   const { db } = deps;
   const caps = deps.spendCaps ?? { dailyUsd: 10, totalUsd: 120 };
   const auth = requireAuth(deps);
-  for (const path of ["/profile", "/avatar", "/identities", "/identities/*", "/stats", "/facts"]) app.use(path, auth);
+  for (const path of ["/profile", "/avatar", "/identities", "/identities/*", "/stats", "/facts", "/memories", "/memories/*"]) app.use(path, auth);
   const avatarsPerUser = new RateLimiter(30, 60 * 60 * 1000);
   const mediaBase = (deps.oauth?.apiUrl ?? "").replace(/\/+$/, "");
 
@@ -211,6 +212,18 @@ export function meRoutes(deps: AgentDeps) {
   });
 
   app.get("/identities", async (c) => c.json({ identities: await listIdentities(db, c.get("userId")) }));
+
+  // What the Dandy remembers about them (memory.ts): listed in Settings, each line removable, or every line at once.
+  app.get("/memories", async (c) => c.json({ memories: await readMemories(db, c.get("userId")) }));
+  app.delete("/memories/:id", async (c) => {
+    const id = z.string().uuid().safeParse(c.req.param("id"));
+    if (id.success) await forgetMemories(db, c.get("userId"), id.data);
+    return c.json({ memories: await readMemories(db, c.get("userId")) });
+  });
+  app.delete("/memories", async (c) => {
+    await forgetMemories(db, c.get("userId"));
+    return c.json({ memories: [] });
+  });
 
   // Unlinking is always allowed: every account has an email address, and an email code still signs in.
   app.delete("/identities/:provider", async (c) => {
