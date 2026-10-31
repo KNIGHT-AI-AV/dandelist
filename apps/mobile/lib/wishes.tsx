@@ -1,8 +1,9 @@
 import type { Media } from "./agent";
 import type { Item, Period } from "@dandelist/cost";
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode, type SetStateAction } from "react";
 import { useAuth } from "./auth";
 import { ordered } from "./list-order";
+import { createWishSession, updateWishSession } from "./wish-session";
 
 export type WishKind = "buy" | "do" | "visit" | "own";
 export type WishTier = "must" | "nice" | "dream";
@@ -111,13 +112,34 @@ async function failure(res: Response | null, fallback: string): Promise<Error> {
 }
 
 const Ctx = createContext<WishStore | null>(null);
+type WishState = Pick<WishStore, "wishes" | "status" | "error">;
+const emptyState = (): WishState => ({ wishes: [], status: "idle", error: null });
 
 /** The signed-in person's wishes, kept on the server; this holds the copy on screen. */
 export function WishProvider({ children }: { children: ReactNode }) {
-  const { status: authStatus, api } = useAuth();
-  const [wishes, setWishes] = useState<Wish[]>([]);
-  const [status, setStatus] = useState<WishStore["status"]>("idle");
-  const [error, setError] = useState<string | null>(null);
+  const { status: authStatus, user, api } = useAuth();
+  const owner = authStatus === "signedIn" ? user?.id ?? null : null;
+  const [session, setSession] = useState(() => createWishSession(owner, emptyState()));
+  let current = session;
+  if (session.scope.owner !== owner) {
+    // Reset this provider before children render, without remounting their navigation/local state.
+    current = createWishSession(owner, emptyState());
+    setSession(current);
+  }
+  const { scope } = current;
+  const { wishes, status, error } = current.value;
+  const update = useCallback((change: (value: WishState) => WishState) => {
+    setSession((latest) => updateWishSession(latest, scope, change));
+  }, [scope]);
+  const setWishes = useCallback((next: SetStateAction<Wish[]>) => {
+    update((value) => ({ ...value, wishes: typeof next === "function" ? next(value.wishes) : next }));
+  }, [update]);
+  const setStatus = useCallback((next: WishState["status"]) => {
+    update((value) => ({ ...value, status: next }));
+  }, [update]);
+  const setError = useCallback((next: WishState["error"]) => {
+    update((value) => ({ ...value, error: next }));
+  }, [update]);
 
   const reload = useCallback(async () => {
     setStatus("loading");
@@ -130,15 +152,11 @@ export function WishProvider({ children }: { children: ReactNode }) {
     }
     setWishes(((await res.json()) as { wishes: ServerWish[] }).wishes.map(fromServer));
     setStatus("ready");
-  }, [api]);
+  }, [api, setWishes, setStatus, setError]);
 
   useEffect(() => {
-    if (authStatus === "signedIn") void reload();
-    if (authStatus === "signedOut") {
-      setWishes([]);
-      setStatus("idle");
-    }
-  }, [authStatus, reload]);
+    if (owner !== null) void reload();
+  }, [owner, reload]);
 
   const store = useMemo<WishStore>(
     () => ({
@@ -214,7 +232,7 @@ export function WishProvider({ children }: { children: ReactNode }) {
         setWishes((ws) => ws.map((x) => (x.id === id ? { ...x, note: saved } : x)));
       },
     }),
-    [wishes, status, error, reload, api],
+    [wishes, status, error, reload, api, setWishes],
   );
   return <Ctx.Provider value={store}>{children}</Ctx.Provider>;
 }
