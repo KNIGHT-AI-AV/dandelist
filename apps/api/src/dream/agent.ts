@@ -95,6 +95,8 @@ const CONCIERGE = `You are the person's Dandy, their private concierge on Dandel
 - You are their Dandy and nothing else. Your name is the one in YOUR NAME; use it when you introduce yourself. Never say which model, company or technology is behind you, never mention Meta or Muse, and never call yourself an AI, an assistant, a bot, a model or an agent. If they ask what you are, say you're their Dandy, here to find the real thing and what it costs.
 - Never use the word "life" with them; talk about their home, their plans or the things they want.
 - Reply in one or two short, warm sentences of plain text: no dashes, lists or markdown. Don't state prices or other figures yourself; the tools show them. You may repeat numbers the person said.
+- When they ask you something ("is the Leica worth it over the Fuji?", "is that the V12?"), answer it in that same reply, in your own words and without prices or figures, as someone who knows these things well.
+- Say it all once: when you call tools, your words go with the calls; once the tools have run, add nothing unless a tool result tells you to say something or a question is still unanswered. Never list back what you started; the cards show it.
 - A home they describe: open home_builder, prefilled with everything they said (style, features, appliances, bedrooms, budget). If they say "just search", "that's enough" or similar, call search_homes instead.
 - A change to an open search ("less modern", "bigger garden"): call refine.
 - A car: car_builder for a new car still on sale, to configure; search_cars for a used car, a model no longer made, or when they ask for listings.
@@ -887,7 +889,7 @@ async function runTool(ctx: DreamCtx, t: TranscriptEntry[], state: DreamState, n
       }
       for (const text of fresh) await show(ctx, t, state, { kind: "item", id: nextId(state, "item"), text }, `Handed "${text}" to the item price research.`);
       return [
-        fresh.length ? `Opened the item price research for ${fresh.length === 1 ? "it" : `${fresh.length} things, each on its own card`}. It finds the real prices, so don't state any.` : "",
+        fresh.length ? `Opened the item price research for ${fresh.length === 1 ? "it" : `${fresh.length} things, each on its own card`}. It finds the real prices, so don't state any, and don't list them back: each has its own card.` : "",
         again.length ? `Not hunted again, already on a card above in this conversation: ${again.map((x) => `"${x}"`).join(", ")}. Say so.` : "",
       ]
         .filter(Boolean)
@@ -1025,6 +1027,27 @@ function modelInput(ctx: DreamCtx, t: TranscriptEntry[], state: DreamState, mess
     .join("\n\n");
 }
 
+/**
+ * A reply as one paragraph of plain sentences. A list the model writes anyway reads as one sentence with commas, never
+ * run together ("Leica Q3 for street photos a week in Kyoto" from a real reply, 2026-10-31): a line without its own
+ * punctuation joins the next with a comma when the next is short like a list item, else with a full stop.
+ */
+export function paragraph(text: string): string {
+  const lines = text
+    .split(/\n+/)
+    .map((l) => l.replace(/^\s*(?:[-*•]|\d+[.)])\s+/, "").trim())
+    .filter(Boolean);
+  let out = "";
+  lines.forEach((line, i) => {
+    if (i === 0) return void (out = line);
+    const open = !/[.!?:;,]$/.test(out);
+    // A list item is short and ends without a full stop; a sentence after the list has one.
+    const item = line.split(/\s+/).length <= 8 && !/[.!?]$/.test(line);
+    out += open ? (item ? ", " : ". ") + line : ` ${line}`;
+  });
+  return out.trim();
+}
+
 /** A reply that says the concierge is about to open, search or price something. */
 const PROMISE = /\b(let me|i'll|i will|i shall|i'm going to|i am going to|opening|searching|looking up|pulling up|arrang(?:e|ing)|gather(?:ing)?|on it|one moment|just a moment|right away)\b/i;
 const NUDGE = "You said you would do that but called no tool. Call the tool now, without repeating what you said.";
@@ -1110,7 +1133,7 @@ function background(ctx: DreamCtx, name: string, rawArgs: string): { lane: strin
 }
 
 const started = (id: string, label: string) =>
-  `Started in the background (job ${id}): ${label}. Its card appears in the chat by itself, usually within a minute, and the person can keep talking meanwhile. Say in a few words that it's on its way; don't state any result or figure.`;
+  `Started in the background (job ${id}): ${label}. Its card appears in the chat by itself, usually within a minute, and the person can keep talking meanwhile. Say in a few words that it's on its way; don't state any result or figure, and don't list it back.`;
 
 /** A car build's steps and choices in a line, so the concierge can answer "Is that the V12?" from the maker's own list. */
 function buildChoices(b: CarBuildState): string {
@@ -1124,18 +1147,24 @@ async function converse(ctx: DreamCtx, t: TranscriptEntry[], state: DreamState, 
   // What the message asks for, read on its own beside the concierge's first answer, so a want it skips gets asked for.
   const listed = wantsIn(ctx, message);
   let res = await ctx.meta.responses({ instructions: [CONCIERGE, ctx.voice, ctx.notes].filter(Boolean).join("\n"), input: modelInput(ctx, t, state, message), tools: CONCIERGE_TOOLS });
+  let spoken = false;
   const speak = async (text: string) => {
-    const clean = brief(inCharacter(honest(text.replace(/^\s*(?:[-*]|\d+[.)])\s+/gm, "").replace(/\s*\n+\s*/g, " ").trim(), sayableFacts(t, state, ctx))));
+    const clean = brief(inCharacter(honest(paragraph(text), sayableFacts(t, state, ctx))));
     if (!clean) return;
+    spoken = true;
     await say(ctx, clean);
     log(t, { role: "agent", text: clean, at: ctx.now().toISOString() });
   };
   let acted = false;
   let handled = 0;
   let reminded = false;
+  // Once the concierge has spoken, what it adds after its tools run is chatter unless a tool asked it to say something
+  // (a real reply on 2026-10-31 said its piece with the calls, then listed the three things back).
+  let quiet = false;
   const wants = await listed;
   for (;;) {
-    if (res.text.trim()) await speak(res.text);
+    if (res.text.trim() && !quiet) await speak(res.text);
+    quiet = false;
     if (!res.functionCalls.length) {
       // The model sometimes announces a tool ("I shall arrange these three motorcars") without calling it, or handles
       // two of the five things a long message asked for, which leaves the person waiting on nothing. Hold it to the
@@ -1173,6 +1202,7 @@ async function converse(ctx: DreamCtx, t: TranscriptEntry[], state: DreamState, 
       }
       outputs.push({ type: "function_call_output", call_id: fc.callId, output: out.slice(0, 4000) });
     }
+    const mustSay = outputs.some((o) => /Say so|Not run/.test(o.output));
     // Things the message asked for that no call has taken yet: asked for once, beside the outputs.
     const input: unknown[] = [...outputs];
     if (!stop && !reminded && wants.length > handled) {
@@ -1185,6 +1215,7 @@ async function converse(ctx: DreamCtx, t: TranscriptEntry[], state: DreamState, 
       if (e instanceof TurnLimitError) break;
       throw e;
     }
+    quiet = spoken && !mustSay;
     if (stop) {
       if (res.text.trim()) await speak(res.text);
       break;

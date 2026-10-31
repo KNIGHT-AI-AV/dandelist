@@ -149,3 +149,14 @@ describe("staying awake while work outlives its request", () => {
     expect(alive.inFlight).toBe(0);
   });
 });
+
+describe("a reply as one paragraph", () => {
+  it("reads a list the model wrote anyway as one sentence, never run together", async () => {
+    const { paragraph } = await import("../src/dream/agent");
+    expect(paragraph("Got you, I just added all 3:\nLeica Q3 for street photos\na week in Kyoto in the fall\nOmega Speedmaster\nI'm hunting down real pricing for each now.")).toBe(
+      "Got you, I just added all 3: Leica Q3 for street photos, a week in Kyoto in the fall, Omega Speedmaster. I'm hunting down real pricing for each now.",
+    );
+    expect(paragraph("On it:\n- a Leica Q3\n- a week in Kyoto\n\nThey'll show up as cards on their own soon.")).toBe("On it: a Leica Q3, a week in Kyoto. They'll show up as cards on their own soon.");
+    expect(paragraph("One line.")).toBe("One line.");
+  });
+});
