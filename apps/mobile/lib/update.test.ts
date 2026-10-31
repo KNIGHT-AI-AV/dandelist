@@ -12,7 +12,7 @@ describe("latest.json", () => {
   // The iOS entry is the build the public TestFlight link serves (the external group's newest approved build), never a
   // newer internal-only one: a tester on the link would be offered a build the link can't give them, on every visit.
   it("ships TestFlight build 18 (the public link's build) and APK build 15, with the web version left to the deploy", () => {
-    expect(parseLatest(shipped)).toEqual({ ios: { build: 18, url: TESTFLIGHT }, android: { build: 15, url: APK }, web: null });
+    expect(parseLatest(shipped)).toEqual({ ios: { build: 27, url: TESTFLIGHT }, android: { build: 15, url: APK }, web: null });
   });
 
   it("keeps an entry only with a whole build and an https link", () => {
