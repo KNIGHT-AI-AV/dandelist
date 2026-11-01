@@ -2,7 +2,7 @@ import { recurringBreakdown } from "@dandelist/cost";
 import { Image } from "expo-image";
 import { useRef } from "react";
 import { Animated, Platform, Pressable, StyleSheet, Text, View, type AccessibilityActionEvent } from "react-native";
-import { AgentDot, Money, Photo, Shade } from "../lux";
+import { Money, Photo, Shade } from "../lux";
 import { savedGlyph } from "../worth";
 import { useMoney } from "../../lib/currency";
 import { formatCents } from "../../lib/money";
@@ -10,9 +10,10 @@ import { usePress } from "../../lib/motion";
 import { usePhotoLoad } from "../../lib/photo-load";
 import { layout, radius, space, type, usePalette } from "../../lib/theme";
 import type { Wish } from "../../lib/wishes";
-import { TIER_LABEL, agentLine } from "../../lib/words";
+import { TIER_LABEL } from "../../lib/words";
 import { isPriceless, priceWords } from "../../lib/worth";
 import type { Rect } from "../../lib/zoom";
+import { CardLine } from "./card-line";
 import { Swap } from "./presence";
 
 /** What a screen reader says for a card, and for its lifted copy in the action sheet. */
@@ -47,12 +48,7 @@ export function WishFace({ w, still = false }: { w: Wish; still?: boolean }) {
           {w.name}
         </Text>
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: space[12] }}>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: space[8], flexShrink: 1 }}>
-            {w.details.agent ? <AgentDot /> : null}
-            <Text style={[type.footnote, { color: p.ink2, flexShrink: 1 }]} numberOfLines={1}>
-              {monthly ? `${agentLine(w)} · + ${formatCents(monthly)}/mo` : agentLine(w)}
-            </Text>
-          </View>
+          <CardLine w={w} monthlyCents={monthly} />
           <View style={{ flexDirection: "row", alignItems: "baseline", gap: space[8] }}>
             <Swap k={w.tier}>
               <Text style={[type.figure, { color: p.ink2, textTransform: "uppercase" }]}>{TIER_LABEL[w.tier]}</Text>
