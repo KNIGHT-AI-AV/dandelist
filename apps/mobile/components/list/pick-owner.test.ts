@@ -93,7 +93,7 @@ vi.mock("../../lib/notifications", () => ({ notifier: { available: false } }));
 vi.mock("../../lib/reminder-state", () => ({ isFirstLaunch: () => false, updateReminders: async () => {}, useReminderState: () => ({ ask: null }) }));
 vi.mock("../../lib/reminders", () => ({ shouldAsk: () => false }));
 vi.mock("../../lib/theme", () => ({
-  layout: { cardPad: 20, gutter: () => 20, list: 520, headerBar: 44, stack: { tight: 8, base: 16, section: 32, sectionLg: 48 } },
+  layout: { cardPad: 20, control: { icon: 44 }, gutter: () => 20, list: 520, headerBar: 44, stack: { tight: 8, base: 16, section: 32, sectionLg: 48 } },
   radius: { lg: 24 },
   space: { 4: 4, 8: 8, 12: 12 },
   type: { body: {}, callout: {}, footnote: {}, figure: {} },

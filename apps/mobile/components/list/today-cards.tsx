@@ -196,13 +196,13 @@ function PickCard({ pick, noted, onOpen, onAdd, onSkip, onClose }: { pick: Today
                   {pick.title}
                 </Text>
               </View>
-              <View style={{ position: "absolute", top: space[12], right: space[12] }}>{close}</View>
             </View>
           ) : (
             <View style={{ paddingTop: layout.cardPad, paddingHorizontal: layout.cardPad, gap: layout.stack.tight }}>
               <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
                 {label}
-                {close}
+                {/* The close button's place in the row; the button itself sits over the card, below. */}
+                <View style={{ width: layout.control.icon, height: layout.control.icon }} />
               </View>
               <Text accessibilityRole="header" style={[t.title2, { color: p.ink }]}>
                 {pick.title}
@@ -211,6 +211,9 @@ function PickCard({ pick, noted, onOpen, onAdd, onSkip, onClose }: { pick: Today
           )}
           <Text style={[type.callout, { color: p.ink2, paddingHorizontal: layout.cardPad, paddingTop: pick.photo ? space[12] : layout.stack.tight }]}>{pick.why}</Text>
         </Pressable>
+        {/* Over the card, not inside what opens it: a button inside a button is one control to a screen reader (and
+            invalid on the web), so the close button couldn't be reached on its own. Same place as before. */}
+        <View style={[{ position: "absolute" }, pick.photo ? { top: space[12], right: space[12] } : { top: layout.cardPad, right: layout.cardPad }]}>{close}</View>
         <View style={{ padding: layout.cardPad, paddingTop: layout.stack.base, gap: layout.stack.base }}>
           {noted ? (
             <Text accessibilityLiveRegion="polite" style={[type.footnote, { color: p.ink3 }]}>

@@ -51,7 +51,7 @@ vi.mock("../../lib/reminder-state", () => ({ isFirstLaunch: () => false, updateR
 vi.mock("../../lib/reminders", () => ({ shouldAsk: () => false }));
 vi.mock("../../lib/storage", () => ({ getSecret: async () => null, setSecret: async () => {} }));
 vi.mock("../../lib/theme", () => ({
-  layout: { cardPad: 20, stack: { tight: 8, base: 16 } },
+  layout: { cardPad: 20, control: { icon: 44 }, stack: { tight: 8, base: 16 } },
   radius: { lg: 24 },
   space: { 4: 4, 8: 8, 12: 12 },
   type: { callout: {}, footnote: {}, figure: {} },
@@ -110,6 +110,29 @@ describe("today's pick on the list", () => {
     await act(async () => press.props.onPress());
     expect(h.moves).toEqual([["push", { pathname: "/picks/[id]", params: { id: "pick-1" } }]]);
     expect(picks.knownPick("pick-1", { account: "user-1", at: 1 })?.title).toBe("A week in Kyoto in April");
+  });
+
+  it("keeps its close button out of what opens it, so the button is a control of its own, with a photo or without", async () => {
+    for (const photo of [pick.photo, null]) {
+      // A fresh list and picks store each time, so this run asks for this pick rather than the one kept above.
+      vi.resetModules();
+      const { TodayCards: Fresh } = await import("./today-cards");
+      h.today = { ...pick, photo };
+      await act(async () => {
+        root = create(createElement(Fresh), { unstable_isConcurrent: true } as unknown as Parameters<typeof create>[1]);
+      });
+      await settle();
+      const close = root!.root.find((n: ReactTestInstance) => is(n, "IconButton"));
+      expect(close.props.label).toBe("Hide today's pick until tomorrow");
+      // Compared by label: a failure prints the label, not the whole rendered tree.
+      expect(card().findAll((n: ReactTestInstance) => is(n, "IconButton")).map((n: ReactTestInstance) => n.props.label)).toEqual([]);
+      // Without a photo the row keeps the button's place, so the title doesn't move up under it.
+      expect(card().findAll((n: ReactTestInstance) => is(n, "View") && n.props.style?.width === 44 && n.props.style?.height === 44).length).toBe(photo ? 0 : 1);
+      await act(async () => close.props.onPress());
+      expect(root!.root.findAllByType("Presence" as never)).toHaveLength(0);
+      await act(async () => root?.unmount());
+      root = null;
+    }
   });
 
   it("leaves the list as soon as it is turned down on its own page", async () => {
