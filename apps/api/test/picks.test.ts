@@ -277,6 +277,34 @@ describe("today's pick", () => {
     expect(calls.filter((b) => b.text?.format?.name === "photo_check").length).toBeGreaterThan(0);
   });
 
+  it("logs how each pick's photo search went, in counts and hosts only", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    try {
+      const lines = () => info.mock.calls.filter((c) => c[0] === "daily pick photo").map((c) => JSON.parse(String(c[1])) as Json);
+      const { token } = await signIn();
+      await addWish(token, "Riva boat");
+      await today(token);
+      // A photo the looks picked: found, from its host, with the counts behind it.
+      expect(lines()).toEqual([expect.objectContaining({ kind: "own", found: true, source: "wikipedia.org", outOfTime: false, sizedOk: 1, judged: 1 })]);
+      expect(lines()[0]!.sources).toMatchObject({ wikipedia: 1 });
+      // One the looks didn't pick: judged, not found.
+      looksPass = false;
+      answers = [{ ...RIVA, title: "Riva Rivamare" }];
+      await today(token, "2026-10-30");
+      expect(lines()[1]).toMatchObject({ found: false, sizedOk: 1, judged: 1 });
+      // One too small to show: never judged, with the reason it was set aside.
+      photoSize = [320, 200];
+      answers = [{ ...RIVA, title: "Riva Dolceriva" }];
+      await today(token, "2026-10-28");
+      expect(lines()[2]).toMatchObject({ found: false, sizedOk: 0, judged: 0 });
+      expect(Object.keys(lines()[2]!.setAside as Json)).toEqual(["too small"]);
+      // Never the pick's title or an address.
+      expect(info.mock.calls.filter((c) => c[0] === "daily pick photo").map((c) => String(c[1])).join(" ")).not.toMatch(/Riva|https?:/);
+    } finally {
+      info.mockRestore();
+    }
+  });
+
   it("makes one pick when two requests come at once", async () => {
     const { token } = await signIn();
     await addWish(token, "Riva boat");
