@@ -1,12 +1,13 @@
 import { recurringBreakdown } from "@dandelist/cost";
 import { Image } from "expo-image";
-import { useRef, useState } from "react";
+import { useRef } from "react";
 import { Animated, Platform, Pressable, StyleSheet, Text, View, type AccessibilityActionEvent } from "react-native";
 import { AgentDot, Money, Photo, Shade } from "../lux";
 import { savedGlyph } from "../worth";
 import { useMoney } from "../../lib/currency";
 import { formatCents } from "../../lib/money";
 import { usePress } from "../../lib/motion";
+import { usePhotoLoad } from "../../lib/photo-load";
 import { layout, radius, space, type, usePalette } from "../../lib/theme";
 import type { Wish } from "../../lib/wishes";
 import { TIER_LABEL, agentLine } from "../../lib/words";
@@ -25,9 +26,9 @@ export function cardLabel(w: Wish): string {
  * same glyph panel as the card.
  */
 function StillPhoto({ uri, glyph }: { uri?: string; glyph?: string }) {
-  const [failed, setFailed] = useState(false);
-  if (!uri || failed) return <Photo glyph={glyph} />;
-  return <Image source={{ uri }} style={StyleSheet.absoluteFill} contentFit="cover" onError={() => setFailed(true)} accessibilityIgnoresInvertColors />;
+  const load = usePhotoLoad(uri);
+  if (!uri || !load.show) return <Photo glyph={glyph} />;
+  return <Image key={load.tries} source={{ uri }} style={StyleSheet.absoluteFill} contentFit="cover" onError={load.onError} accessibilityIgnoresInvertColors />;
 }
 
 /** The inside of a wish card: photo, shade, name, the agent's line, tier and price. Fills its parent. */
