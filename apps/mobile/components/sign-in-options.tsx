@@ -33,7 +33,7 @@ export function ProviderMark({ id, size = 32 }: { id: ProviderId; size?: number 
   const mark = Math.round(size * (id === "facebook" ? 0.62 : 0.5));
   return (
     <View accessible={false} style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: disc, alignItems: "center", justifyContent: "center", borderWidth: StyleSheet.hairlineWidth, borderColor: "rgba(0, 0, 0, 0.12)" }}>
-      <Image source={MARK[id]} style={{ width: mark, height: mark }} contentFit="contain" accessible={false} />
+      <Image source={MARK[id]} accessibilityLabel="" style={{ width: mark, height: mark }} contentFit="contain" accessible={false} />
     </View>
   );
 }
@@ -62,7 +62,7 @@ function FacebookButton({ busy, disabled, onPress }: { busy: boolean; disabled: 
       ) : null}
       <View style={{ height: HEIGHT, borderRadius: radius.control, borderCurve: "continuous", justifyContent: "center", backgroundColor: FACEBOOK_BLUE }}>
         <View style={{ position: "absolute", left: 20, top: 0, bottom: 0, justifyContent: "center" }}>
-          <Image source={MARK.facebook} style={{ width: 22, height: 22 }} contentFit="contain" accessible={false} />
+          <Image source={MARK.facebook} accessibilityLabel="" style={{ width: 22, height: 22 }} contentFit="contain" accessible={false} />
         </View>
         {busy ? <ActivityIndicator color="#FFFFFF" accessibilityLabel="Signing in with Facebook" /> : <Text style={[type.button, { textAlign: "center", color: "#FFFFFF" }]}>{label}</Text>}
       </View>
@@ -97,7 +97,7 @@ function ProviderButton({ id, busy, disabled, onPress }: { id: ProviderId; busy:
       ) : null}
       <Glass intensity={34} style={{ height: HEIGHT, borderRadius: radius.control, borderCurve: "continuous", justifyContent: "center", borderColor: hovered && !inactive ? p.ink2 : p.line }}>
         <View style={{ position: "absolute", left: 22, top: 0, bottom: 0, justifyContent: "center" }}>
-          <Image source={MARK[id]} style={{ width: 18, height: 18 }} contentFit="contain" accessible={false} />
+          <Image source={MARK[id]} accessibilityLabel="" style={{ width: 18, height: 18 }} contentFit="contain" accessible={false} />
         </View>
         {busy ? (
           <ActivityIndicator color={p.ink} accessibilityLabel={`Signing in with ${providerName(id)}`} />

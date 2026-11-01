@@ -177,7 +177,7 @@ export function MadeStep({
                     // while the photo is still coming, the photo landing over it.
                     <>
                       <FrostedWait uri={pickPhoto} active={!photo && looking} />
-                      {photo ? <Image source={{ uri: photo }} style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0 }} contentFit="cover" transition={{ duration: 400, effect: "cross-dissolve" }} accessibilityIgnoresInvertColors /> : null}
+                      {photo ? <Image source={{ uri: photo }} accessibilityLabel="" style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0 }} contentFit="cover" transition={{ duration: 400, effect: "cross-dissolve" }} accessibilityIgnoresInvertColors /> : null}
                     </>
                   )}
                 </Animated.View>

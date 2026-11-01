@@ -26,7 +26,10 @@ export function SearchField({ value, onChangeText, placeholder }: { value: strin
           placeholder={placeholder}
           placeholderTextColor={p.ink3}
           accessibilityLabel="Search your wishes"
-          accessibilityRole="search"
+          // A search field on every platform, by each one's own word: on the web "search" is a landmark role a field
+          // can't have, so there it is a searchbox; on iOS a role wins over accessibilityRole and "searchbox" has no
+          // trait, so the phones keep "search" (VoiceOver's "search field").
+          {...(Platform.OS === "web" ? { role: "searchbox" as const } : { accessibilityRole: "search" as const })}
           returnKeyType="search"
           autoCorrect={false}
           autoCapitalize="none"

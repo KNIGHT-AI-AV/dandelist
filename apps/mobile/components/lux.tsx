@@ -194,9 +194,11 @@ export function Photo({ uri, style, contentPosition, glyph }: { uri?: string | n
   return (
     // Photographs never take the pointer: on the web a drag over an <img> starts the browser's own image drag, which
     // cancels whatever swipe was under way (a card removal, a page turn). Presses go to the parent control.
+    // The empty label is the web's alt="": the control or title around a photograph already names the wish, and an
+    // <img> with no alt at all is read out by its file name (expo-image takes alt from accessibilityLabel).
     <View pointerEvents="none" style={[StyleSheet.absoluteFill, style]}>
       {glyph ? <GlyphPanel glyph={glyph} /> : <LinearGradient colors={[p.surface, p.bg]} start={{ x: 0.2, y: 0 }} end={{ x: 0.8, y: 1 }} style={StyleSheet.absoluteFill} />}
-      {uri && load.show ? <Image key={load.tries} source={{ uri }} style={StyleSheet.absoluteFill} contentFit="cover" contentPosition={contentPosition ?? "center"} transition={{ duration: 300, effect: "cross-dissolve" }} onError={load.onError} accessibilityIgnoresInvertColors /> : null}
+      {uri && load.show ? <Image key={load.tries} source={{ uri }} accessibilityLabel="" style={StyleSheet.absoluteFill} contentFit="cover" contentPosition={contentPosition ?? "center"} transition={{ duration: 300, effect: "cross-dissolve" }} onError={load.onError} accessibilityIgnoresInvertColors /> : null}
     </View>
   );
 }
@@ -448,7 +450,7 @@ export function Backdrop({ source, blur = 0, dim = 0 }: { source: number; blur?:
   const p = usePalette();
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
-      <Image source={source} style={StyleSheet.absoluteFill} contentFit="cover" blurRadius={blur} accessibilityIgnoresInvertColors />
+      <Image source={source} accessibilityLabel="" style={StyleSheet.absoluteFill} contentFit="cover" blurRadius={blur} accessibilityIgnoresInvertColors />
       {dim ? <View style={[StyleSheet.absoluteFill, { backgroundColor: `rgba(${p.bgRgb}, ${dim})` }]} /> : null}
     </View>
   );

@@ -18,6 +18,37 @@ let touchedAt = 0;
  */
 export const faderJustMoved = (ms = 700) => Date.now() - touchedAt < ms;
 
+/** The index of the notch nearest `value`. */
+export function nearestNotch(value: number, steps: readonly number[]): number {
+  let i = 0;
+  for (let k = 0; k < steps.length; k++) if (Math.abs(steps[k]! - value) < Math.abs(steps[i]! - value)) i = k;
+  return i;
+}
+
+const KEY_STEP: Record<string, 1 | -1> = { ArrowRight: 1, ArrowUp: 1, ArrowLeft: -1, ArrowDown: -1 };
+
+/**
+ * What a fader needs on the web, where react-native-web reads none of accessibilityValue: its place on the track for a
+ * screen reader (axe: a slider must have aria-valuenow), a Tab stop, and the slider keys. The arrows move a notch, Home
+ * and End go to the ends, as a screen reader's swipe does on a phone. While it has focus the arrows are its own: the page
+ * doesn't scroll, and the pager, which listens on the window for arrows, doesn't turn.
+ */
+export function webSlider(at: number, notches: number, goTo: (i: number) => void) {
+  return {
+    "aria-valuemin": 0,
+    "aria-valuemax": notches - 1,
+    "aria-valuenow": at,
+    focusable: true,
+    onKeyDown: (e: { key: string; preventDefault(): void; stopPropagation(): void }) => {
+      const to = e.key === "Home" ? 0 : e.key === "End" ? notches - 1 : e.key in KEY_STEP ? at + KEY_STEP[e.key]! : null;
+      if (to === null) return;
+      e.preventDefault();
+      e.stopPropagation();
+      goTo(to);
+    },
+  };
+}
+
 /**
  * The one fader: a 3 pt track lit in the accent up to a 30 pt ink thumb, on a log scale of round notches. It lands
  * only on `steps` (US cents), each with a tick (a haptic on phones); `firm` says which moves deserve the firmer one.
@@ -95,11 +126,11 @@ export function Fader({
     }),
   ).current;
 
-  /** One notch either way, from the notch nearest the value (a screen reader's swipe up or down). */
-  const step = (dir: 1 | -1) => {
-    let i = 0;
-    for (let k = 0; k < steps.length; k++) if (Math.abs(steps[k]! - value) < Math.abs(steps[i]! - value)) i = k;
-    const next = steps[Math.max(0, Math.min(steps.length - 1, i + dir))]!;
+  /** The notch nearest the value. */
+  const at = nearestNotch(value, steps);
+  /** To the notch at `i`, kept on the track (a screen reader's swipe up or down, or a key on the web). */
+  const goTo = (i: number) => {
+    const next = steps[Math.max(0, Math.min(steps.length - 1, i))]!;
     if (next !== value) land(next);
   };
 
@@ -111,9 +142,10 @@ export function Fader({
         {...pan.panHandlers}
         accessibilityRole="adjustable"
         accessibilityLabel={label}
-        accessibilityValue={{ text: valueText }}
+        aria-valuetext={valueText}
         accessibilityActions={[{ name: "increment" }, { name: "decrement" }]}
-        onAccessibilityAction={(e) => step(e.nativeEvent.actionName === "increment" ? 1 : -1)}
+        onAccessibilityAction={(e) => goTo(at + (e.nativeEvent.actionName === "increment" ? 1 : -1))}
+        {...(Platform.OS === "web" ? webSlider(at, steps.length, goTo) : null)}
         style={[{ height: 44, justifyContent: "center" }, Platform.OS === "web" ? ({ cursor: "grab", touchAction: "none", userSelect: "none" } as object) : null]}
       >
         <View style={{ height: 3, borderRadius: 1.5, backgroundColor: p.track }}>

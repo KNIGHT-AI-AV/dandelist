@@ -29,6 +29,7 @@ export function Frame({ img, fit = "cover", backdrop = true, fade = true, onDisp
       {img ? (
         <Image
           source={{ uri: img.url }}
+          accessibilityLabel=""
           style={StyleSheet.absoluteFill}
           contentFit={fit}
           transition={fade ? { duration: step.inMs, effect: "cross-dissolve" } : null}
