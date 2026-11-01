@@ -29,6 +29,7 @@ import { welcomeSteps, type Fade } from "../lib/welcome-steps";
 import { guessCandidates, guessOthers } from "../lib/guess";
 import { useMoney } from "../lib/currency";
 import { amountSteps, startAmount } from "../lib/worth";
+import { MAIN } from "../lib/landmark";
 import { dollars } from "../components/odometer";
 import { Atmosphere } from "../components/atmosphere";
 
@@ -555,7 +556,7 @@ export default function Welcome() {
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: p.bg }}>
+    <View style={{ flex: 1, backgroundColor: p.bg }} {...MAIN}>
       <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { opacity: chrome }]}>
         <Atmosphere />
       </Animated.View>

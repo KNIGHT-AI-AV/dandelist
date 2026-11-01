@@ -8,6 +8,7 @@ import { SignInOptions } from "../components/sign-in-options";
 import { signInErrorMessage, useAuth, useSignInOptions, type ProviderId, type SignInOption } from "../lib/auth";
 import { haptic } from "../lib/motion";
 import { fonts, layout, space, type, usePalette, useType } from "../lib/theme";
+import { MAIN } from "../lib/landmark";
 import { Atmosphere } from "../components/atmosphere";
 
 const EMAIL_INVALID = "Enter a full email address.";
@@ -91,7 +92,7 @@ export default function SignIn() {
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: p.bg }}>
+    <View style={{ flex: 1, backgroundColor: p.bg }} {...MAIN}>
       <Atmosphere />
       <Backdrop source={require("../assets/backdrop.jpg")} />
       {/* The photo stays atmosphere, not the page: the emerald dusk over it keeps the mood dark and stops its warm
