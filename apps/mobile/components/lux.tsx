@@ -9,6 +9,7 @@ import { ICON_PATHS, type IconName } from "../lib/icon-glyphs";
 export type { IconName } from "../lib/icon-glyphs";
 import { useMoney } from "../lib/currency";
 import { ease, haptic, native, usePress, useReducedMotion } from "../lib/motion";
+import { usePhotoLoad } from "../lib/photo-load";
 import { fonts, layout, radius, type, usePalette, useTheme, useType, type ThemeId } from "../lib/theme";
 import { INFINITY } from "../lib/worth";
 import { Odometer, type OdometerProps } from "./odometer";
@@ -188,13 +189,14 @@ function GrainTiles() {
  */
 export function Photo({ uri, style, contentPosition, glyph }: { uri?: string | null; kind?: string; style?: StyleProp<ViewStyle>; contentPosition?: ImageContentPosition; glyph?: string }) {
   const p = usePalette();
-  const [failed, setFailed] = useState(false);
+  // A failed load is tried again, and a new address starts over (lib/photo-load.ts); each try is a fresh image.
+  const load = usePhotoLoad(uri);
   return (
     // Photographs never take the pointer: on the web a drag over an <img> starts the browser's own image drag, which
     // cancels whatever swipe was under way (a card removal, a page turn). Presses go to the parent control.
     <View pointerEvents="none" style={[StyleSheet.absoluteFill, style]}>
       {glyph ? <GlyphPanel glyph={glyph} /> : <LinearGradient colors={[p.surface, p.bg]} start={{ x: 0.2, y: 0 }} end={{ x: 0.8, y: 1 }} style={StyleSheet.absoluteFill} />}
-      {uri && !failed ? <Image source={{ uri }} style={StyleSheet.absoluteFill} contentFit="cover" contentPosition={contentPosition ?? "center"} transition={{ duration: 300, effect: "cross-dissolve" }} onError={() => setFailed(true)} accessibilityIgnoresInvertColors /> : null}
+      {uri && load.show ? <Image key={load.tries} source={{ uri }} style={StyleSheet.absoluteFill} contentFit="cover" contentPosition={contentPosition ?? "center"} transition={{ duration: 300, effect: "cross-dissolve" }} onError={load.onError} accessibilityIgnoresInvertColors /> : null}
     </View>
   );
 }
