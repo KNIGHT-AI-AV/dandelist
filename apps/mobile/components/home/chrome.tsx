@@ -70,6 +70,8 @@ const SOUND_FROM = 388;
 const HELP_FROM = 430;
 /** The space between the palette's touch area and the photo's, so one thumb never lands on both. */
 const PALETTE_GAP = 12;
+/** How far above the bar's foot its controls end: the 34 pt photo, the tallest, is centred in the 44 pt bar. */
+const CONTROLS_CLEAR = 5;
 
 /**
  * Colours one tap away (owner, 2026-10-29: "Put a color palette near the profile picture ... far enough away that
@@ -120,6 +122,10 @@ export function TopBar() {
     <View pointerEvents="box-none" style={{ position: "absolute", top: 0, left: 0, right: 0, paddingTop: insets.top, paddingHorizontal: gutter }}>
       {/* A scroll edge, not a bar: the page colour fades out under the wordmark, so content passing beneath stays legible. */}
       <LinearGradient pointerEvents="none" colors={[`rgba(${p.bgRgb}, 0.94)`, `rgba(${p.bgRgb}, 0.7)`, `rgba(${p.bgRgb}, 0)`]} locations={[0, 0.6, 1]} style={{ position: "absolute", top: 0, left: 0, right: 0, height: edge + 28 }} />
+      {/* And under the bar's own controls a stronger wash that ends at the bar's foot (owner's screenshot, 2026-11-01: a
+          quote scrolled under the bar showed at about half brightness behind the wordmark). Below the bar nothing
+          changes, so a page's first line at rest is no dimmer than before. */}
+      <LinearGradient pointerEvents="none" colors={[`rgba(${p.bgRgb}, 0.85)`, `rgba(${p.bgRgb}, 0.85)`, `rgba(${p.bgRgb}, 0)`]} locations={[0, (edge - CONTROLS_CLEAR) / edge, 1]} style={{ position: "absolute", top: 0, left: 0, right: 0, height: edge }} />
       <View pointerEvents="box-none" style={{ height: layout.headerBar, flexDirection: "row", alignItems: "center", justifyContent: "space-between", width: "100%", maxWidth: spread ? undefined : layout.list, alignSelf: "center" }}>
         {spread ? (
           <View pointerEvents="box-none" style={{ flexDirection: "row", alignItems: "center", gap: space[24] }}>
