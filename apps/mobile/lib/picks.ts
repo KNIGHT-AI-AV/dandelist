@@ -28,9 +28,22 @@ export interface TodayPick {
   kind: WishKind;
   why: string;
   summary: string;
+  /** Two or three sentences for the pick's own page, made with the pick; absent or empty on older picks. */
+  about?: string;
+  /** At most three short facts for its page, like Made by: Leica. */
+  facts?: PickFact[];
   photo: PickPhoto | null;
   createdAt: string;
 }
+
+export interface PickFact {
+  label: string;
+  value: string;
+}
+
+/** The facts a page can show: only well-formed ones, three at most, whatever the server sent. */
+export const factsOf = (pick: Pick<TodayPick, "facts">): PickFact[] =>
+  (Array.isArray(pick.facts) ? pick.facts : []).filter((f) => !!f && typeof f.label === "string" && typeof f.value === "string" && !!f.label.trim() && !!f.value.trim()).slice(0, 3);
 
 /** The date on this phone, YYYY-MM-DD. */
 export function localDay(d = new Date()): string {

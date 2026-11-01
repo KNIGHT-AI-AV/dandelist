@@ -8,7 +8,7 @@ import { AgentDot, Eyebrow, Grain, IconButton, Photo, PrimaryButton, Protect, Qu
 import { PhotoCredit } from "../../components/photo-credit";
 import { bindToSignIn, currentSignIn, useAuth } from "../../lib/auth";
 import { haptic } from "../../lib/motion";
-import { answerPick, fetchTodayPick, knownPick, localDay, pickSkipped, rememberPick, sameOwner, usePickAnswers, wasPickAdded, wasPickSkipped, type PickOwner, type TodayPick } from "../../lib/picks";
+import { answerPick, factsOf, fetchTodayPick, knownPick, localDay, pickSkipped, rememberPick, sameOwner, usePickAnswers, wasPickAdded, wasPickSkipped, type PickOwner, type TodayPick } from "../../lib/picks";
 import { layout, space, type, usePalette, useType } from "../../lib/theme";
 import { KIND_LABEL } from "../../lib/words";
 
@@ -85,6 +85,8 @@ export default function PickDetail() {
     setNoted(true);
     closing.current = setTimeout(leave, NOTED_MS);
   };
+  const what = pick.about?.trim() || pick.summary;
+  const facts = factsOf(pick);
   const added = pick.status === "added" || wasPickAdded(pick.id);
   const skipped = noted || pick.status === "skipped" || wasPickSkipped(pick.id);
 
@@ -117,10 +119,21 @@ export default function PickDetail() {
         </View>
 
         <View style={[column, { marginTop: layout.stack.section, gap: layout.stack.section }]}>
-          {pick.summary ? (
+          {/* What it is: the few sentences made with the pick, or its one-line summary on an older pick; then its facts. */}
+          {what || facts.length ? (
             <View style={{ gap: layout.stack.tight }}>
               <Eyebrow>What it is</Eyebrow>
-              <Text style={[type.body, { color: p.ink }]}>{pick.summary}</Text>
+              {what ? <Text style={[type.body, { color: p.ink }]}>{what}</Text> : null}
+              {facts.length ? (
+                <View>
+                  {facts.map((f) => (
+                    <View key={f.label} style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "baseline", gap: layout.stack.base, paddingVertical: space[8], borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: p.hair }}>
+                      <Text style={[type.footnote, { color: p.ink3 }]}>{f.label}</Text>
+                      <Text style={[type.callout, { color: p.ink, flexShrink: 1, textAlign: "right" }]}>{f.value}</Text>
+                    </View>
+                  ))}
+                </View>
+              ) : null}
             </View>
           ) : null}
           <View style={{ gap: layout.stack.tight }}>

@@ -24,7 +24,7 @@ const h = vi.hoisted(() => ({
 const passThrough = (name: string) => ({ children }: { children?: ReactNode }) => createElement(name, null, children);
 vi.mock("react-native", () => ({
   ScrollView: passThrough("ScrollView"),
-  StyleSheet: { absoluteFill: {} },
+  StyleSheet: { absoluteFill: {}, hairlineWidth: 1 },
   Text: "Text",
   View: "View",
   useWindowDimensions: () => ({ width: 393, height: 852, fontScale: 1, scale: 3 }),
@@ -69,8 +69,8 @@ vi.mock("../../lib/storage", () => ({ getSecret: async () => null, setSecret: as
 vi.mock("../../lib/theme", () => ({
   layout: { gutter: () => 20, list: 520, headerBar: 44, stack: { tight: 8, base: 16, section: 32, sectionLg: 48 } },
   space: { 4: 4, 8: 8 },
-  type: { body: {}, footnote: {} },
-  usePalette: () => ({ bg: "#000", ink: "#fff", ink2: "#ccc", ink3: "#999" }),
+  type: { body: {}, callout: {}, footnote: {} },
+  usePalette: () => ({ bg: "#000", ink: "#fff", ink2: "#ccc", ink3: "#999", hair: "#333" }),
   useType: () => ({ title1: {} }),
 }));
 
@@ -132,6 +132,20 @@ describe("today's pick, opened from its card", () => {
     expect(texts()).toContain(pick.why);
     expect(root!.root.findByType("Photo" as never).props.uri).toBe(pick.photo!.url);
     expect(h.requests).toEqual([]);
+  });
+
+  it("shows the few sentences and the facts made with the pick in place of its one-line summary", async () => {
+    const facts = [{ label: "Made by", value: "Leica" }, { label: "Built in", value: "Wetzlar, Germany" }, { label: "", value: "Empty" }, { label: "Sensor" } as never];
+    picks.rememberPick({ ...pick, id: "pick-6", about: "A full-frame rangefinder made by Leica in Wetzlar, with a silent shutter.", facts }, ADA);
+    await open("pick-6");
+    expect(eyebrows()).toEqual(["Today's pick · Own", "What it is", "Why your Dandy picked it"]);
+    expect(texts()).toContain("A full-frame rangefinder made by Leica in Wetzlar, with a silent shutter.");
+    expect(texts()).not.toContain(pick.summary);
+    // Only well-formed facts show, label then value.
+    const shown = texts();
+    expect(shown.slice(shown.indexOf("Made by"), shown.indexOf("Made by") + 4)).toEqual(["Made by", "Leica", "Built in", "Wetzlar, Germany"]);
+    expect(shown).not.toContain("Empty");
+    expect(shown).not.toContain("Sensor");
   });
 
   it("leaves out what it is when the pick came without a summary", async () => {
