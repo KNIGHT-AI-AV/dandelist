@@ -264,11 +264,14 @@ type PhotoSources = Omit<Extract<PhotoTrace, { step: "sources" }>, "step">;
 export async function photoFor(meta: Meta, made: MadePick, fetcher: Fetcher, by: number): Promise<PickPhoto | null> {
   // One line per pick on how its photo search went (3 of the first 5 picks came without a photo, 2026-11-01): how many
   // candidates each source gave, how many were big enough, how many the looks judged, and whether the time ran out.
-  // Counts and hosts only: never the pick's title or an address.
+  // Counts and hosts only: never the pick's title or an address. The web search's own step says why it gave what it
+  // did: how many addresses the model named, how many pages opened and how many photos they held. None at all means the
+  // search didn't answer in time.
   const started = Date.now();
-  const seen = { sources: null as PhotoSources | null, sized: 0, sizedOk: 0, judged: 0, unjudged: 0, setAside: {} as Record<string, number> };
+  const seen = { sources: null as PhotoSources | null, web: null as { said: number; read: number; readOk: number; photos: number } | null, sized: 0, sizedOk: 0, judged: 0, unjudged: 0, setAside: {} as Record<string, number> };
   const trace = (t: PhotoTrace) => {
     if (t.step === "sources") seen.sources = { page: t.page, web: t.web, wikipedia: t.wikipedia, commons: t.commons, openverse: t.openverse };
+    else if (t.step === "web") seen.web = { said: t.said.length, read: t.read.length, readOk: t.read.filter((r) => r.ok).length, photos: t.read.reduce((n, r) => n + r.photos, 0) };
     else if (t.step === "sized") {
       seen.sized++;
       // The first reason, without its numbers ("too small (320 x 200)" counts as "too small").
