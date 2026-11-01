@@ -1,7 +1,7 @@
 import { useMemo, useRef } from "react";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
-import { Animated, Pressable, View, useWindowDimensions } from "react-native";
+import { Animated, Platform, Pressable, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { transcribeWish } from "../../lib/agent";
 import { useAuth } from "../../lib/auth";
@@ -194,6 +194,8 @@ export function Dock() {
       pointerEvents={here ? "box-none" : "none"}
       style={spread ? { position: "absolute", left: 0, width: pageWidth, bottom: 0, top: 0, opacity: follow.opacity, transform: [{ translateX: follow.x }] } : { position: "absolute", left: 0, right: 0, bottom: 0, top: 0, opacity, transform: [{ translateY: sink }] }}
       aria-hidden={!here}
+      // Away from the list and the chat the composer is out of sight, so on the web it leaves the Tab order too.
+      {...(Platform.OS === "web" ? { inert: !here } : null)}
     >
       <PageSizeProvider width={pageWidth} height={height}>
       <KeyboardDock onHeight={home.setDock} maxWidth={layout.column}>

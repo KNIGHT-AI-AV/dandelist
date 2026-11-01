@@ -49,7 +49,7 @@ export function Model3D({ model, style }: { model: Model3d; style?: StyleProp<Vi
 
   return (
     <View style={[{ overflow: "hidden", backgroundColor: p.bg }, style]}>
-      <Image source={{ uri: model.thumbnail }} style={[StyleSheet.absoluteFill, { opacity: loaded ? 0 : 0.6 }]} contentFit="cover" blurRadius={12} />
+      <Image source={{ uri: model.thumbnail }} accessibilityLabel="" style={[StyleSheet.absoluteFill, { opacity: loaded ? 0 : 0.6 }]} contentFit="cover" blurRadius={12} />
       <View style={StyleSheet.absoluteFill}>
         <Embed uri={model.embedUrl} title={model.name} onLoad={() => setLoaded(true)} />
       </View>
@@ -101,6 +101,7 @@ function SlideshowLayer({ record, ready, interval, reduced, dispatch }: { record
     <Animated.View style={[StyleSheet.absoluteFill, { opacity: fade, transform: [{ scale }, { translateX }] }]}>
       <Image
         source={source}
+        accessibilityLabel=""
         recyclingKey={`${record.epoch}:${record.attempt}`}
         style={StyleSheet.absoluteFill}
         contentFit="cover"
@@ -150,7 +151,7 @@ export function Slideshow({ images, interval = 5200, style, children }: { images
       {!state.images.length ? <Photo /> : null}
       {layers.map((record) => <SlideshowLayer key={`${record.epoch}:${record.attempt}`} record={record} ready={record === state.shown || state.candidate?.phase === "fading"} interval={interval} reduced={reduced} dispatch={dispatch} />)}
       {/* Cache hint only: readiness belongs to the matching full-size node's onDisplay. */}
-      {preload ? <Image source={{ uri: preload.url }} style={{ width: 1, height: 1, opacity: 0, position: "absolute" }} /> : null}
+      {preload ? <Image source={{ uri: preload.url }} accessibilityLabel="" style={{ width: 1, height: 1, opacity: 0, position: "absolute" }} /> : null}
       {children}
       {state.images.length > 1 ? (
         <View pointerEvents="none" style={{ position: "absolute", top: 12, left: 14, right: 14, flexDirection: "row", gap: 4 }}>
@@ -230,7 +231,7 @@ export function TiltObject({ uri, style, credit, image }: { uri: string; style?:
       {/* The plinth's soft light pool. */}
       <View pointerEvents="none" style={{ position: "absolute", bottom: "14%", width: "62%", height: 26, borderRadius: 999, backgroundColor: "rgba(0,0,0,0.55)", transform: [{ scaleY: 0.5 }] }} />
       <Animated.View style={{ width: "78%", height: "70%", transform: [{ perspective: 900 }, { rotateX }, { rotateY }] }}>
-        <Image source={{ uri }} style={StyleSheet.absoluteFill} contentFit="contain" accessibilityIgnoresInvertColors />
+        <Image source={{ uri }} accessibilityLabel="" style={StyleSheet.absoluteFill} contentFit="contain" accessibilityIgnoresInvertColors />
         <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { opacity: 0.22, transform: [{ translateX: sheenX }] }]}>
           <LinearGradient colors={["rgba(255,255,255,0)", "rgba(255,248,235,0.55)", "rgba(255,255,255,0)"]} start={{ x: 0, y: 0.3 }} end={{ x: 1, y: 0.7 }} style={StyleSheet.absoluteFill} />
         </Animated.View>

@@ -81,6 +81,7 @@ export function RevealPhoto({ deck, final, clarity, done }: { deck: Card[]; fina
         <Animated.View style={[StyleSheet.absoluteFill, { transform: [{ scale: drift.interpolate({ inputRange: [0, 1], outputRange: [1, DRIFT_SCALE] }) }] }]}>
           <Image
             source={{ uri: waiting.uri }}
+            accessibilityLabel=""
             style={StyleSheet.absoluteFill}
             contentFit="cover"
             blurRadius={cardBlur(waiting, done ? 0.8 : clarity)}
@@ -95,11 +96,11 @@ export function RevealPhoto({ deck, final, clarity, done }: { deck: Card[]; fina
         <Animated.View style={[StyleSheet.absoluteFill, { transform: [{ scale: settle }] }]}>
           {reduced ? null : (
             <Animated.View style={[StyleSheet.absoluteFill, { opacity: soft }]}>
-              <Image source={{ uri: final }} style={StyleSheet.absoluteFill} contentFit="cover" blurRadius={LAND_BLUR} accessibilityIgnoresInvertColors />
+              <Image source={{ uri: final }} accessibilityLabel="" style={StyleSheet.absoluteFill} contentFit="cover" blurRadius={LAND_BLUR} accessibilityIgnoresInvertColors />
             </Animated.View>
           )}
           <Animated.View style={[StyleSheet.absoluteFill, { opacity: sharp }]}>
-            <Image source={{ uri: final }} style={StyleSheet.absoluteFill} contentFit="cover" accessibilityIgnoresInvertColors />
+            <Image source={{ uri: final }} accessibilityLabel="" style={StyleSheet.absoluteFill} contentFit="cover" accessibilityIgnoresInvertColors />
           </Animated.View>
           <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: p.bg, opacity: shade }]} />
         </Animated.View>

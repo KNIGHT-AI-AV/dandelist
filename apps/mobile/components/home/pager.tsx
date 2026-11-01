@@ -261,6 +261,9 @@ export function PagerView({ pages }: { pages: Record<PageId, ReactNode> }) {
             accessibilityElementsHidden={!front}
             importantForAccessibility={front ? "auto" : "no-hide-descendants"}
             aria-hidden={!front}
+            // On the web a page out of view also leaves the Tab order: with aria-hidden alone, Tab from the list went
+            // through 33 unseen controls on the other pages (Sign out and Delete account among them) before the tabs.
+            {...(Platform.OS === "web" ? { inert: !front } : null)}
             // One page wide from the left edge: the whole window, or its half of a spread, which lays out at that width.
             style={{ position: "absolute", top: 0, bottom: 0, left: 0, width, opacity: l.opacity, transform: [{ translateX: l.translateX }, { scale: l.scale }] }}
           >

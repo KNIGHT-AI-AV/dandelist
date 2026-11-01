@@ -202,3 +202,39 @@ describe("one page, as before", () => {
     ]);
   });
 });
+
+/**
+ * The web's Tab order (axe, 2026-11-01): aria-hidden alone left the pages out of view in it, so Tab from the list went
+ * through 33 unseen controls, Sign out and Delete account among them, before reaching the tabs. A page out of view is
+ * inert there; a page in view never is, and phones get no inert at all.
+ */
+describe("pages out of view and the keyboard", () => {
+  /** Each page and whether its layer is inert. */
+  const inert = () =>
+    Object.fromEntries(
+      root!.root
+        .findAll((n) => (n.type as unknown) === "AnimatedView")
+        .map((l: ReactTestInstance) => [l.findAll((n) => (n.type as unknown) === "Page")[0]!.props.id as PageId, l.props.inert as boolean | undefined]),
+    );
+
+  it("leave the Tab order in a browser, and come back when turned to", async () => {
+    h.os = "web";
+    vi.stubGlobal("window", { matchMedia: () => ({ matches: false, media: "(pointer: coarse)", addEventListener() {}, removeEventListener() {} }), addEventListener() {}, removeEventListener() {} });
+    await mount(1440, 900);
+    expect(inert()).toEqual({ list: false, chat: true, details: true, money: true, settings: true });
+    await act(async () => pager!.go("money"));
+    expect(inert()).toEqual({ list: true, chat: true, details: true, money: false, settings: true });
+  });
+
+  it("keep both pages of a spread in it", async () => {
+    h.os = "web";
+    vi.stubGlobal("window", { matchMedia: () => ({ matches: true, media: "(pointer: coarse)", addEventListener() {}, removeEventListener() {} }), addEventListener() {}, removeEventListener() {} });
+    await mount(951, 669);
+    expect(inert()).toEqual({ list: false, chat: false, details: true, money: true, settings: true });
+  });
+
+  it("are left to aria-hidden and the screen reader's own rules on a phone", async () => {
+    await mount(393, 852);
+    expect(Object.values(inert()).every((v) => v === undefined)).toBe(true);
+  });
+});

@@ -53,11 +53,11 @@ function Face({ index, size: FACE = 112 }: { index: number; size?: number }) {
       />
       {shown.was !== shown.now ? (
         <Animated.View style={[{ position: "absolute", width: FACE, height: FACE, opacity: v.interpolate({ inputRange: [0, 0.6, 1], outputRange: [1, 0, 0] }), transform: [{ scale: v.interpolate({ inputRange: [0, 1], outputRange: [1, 0.88] }) }] }, blurOut]}>
-          <Image source={FACES[shown.was]} style={{ width: FACE, height: FACE }} tintColor={p.ink} contentFit="contain" />
+          <Image source={FACES[shown.was]} accessibilityLabel="" style={{ width: FACE, height: FACE }} tintColor={p.ink} contentFit="contain" />
         </Animated.View>
       ) : null}
       <Animated.View style={{ width: FACE, height: FACE, opacity: v.interpolate({ inputRange: [0, 0.3, 1], outputRange: [0, 0.2, 1] }), transform: [{ scale: v.interpolate({ inputRange: [0, 1], outputRange: [1.1, 1] }) }] }}>
-        <Image source={FACES[shown.now]} style={{ width: FACE, height: FACE }} tintColor={p.ink} contentFit="contain" />
+        <Image source={FACES[shown.now]} accessibilityLabel="" style={{ width: FACE, height: FACE }} tintColor={p.ink} contentFit="contain" />
       </Animated.View>
     </View>
   );

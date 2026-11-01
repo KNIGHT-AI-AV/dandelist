@@ -21,7 +21,7 @@ export function ProfileAvatar({ size, preview }: { size: number; preview?: strin
   return (
     <View style={{ width: size, height: size, borderRadius: size / 2, borderWidth: 1, borderColor: p.line, backgroundColor: p.surface, alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
       {uri && failed !== uri ? (
-        <Image source={{ uri }} style={{ width: size, height: size }} contentFit="cover" transition={{ duration: 200, effect: "cross-dissolve" }} onError={() => setFailed(uri)} accessibilityIgnoresInvertColors accessible={false} />
+        <Image source={{ uri }} accessibilityLabel="" style={{ width: size, height: size }} contentFit="cover" transition={{ duration: 200, effect: "cross-dissolve" }} onError={() => setFailed(uri)} accessibilityIgnoresInvertColors accessible={false} />
       ) : (
         <Text style={large ? { fontFamily: fonts.title, fontSize: size * 0.44, lineHeight: size * 0.56, color: p.ink } : [type.label, { color: p.ink2 }]}>{initial}</Text>
       )}

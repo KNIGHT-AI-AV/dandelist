@@ -26,7 +26,8 @@ export function SearchField({ value, onChangeText, placeholder }: { value: strin
           placeholder={placeholder}
           placeholderTextColor={p.ink3}
           accessibilityLabel="Search your wishes"
-          accessibilityRole="search"
+          // "searchbox", not "search": on the web "search" is a landmark role and isn't allowed on a field.
+          role="searchbox"
           returnKeyType="search"
           autoCorrect={false}
           autoCapitalize="none"

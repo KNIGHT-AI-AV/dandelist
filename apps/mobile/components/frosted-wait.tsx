@@ -18,7 +18,7 @@ export function FrostedWait({ uri, active }: { uri?: string | null; active: bool
   const p = usePalette();
   return (
     <View pointerEvents="none" style={[StyleSheet.absoluteFill, { overflow: "hidden" }]} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-      <Image source={uri ? { uri } : BACKDROP} style={[StyleSheet.absoluteFill, { transform: [{ scale: 1.25 }] }]} contentFit="cover" blurRadius={36} accessibilityIgnoresInvertColors />
+      <Image source={uri ? { uri } : BACKDROP} accessibilityLabel="" style={[StyleSheet.absoluteFill, { transform: [{ scale: 1.25 }] }]} contentFit="cover" blurRadius={36} accessibilityIgnoresInvertColors />
       <View style={[StyleSheet.absoluteFill, { backgroundColor: `rgba(${p.bgRgb}, 0.38)` }]} />
       <Glass intensity={40} style={[StyleSheet.absoluteFill, { borderRadius: 0, borderWidth: 0 }]} />
       <WaitingLight active={active} />

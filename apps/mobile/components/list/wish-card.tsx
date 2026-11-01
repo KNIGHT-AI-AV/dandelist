@@ -29,7 +29,7 @@ export function cardLabel(w: Wish): string {
 function StillPhoto({ uri, glyph }: { uri?: string; glyph?: string }) {
   const load = usePhotoLoad(uri);
   if (!uri || !load.show) return <Photo glyph={glyph} />;
-  return <Image key={load.tries} source={{ uri }} style={StyleSheet.absoluteFill} contentFit="cover" onError={load.onError} accessibilityIgnoresInvertColors />;
+  return <Image key={load.tries} source={{ uri }} accessibilityLabel="" style={StyleSheet.absoluteFill} contentFit="cover" onError={load.onError} accessibilityIgnoresInvertColors />;
 }
 
 /** The inside of a wish card: photo, shade, name, the agent's line, tier and price. Fills its parent. */
