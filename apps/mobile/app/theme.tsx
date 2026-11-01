@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { IconButton } from "../components/lux";
 import { ThemeChooser } from "../components/welcome/theme";
 import { layout, usePalette, useTheme } from "../lib/theme";
+import { MAIN } from "../lib/landmark";
 import { useWishes } from "../lib/wishes";
 import { counted } from "../lib/worth";
 import { Atmosphere } from "../components/atmosphere";
@@ -23,7 +24,7 @@ export default function ThemeScreen() {
   const { wishes } = useWishes();
   const total = upfrontCashCents(counted(wishes).map((w) => w.item));
   return (
-    <View style={{ flex: 1, backgroundColor: p.bg }}>
+    <View style={{ flex: 1, backgroundColor: p.bg }} {...MAIN}>
       <Atmosphere />
       <ThemeChooser
         totalCents={total}
