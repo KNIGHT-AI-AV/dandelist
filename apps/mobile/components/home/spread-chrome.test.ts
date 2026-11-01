@@ -11,7 +11,7 @@ const g = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean; IS_REACT_NATIVE_TE
 g.IS_REACT_ACT_ENVIRONMENT = true;
 g.IS_REACT_NATIVE_TEST_ENVIRONMENT = true;
 
-const h = vi.hoisted(() => ({ win: { width: 951, height: 669 }, top: 0 }));
+const h = vi.hoisted(() => ({ win: { width: 951, height: 669 }, top: 0, os: "ios" }));
 
 vi.mock("react-native", () => {
   class Node {
@@ -56,7 +56,11 @@ vi.mock("react-native", () => {
     AppState: { addEventListener: () => ({ remove() {} }) },
     Keyboard: { dismiss() {} },
     PanResponder: { create: () => ({ panHandlers: {} }) },
-    Platform: { OS: "ios" },
+    Platform: {
+      get OS() {
+        return h.os;
+      },
+    },
     Pressable: "Pressable",
     StyleSheet: { absoluteFill: {} },
     View: "View",
@@ -173,6 +177,32 @@ describe("the bar over the pages", () => {
       for (let y = edge; y <= edge + 30; y++) expect(wash(y)).toBeCloseTo(before(y, edge), 5);
       await act(async () => root?.unmount());
       root = null;
+    }
+  });
+});
+
+/**
+ * Landmarks on the web (axe, 2026-11-01: no main region, and content outside any landmark): the bar is the banner and
+ * the composer a region named like its field, so a screen reader can jump between them and the page. Web only: on iOS
+ * a role would replace the traits the controls already give.
+ */
+describe("the bar and the composer as landmarks", () => {
+  const roles = () => root!.root.findAll((n) => typeof n.props.role === "string").map((n) => [n.props.role, n.props["aria-label"]]);
+  it("are a banner and a named region on the web, and nothing new on a phone", async () => {
+    for (const os of ["web", "ios"]) {
+      h.os = os;
+      h.win = { width: 430, height: 932 };
+      try {
+        await act(async () => {
+          root = create(createElement(PagerProvider, { initial: "list", children: createElement(RemovalsProvider, { children: createElement(Fragment, null, createElement(TopBar), createElement(Dock)) }) }));
+        });
+        const found = roles().filter(([r]) => r === "banner" || r === "region");
+        expect([os, found]).toEqual([os, os === "web" ? [["banner", undefined], ["region", "Message Dandy"]] : []]);
+      } finally {
+        await act(async () => root?.unmount());
+        root = null;
+        h.os = "ios";
+      }
     }
   });
 });

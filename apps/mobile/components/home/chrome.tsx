@@ -119,7 +119,9 @@ export function TopBar() {
   const p = usePalette();
   const edge = insets.top + layout.headerBar;
   return (
-    <View pointerEvents="box-none" style={{ position: "absolute", top: 0, left: 0, right: 0, paddingTop: insets.top, paddingHorizontal: gutter }}>
+    // On the web the bar is the page's banner landmark: the wordmark, the page dots and the controls a screen reader
+    // can jump past to the page itself. Web only: on iOS a role would replace the traits the controls already give.
+    <View pointerEvents="box-none" style={{ position: "absolute", top: 0, left: 0, right: 0, paddingTop: insets.top, paddingHorizontal: gutter }} {...(Platform.OS === "web" ? { role: "banner" as const } : null)}>
       {/* A scroll edge, not a bar: the page colour fades out under the wordmark, so content passing beneath stays legible. */}
       <LinearGradient pointerEvents="none" colors={[`rgba(${p.bgRgb}, 0.94)`, `rgba(${p.bgRgb}, 0.7)`, `rgba(${p.bgRgb}, 0)`]} locations={[0, 0.6, 1]} style={{ position: "absolute", top: 0, left: 0, right: 0, height: edge + 28 }} />
       {/* And under the bar's own controls a stronger wash that ends at the bar's foot (owner's screenshot, 2026-11-01: a
@@ -194,8 +196,9 @@ export function Dock() {
       pointerEvents={here ? "box-none" : "none"}
       style={spread ? { position: "absolute", left: 0, width: pageWidth, bottom: 0, top: 0, opacity: follow.opacity, transform: [{ translateX: follow.x }] } : { position: "absolute", left: 0, right: 0, bottom: 0, top: 0, opacity, transform: [{ translateY: sink }] }}
       aria-hidden={!here}
-      // Away from the list and the chat the composer is out of sight, so on the web it leaves the Tab order too.
-      {...(Platform.OS === "web" ? { inert: !here } : null)}
+      // Away from the list and the chat the composer is out of sight, so on the web it leaves the Tab order too. There
+      // it is also a named region, so a screen reader can jump straight to it (axe: all content in landmarks).
+      {...(Platform.OS === "web" ? { inert: !here, role: "region" as const, "aria-label": `Message ${dandy.name}` } : null)}
     >
       <PageSizeProvider width={pageWidth} height={height}>
       <KeyboardDock onHeight={home.setDock} maxWidth={layout.column}>
