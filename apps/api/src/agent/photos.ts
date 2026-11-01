@@ -567,10 +567,13 @@ export async function webPhotoUrls(meta: Meta, query: string, subject: PhotoSubj
   // view is a clean 404, and so is every one if that server ever turns this one away.
   const derived = new Set(pages.flatMap(brandPhotos));
   if (first.some((u) => !derived.has(u)) || !pages.length || subject.kind !== "buy" || by - Date.now() < AGAIN_MIN_MS + LOOKS_MS) return first;
-  const opened = (await within(Promise.all(first.map((u) => checkPhoto(u, fetcher, { minSide: 250 }).then((c) => c.ok, () => false))), Math.min(6_000, by - Date.now() - AGAIN_MIN_MS - LOOKS_MS))) ?? [];
-  if (opened.some(Boolean)) return first;
+  const opened = await within(Promise.all(first.map((u) => checkPhoto(u, fetcher, { minSide: 250 }).then((c) => c.ok, () => false))), Math.min(6_000, by - Date.now() - AGAIN_MIN_MS - LOOKS_MS));
+  if (opened?.some(Boolean)) return first;
+  // Only a photo that failed to open is dropped; one the check ran out of time on stays a candidate.
+  const failed = opened ? first.filter((_, i) => !opened[i]) : [];
+  const kept = first.filter((u) => !failed.includes(u));
   const refused = [...new Set([opts.official?.replace(/^www\./, ""), ...pages.slice(0, 4).filter((_, i) => !read?.[i]?.ok).map(hostOf)].filter((h): h is string => !!h))].slice(0, 4);
-  if (!refused.length || by - Date.now() < AGAIN_MIN_MS + LOOKS_MS) return first;
+  if (!refused.length || by - Date.now() < AGAIN_MIN_MS + LOOKS_MS) return kept;
   // A refused site's other country sites too: us.louisvuitton.com turned away means en.louisvuitton.com will be.
   const away = (u: string) => refused.some((r) => siteOf(hostOf(u)) === siteOf(r));
   // The search and its reads stop with LOOKS_MS left: the size checks and both looks wait on every source, this one too.
@@ -586,7 +589,7 @@ export async function webPhotoUrls(meta: Meta, query: string, subject: PhotoSubj
     }),
     Math.max(0, by - Date.now() - LOOKS_MS - 3_000),
   ).catch(() => null);
-  if (!again) return first;
+  if (!again) return kept;
   const more = addresses(again);
   const otherPages = more.pages.filter((u) => !away(u));
   const read2 = await within(Promise.all(otherPages.slice(0, 4).map((u) => readProduct(u, fetcher, 5_000).catch(() => null))), Math.max(0, by - Date.now() - LOOKS_MS));
@@ -595,7 +598,7 @@ export async function webPhotoUrls(meta: Meta, query: string, subject: PhotoSubj
   // A maker's image-server photo stays even though its site refused us (that server is the route that works), unless it
   // is one that just failed to open.
   const derived2 = new Set(more.pages.flatMap(brandPhotos));
-  return [...new Set([...more.images.filter((u) => !first.includes(u) && (derived2.has(u) || !away(u))), ...found2.flat()])];
+  return [...new Set([...kept, ...more.images.filter((u) => !failed.includes(u) && (derived2.has(u) || !away(u))), ...found2.flat()])];
 }
 
 /**

@@ -140,6 +140,24 @@ describe("a second web search when every page named turned us away", () => {
     }
   });
 
+  it("keeps the maker's photo when checking it ran out of time rather than failed", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    try {
+      // The image takes 7 s; its check gets 6, and the second search still has time to run.
+      const slow = (async (input: string | URL, init?: RequestInit) => {
+        if (String(input) === LV_SHOT) await new Promise((r) => setTimeout(r, 7_000));
+        return web()(input, init);
+      }) as unknown as typeof fetch;
+      const calls: Record<string, unknown>[] = [];
+      const got = webPhotoUrls(searching([[LV_PAGE], []], calls), lvPlan.web, lv, slow, Date.now() + 40_000, { identity: lvPlan.identity, official: "louisvuitton.com" });
+      await vi.advanceTimersByTimeAsync(40_000);
+      expect(await got).toEqual([LV_SHOT]);
+      expect(calls).toHaveLength(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("searches again when the maker's photo doesn't open, keeping the maker's other photos it names", async () => {
     const calls: Record<string, unknown>[] = [];
     const meta = searching([[LV_PAGE], [LV_OTHER_PAGE, RESALE]], calls);
