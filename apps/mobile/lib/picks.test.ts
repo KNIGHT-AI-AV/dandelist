@@ -5,7 +5,7 @@ vi.mock("./storage", () => ({
   getSecret: async (k: string) => store.get(k) ?? null,
   setSecret: async (k: string, v: string | null) => void (v === null ? store.delete(k) : store.set(k, v)),
 }));
-import { answerPick, fetchTodayPick, hiddenDay, hideForDay, localDay, pickAdded, showsPick, wasPickAdded, type TodayPick } from "./picks";
+import { answerPick, fetchTodayPick, hiddenDay, hideForDay, knownPick, localDay, pickAdded, pickSkipped, rememberPick, showsPick, subscribePickAnswers, wasPickAdded, wasPickSkipped, type TodayPick } from "./picks";
 
 const pick: TodayPick = { id: "p1", day: "2026-10-29", status: "ready", title: "Riva Aquariva Super", kind: "own", why: "It goes with the summers on the lake you wrote about.", summary: "", photo: null, createdAt: "2026-10-29T12:00:00.000Z" };
 
@@ -55,5 +55,20 @@ describe("today's pick on the list", () => {
     expect(seen.at(-1)).toMatchObject({ path: "/picks/p1", init: { method: "PATCH", body: JSON.stringify({ outcome: "skipped" }) } });
     reply = new Response("gone", { status: 404 });
     await expect(answerPick(api, "p1", "added")).rejects.toThrow("Couldn't save that.");
+  });
+
+  it("shares a pick between its card and its own page, and tells both when it is answered", () => {
+    expect(knownPick("p9")).toBeNull();
+    rememberPick({ ...pick, id: "p9" });
+    expect(knownPick("p9")?.title).toBe("Riva Aquariva Super");
+    let heard = 0;
+    const stop = subscribePickAnswers(() => heard++);
+    pickSkipped("p9");
+    expect(wasPickSkipped("p9")).toBe(true);
+    pickAdded("p10");
+    expect(heard).toBe(2);
+    stop();
+    pickSkipped("p11");
+    expect(heard).toBe(2);
   });
 });

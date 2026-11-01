@@ -1,12 +1,12 @@
 import { router } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { AppState, Text, View } from "react-native";
+import { Animated, AppState, Pressable, Text, View } from "react-native";
 import { endTask, startTask } from "../../lib/activity";
 import { useAuth } from "../../lib/auth";
 import { useDandy } from "../../lib/dandy";
-import { haptic } from "../../lib/motion";
+import { haptic, usePress } from "../../lib/motion";
 import { notifier } from "../../lib/notifications";
-import { answerPick, fetchTodayPick, hiddenDay, hideForDay, localDay, showsPick, wasPickAdded, type TodayPick } from "../../lib/picks";
+import { answerPick, fetchTodayPick, hiddenDay, hideForDay, localDay, rememberPick, showsPick, usePickAnswers, wasPickAdded, wasPickSkipped, type TodayPick } from "../../lib/picks";
 import { isFirstLaunch, updateReminders, useReminderState } from "../../lib/reminder-state";
 import { shouldAsk, type Permission } from "../../lib/reminders";
 import { layout, radius, space, type, usePalette, useType } from "../../lib/theme";
@@ -43,6 +43,12 @@ function useTodayPick() {
   persona.current = dandy.persona;
   const userId = auth.user?.id ?? null;
   const hasWish = wishes.length > 0;
+  // Turned down on its own page: the card goes as soon as the list shows again.
+  usePickAnswers();
+  // The pick's own page reads the same pick (app/picks/[id].tsx).
+  useEffect(() => {
+    if (pick) rememberPick(pick);
+  }, [pick]);
 
   // Closing the card is remembered per person on this device.
   useEffect(() => {
@@ -101,6 +107,7 @@ function useTodayPick() {
     if (!pick) return;
     const next = { ...pick, status: outcome };
     if (userId) seen.set(`${userId}:${pick.day}`, next);
+    rememberPick(next);
     void answerPick(auth.api, pick.id, outcome).catch(() => {});
     return next;
   };
@@ -109,7 +116,12 @@ function useTodayPick() {
     day,
     pick,
     noted,
-    visible: hidden !== undefined && showsPick(pick, day, hidden) && !wasPickAdded(pick.id),
+    visible: hidden !== undefined && showsPick(pick, day, hidden) && !wasPickAdded(pick.id) && !wasPickSkipped(pick.id),
+    /** The pick's own page: its photo, what it is and why the Dandy chose it, with the same two answers. */
+    open() {
+      if (!pick) return;
+      router.push({ pathname: "/picks/[id]", params: { id: pick.id } });
+    },
     /**
      * Adds it the usual way: the new wish screen hunts its real price, and "added" is recorded once the person saves
      * it there. Backing out leaves the pick on the list.
@@ -135,9 +147,11 @@ function useTodayPick() {
   };
 }
 
-function PickCard({ pick, noted, onAdd, onSkip, onClose }: { pick: TodayPick; noted: boolean; onAdd(): void; onSkip(): void; onClose(): void }) {
+function PickCard({ pick, noted, onOpen, onAdd, onSkip, onClose }: { pick: TodayPick; noted: boolean; onOpen(): void; onAdd(): void; onSkip(): void; onClose(): void }) {
   const p = usePalette();
   const t = useType();
+  // A card this tall sinks less than a button (lib/motion.ts).
+  const press = usePress(0.985);
   const close = <IconButton icon="close" label="Hide today's pick until tomorrow" onPress={onClose} />;
   const label = (
     <View style={{ flexDirection: "row", alignItems: "center", gap: space[8] }}>
@@ -146,49 +160,62 @@ function PickCard({ pick, noted, onAdd, onSkip, onClose }: { pick: TodayPick; no
     </View>
   );
   return (
-    <Glass style={{ borderRadius: radius.lg, borderCurve: "continuous" }}>
-      {pick.photo ? (
-        <View style={{ height: PHOTO_HEIGHT }}>
-          <Photo uri={pick.photo.url} />
-          <Shade from={0.2} />
-          <View style={{ position: "absolute", left: layout.cardPad, right: layout.cardPad, bottom: space[12], gap: layout.stack.tight }}>
-            {label}
-            <Text accessibilityRole="header" numberOfLines={2} style={[t.title2, { color: p.ink }]}>
-              {pick.title}
+    <Animated.View style={{ transform: [{ scale: press.scale }] }}>
+      <Glass style={{ borderRadius: radius.lg, borderCurve: "continuous" }}>
+        {/* The photo, title and why open the pick's own page; the close button and the answers below keep their own. */}
+        <Pressable
+          onPress={onOpen}
+          onPressIn={press.onPressIn}
+          onPressOut={press.onPressOut}
+          disabled={noted}
+          accessibilityRole="button"
+          accessibilityLabel={`Today's pick: ${pick.title}`}
+          accessibilityHint="Opens what it is and why your Dandy picked it"
+        >
+          {pick.photo ? (
+            <View style={{ height: PHOTO_HEIGHT }}>
+              <Photo uri={pick.photo.url} />
+              <Shade from={0.2} />
+              <View style={{ position: "absolute", left: layout.cardPad, right: layout.cardPad, bottom: space[12], gap: layout.stack.tight }}>
+                {label}
+                <Text accessibilityRole="header" numberOfLines={2} style={[t.title2, { color: p.ink }]}>
+                  {pick.title}
+                </Text>
+              </View>
+              <View style={{ position: "absolute", top: space[12], right: space[12] }}>{close}</View>
+            </View>
+          ) : (
+            <View style={{ paddingTop: layout.cardPad, paddingHorizontal: layout.cardPad, gap: layout.stack.tight }}>
+              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                {label}
+                {close}
+              </View>
+              <Text accessibilityRole="header" style={[t.title2, { color: p.ink }]}>
+                {pick.title}
+              </Text>
+            </View>
+          )}
+          <Text style={[type.callout, { color: p.ink2, paddingHorizontal: layout.cardPad, paddingTop: pick.photo ? space[12] : layout.stack.tight }]}>{pick.why}</Text>
+        </Pressable>
+        <View style={{ padding: layout.cardPad, paddingTop: layout.stack.base, gap: layout.stack.base }}>
+          {noted ? (
+            <Text accessibilityLiveRegion="polite" style={[type.footnote, { color: p.ink3 }]}>
+              Noted. Tomorrow's pick will learn from this.
             </Text>
-          </View>
-          <View style={{ position: "absolute", top: space[12], right: space[12] }}>{close}</View>
+          ) : (
+            <View style={{ gap: space[4] }}>
+              <PrimaryButton label="Add to my list" commit onPress={onAdd} />
+              <QuietButton label="Not for me" onPress={onSkip} style={{ alignSelf: "center" }} />
+            </View>
+          )}
+          {pick.photo?.credit ? (
+            <Text numberOfLines={1} style={[type.figure, { color: p.ink3 }]}>
+              {[pick.photo.credit, pick.photo.license].filter(Boolean).join(" · ")}
+            </Text>
+          ) : null}
         </View>
-      ) : (
-        <View style={{ paddingTop: layout.cardPad, paddingHorizontal: layout.cardPad, gap: layout.stack.tight }}>
-          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-            {label}
-            {close}
-          </View>
-          <Text accessibilityRole="header" style={[t.title2, { color: p.ink }]}>
-            {pick.title}
-          </Text>
-        </View>
-      )}
-      <View style={{ padding: layout.cardPad, paddingTop: pick.photo ? space[12] : layout.stack.tight, gap: layout.stack.base }}>
-        <Text style={[type.callout, { color: p.ink2 }]}>{pick.why}</Text>
-        {noted ? (
-          <Text accessibilityLiveRegion="polite" style={[type.footnote, { color: p.ink3 }]}>
-            Noted. Tomorrow's pick will learn from this.
-          </Text>
-        ) : (
-          <View style={{ gap: space[4] }}>
-            <PrimaryButton label="Add to my list" commit onPress={onAdd} />
-            <QuietButton label="Not for me" onPress={onSkip} style={{ alignSelf: "center" }} />
-          </View>
-        )}
-        {pick.photo?.credit ? (
-          <Text numberOfLines={1} style={[type.figure, { color: p.ink3 }]}>
-            {[pick.photo.credit, pick.photo.license].filter(Boolean).join(" · ")}
-          </Text>
-        ) : null}
-      </View>
-    </Glass>
+      </Glass>
+    </Animated.View>
   );
 }
 
@@ -241,7 +268,7 @@ export function TodayCards() {
   const s = useTodayPick();
   return (
     <>
-      <Presence show={s.visible}>{s.pick ? <PickCard pick={s.pick} noted={s.noted} onAdd={s.add} onSkip={s.skip} onClose={s.close} /> : null}</Presence>
+      <Presence show={s.visible}>{s.pick ? <PickCard pick={s.pick} noted={s.noted} onOpen={s.open} onAdd={s.add} onSkip={s.skip} onClose={s.close} /> : null}</Presence>
       {notifier.available ? <AskCard hold={s.visible} /> : null}
     </>
   );
