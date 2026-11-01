@@ -1,6 +1,6 @@
-import { Redirect, useLocalSearchParams } from "expo-router";
+import { Redirect, useIsFocused, useLocalSearchParams } from "expo-router";
 import { useMemo } from "react";
-import { View } from "react-native";
+import { Platform, View } from "react-native";
 import { Atmosphere } from "../../components/atmosphere";
 import { HomeProvider } from "../../components/home/bridge";
 import { ChatPage } from "../../components/home/chat-page";
@@ -26,12 +26,16 @@ export default function Home() {
   const auth = useAuth();
   const { page } = useLocalSearchParams<{ page?: string }>();
   const initial: PageId = PAGES.includes(page as PageId) ? (page as PageId) : "list";
+  // A wish open over the list (wishes/[id], a transparent modal) leaves this screen mounted underneath.
+  const focused = useIsFocused();
   const pages = useMemo(() => ({ list: <ListPage />, chat: <ChatPage />, details: <DetailsPage />, money: <MoneyPage />, settings: <SettingsPage /> }), []);
   if (auth.status === "signedOut") return <Redirect href="/welcome" />;
   // Clipped: the dock sinks 56 below the screen on the other pages, and unclipped that made the web page itself
   // scroll, lifting the bar away and showing a white strip at the end of Settings (UI audit, 2026-10-31).
   return (
-    <View style={{ flex: 1, backgroundColor: p.bg, overflow: "hidden" }}>
+    // While a wish's page covers it, the web's keyboard and screen readers leave this screen alone: before, Tab went
+    // through the bar's controls before the wish's own, and from its Back button into the list hidden underneath.
+    <View style={{ flex: 1, backgroundColor: p.bg, overflow: "hidden" }} {...(Platform.OS === "web" ? { inert: !focused, "aria-hidden": !focused } : null)}>
       <Atmosphere />
       <PagerProvider initial={initial}>
         <HomeProvider>
