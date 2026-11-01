@@ -6,11 +6,12 @@ import { noteDrag } from "../../lib/drag-guard";
 import { ease, haptic, native, spring, usePress, useReducedMotion } from "../../lib/motion";
 import { layout, space, type, usePalette } from "../../lib/theme";
 import type { Wish } from "../../lib/wishes";
-import { TIER_LABEL, agentLine } from "../../lib/words";
+import { TIER_LABEL } from "../../lib/words";
 import { isPriceless, priceWords } from "../../lib/worth";
 import { swipeOutcome } from "../../lib/swipe-intent";
 import type { Rect } from "../../lib/zoom";
-import { AgentDot, Money, Photo, Shade } from "../lux";
+import { Money, Photo, Shade } from "../lux";
+import { CardLine } from "../list/card-line";
 import { savedGlyph } from "../worth";
 import { cardRanges, listHeight, type CardGeometry } from "./card-metrics";
 import { usePageSwipe } from "./pager";
@@ -179,12 +180,7 @@ function Card({ w, index, g, scrollY, listTop, focus, width, fresh, onOpen, onQu
                   {w.name}
                 </Text>
                 <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: space[12] }}>
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: space[8], flexShrink: 1 }}>
-                    {w.details.agent ? <AgentDot /> : null}
-                    <Text style={[type.footnote, { color: p.ink2, flexShrink: 1 }]} numberOfLines={1}>
-                      {monthly ? `${agentLine(w)} · + ${money.format(monthly)}/mo` : agentLine(w)}
-                    </Text>
-                  </View>
+                  <CardLine w={w} monthlyCents={monthly} />
                   <View style={{ alignItems: "flex-end" }}>
                     <Text style={[type.figure, { color: p.ink3, textTransform: "uppercase" }]}>{TIER_LABEL[w.tier]}</Text>
                     <Money cents={w.item.upfrontCents} priceless={isPriceless(w)} size="card" />
