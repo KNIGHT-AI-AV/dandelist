@@ -8,6 +8,7 @@ import { Chip, Eyebrow, PrimaryButton, QuietButton } from "../../components/lux"
 import { Statement } from "../../components/statement";
 import { haptic } from "../../lib/motion";
 import { layout, space, usePalette, useType } from "../../lib/theme";
+import { MAIN } from "../../lib/landmark";
 import { useWishes, type WishKind, type WishTier } from "../../lib/wishes";
 import { Atmosphere } from "../../components/atmosphere";
 
@@ -97,7 +98,7 @@ export default function ManualWish() {
   );
 
   return (
-    <View style={{ flex: 1, backgroundColor: p.bg }}>
+    <View style={{ flex: 1, backgroundColor: p.bg }} {...MAIN}>
       <Atmosphere />
       <KeyboardScroll dock={dock} contentContainerStyle={{ paddingTop: insets.top + layout.contentTop, paddingBottom: dockRoom(dock, insets.bottom), paddingHorizontal: gutter, gap: space[20], width: "100%", maxWidth: layout.list + 2 * gutter, alignSelf: "center" }}>
         <View style={{ gap: layout.stack.tight }}>

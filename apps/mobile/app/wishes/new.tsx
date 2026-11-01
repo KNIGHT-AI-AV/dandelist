@@ -16,6 +16,7 @@ import { AskNote } from "../../components/ask";
 import { endTask, startTask } from "../../lib/activity";
 import { useAuth } from "../../lib/auth";
 import { fonts, layout, radius, space, type, usePalette, useType } from "../../lib/theme";
+import { MAIN } from "../../lib/landmark";
 import { useWishes, type WishTier } from "../../lib/wishes";
 import { KIND_LABEL, hostOf } from "../../lib/words";
 import { Atmosphere } from "../../components/atmosphere";
@@ -285,7 +286,7 @@ export default function NewWish() {
   // Concierge: describe the wish over a blurred photograph; the hunt starts the moment it's sent.
   if (stage === "describe") {
     return (
-      <View style={{ flex: 1, backgroundColor: p.bg }}>
+      <View style={{ flex: 1, backgroundColor: p.bg }} {...MAIN}>
         <Atmosphere />
         {latestImage ? (
           <View style={StyleSheet.absoluteFill}>
@@ -358,7 +359,7 @@ export default function NewWish() {
   const tally = [pages ? `${pages} ${pages === 1 ? "page" : "pages"} read` : "", checks ? `${checks} checked` : ""].filter(Boolean).join(" · ");
 
   return (
-    <View style={{ flex: 1, backgroundColor: p.bg }}>
+    <View style={{ flex: 1, backgroundColor: p.bg }} {...MAIN}>
       <Atmosphere />
       <ScrollView contentContainerStyle={{ paddingBottom: result?.options.length || worth ? dock : working ? dockRoom(addDock, insets.bottom) : insets.bottom + 40 }} style={{ scrollbarWidth: "thin", scrollbarColor: `rgba(${p.inkRgb},0.2) transparent` } as object}>
         <View style={{ height: HERO_HEIGHT, width: "100%" }}>
