@@ -583,6 +583,34 @@ describe("the research's deadline", () => {
     expect(out.options[0]).toMatchObject({ url: ROLEX });
   });
 
+  it("logs how the research spent its time, in milliseconds and counts only (14 ran out of time in two days, 2026-11-01)", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    try {
+      const answered = metaOf((b) => {
+        if (b.text?.format?.name === "price_options") return result(OPTIONS);
+        if (b.previous_response_id) return result("Done.");
+        if (String(b.instructions ?? "").startsWith("You are Dandelist's price researcher")) return result("", { functionCalls: [{ callId: "g1", name: "get_page", arguments: JSON.stringify(ROUND) }] });
+        return result("Pick the Rolex.");
+      });
+      await research(answered, { draft: DRAFT, answers: [], onStep: () => undefined, now: () => clock, fetcher: fakeWeb, deadline: Date.now() + 60_000 });
+      const line = (outcome: string) => info.mock.calls.map((c) => c.map(String).join(" ")).find((l) => l.startsWith("research timing") && l.includes(`"outcome":"${outcome}"`));
+      const ok = JSON.parse(line("answered")!.slice("research timing ".length));
+      expect(ok).toMatchObject({ outcome: "answered", rounds: [{ calls: 1 }] });
+      for (const n of [ok.first, ok.answerAt, ok.answer, ok.budget, ok.rounds[0].tools, ok.rounds[0].model]) expect(typeof n).toBe("number");
+      // An answer that never lands in time: the line says so, and the research still fails as before.
+      const late = metaOf((b) => (b.text?.format?.name === "price_options" ? new Promise(() => undefined) : result("Pick the Rolex.")));
+      await expect(research(late, { draft: DRAFT, answers: [], onStep: () => undefined, now: () => clock, fetcher: fakeWeb, deadline: Date.now() + 3_000 })).rejects.toThrow("ran out of time");
+      expect(JSON.parse(line("out of time")!.slice("research timing ".length))).toMatchObject({ outcome: "out of time", answer: null });
+      // Never an address or a title.
+      for (const l of info.mock.calls.map((c) => c.map(String).join(" ")).filter((x) => x.startsWith("research timing"))) {
+        expect(l).not.toContain("rolex.com");
+        expect(l).not.toContain("Submariner");
+      }
+    } finally {
+      info.mockRestore();
+    }
+  });
+
   it("asks twice more when Meta still can't see it a second later (the live server, 10:19Z and 15:15Z on 2026-11-01)", async () => {
     let refused = 0;
     const meta = metaOf((b) => {
