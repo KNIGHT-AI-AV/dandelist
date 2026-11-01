@@ -39,6 +39,8 @@ let answers: (Json | string)[];
 let photoSize: [number, number] | null;
 /** Whether the photo search's two looks pick the photo out of the line-up. */
 let looksPass: boolean;
+/** What the photo search's web search answers. */
+let webSays: string;
 /** Whose holds each model call sees while it runs, and what they were. */
 let watch: string | null;
 let held: { format: string; usd: number }[];
@@ -65,7 +67,7 @@ const fakeMeta = (async (_url: string, init: RequestInit) => {
     const letter = (name: string) => new RegExp(`([A-G])\\. ${name}`).exec(options)?.[1];
     return reply([message(JSON.stringify({ seen: "A wooden runabout on a lake.", fits: [looksPass ? letter(RIVA.title) : letter("None of these")], quality: "studio", clean: true }))]);
   }
-  return reply([message("Nothing.")]);
+  return reply([message(webSays)]);
 }) as unknown as typeof fetch;
 
 const fakeWeb = (async (input: string | URL) => {
@@ -87,6 +89,7 @@ beforeEach(async () => {
   answers = [];
   photoSize = [3000, 2000];
   looksPass = true;
+  webSays = "Nothing.";
   watch = null;
   held = [];
   clock = new Date("2026-10-29T12:00:00Z");
@@ -287,6 +290,8 @@ describe("today's pick", () => {
       // A photo the looks picked: found, from its host, with the counts behind it.
       expect(lines()).toEqual([expect.objectContaining({ kind: "own", found: true, source: "wikipedia.org", outOfTime: false, sizedOk: 1, judged: 1 })]);
       expect(lines()[0]!.sources).toMatchObject({ wikipedia: 1 });
+      // The web search answered and named nothing (this stand-in's search answers "Nothing."), so nothing was opened.
+      expect(lines()[0]!.web).toEqual({ said: 0, read: 0, readOk: 0, photos: 0 });
       // One the looks didn't pick: judged, not found.
       looksPass = false;
       answers = [{ ...RIVA, title: "Riva Rivamare" }];
@@ -298,6 +303,16 @@ describe("today's pick", () => {
       await today(token, "2026-10-28");
       expect(lines()[2]).toMatchObject({ found: false, sizedOk: 0, judged: 0 });
       expect(Object.keys(lines()[2]!.setAside as Json)).toEqual(["too small"]);
+      // A web search that names a photo and a page that won't open (the way shops refuse the server): counted, not named.
+      photoSize = [3000, 2000];
+      looksPass = true;
+      webSays = "https://shop.example/riva-iseo.jpg\nhttps://shop.example/riva-iseo";
+      answers = [{ ...RIVA, title: "Riva Iseo" }];
+      // Another person's pick: this one already has a pick on each day the route takes.
+      const other = await signIn("grace@example.com");
+      await addWish(other.token, "Riva boat");
+      await today(other.token);
+      expect(lines()[3]!.web).toEqual({ said: 2, read: 1, readOk: 0, photos: 0 });
       // Never the pick's title or an address.
       expect(info.mock.calls.filter((c) => c[0] === "daily pick photo").map((c) => String(c[1])).join(" ")).not.toMatch(/Riva|https?:/);
     } finally {
