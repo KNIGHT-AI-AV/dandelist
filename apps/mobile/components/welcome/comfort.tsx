@@ -9,6 +9,7 @@ import { fonts, layout, type, usePalette, useType } from "../../lib/theme";
 import { Fader, faderJustMoved } from "../fader";
 import { Chip, Eyebrow, PrimaryButton } from "../lux";
 import { Odometer } from "../odometer";
+import { ComfortLine } from "./comfort-line";
 import { Rise } from "./kit";
 
 /**
@@ -96,7 +97,7 @@ export function IncomeFader({ incomeCents, needCents, onChange, size = 52, compa
   const newFace = (from: number, to: number) => stageOf(from, needCents).index !== stageOf(to, needCents).index;
 
   const figure = <Odometer cents={incomeCents} format={money.format} size={size} family="bodoni" smallPrefix tracking={-0.02 * size} mode={reduced ? "instant" : "ui"} />;
-  const line = <Text accessibilityLiveRegion="polite" numberOfLines={1} style={[compact ? type.callout : type.title3, { fontFamily: fonts.titleItalic, color: p.accentText, textAlign: compact ? "left" : "center" }]}>{stage.line}</Text>;
+  const line = <ComfortLine line={stage.line} compact={compact} />;
   return (
     <View style={{ gap: compact ? layout.stack.tight : layout.stack.base + layout.stack.tight }}>
       {compact ? (

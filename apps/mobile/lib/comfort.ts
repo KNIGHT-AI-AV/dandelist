@@ -250,6 +250,8 @@ const LINES = [
 export const STAGES = LINES.length;
 /** The stage that reads "comfortably". */
 export const COMFORTABLE = 3;
+/** The longest line, which sets how much room the line takes wherever it shows. */
+export const LONGEST_LINE = LINES.reduce((a, b) => (b.length > a.length ? b : a));
 
 const floored = (needCents: number) => Math.max(needCents, MIN_NEED);
 
