@@ -364,7 +364,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const owner = start();
     const kept = keeper.current;
     (async () => {
-      const stored = await getSecret(REFRESH_KEY);
+      // A keychain that can't be read (iOS -34018, an Android Keystore that can't decrypt after a restore) restores
+      // nothing: the app goes on signed out instead of loading for good, and the token stays for a start that can read it.
+      const stored = await getSecret(REFRESH_KEY).catch(() => null);
       const res = stored ? await post("/auth/refresh", { refreshToken: stored }).catch(() => null) : null;
       const body = res?.ok ? ((await res.json().catch(() => null)) as { accessToken?: string; refreshToken?: string } | null) : null;
       const tokens = body?.accessToken && body.refreshToken ? { accessToken: body.accessToken, refreshToken: body.refreshToken } : null;

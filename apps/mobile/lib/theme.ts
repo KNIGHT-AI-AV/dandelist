@@ -25,7 +25,10 @@ const ThemeContext = createContext<{
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [id, setId] = useState<ThemeId>(DEFAULT_THEME);
   useEffect(() => {
-    void getSecret(KEY).then((v) => v && v in THEMES && setId(v as ThemeId));
+    // A keychain that can't be read leaves the default theme.
+    void getSecret(KEY)
+      .then((v) => v && v in THEMES && setId(v as ThemeId))
+      .catch(() => {});
   }, []);
   const set = useCallback((next: ThemeId) => {
     setId(next);
