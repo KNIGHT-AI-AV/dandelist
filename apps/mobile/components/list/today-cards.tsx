@@ -1,12 +1,12 @@
 import { router } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Animated, AppState, Pressable, Text, View } from "react-native";
 import { endTask, startTask } from "../../lib/activity";
-import { useAuth } from "../../lib/auth";
+import { bindToSignIn, currentSignIn, useAuth } from "../../lib/auth";
 import { useDandy } from "../../lib/dandy";
 import { haptic, usePress } from "../../lib/motion";
 import { notifier } from "../../lib/notifications";
-import { answerPick, fetchTodayPick, hiddenDay, hideForDay, localDay, rememberPick, showsPick, usePickAnswers, wasPickAdded, wasPickSkipped, type TodayPick } from "../../lib/picks";
+import { answerPick, fetchTodayPick, hiddenDay, hideForDay, localDay, rememberPick, sameOwner, showsPick, usePickAnswers, wasPickAdded, wasPickSkipped, type PickOwner, type TodayPick } from "../../lib/picks";
 import { isFirstLaunch, updateReminders, useReminderState } from "../../lib/reminder-state";
 import { shouldAsk, type Permission } from "../../lib/reminders";
 import { layout, radius, space, type, usePalette, useType } from "../../lib/theme";
@@ -28,31 +28,38 @@ const seen = new Map<string, TodayPick>();
 
 /**
  * Today's pick for the list (lib/picks.ts): asked for once the person has a wish, again when the app comes back on a
- * new day. The close button hides it until tomorrow on this device.
+ * new day. The close button hides it until tomorrow on this device. The pick belongs to the sign-in it was asked for
+ * under (review R50-PICK-OWNER): it shows, opens and is answered only while that sign-in is the one in place, and a
+ * request still out for another one changes nothing.
  */
 function useTodayPick() {
   const auth = useAuth();
   const { wishes, status } = useWishes();
   const dandy = useDandy();
   const [day, setDay] = useState(localDay);
-  const [pick, setPick] = useState<TodayPick | null>(null);
+  const [held, setHeld] = useState<{ pick: TodayPick; owner: PickOwner } | null>(null);
   // undefined until read from the device.
   const [hidden, setHidden] = useState<string | null | undefined>(undefined);
   const [noted, setNoted] = useState(false);
   const persona = useRef(dandy.persona);
   persona.current = dandy.persona;
-  const userId = auth.user?.id ?? null;
+  const userId = auth.status === "signedIn" ? (auth.user?.id ?? null) : null;
+  // A new account moves currentSignIn before its user shows here, so this is the sign-in in place for this account.
+  const owner = useMemo<PickOwner | null>(() => (userId ? { account: userId, at: currentSignIn() } : null), [userId]);
+  const pick = held && sameOwner(held.owner, owner) ? held.pick : null;
   const hasWish = wishes.length > 0;
   // Turned down on its own page: the card goes as soon as the list shows again.
   usePickAnswers();
-  // The pick's own page reads the same pick (app/picks/[id].tsx).
-  useEffect(() => {
-    if (pick) rememberPick(pick);
-  }, [pick]);
 
   // Closing the card is remembered per person on this device.
   useEffect(() => {
-    if (userId) void hiddenDay(userId).then(setHidden);
+    setHidden(undefined);
+    if (!userId) return;
+    let live = true;
+    void hiddenDay(userId).then((h) => live && setHidden(h));
+    return () => {
+      live = false;
+    };
   }, [userId]);
 
   useEffect(() => {
@@ -62,17 +69,21 @@ function useTodayPick() {
   }, []);
 
   useEffect(() => {
-    if (auth.status !== "signedIn" || status !== "ready" || !hasWish || !userId) return;
-    const key = `${userId}:${day}`;
+    if (!owner || status !== "ready" || !hasWish) return;
+    const me = owner;
+    const key = `${me.account}:${day}`;
     const known = seen.get(key);
     if (known) {
-      setPick(known);
+      rememberPick(known, me);
+      setHeld({ pick: known, owner: me });
       return;
     }
     let live = true;
     let tries = 0;
     let task: string | null = null;
     let retry: ReturnType<typeof setTimeout> | undefined;
+    // Each request goes as this sign-in or not at all.
+    const call = bindToSignIn(auth.api, me.at);
     const slow = setTimeout(() => (task = startTask("Finding today's pick")), SLOW_MS);
     const done = () => {
       clearTimeout(slow);
@@ -81,15 +92,18 @@ function useTodayPick() {
     };
     const ask = async () => {
       try {
-        const r = await fetchTodayPick(auth.api, day, persona.current);
+        const r = await fetchTodayPick(call, day, persona.current);
         if (!live) return;
         if (r.pending && ++tries <= PENDING_TRIES) {
           retry = setTimeout(() => void ask(), PENDING_MS);
           return;
         }
         // Only a pick is kept: no pick yet is asked again next time the list opens.
-        if (r.pick) seen.set(key, r.pick);
-        setPick(r.pick);
+        if (r.pick) {
+          seen.set(key, r.pick);
+          rememberPick(r.pick, me);
+        }
+        setHeld(r.pick ? { pick: r.pick, owner: me } : null);
       } catch {
         // No pick today is a fine answer; the next open asks again.
       }
@@ -101,14 +115,14 @@ function useTodayPick() {
       clearTimeout(retry);
       done();
     };
-  }, [auth.status, auth.api, status, hasWish, userId, day]);
+  }, [owner, auth.api, status, hasWish, day]);
 
   const decide = (outcome: "added" | "skipped") => {
-    if (!pick) return;
-    const next = { ...pick, status: outcome };
-    if (userId) seen.set(`${userId}:${pick.day}`, next);
-    rememberPick(next);
-    void answerPick(auth.api, pick.id, outcome).catch(() => {});
+    if (!held || !pick) return;
+    const next = { pick: { ...held.pick, status: outcome }, owner: held.owner };
+    seen.set(`${next.owner.account}:${next.pick.day}`, next.pick);
+    rememberPick(next.pick, next.owner);
+    void answerPick(bindToSignIn(auth.api, next.owner.at), next.pick.id, outcome).catch(() => {});
     return next;
   };
 
@@ -136,7 +150,7 @@ function useTodayPick() {
       haptic.select();
       setNoted(true);
       setTimeout(() => {
-        setPick(next);
+        setHeld((h) => (h && h.pick.id === next.pick.id && sameOwner(h.owner, next.owner) ? next : h));
         setNoted(false);
       }, NOTED_MS);
     },

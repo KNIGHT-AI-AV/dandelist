@@ -74,10 +74,24 @@ export async function hideForDay(userId: string, day: string): Promise<void> {
   } catch {}
 }
 
-/** Picks seen this run of the app, by id, so the card and the pick's own page show the same one. */
-const known = new Map<string, TodayPick>();
-export const rememberPick = (pick: TodayPick) => void known.set(pick.id, pick);
-export const knownPick = (id: string): TodayPick | null => known.get(id) ?? null;
+/** The account and sign-in (lib/auth.tsx currentSignIn) a pick was asked for under. */
+export interface PickOwner {
+  account: string;
+  at: number;
+}
+export const sameOwner = (a: PickOwner | null | undefined, b: PickOwner | null | undefined): boolean => !!a && !!b && a.account === b.account && a.at === b.at;
+
+/**
+ * Picks seen this run of the app, so the card and the pick's own page show the same one; each keeps the sign-in it was
+ * asked for under (review R50-PICK-OWNER), and only that sign-in reads it back: another account on the same phone never
+ * sees it, whatever route it opens.
+ */
+const known = new Map<string, { pick: TodayPick; owner: PickOwner }>();
+export const rememberPick = (pick: TodayPick, owner: PickOwner) => void known.set(pick.id, { pick, owner });
+export const knownPick = (id: string, owner: PickOwner | null): TodayPick | null => {
+  const k = known.get(id);
+  return k && sameOwner(k.owner, owner) ? k.pick : null;
+};
 
 // Answers given this session, from the card or the pick's page: whichever is showing learns of one at once.
 let answered = 0;

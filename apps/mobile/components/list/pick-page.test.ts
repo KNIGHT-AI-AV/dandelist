@@ -60,8 +60,9 @@ vi.mock("../../lib/auth", () => {
     if (path === "/picks/today") return new Response(JSON.stringify({ pick: h.today, pending: false }), { status: 200 });
     return new Response("{}", { status: 200 });
   };
-  const auth = { status: "signedIn", api };
-  return { useAuth: () => auth };
+  const auth = { status: "signedIn", user: { id: "ada", email: "ada@example.com" }, api };
+  // One sign-in throughout: the change of account has its own mounted test (pick-owner.test.ts).
+  return { useAuth: () => auth, currentSignIn: () => 1, bindToSignIn: (call: typeof api) => call };
 });
 vi.mock("../../lib/motion", () => ({ haptic: { select() {} } }));
 vi.mock("../../lib/storage", () => ({ getSecret: async () => null, setSecret: async () => {} }));
@@ -88,6 +89,8 @@ const pick: TodayPick = {
   createdAt: "2026-11-01T08:00:00.000Z",
 };
 
+/** The one sign-in these tests run under. */
+const ADA = { account: "ada", at: 1 };
 let root: ReactTestRenderer | null = null;
 const settle = () =>
   act(async () => {
@@ -121,7 +124,7 @@ afterEach(async () => {
 
 describe("today's pick, opened from its card", () => {
   it("shows what was made with the pick at once: its photo, what it is and why, with nothing asked for", async () => {
-    picks.rememberPick(pick);
+    picks.rememberPick(pick, ADA);
     await open("pick-1");
     expect(texts()).toContain("Leica M11-P");
     expect(eyebrows()).toEqual(["Today's pick · Own", "What it is", "Why your Dandy picked it"]);
@@ -132,13 +135,13 @@ describe("today's pick, opened from its card", () => {
   });
 
   it("leaves out what it is when the pick came without a summary", async () => {
-    picks.rememberPick({ ...pick, id: "pick-2", summary: "" });
+    picks.rememberPick({ ...pick, id: "pick-2", summary: "" }, ADA);
     await open("pick-2");
     expect(eyebrows()).toEqual(["Today's pick · Own", "Why your Dandy picked it"]);
   });
 
   it("adds it the usual way: the new wish screen finds the real price and records the pick as added", async () => {
-    picks.rememberPick(pick);
+    picks.rememberPick(pick, ADA);
     await open("pick-1");
     await act(async () => button("Add to my list").props.onPress());
     expect(h.moves).toEqual([["replace", { pathname: "/wishes/new", params: { text: "Leica M11-P", pick: "pick-1" } }]]);
@@ -148,7 +151,7 @@ describe("today's pick, opened from its card", () => {
 
   it("turns it down once: noted, the card's pick is marked, and the page closes", async () => {
     vi.useFakeTimers();
-    picks.rememberPick({ ...pick, id: "pick-3" });
+    picks.rememberPick({ ...pick, id: "pick-3" }, ADA);
     h.params = { id: "pick-3" };
     await act(async () => {
       root = create(createElement(PickDetail), { unstable_isConcurrent: true } as unknown as Parameters<typeof create>[1]);
@@ -156,7 +159,7 @@ describe("today's pick, opened from its card", () => {
     await act(async () => button("Not for me").props.onPress());
     expect(h.requests).toEqual([{ method: "PATCH", path: "/picks/pick-3", body: { outcome: "skipped" } }]);
     expect(picks.wasPickSkipped("pick-3")).toBe(true);
-    expect(picks.knownPick("pick-3")?.status).toBe("skipped");
+    expect(picks.knownPick("pick-3", ADA)?.status).toBe("skipped");
     expect(texts()).toContain("Noted. Tomorrow's pick will learn from this.");
     expect(buttons()).toEqual([]);
     expect(h.moves).toEqual([]);

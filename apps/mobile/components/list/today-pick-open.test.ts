@@ -41,7 +41,8 @@ vi.mock("../../lib/auth", () => {
     return new Response("{}", { status: 200 });
   };
   const auth = { status: "signedIn", api, user: { id: "user-1", email: "ada@example.com" } };
-  return { useAuth: () => auth };
+  // One sign-in throughout: the change of account has its own mounted test (pick-owner.test.ts).
+  return { useAuth: () => auth, currentSignIn: () => 1, bindToSignIn: (call: typeof api) => call };
 });
 vi.mock("../../lib/dandy", () => ({ useDandy: () => ({ persona: undefined }) }));
 vi.mock("../../lib/motion", () => ({ haptic: { select() {}, success() {} }, usePress: () => ({ scale: 1, onPressIn() {}, onPressOut() {} }) }));
@@ -108,7 +109,7 @@ describe("today's pick on the list", () => {
     expect(press.findAll((n: ReactTestInstance) => is(n, "PrimaryButton", "QuietButton"))).toEqual([]);
     await act(async () => press.props.onPress());
     expect(h.moves).toEqual([["push", { pathname: "/picks/[id]", params: { id: "pick-1" } }]]);
-    expect(picks.knownPick("pick-1")?.title).toBe("A week in Kyoto in April");
+    expect(picks.knownPick("pick-1", { account: "user-1", at: 1 })?.title).toBe("A week in Kyoto in April");
   });
 
   it("leaves the list as soon as it is turned down on its own page", async () => {

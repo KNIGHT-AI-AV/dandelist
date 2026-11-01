@@ -1,14 +1,14 @@
 import { Redirect, router, useLocalSearchParams } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ScrollView, StyleSheet, Text, View, useWindowDimensions, type ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Atmosphere } from "../../components/atmosphere";
 import { CONTROL_TOP, HERO_SHADE } from "../../components/detail/metrics";
 import { AgentDot, Eyebrow, Grain, IconButton, Photo, PrimaryButton, Protect, QuietButton, Shade } from "../../components/lux";
 import { PhotoCredit } from "../../components/photo-credit";
-import { useAuth } from "../../lib/auth";
+import { bindToSignIn, currentSignIn, useAuth } from "../../lib/auth";
 import { haptic } from "../../lib/motion";
-import { answerPick, fetchTodayPick, knownPick, localDay, pickSkipped, rememberPick, usePickAnswers, wasPickAdded, wasPickSkipped, type TodayPick } from "../../lib/picks";
+import { answerPick, fetchTodayPick, knownPick, localDay, pickSkipped, rememberPick, sameOwner, usePickAnswers, wasPickAdded, wasPickSkipped, type PickOwner, type TodayPick } from "../../lib/picks";
 import { layout, space, type, usePalette, useType } from "../../lib/theme";
 import { KIND_LABEL } from "../../lib/words";
 
@@ -23,7 +23,9 @@ const NOTED_MS = 1800;
  * adding it). Opened from the card on the list, it shows what was made when the pick was: its checked photo, what it
  * is, why the Dandy chose it, and the photo's credit, so nothing waits on a new request. The same two answers as the
  * card: "Add to my list" goes to the new wish screen, which finds the real price, and "Not for me" is noted before the
- * page closes; the card on the list goes with it.
+ * page closes; the card on the list goes with it. A pick belongs to the sign-in it was asked for under (review
+ * R50-PICK-OWNER): the page shows and answers one only for that sign-in, shows nothing while the sign-in is still being
+ * settled, and a request still out for another sign-in changes nothing.
  */
 export default function PickDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -33,32 +35,38 @@ export default function PickDetail() {
   const insets = useSafeAreaInsets();
   const { width: winW } = useWindowDimensions();
   usePickAnswers();
-  const [pick, setPick] = useState<TodayPick | null>(() => (id ? knownPick(id) : null));
-  const [lost, setLost] = useState(false);
+  const userId = auth.status === "signedIn" ? (auth.user?.id ?? null) : null;
+  // A new account moves currentSignIn before its user shows here, so this is the sign-in in place for this account.
+  const owner = useMemo<PickOwner | null>(() => (userId ? { account: userId, at: currentSignIn() } : null), [userId]);
+  // What this page's own request found, with the sign-in it was made for; and a sign-in it found nothing for.
+  const [found, setFound] = useState<{ pick: TodayPick; owner: PickOwner } | null>(null);
+  const [lost, setLost] = useState<PickOwner | null>(null);
   const [noted, setNoted] = useState(false);
   const closing = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const pick = (id ? knownPick(id, owner) : null) ?? (found && sameOwner(found.owner, owner) && found.pick.id === id ? found.pick : null);
 
-  // Opened without its card this run (a reload on the web, a saved link): today's pick is asked for again.
+  // Opened without its card for this sign-in (a reload on the web, a saved link): today's pick is asked for again, as it.
   useEffect(() => {
-    if (pick || !id || auth.status !== "signedIn") return;
+    if (!owner || !id || knownPick(id, owner)) return;
+    const me = owner;
     let live = true;
-    fetchTodayPick(auth.api, localDay())
+    fetchTodayPick(bindToSignIn(auth.api, me.at), localDay())
       .then((r) => {
         if (!live) return;
         if (r.pick?.id === id) {
-          rememberPick(r.pick);
-          setPick(r.pick);
-        } else setLost(true);
+          rememberPick(r.pick, me);
+          setFound({ pick: r.pick, owner: me });
+        } else setLost(me);
       })
-      .catch(() => live && setLost(true));
+      .catch(() => live && setLost(me));
     return () => {
       live = false;
     };
-  }, [pick, id, auth.status, auth.api]);
+  }, [owner, id, auth.api]);
   useEffect(() => () => clearTimeout(closing.current), []);
 
-  if (!id || lost || auth.status === "signedOut") return <Redirect href="/" />;
-  if (!pick) {
+  if (!id || auth.status === "signedOut" || (lost && sameOwner(lost, owner))) return <Redirect href="/" />;
+  if (!pick || !owner) {
     return (
       <View style={{ flex: 1, backgroundColor: p.bg }}>
         <Atmosphere />
@@ -66,12 +74,13 @@ export default function PickDetail() {
     );
   }
 
+  const me = owner;
   const leave = () => (router.canGoBack() ? router.back() : router.replace("/"));
   const add = () => router.replace({ pathname: "/wishes/new", params: { text: pick.title, pick: pick.id } });
   const skip = () => {
-    rememberPick({ ...pick, status: "skipped" });
+    rememberPick({ ...pick, status: "skipped" }, me);
     pickSkipped(pick.id);
-    void answerPick(auth.api, pick.id, "skipped").catch(() => {});
+    void answerPick(bindToSignIn(auth.api, me.at), pick.id, "skipped").catch(() => {});
     haptic.select();
     setNoted(true);
     closing.current = setTimeout(leave, NOTED_MS);
