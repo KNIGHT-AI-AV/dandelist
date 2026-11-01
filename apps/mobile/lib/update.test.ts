@@ -11,8 +11,8 @@ const run = (s: Prompt, ...events: PromptEvent[]) => events.reduce(promptStep, s
 describe("latest.json", () => {
   // The iOS entry is the build the public TestFlight link serves (the external group's newest approved build), never a
   // newer internal-only one: a tester on the link would be offered a build the link can't give them, on every visit.
-  it("ships TestFlight build 40 (the public link's build) and APK build 16, with the web version left to the deploy", () => {
-    expect(parseLatest(shipped)).toEqual({ ios: { build: 40, url: TESTFLIGHT }, android: { build: 16, url: APK }, web: null });
+  it("ships TestFlight build 41 (the public link's build) and APK build 16, with the web version left to the deploy", () => {
+    expect(parseLatest(shipped)).toEqual({ ios: { build: 41, url: TESTFLIGHT }, android: { build: 16, url: APK }, web: null });
   });
 
   it("keeps an entry only with a whole build and an https link", () => {
