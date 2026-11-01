@@ -19,17 +19,29 @@ const h = vi.hoisted(() => ({
   requests: [] as { method: string; path: string; body: unknown }[],
   /** What POST /picks/today answers. */
   today: null as TodayPick | null,
+  /** The safe area's top inset. */
+  top: 0,
 }));
 
 const passThrough = (name: string) => ({ children }: { children?: ReactNode }) => createElement(name, null, children);
 vi.mock("react-native", () => ({
-  ScrollView: passThrough("ScrollView"),
+  // A scroll position's interpolation is kept as given, so a test reads the range it was asked for.
+  Animated: {
+    Value: class {
+      interpolate(config: unknown) {
+        return config;
+      }
+    },
+    event: () => () => {},
+    ScrollView: passThrough("ScrollView"),
+    View: ({ children, ...props }: { children?: ReactNode }) => createElement("AnimatedView", props, children),
+  },
   StyleSheet: { absoluteFill: {}, hairlineWidth: 1 },
   Text: "Text",
   View: "View",
   useWindowDimensions: () => ({ width: 393, height: 852, fontScale: 1, scale: 3 }),
 }));
-vi.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }));
+vi.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ top: h.top, bottom: 0, left: 0, right: 0 }) }));
 vi.mock("expo-router", () => ({
   Redirect: ({ href }: { href: string }) => createElement("Redirect", { href }),
   router: {
@@ -44,6 +56,7 @@ vi.mock("../atmosphere", () => ({ Atmosphere: "Atmosphere" }));
 vi.mock("../detail/metrics", () => ({ CONTROL_TOP: 4, HERO_SHADE: 0.2 }));
 vi.mock("../lux", () => ({
   AgentDot: "AgentDot",
+  EdgeFade: "EdgeFade",
   Eyebrow: passThrough("Eyebrow"),
   Grain: "Grain",
   IconButton: "IconButton",
@@ -64,7 +77,7 @@ vi.mock("../../lib/auth", () => {
   // One sign-in throughout: the change of account has its own mounted test (pick-owner.test.ts).
   return { useAuth: () => auth, currentSignIn: () => 1, bindToSignIn: (call: typeof api) => call };
 });
-vi.mock("../../lib/motion", () => ({ haptic: { select() {} } }));
+vi.mock("../../lib/motion", () => ({ haptic: { select() {} }, native: true }));
 vi.mock("../../lib/storage", () => ({ getSecret: async () => null, setSecret: async () => {} }));
 vi.mock("../../lib/theme", () => ({
   layout: { gutter: () => 20, list: 520, headerBar: 44, stack: { tight: 8, base: 16, section: 32, sectionLg: 48 } },
@@ -109,12 +122,15 @@ const eyebrows = () => root!.root.findAllByType("Eyebrow" as never).map((n: Reac
 const is = (n: ReactTestInstance, ...names: string[]) => names.includes(n.type as unknown as string);
 const button = (label: string) => root!.root.find((n: ReactTestInstance) => is(n, "PrimaryButton", "QuietButton") && n.props.label === label);
 const buttons = () => root!.root.findAll((n: ReactTestInstance) => is(n, "PrimaryButton", "QuietButton"));
+/** The scroll edge under the back button. */
+const edge = () => root!.root.find((n: ReactTestInstance) => is(n, "AnimatedView") && n.props.pointerEvents === "none");
 
 beforeEach(() => {
   h.params = {};
   h.moves = [];
   h.requests = [];
   h.today = null;
+  h.top = 0;
 });
 afterEach(async () => {
   vi.useRealTimers();
@@ -179,6 +195,24 @@ describe("today's pick, opened from its card", () => {
     expect(h.moves).toEqual([]);
     await act(async () => void vi.advanceTimersByTime(1800));
     expect(h.moves).toEqual([["back"]]);
+  });
+
+  it("fades the title out under the back button as the page scrolls up, as a wish's page does", async () => {
+    picks.rememberPick(pick, ADA);
+    await open("pick-1");
+    // Over the photo, the title's top (420 - 120) reaches the edge's foot (44 + 16) after 240 points of scroll.
+    expect(edge().props.style).toMatchObject({ position: "absolute", top: 0, height: 60, opacity: { inputRange: [180, 240], outputRange: [0, 1], extrapolate: "clamp" }, transform: [{ scaleY: -1 }] });
+    expect(edge().findByType("EdgeFade" as never).props.height).toBe(60);
+    await act(async () => root?.unmount());
+    // Under a status bar the edge reaches further down, so it is in sooner.
+    h.top = 59;
+    await open("pick-1");
+    expect(edge().props.style).toMatchObject({ height: 119, opacity: { inputRange: [121, 181] } });
+    await act(async () => root?.unmount());
+    // Without a photo the title starts just below the button, so the edge is in within its first few points.
+    picks.rememberPick({ ...pick, id: "pick-7", photo: null }, ADA);
+    await open("pick-7");
+    expect(edge().props.style).toMatchObject({ height: 119, opacity: { inputRange: [0, 4] } });
   });
 
   it("finds today's pick again when opened without its card, and goes home when that isn't the one", async () => {

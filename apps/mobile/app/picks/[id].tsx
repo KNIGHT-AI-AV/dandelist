@@ -1,13 +1,13 @@
 import { Redirect, router, useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ScrollView, StyleSheet, Text, View, useWindowDimensions, type ViewStyle } from "react-native";
+import { Animated, StyleSheet, Text, View, useWindowDimensions, type ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Atmosphere } from "../../components/atmosphere";
 import { CONTROL_TOP, HERO_SHADE } from "../../components/detail/metrics";
-import { AgentDot, Eyebrow, Grain, IconButton, Photo, PrimaryButton, Protect, QuietButton, Shade } from "../../components/lux";
+import { AgentDot, EdgeFade, Eyebrow, Grain, IconButton, Photo, PrimaryButton, Protect, QuietButton, Shade } from "../../components/lux";
 import { PhotoCredit } from "../../components/photo-credit";
 import { bindToSignIn, currentSignIn, useAuth } from "../../lib/auth";
-import { haptic } from "../../lib/motion";
+import { haptic, native } from "../../lib/motion";
 import { answerPick, factsOf, fetchTodayPick, knownPick, localDay, pickSkipped, rememberPick, sameOwner, usePickAnswers, wasPickAdded, wasPickSkipped, type PickOwner, type TodayPick } from "../../lib/picks";
 import { layout, space, type, usePalette, useType } from "../../lib/theme";
 import { KIND_LABEL } from "../../lib/words";
@@ -43,7 +43,9 @@ export default function PickDetail() {
   const [lost, setLost] = useState<PickOwner | null>(null);
   const [noted, setNoted] = useState(false);
   const closing = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const pick = (id ? knownPick(id, owner) : null) ?? (found && sameOwner(found.owner, owner) && found.pick.id === id ? found.pick : null);
+  const scrollY = useRef(new Animated.Value(0)).current;
+  const onScroll = useRef(Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: native })).current;
+  const pick =(id ? knownPick(id, owner) : null) ?? (found && sameOwner(found.owner, owner) && found.pick.id === id ? found.pick : null);
 
   // Opened without its card for this sign-in (a reload on the web, a saved link): today's pick is asked for again, as it.
   useEffect(() => {
@@ -92,10 +94,15 @@ export default function PickDetail() {
 
   const gutter = layout.gutter(winW);
   const column: ViewStyle = { width: "100%", maxWidth: layout.list + 2 * gutter, alignSelf: "center", paddingHorizontal: gutter };
+  // The scroll edge under the back button, as on a wish's page: fully in by the time the title's top reaches its lower
+  // edge, so the title fades out there instead of running under the button (measured at 375 x 667, 2026-11-01).
+  const edge = insets.top + layout.headerBar + layout.stack.base;
+  const titleTop = pick.photo ? HERO - TITLE_OVERLAP : insets.top + CONTROL_TOP + layout.headerBar + layout.stack.base;
+  const edgeIn = Math.max(1, titleTop - edge);
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
       <Atmosphere />
-      <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + layout.stack.sectionLg }} showsVerticalScrollIndicator={false}>
+      <Animated.ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + layout.stack.sectionLg }} showsVerticalScrollIndicator={false} onScroll={onScroll} scrollEventThrottle={16}>
         {pick.photo ? (
           <View style={{ height: HERO }}>
             <Photo uri={pick.photo.url} style={StyleSheet.absoluteFill} />
@@ -154,7 +161,21 @@ export default function PickDetail() {
             </View>
           )}
         </View>
-      </ScrollView>
+      </Animated.ScrollView>
+      <Animated.View
+        pointerEvents="none"
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          height: edge,
+          opacity: scrollY.interpolate({ inputRange: [Math.max(0, edgeIn - layout.headerBar - layout.stack.base), edgeIn], outputRange: [0, 1], extrapolate: "clamp" }),
+          transform: [{ scaleY: -1 }],
+        }}
+      >
+        <EdgeFade height={edge} />
+      </Animated.View>
       <View style={{ position: "absolute", top: insets.top + CONTROL_TOP, left: gutter }}>
         <IconButton icon="back" label="Back" onPress={leave} />
       </View>
