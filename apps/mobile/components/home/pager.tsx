@@ -251,7 +251,8 @@ export function PagerView({ pages }: { pages: Record<PageId, ReactNode> }) {
 
   return (
     // On the web a drag that starts selecting text ends the gesture, so the ring doesn't select (fields still do).
-    <View ref={box} style={[StyleSheet.absoluteFill, Platform.OS === "web" ? ({ overflow: "hidden", touchAction: "pan-y", userSelect: "none" } as object) : { overflow: "hidden" }]} {...pan.panHandlers}>
+    // On the web the pages are the main landmark (axe 2026-11-01: no main region, so nothing to jump to past the bar).
+    <View ref={box} style={[StyleSheet.absoluteFill, Platform.OS === "web" ? ({ overflow: "hidden", touchAction: "pan-y", userSelect: "none" } as object) : { overflow: "hidden" }]} {...pan.panHandlers} {...(Platform.OS === "web" ? { role: "main" as const } : null)}>
       {layers.map((l) => {
         const front = shows(l.id);
         return (

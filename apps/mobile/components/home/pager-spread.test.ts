@@ -233,6 +233,17 @@ describe("pages out of view and the keyboard", () => {
     expect(inert()).toEqual({ list: false, chat: false, details: true, money: true, settings: true });
   });
 
+  it("sit in the main landmark on the web, and a phone gets no role", async () => {
+    h.os = "web";
+    vi.stubGlobal("window", { matchMedia: () => ({ matches: false, media: "(pointer: coarse)", addEventListener() {}, removeEventListener() {} }), addEventListener() {}, removeEventListener() {} });
+    await mount(1440, 900);
+    expect(root!.root.findAll((n) => n.props.role === "main")).toHaveLength(1);
+    await act(async () => root!.unmount());
+    h.os = "ios";
+    await mount(393, 852);
+    expect(root!.root.findAll((n) => n.props.role === "main")).toHaveLength(0);
+  });
+
   it("are left to aria-hidden and the screen reader's own rules on a phone", async () => {
     await mount(393, 852);
     expect(Object.values(inert()).every((v) => v === undefined)).toBe(true);
