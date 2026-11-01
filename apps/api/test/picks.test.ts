@@ -18,7 +18,15 @@ import { imageResponse, jpegHeader } from "./images";
 
 type Json = Record<string, any>;
 const PHOTO = "https://upload.wikimedia.org/wikipedia/commons/r/ri/Riva_Aquariva.jpg";
-const RIVA = { title: "Riva Aquariva Super", kind: "own", why: "It goes with the summers on the lake you wrote about.", summary: "A classic wooden runabout.", place: "" };
+const RIVA = {
+  title: "Riva Aquariva Super",
+  kind: "own",
+  why: "It goes with the summers on the lake you wrote about.",
+  summary: "A classic wooden runabout.",
+  about: "A mahogany runabout built by Riva in Sarnico on Lake Iseo, a modern take on the 1960s Aquarama. It seats eight and is made to order.",
+  facts: [{ label: "Made by", value: "Riva" }, { label: "Built in", value: "Sarnico, Italy" }],
+  place: "",
+};
 
 let db: Db;
 let mail: { to: string; code: string }[];
@@ -144,7 +152,8 @@ describe("the pick's rules", () => {
   it("refuses a repeat, a price, flattery and the machinery, and tidies what it keeps", () => {
     const none = { wishes: [{ name: "Leica Q3", kind: "buy" }], picks: [{ title: "Fujifilm X100VI", status: "skipped" }] };
     const ok = { title: "Leica Summilux 35", kind: "buy", why: "Your Q3 is fixed at 28mm — this lens frames people closer.", summary: "A fast lens.", place: "" };
-    expect(checkPick(ok, none)).toEqual({ title: "Leica Summilux 35", kind: "buy", why: "Your Q3 is fixed at 28mm, this lens frames people closer.", summary: "A fast lens.", place: "" });
+    // A model answer from before about and facts were asked for still makes a pick, without them.
+    expect(checkPick(ok, none)).toEqual({ title: "Leica Summilux 35", kind: "buy", why: "Your Q3 is fixed at 28mm, this lens frames people closer.", summary: "A fast lens.", about: "", facts: [], place: "" });
     const no = (change: Json) => expect(() => checkPick({ ...ok, ...change }, none)).toThrow(PickRejected);
     no({ title: "A Leica Q3" });
     no({ title: "Fujifilm X100VI" });
@@ -157,6 +166,31 @@ describe("the pick's rules", () => {
     no({ kind: "steal" });
     no({ title: "https://leica.com/lens" });
     expect(() => checkPick(null, none)).toThrow(PickRejected);
+  });
+
+  it("keeps the page's about and facts to the why line's rules, dropping only what breaks them", () => {
+    const none = { wishes: [], picks: [] };
+    const ok = { title: "Leica M11-P", kind: "buy", why: "Your Q3 is fixed at 28mm, and this one takes every Leica M lens.", summary: "A rangefinder camera." };
+    const about = "A full-frame rangefinder made by Leica in Wetzlar — the M11 with a silent shutter and content credentials built in.";
+    const facts = [
+      { label: "Made by", value: "Leica" },
+      { label: "Price", value: "$9,195" },
+      { label: "made by", value: "Leica Camera AG" },
+      { label: "Sensor", value: "60 megapixels" },
+      { label: "Weight", value: "530 g" },
+      { label: "Mount", value: "Leica M" },
+      { label: "", value: "Empty" },
+    ];
+    const made = checkPick({ ...ok, about, facts }, none);
+    expect(made.about).toBe("A full-frame rangefinder made by Leica in Wetzlar, the M11 with a silent shutter and content credentials built in.");
+    // The price goes, a repeated label goes, an empty one goes, and three at most stay.
+    expect(made.facts).toEqual([{ label: "Made by", value: "Leica" }, { label: "Sensor", value: "60 megapixels" }, { label: "Weight", value: "530 g" }]);
+    // An about with a price, flattery or too little in it is left out; the pick stands.
+    expect(checkPick({ ...ok, about: "Yours for about $9,000 before tax." }, none).about).toBe("");
+    expect(checkPick({ ...ok, about: "You deserve a camera this fine." }, none).about).toBe("");
+    expect(checkPick({ ...ok, about: "A camera." }, none).about).toBe("");
+    // Facts that come back as something else are simply none.
+    expect(checkPick({ ...ok, facts: "Made by Leica" }, none).facts).toEqual([]);
   });
 });
 
@@ -183,7 +217,7 @@ describe("today's pick", () => {
     await addWish(token, "Riva boat", "Summers on the lake with my brother.");
     const first = await today(token);
     expect(first.status).toBe(200);
-    expect(first.body.pick).toMatchObject({ day: "2026-10-29", status: "ready", title: "Riva Aquariva Super", kind: "own", why: RIVA.why, summary: RIVA.summary });
+    expect(first.body.pick).toMatchObject({ day: "2026-10-29", status: "ready", title: "Riva Aquariva Super", kind: "own", why: RIVA.why, summary: RIVA.summary, about: RIVA.about, facts: RIVA.facts });
     expect(first.body.pick.photo).toEqual({ url: PHOTO, width: 3000, height: 2000, source: "wikipedia.org", credit: "Wikipedia: Riva Aquariva" });
 
     // Muse Spark at low effort, one web search, JSON out; the notes are framed as data in its instructions.
