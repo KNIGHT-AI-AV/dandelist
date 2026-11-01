@@ -126,7 +126,11 @@ export class MetaClient {
     return { text: String(raw.transcript ?? "").trim(), durationMs, costUsd: (durationMs / 1000) * TRANSCRIBE_PRICE_PER_SECOND };
   }
 
-  /** One retry, a second later, when Meta answers 502, 503 or 504: those failed before any work was billed. */
+  /**
+   * One retry, a second later, when Meta answers 500, 502, 503 or 504: those failed before any usage came back, so
+   * nothing was recorded against the budget. A bare 500 ("internal server error") ended a live hunt's research on
+   * 2026-11-01 and left only the estimate.
+   */
   private async post(path: string, payload: unknown): Promise<unknown> {
     const body = JSON.stringify(payload);
     for (let attempt = 0; ; attempt++) {
@@ -137,7 +141,7 @@ export class MetaClient {
       });
       const text = await res.text();
       if (res.ok) return JSON.parse(text);
-      if (attempt === 0 && [502, 503, 504].includes(res.status)) {
+      if (attempt === 0 && [500, 502, 503, 504].includes(res.status)) {
         await new Promise((r) => setTimeout(r, this.opts.retryDelayMs ?? 1000));
         continue;
       }

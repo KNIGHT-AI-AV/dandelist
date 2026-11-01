@@ -3,7 +3,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import type { Meta } from "./agent/agent";
 import { personaSchema, voiceLine, type PersonaId } from "./agent/persona";
-import { PHOTO_CHECK, findPhoto, type PhotoTrace } from "./agent/photos";
+import { PHOTO_CHECK, findPhoto, photoTally } from "./agent/photos";
 import { USER_DAILY_USD, type AgentDeps } from "./agent/routes";
 import { within } from "./agent/time";
 import { publicFetch, type Fetcher } from "./agent/tools";
@@ -255,8 +255,6 @@ export async function choosePick(meta: Meta, input: PickInput): Promise<MadePick
   return checkPick(raw, input);
 }
 
-type PhotoSources = Omit<Extract<PhotoTrace, { step: "sources" }>, "step">;
-
 /**
  * The photo search's pick for today's pick (agent/photos.ts: sized, then picked out of a line-up twice), or none. Never
  * a photo that didn't pass, and only https.
@@ -266,23 +264,9 @@ export async function photoFor(meta: Meta, made: MadePick, fetcher: Fetcher, by:
   // candidates each source gave, how many were big enough, how many the looks judged, and whether the time ran out.
   // Counts and hosts only: never the pick's title or an address. The web search's own step says why it gave what it
   // did: how many addresses the model named, how many pages opened and how many photos they held. None at all means the
-  // search didn't answer in time.
+  // web step never reported: it didn't answer in time, or it failed before it could (Codex, round 58).
   const started = Date.now();
-  const seen = { sources: null as PhotoSources | null, web: null as { said: number; read: number; readOk: number; photos: number } | null, sized: 0, sizedOk: 0, judged: 0, unjudged: 0, setAside: {} as Record<string, number> };
-  const trace = (t: PhotoTrace) => {
-    if (t.step === "sources") seen.sources = { page: t.page, web: t.web, wikipedia: t.wikipedia, commons: t.commons, openverse: t.openverse };
-    else if (t.step === "web") seen.web = { said: t.said.length, read: t.read.length, readOk: t.read.filter((r) => r.ok).length, photos: t.read.reduce((n, r) => n + r.photos, 0) };
-    else if (t.step === "sized") {
-      seen.sized++;
-      // The first reason, without its numbers ("too small (320 x 200)" counts as "too small").
-      const why = t.reasons[0]?.replace(/ \(.*\)$/, "");
-      if (t.ok) seen.sizedOk++;
-      else if (why) seen.setAside[why] = (seen.setAside[why] ?? 0) + 1;
-    } else if (t.step === "checked") {
-      if (t.verdict) seen.judged++;
-      else seen.unjudged++;
-    }
-  };
+  const { seen, trace } = photoTally();
   const found = await findPhoto(meta, { title: made.title, kind: made.kind, summary: made.summary, ...(made.place ? { place: made.place } : {}) }, { fetcher, by, trace }).catch(() => null);
   const ok = !!found && /^https:\/\//i.test(found.image.url);
   console.info("daily pick photo", JSON.stringify({ kind: made.kind, found: ok, ...(ok ? { source: found!.image.source } : {}), ms: Date.now() - started, outOfTime: Date.now() >= by, ...seen }));

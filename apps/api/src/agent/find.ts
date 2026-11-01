@@ -22,7 +22,7 @@ import { CANDIDATE_PHOTOS_MS, candidatePhotos } from "./candidates";
 import { estimateCard } from "./estimate";
 import { clip, withLine } from "./lines";
 import type { MediaImage } from "./media";
-import { fallbackPlan, findPhoto, photoPlan, subjectOf, verifyPhoto, type FoundPhoto } from "./photos";
+import { fallbackPlan, findPhoto, photoPlan, photoTally, subjectOf, verifyPhoto, type FoundPhoto } from "./photos";
 import { QUICK_MS, mediaKindOf, quickFind, subjectPhoto } from "./quick";
 import { within } from "./time";
 import { publicFetch } from "./tools";
@@ -218,7 +218,11 @@ export async function huntWish(meta: Meta, ctx: HuntContext): Promise<HuntResult
   const subject = subjectOf(draft);
   const planned = photoPlan(meta, subject).catch(() => fallbackPlan(subject));
   const standIn = subjectPhoto(draft, { archive: ctx.archive, api: fetcher, by: t0 + RESEARCH_MS }).catch(() => null);
-  const searched = findPhoto(meta, subject, { fetcher, by: t0 + RESEARCH_MS, plan: planned, pages: quick.then((q) => (q?.url ? [q.url] : [])) }).catch(() => null);
+  const tally = photoTally();
+  const searched = findPhoto(meta, subject, { fetcher, by: t0 + RESEARCH_MS, plan: planned, pages: quick.then((q) => (q?.url ? [q.url] : [])), trace: tally.trace }).catch(() => null);
+  // One line per hunt on how its photo search went, as the daily pick's: counts and hosts only (owner, 2026-11-01: a
+  // Louis Vuitton came back with no photo, and nothing in the log said why).
+  void searched.then((f) => console.info("hunt photo", JSON.stringify({ kind: subject.kind, found: !!f, ...(f ? { source: f.image.source, how: f.how } : {}), ms: Date.now() - t0, ...tally.seen })));
   const passed = new Map<string, Promise<boolean>>();
   const stands = (url: string) => {
     let p = passed.get(url);
