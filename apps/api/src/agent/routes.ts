@@ -12,7 +12,7 @@ import { HUNT_STOP_MS, huntWish, type HuntResult } from "./find";
 import { SAM_MODEL } from "./cutout";
 import type { MediaOptions } from "./hunt";
 import { SHOPPING_ACTOR, SHOPPING_MAX_RESULTS, SHOPPING_PRICE_PER_RESULT_USD, shoppingSearch } from "./shopping";
-import { PHOTO_CHECK, findPhoto } from "./photos";
+import { PHOTO_CHECK, findPhoto, photoTally } from "./photos";
 import { publicFetch, type Fetcher } from "./tools";
 import { pgArchive, type Archive } from "../archive/archive";
 import { MAX_CLIP_BYTES, TRANSCRIBES_PER_USER_PER_DAY, WISH_KEYWORDS, cleanTranscript, clipProblem, readWav } from "./transcribe";
@@ -230,7 +230,11 @@ export function agentRoutes(deps: AgentDeps) {
       const stop = new AbortController();
       const timer = setTimeout(() => stop.abort(), RETAKE_MS);
       try {
-        const found = await findPhoto(metaFor(userId, "photo", undefined, stop.signal), subject, { fetcher: deps.webFetch ?? publicFetch, exclude, deep: true, pages: page ? [page] : [], by: Date.now() + RETAKE_MS });
+        const started = Date.now();
+        const tally = photoTally();
+        const found = await findPhoto(metaFor(userId, "photo", undefined, stop.signal), subject, { fetcher: deps.webFetch ?? publicFetch, exclude, deep: true, pages: page ? [page] : [], by: Date.now() + RETAKE_MS, trace: tally.trace });
+        // As a hunt's: counts and hosts only.
+        console.info("retake photo", JSON.stringify({ kind: subject.kind, found: !!found, ...(found ? { source: found.image.source, how: found.how } : {}), ms: Date.now() - started, ...tally.seen }));
         if (!found) return c.json({ error: "No better photo turned up this time. Try again in a moment." }, 404);
         return c.json({ photo: { imageUrl: found.image.url, media: { kind: found.kind, images: [found.image] }, how: found.how } });
       } finally {

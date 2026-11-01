@@ -784,7 +784,12 @@ export interface ResearchContext {
   deadline?: number;
   /** Meta's reasoning effort for every research call. Missing: RESEARCH_EFFORT. */
   effort?: string;
+  /** The waits before asking Meta again for a response it can't yet see. Missing: CHAIN_RETRY_MS (tests set zeros). */
+  chainRetryMs?: readonly number[];
 }
+
+/** Before each retry of a follow-up call that names a response Meta can't yet see: a second, then three. */
+export const CHAIN_RETRY_MS: readonly number[] = [1_000, 3_000];
 
 /**
  * The reasoning effort research runs at when its caller names none. Chosen by a live A/B through huntWish with shops
@@ -876,16 +881,20 @@ export async function research(meta: Meta, ctx: ResearchContext): Promise<Resear
 
   /**
    * A follow-up call. Meta sometimes can't yet see a response it made a moment ago ("referenced response not found
-   * or expired", seen on the live server 2026-10-29), so that one error gets a single retry a second later.
+   * or expired", seen on the live server 2026-10-29), so that one error is asked again a second later, then once more
+   * three seconds after that: one retry a second later still failed twice on the live server in two days (10:19Z and
+   * 15:15Z on 2026-11-01), each time leaving only the fast card.
    */
   const chain = async (body: Parameters<Meta["responses"]>[0]) => {
-    try {
-      return await meta.responses(body);
-    } catch (e) {
-      if (!/referenced response not found/i.test(e instanceof Error ? e.message : "")) throw e;
-      await new Promise((r) => setTimeout(r, 1_000));
-      return meta.responses(body);
+    for (const wait of ctx.chainRetryMs ?? CHAIN_RETRY_MS) {
+      try {
+        return await meta.responses(body);
+      } catch (e) {
+        if (!/referenced response not found/i.test(e instanceof Error ? e.message : "")) throw e;
+        await new Promise((r) => setTimeout(r, wait));
+      }
     }
+    return meta.responses(body);
   };
 
   let res = await meta.responses({ instructions: researchInstructions(ctx.now(), !!ctx.shopping, ctx.voice), input: brief(ctx.draft, ctx.answers, home), tools, ...reasoning });

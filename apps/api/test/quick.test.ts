@@ -582,6 +582,21 @@ describe("the research's deadline", () => {
     expect(refused).toBeGreaterThan(1);
     expect(out.options[0]).toMatchObject({ url: ROLEX });
   });
+
+  it("asks twice more when Meta still can't see it a second later (the live server, 10:19Z and 15:15Z on 2026-11-01)", async () => {
+    let refused = 0;
+    const meta = metaOf((b) => {
+      if (b.text?.format?.name === "price_options") return result(OPTIONS);
+      if (b.previous_response_id && refused++ < 2) throw new Error('Meta Model API returned 400: {"error":{"message":"referenced response not found or expired"}}');
+      if (b.previous_response_id) return result("Done.");
+      if (String(b.instructions ?? "").startsWith("You are Dandelist's price researcher")) return result("", { functionCalls: [{ callId: "g1", name: "get_page", arguments: JSON.stringify(ROUND) }] });
+      return result("Pick the Rolex.");
+    });
+    const out = await research(meta, { draft: DRAFT, answers: [], onStep: () => undefined, now: () => clock, fetcher: fakeWeb, deadline: Date.now() + 60_000, chainRetryMs: [0, 0] });
+    // Refused twice, answered the third time.
+    expect(refused).toBe(3);
+    expect(out.options[0]).toMatchObject({ url: ROLEX });
+  });
 });
 
 describe("what the explanation may say about running costs", () => {

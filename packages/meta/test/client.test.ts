@@ -88,6 +88,21 @@ describe("MetaClient", () => {
     expect(calls).toBe(2);
   });
 
+  it("retries a bare 500 once too, and never a 400 (a live hunt's research ended on one 500, 2026-11-01)", async () => {
+    let calls = 0;
+    const flaky = (async () => (++calls === 1 ? new Response('{"error":{"message":"internal server error","type":"server_error"}}', { status: 500 }) : new Response(JSON.stringify(sample), { status: 200 }))) as unknown as typeof fetch;
+    expect((await new MetaClient({ apiKey: "k", fetch: flaky, retryDelayMs: 0 }).responses({ input: "hi" })).text).toBe("B&H lists it at $5,995.");
+    expect(calls).toBe(2);
+    calls = 0;
+    const down = (async () => (calls++, new Response("{}", { status: 500 }))) as unknown as typeof fetch;
+    await expect(new MetaClient({ apiKey: "k", fetch: down, retryDelayMs: 0 }).responses({ input: "hi" })).rejects.toMatchObject({ status: 500 });
+    expect(calls).toBe(2);
+    calls = 0;
+    const refused = (async () => (calls++, new Response('{"error":{"message":"referenced response not found or expired"}}', { status: 400 }))) as unknown as typeof fetch;
+    await expect(new MetaClient({ apiKey: "k", fetch: refused, retryDelayMs: 0 }).responses({ input: "hi" })).rejects.toMatchObject({ status: 400 });
+    expect(calls).toBe(1);
+  });
+
   it("raises MetaApiError with the status on failure", async () => {
     const fakeFetch = (async () => new Response('{"error":"bad key"}', { status: 401 })) as unknown as typeof fetch;
     const client = new MetaClient({ apiKey: "x", fetch: fakeFetch });
