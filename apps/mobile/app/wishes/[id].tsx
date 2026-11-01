@@ -1,6 +1,6 @@
 import { Redirect, router, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { Animated, Linking, PanResponder, Pressable, StyleSheet, Text, View, useWindowDimensions, type NativeScrollEvent, type NativeSyntheticEvent, type ScrollView, type ViewStyle } from "react-native";
+import { Animated, Linking, PanResponder, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions, type NativeScrollEvent, type NativeSyntheticEvent, type ScrollView, type ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Atmosphere } from "../../components/atmosphere";
 import { HeroGallery, type GalleryReturn } from "../../components/detail/gallery";
@@ -42,6 +42,12 @@ const EXIT_MS = 200;
 const PULL = { claim: 8, steep: 1.5, dismiss: 0.25, range: 240, scale: 0.9, follow: 0.6 };
 /** Title, price, why it matters, source, remove: the regions that stagger in, top to bottom. */
 const SECTIONS = 5;
+
+/**
+ * On the web the wish's page is the main landmark while it covers the list (whose own landmarks are hidden then), so
+ * a screen reader finds all of it in one (axe: 12 parts outside any landmark). Web only, as on the list's pages.
+ */
+const MAIN = Platform.OS === "web" ? { role: "main" as const } : null;
 
 /**
  * A wish in full. Opened from the list, its photograph grows out of the card it was (UI audit P1-17): the list
@@ -163,7 +169,7 @@ export default function WishDetail() {
   const w = found ?? (removing ? kept.current : undefined);
   if (!w) {
     return (
-      <View style={{ flex: 1, backgroundColor: p.bg, alignItems: "center", justifyContent: "center", gap: layout.stack.base, padding: layout.gutter(winW) }}>
+      <View style={{ flex: 1, backgroundColor: p.bg, alignItems: "center", justifyContent: "center", gap: layout.stack.base, padding: layout.gutter(winW) }} {...MAIN}>
         <Atmosphere />
         {status === "loading" || status === "idle" ? <Breathing style={{ width: "100%", maxWidth: layout.list, height: CARD_PLACEHOLDER }} /> : <Text style={[type.callout, { color: p.ink2 }]}>That wish wasn't found.</Text>}
         <QuietButton label="Back to your list" onPress={() => router.replace("/wishes")} />
@@ -187,7 +193,9 @@ export default function WishDetail() {
     const out = new Promise<void>((resolve) => exit(resolve, false));
     try {
       await Promise.all([remove(w!.id), out]);
-      router.replace("/wishes");
+      // Back to the list underneath, as Back does: a replace stacked a second list over the first.
+      if (router.canGoBack()) router.back();
+      else router.replace("/wishes");
     } catch (e) {
       leaving.current = false;
       setRemoving(false);
@@ -228,7 +236,7 @@ export default function WishDetail() {
   const priceKey = [w.item.upfrontCents, ...w.item.recurring.map((rr) => `${rr.amountCents}/${rr.period}`)].join("|");
 
   return (
-    <View style={{ flex: 1 }}>
+    <View style={{ flex: 1 }} {...MAIN}>
       <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: p.bg, opacity: page }]} />
       <Animated.ScrollView
         ref={scroller}

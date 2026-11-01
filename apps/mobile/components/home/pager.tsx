@@ -218,6 +218,9 @@ export function PagerView({ pages }: { pages: Record<PageId, ReactNode> }) {
       }
     };
     const onKey = (e: KeyboardEvent) => {
+      // Not while another screen covers this one (an open wish leaves the list inert underneath): the arrows there
+      // turned these pages out of sight, so Back landed somewhere else.
+      if (el?.closest?.("[inert]")) return;
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
       if (e.key === "ArrowRight") next(1);

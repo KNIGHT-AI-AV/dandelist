@@ -233,6 +233,27 @@ describe("pages out of view and the keyboard", () => {
     expect(inert()).toEqual({ list: false, chat: false, details: true, money: true, settings: true });
   });
 
+  it("don't turn with the arrow keys while another screen covers them (an open wish leaves the list inert)", async () => {
+    h.os = "web";
+    let onKey: ((e: { key: string; target: unknown }) => void) | null = null;
+    vi.stubGlobal("window", {
+      matchMedia: () => ({ matches: false, media: "(pointer: coarse)", addEventListener() {}, removeEventListener() {} }),
+      addEventListener: (type: string, fn: (e: { key: string; target: unknown }) => void) => void (type === "keydown" && (onKey = fn)),
+      removeEventListener() {},
+    });
+    let covered = true;
+    h.win = { width: 1440, height: 900 };
+    await act(async () => {
+      root = create(ring(), { createNodeMock: () => ({ closest: (s: string) => (s === "[inert]" && covered ? {} : null), addEventListener() {}, removeEventListener() {} }) });
+    });
+    await act(async () => onKey!({ key: "ArrowRight", target: null }));
+    expect(pager!.page).toBe("list");
+    // Uncovered again, the arrows turn the pages as before.
+    covered = false;
+    await act(async () => onKey!({ key: "ArrowRight", target: null }));
+    expect(pager!.page).toBe("chat");
+  });
+
   it("sit in the main landmark on the web, and a phone gets no role", async () => {
     h.os = "web";
     vi.stubGlobal("window", { matchMedia: () => ({ matches: false, media: "(pointer: coarse)", addEventListener() {}, removeEventListener() {} }), addEventListener() {}, removeEventListener() {} });
