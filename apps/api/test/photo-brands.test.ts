@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 // Image hosts resolve to a public documentation address, so no test touches real DNS.
 vi.mock("node:dns/promises", async (importOriginal) => ({ ...(await importOriginal<object>()), lookup: async () => [{ address: "93.184.215.14", family: 4 }] }));
 import type { Meta } from "../src/agent/agent";
-import { brandPhotos, findPhoto, photoTally, siteOf, webPhotoUrls, type PhotoPlan, type PhotoVerdict } from "../src/agent/photos";
+import { LOOKS_MS, brandPhotos, findPhoto, photoTally, siteOf, webPhotoUrls, type PhotoPlan, type PhotoVerdict } from "../src/agent/photos";
 import { imageResponse, jpegHeader, pngHeader } from "./images";
 
 /**
@@ -25,12 +25,16 @@ const RESALE_SHOT = "https://www.fashionphile.com/cdn/shop/files/hermes-togo-bir
 const birkin = { title: "Hermès Birkin 30 in Etoupe Togo", kind: "buy" as const };
 const resaleHtml = `<html><head><title>Hermes Togo Birkin 30 Etoupe</title><meta property="og:image" content="${RESALE_SHOT}"><script type="application/ld+json">{"@type":"Product","name":"Hermes Togo Birkin 30 Etoupe","image":"${RESALE_SHOT}","offers":{"price":"24000","priceCurrency":"USD"}}</script></head><body>Hermes Togo Birkin 30 Etoupe</body></html>`;
 
+const LV_OTHER_PAGE = "https://en.louisvuitton.com/eng-e1/products/christopher-mm-taurillon-monogram-nvprod5170035v/M24428";
+const LV_OTHER_SHOT = LV_SHOT.replace("N40564", "M24428");
+
 /** The web as our server meets it: these makers' pages turn it away; the rest open as given. */
-const web = (opened: string[] = []) =>
+const web = (opened: string[] = [], o: { lvMissing?: boolean } = {}) =>
   (async (input: string | URL) => {
     const u = String(input);
     opened.push(u);
-    if (u === LV_SHOT) return imageResponse(pngHeader(1090, 1090), "image/png");
+    if (u === LV_SHOT && !o.lvMissing) return imageResponse(pngHeader(1090, 1090), "image/png");
+    if (u === LV_OTHER_SHOT) return imageResponse(pngHeader(1090, 1090), "image/png");
     if (u === RESALE_SHOT) return imageResponse(jpegHeader(1946, 1946), "image/jpeg");
     if (u === RESALE) return new Response(resaleHtml, { headers: { "content-type": "text/html" } });
     if (/louisvuitton\.com|hermes\.com/.test(u)) return new Response("Access Denied", { status: 403, headers: { "content-type": "text/html" } });
@@ -38,12 +42,14 @@ const web = (opened: string[] = []) =>
     return new Response("not found", { status: 404, headers: { "content-type": "text/html" } });
   }) as unknown as typeof fetch;
 
+/** A web search's answer: one address a line. */
+const answer = (lines: string[], n = 1) => ({ id: `r${n}`, text: lines.join("\n"), citations: [], functionCalls: [], searchQueries: [], usage: { model: "muse-spark-1.3", inputTokens: 10, cachedInputTokens: 0, outputTokens: 10, searches: 1 }, costUsd: 0, raw: {} }) as never;
+
 /** A web search answering each call with its own lines, recording what it was asked. */
 const searching = (answers: string[][], calls: Record<string, unknown>[] = []): Meta => ({
   responses: async (body) => {
     calls.push(body);
-    const lines = answers[calls.length - 1] ?? [];
-    return { id: `r${calls.length}`, text: lines.join("\n"), citations: [], functionCalls: [], searchQueries: [], usage: { model: "muse-spark-1.3", inputTokens: 10, cachedInputTokens: 0, outputTokens: 10, searches: 1 }, costUsd: 0, raw: {} } as never;
+    return answer(answers[calls.length - 1] ?? [], calls.length);
   },
 });
 
@@ -103,16 +109,44 @@ describe("a second web search when every page named turned us away", () => {
     expect(tally.seen.web).toEqual({ said: 2, read: 2, readOk: 1, photos: 1 });
   });
 
-  it("doesn't search again when the first gave a photo, named no page at all, or too little time is left", async () => {
-    for (const [answers, by] of [
-      [[[RESALE]], Date.now() + 60_000],
-      [[[]], Date.now() + 60_000],
-      [[[HERMES]], Date.now() + 10_000],
+  it("doesn't search again when the first gave a photo, named no page, the wish isn't a thing to buy, or under 25 s are left", async () => {
+    const trip = { title: "A week at Amanzoe", kind: "visit" as const };
+    for (const [answers, by, subject] of [
+      [[[RESALE]], Date.now() + 60_000, birkin],
+      [[[]], Date.now() + 60_000, birkin],
+      [[[HERMES]], Date.now() + 60_000, trip],
+      [[[HERMES]], Date.now() + 22_000, birkin],
     ] as const) {
       const calls: Record<string, unknown>[] = [];
-      await webPhotoUrls(searching(answers.map((a) => [...a]), calls), "Hermes Birkin 30", birkin, web(), by, { official: "hermes.com" });
-      expect(calls).toHaveLength(1);
+      await webPhotoUrls(searching(answers.map((a) => [...a]), calls), "Hermes Birkin 30", subject, web(), by, { official: "hermes.com" });
+      expect([subject.kind, by - Date.now() > 30_000, calls.length]).toEqual([subject.kind, by - Date.now() > 30_000, 1]);
     }
+  });
+
+  it("keeps the looks' time free: a second search that never answers is given up with LOOKS_MS still left", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    try {
+      const by = Date.now() + 40_000;
+      const calls: Record<string, unknown>[] = [];
+      const meta: Meta = { responses: async (body) => (calls.push(body) === 1 ? answer([HERMES]) : new Promise(() => undefined)) };
+      let doneAt = 0;
+      const got = webPhotoUrls(meta, "Hermes Birkin 30", birkin, web(), by, { official: "hermes.com" }).then((r) => ((doneAt = Date.now()), r));
+      await vi.advanceTimersByTimeAsync(40_000);
+      expect(await got).toEqual([]);
+      expect(calls).toHaveLength(2);
+      expect(by - doneAt).toBeGreaterThanOrEqual(LOOKS_MS);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("searches again when the maker's photo doesn't open, keeping the maker's other photos it names", async () => {
+    const calls: Record<string, unknown>[] = [];
+    const meta = searching([[LV_PAGE], [LV_OTHER_PAGE, RESALE]], calls);
+    const got = await webPhotoUrls(meta, lvPlan.web, lv, web([], { lvMissing: true }), Date.now() + 60_000, { identity: lvPlan.identity, official: "louisvuitton.com" });
+    expect(calls).toHaveLength(2);
+    // The image server's photo from the second answer stays though the site refused us; the one that 404ed doesn't.
+    expect(got).toEqual([LV_OTHER_SHOT, RESALE_SHOT]);
   });
 
   it("knows a site by its name, whatever its country: us. and fr. are one site, two shops on .co.uk are two", () => {
