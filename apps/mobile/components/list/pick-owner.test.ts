@@ -35,7 +35,16 @@ vi.mock("../../lib/storage", () => ({
   setSecret: async (key: string, value: string | null) => void (value === null ? h.store.delete(key) : h.store.set(key, value)),
 }));
 vi.mock("react-native", () => ({
-  Animated: { View: passThrough("AnimatedView") },
+  Animated: {
+    Value: class {
+      interpolate() {
+        return 0;
+      }
+    },
+    event: () => () => {},
+    ScrollView: passThrough("ScrollView"),
+    View: passThrough("AnimatedView"),
+  },
   AppState: { addEventListener: () => ({ remove() {} }) },
   Platform: { OS: "ios", select: (o: Record<string, unknown>) => o.ios ?? o.default },
   Pressable: ({ children, ...props }: { children?: ReactNode }) => createElement("Pressable", props, children),
@@ -66,6 +75,7 @@ vi.mock("../photo-credit", () => ({ PhotoCredit: "PhotoCredit" }));
 vi.mock("./presence", () => ({ Presence: ({ show, children }: { show: boolean; children?: ReactNode }) => (show ? createElement("Presence", null, children) : null) }));
 vi.mock("../lux", () => ({
   AgentDot: "AgentDot",
+  EdgeFade: "EdgeFade",
   Eyebrow: passThrough("Eyebrow"),
   Glass: passThrough("Glass"),
   Grain: "Grain",
@@ -78,7 +88,7 @@ vi.mock("../lux", () => ({
 }));
 vi.mock("../../lib/activity", () => ({ startTask: () => "task", endTask() {} }));
 vi.mock("../../lib/dandy", () => ({ useDandy: () => ({ persona: undefined }) }));
-vi.mock("../../lib/motion", () => ({ haptic: { select() {}, success() {} }, usePress: () => ({ scale: 1, onPressIn() {}, onPressOut() {} }) }));
+vi.mock("../../lib/motion", () => ({ haptic: { select() {}, success() {} }, native: true, usePress: () => ({ scale: 1, onPressIn() {}, onPressOut() {} }) }));
 vi.mock("../../lib/notifications", () => ({ notifier: { available: false } }));
 vi.mock("../../lib/reminder-state", () => ({ isFirstLaunch: () => false, updateReminders: async () => {}, useReminderState: () => ({ ask: null }) }));
 vi.mock("../../lib/reminders", () => ({ shouldAsk: () => false }));
