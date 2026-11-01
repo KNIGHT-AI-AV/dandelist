@@ -126,7 +126,9 @@ export function IncomeFader({ incomeCents, needCents, onChange, size = 52, compa
         steps={steps}
         onChange={onChange}
         label="Income a year"
-        valueText={`${money.format(incomeCents)} a year. ${stage.line}`}
+        // The line under the figure speaks for itself where a live region does (Android, the web); iOS has none, so
+        // there the slider says it too. Said once either way.
+        valueText={Platform.OS === "ios" ? `${money.format(incomeCents)} a year. ${stage.line}` : `${money.format(incomeCents)} a year`}
         labels={[steps[0]!, steps[steps.length - 1]!].map((c) => ({ cents: c, text: money.compact(c) }))}
         firm={newFace}
       />
