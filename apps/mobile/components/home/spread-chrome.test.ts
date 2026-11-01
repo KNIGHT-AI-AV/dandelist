@@ -11,7 +11,7 @@ const g = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean; IS_REACT_NATIVE_TE
 g.IS_REACT_ACT_ENVIRONMENT = true;
 g.IS_REACT_NATIVE_TEST_ENVIRONMENT = true;
 
-const h = vi.hoisted(() => ({ win: { width: 951, height: 669 } }));
+const h = vi.hoisted(() => ({ win: { width: 951, height: 669 }, top: 0 }));
 
 vi.mock("react-native", () => {
   class Node {
@@ -63,7 +63,7 @@ vi.mock("react-native", () => {
     useWindowDimensions: () => ({ ...h.win, scale: 3, fontScale: 1 }),
   };
 });
-vi.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }));
+vi.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ top: h.top, bottom: 0, left: 0, right: 0 }) }));
 vi.mock("expo-linear-gradient", () => ({ LinearGradient: "LinearGradient" }));
 vi.mock("expo-router", () => ({ router: { push() {} }, useFocusEffect() {} }));
 vi.mock("../../lib/agent", () => ({ transcribeWish: async () => "" }));
@@ -96,7 +96,7 @@ vi.mock("../list/undo-toast", () => ({ Toast: "Toast" }));
 vi.mock("../list/use-removals", () => ({ useRemovals: () => ({ pending: null, remove() {}, undo() {}, hold() {}, release() {} }) }));
 
 const { PagerProvider, usePager } = await import("./pager");
-const { Dock } = await import("./chrome");
+const { Dock, TopBar } = await import("./chrome");
 const { RemovalsProvider } = await import("./removals");
 
 let root: ReactTestRenderer | null = null;
@@ -134,6 +134,47 @@ afterEach(async () => {
   await act(async () => root?.unmount());
   root = null;
   pager = null;
+  h.top = 0;
+});
+
+/** How much of the page colour the bar's washes lay over a point `y` from the top, together (each a linear gradient). */
+function wash(y: number): number {
+  const layers = root!.root.findAll((n) => (n.type as unknown) === "LinearGradient");
+  let clear = 1;
+  for (const l of layers) {
+    const height = (l.props.style as { height: number }).height;
+    const stops = (l.props.locations as number[]).map((at, i) => ({ at: at * height, a: Number(/,\s*([\d.]+)\)$/.exec((l.props.colors as string[])[i]!)![1]) }));
+    if (y >= height) continue;
+    const i = stops.findIndex((s) => s.at >= y);
+    const a = i <= 0 ? stops[0]!.a : stops[i - 1]!.a + ((stops[i]!.a - stops[i - 1]!.a) * (y - stops[i - 1]!.at)) / (stops[i]!.at - stops[i - 1]!.at);
+    clear *= 1 - a;
+  }
+  return 1 - clear;
+}
+/** The bar's one wash before 2026-11-01: 0.94, 0.7 at 60% and nothing at the foot of the bar plus 28. */
+function before(y: number, edge: number): number {
+  const t = y / (edge + 28);
+  return t >= 1 ? 0 : t <= 0.6 ? 0.94 - (0.24 * t) / 0.6 : 0.7 * (1 - (t - 0.6) / 0.4);
+}
+
+describe("the bar over the pages", () => {
+  // Owner's screenshot, 2026-11-01: a quote scrolled under the bar showed at about half brightness behind the wordmark.
+  it("lays at least 90% of the page colour under its controls, and below the bar no more than before", async () => {
+    for (const top of [0, 59]) {
+      h.top = top;
+      h.win = { width: 430, height: 932 };
+      await act(async () => {
+        root = create(createElement(PagerProvider, { initial: "list", children: createElement(TopBar) }));
+      });
+      const edge = top + 44;
+      // The controls: from 5 points below the bar's top to 5 above its foot.
+      for (let y = top + 5; y <= edge - 5; y++) expect(wash(y)).toBeGreaterThanOrEqual(0.9);
+      // Below the bar, where a page's first line rests, nothing changed.
+      for (let y = edge; y <= edge + 30; y++) expect(wash(y)).toBeCloseTo(before(y, edge), 5);
+      await act(async () => root?.unmount());
+      root = null;
+    }
+  });
 });
 
 describe("the composer in a spread", () => {
