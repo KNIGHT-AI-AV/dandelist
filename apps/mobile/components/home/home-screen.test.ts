@@ -46,7 +46,7 @@ async function screen(os: string, focused: boolean) {
     root = create(createElement(Home));
   });
   // The screen's own outermost view, around the pages, the bar and the composer.
-  return root!.root.find((n: ReactTestInstance) => (n.type as unknown) === "View" && n.findAll((c) => (c.type as unknown) === "PagerView").length > 0 && n.parent?.type !== "View").props;
+  return root!.root.find((n: ReactTestInstance) => (n.type as unknown) === "View" && n.findAll((c) => (c.type as unknown) === "PagerView").length > 0 && (n.parent?.type as unknown) !== "View").props;
 }
 
 afterEach(async () => {

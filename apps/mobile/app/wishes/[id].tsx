@@ -193,7 +193,9 @@ export default function WishDetail() {
     const out = new Promise<void>((resolve) => exit(resolve, false));
     try {
       await Promise.all([remove(w!.id), out]);
-      router.replace("/wishes");
+      // Back to the list underneath, as Back does: a replace stacked a second list over the first.
+      if (router.canGoBack()) router.back();
+      else router.replace("/wishes");
     } catch (e) {
       leaving.current = false;
       setRemoving(false);

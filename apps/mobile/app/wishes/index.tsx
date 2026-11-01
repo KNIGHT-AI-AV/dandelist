@@ -1,5 +1,5 @@
 import { Redirect, useIsFocused, useLocalSearchParams } from "expo-router";
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import { Platform, View } from "react-native";
 import { Atmosphere } from "../../components/atmosphere";
 import { HomeProvider } from "../../components/home/bridge";
@@ -13,6 +13,7 @@ import { RemovalsProvider } from "../../components/home/removals";
 import { SettingsPage } from "../../components/home/settings-page";
 import { Grain } from "../../components/lux";
 import { useAuth } from "../../lib/auth";
+import { useFocusReturn } from "../../lib/focus-return";
 import { PAGES, type PageId } from "../../lib/pager";
 import { usePalette } from "../../lib/theme";
 
@@ -28,6 +29,9 @@ export default function Home() {
   const initial: PageId = PAGES.includes(page as PageId) ? (page as PageId) : "list";
   // A wish open over the list (wishes/[id], a transparent modal) leaves this screen mounted underneath.
   const focused = useIsFocused();
+  // And when it closes, the keyboard goes back to where it was (the card the wish was opened from).
+  const screen = useRef<View>(null);
+  useFocusReturn(screen, focused);
   const pages = useMemo(() => ({ list: <ListPage />, chat: <ChatPage />, details: <DetailsPage />, money: <MoneyPage />, settings: <SettingsPage /> }), []);
   if (auth.status === "signedOut") return <Redirect href="/welcome" />;
   // Clipped: the dock sinks 56 below the screen on the other pages, and unclipped that made the web page itself
@@ -35,7 +39,7 @@ export default function Home() {
   return (
     // While a wish's page covers it, the web's keyboard and screen readers leave this screen alone: before, Tab went
     // through the bar's controls before the wish's own, and from its Back button into the list hidden underneath.
-    <View style={{ flex: 1, backgroundColor: p.bg, overflow: "hidden" }} {...(Platform.OS === "web" ? { inert: !focused, "aria-hidden": !focused } : null)}>
+    <View ref={screen} style={{ flex: 1, backgroundColor: p.bg, overflow: "hidden" }} {...(Platform.OS === "web" ? { inert: !focused, "aria-hidden": !focused } : null)}>
       <Atmosphere />
       <PagerProvider initial={initial}>
         <HomeProvider>
