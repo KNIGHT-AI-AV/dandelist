@@ -897,7 +897,14 @@ export async function research(meta: Meta, ctx: ResearchContext): Promise<Resear
     return meta.responses(body);
   };
 
+  // How the research spent its time, for one log line at the end (owner, 2026-11-01: 14 of the last two days'
+  // researches ran out of time before their answer, and the log couldn't say where the time went). Milliseconds and
+  // counts only: never a title, a query or an address.
+  const t0 = Date.now();
+  const spent = { first: 0, rounds: [] as { tools: number; model: number | null; calls: number }[], answerAt: 0, answer: null as number | null, budget: Number.isFinite(deadline) ? deadline - t0 : null };
+  const logTiming = (outcome: "answered" | "out of time") => console.info("research timing", JSON.stringify({ outcome, ...spent }));
   let res = await meta.responses({ instructions: researchInstructions(ctx.now(), !!ctx.shopping, ctx.voice), input: brief(ctx.draft, ctx.answers, home), tools, ...reasoning });
+  spent.first = Date.now() - t0;
   await logSearches(res);
   let calls = 0;
   const runTool = async (name: string, args: string): Promise<string> => {
@@ -949,6 +956,7 @@ export async function research(meta: Meta, ctx: ResearchContext): Promise<Resear
   let carried: { type: string; call_id: string; output: string }[] | null = null;
   while (res.functionCalls.length && calls < MAX_TOOL_CALLS && left() > WRAP_UP_MS) {
     const room = MAX_TOOL_CALLS - calls;
+    const toolsAt = Date.now();
     const outputs = await Promise.all(
       res.functionCalls.map(async (fc, i) => ({
         type: "function_call_output",
@@ -956,7 +964,9 @@ export async function research(meta: Meta, ctx: ResearchContext): Promise<Resear
         output: i < room ? await runTool(fc.name, fc.arguments) : "Tool budget reached. Answer with what you have.",
       })),
     );
+    const modelAt = Date.now();
     const next = Number.isFinite(deadline) ? await within(chain({ previous_response_id: res.id, input: outputs, tools, ...reasoning }), left() - WRAP_UP_MS) : await chain({ previous_response_id: res.id, input: outputs, tools, ...reasoning });
+    spent.rounds.push({ tools: modelAt - toolsAt, model: next ? Date.now() - modelAt : null, calls: outputs.length });
     if (!next) {
       carried = outputs;
       break;
@@ -968,6 +978,7 @@ export async function research(meta: Meta, ctx: ResearchContext): Promise<Resear
   const stop = left() > WRAP_UP_MS ? "Tool budget reached. Answer with what you have." : "Out of time. Answer with what you have.";
   const pending = carried ?? res.functionCalls.map((fc) => ({ type: "function_call_output", call_id: fc.callId, output: stop }));
   // The answer has to land with time to check it; one that would come too late is no answer.
+  spent.answerAt = Date.now() - t0;
   const answering = chain({
     previous_response_id: res.id,
     input: [
@@ -982,7 +993,12 @@ export async function research(meta: Meta, ctx: ResearchContext): Promise<Resear
     ...reasoning,
   });
   const final = Number.isFinite(deadline) ? await within(answering, left() - 2_500) : await answering;
-  if (!final) throw new ResearchTimeout();
+  if (!final) {
+    logTiming("out of time");
+    throw new ResearchTimeout();
+  }
+  spent.answer = Date.now() - t0 - spent.answerAt;
+  logTiming("answered");
   const parsed = z.object({ options: z.array(rawOptionSchema), note: z.string().max(400), media: hintSchema.optional() }).parse(json(final.text));
   const hint: MediaHint = {
     kind: parsed.media?.kind ?? kindFromDraft(ctx.draft),
