@@ -3,6 +3,7 @@ import { useEffect, useRef, type ReactNode } from "react";
 import { ScrollView, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { layout, type, usePalette, useType } from "../lib/theme";
+import { MAIN } from "../lib/landmark";
 import { Chip, EdgeFade, Eyebrow, Hairline, IconButton, Wordmark } from "./lux";
 import { Atmosphere } from "./atmosphere";
 
@@ -59,7 +60,7 @@ export function LegalPage({ eyebrow, title, documents, focus, after }: { eyebrow
   }, [focus]);
 
   return (
-    <View style={{ flex: 1, backgroundColor: p.bg }}>
+    <View style={{ flex: 1, backgroundColor: p.bg }} {...MAIN}>
       <Atmosphere />
       <ScrollView ref={scroll} contentContainerStyle={{ paddingTop: insets.top + layout.contentTop, paddingBottom: insets.bottom + 48, paddingHorizontal: layout.gutter(width), gap: layout.stack.section, maxWidth: 680, width: "100%", alignSelf: "center" }}>
         <View style={{ gap: 8 }}>

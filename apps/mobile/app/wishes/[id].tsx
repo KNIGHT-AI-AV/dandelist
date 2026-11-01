@@ -1,6 +1,6 @@
 import { Redirect, router, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { Animated, Linking, PanResponder, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions, type NativeScrollEvent, type NativeSyntheticEvent, type ScrollView, type ViewStyle } from "react-native";
+import { Animated, Linking, PanResponder, Pressable, StyleSheet, Text, View, useWindowDimensions, type NativeScrollEvent, type NativeSyntheticEvent, type ScrollView, type ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Atmosphere } from "../../components/atmosphere";
 import { HeroGallery, type GalleryReturn } from "../../components/detail/gallery";
@@ -27,6 +27,7 @@ import { KIND_LABEL, TIER_LABEL, agentLine } from "../../lib/words";
 import { worthOf } from "../../lib/worth";
 import { cardRect } from "../../lib/zoom";
 import { useMoney } from "../../lib/currency";
+import { MAIN } from "../../lib/landmark";
 import { savedGlyph } from "../../components/worth";
 
 const HERO = 470;
@@ -43,11 +44,6 @@ const PULL = { claim: 8, steep: 1.5, dismiss: 0.25, range: 240, scale: 0.9, foll
 /** Title, price, why it matters, source, remove: the regions that stagger in, top to bottom. */
 const SECTIONS = 5;
 
-/**
- * On the web the wish's page is the main landmark while it covers the list (whose own landmarks are hidden then), so
- * a screen reader finds all of it in one (axe: 12 parts outside any landmark). Web only, as on the list's pages.
- */
-const MAIN = Platform.OS === "web" ? { role: "main" as const } : null;
 
 /**
  * A wish in full. Opened from the list, its photograph grows out of the card it was (UI audit P1-17): the list
