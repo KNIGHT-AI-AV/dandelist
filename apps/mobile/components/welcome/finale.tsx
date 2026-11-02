@@ -1,7 +1,7 @@
 import { heroFor, heroOf } from "@dandelist/catalogue";
 import { formatCents } from "../../lib/money";
 import { useEffect, useRef, useState } from "react";
-import { Animated, Keyboard, Linking, PanResponder, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions, type TextInput } from "react-native";
+import { Animated, BackHandler, Keyboard, Linking, PanResponder, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions, type TextInput } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { FLICK, ease, haptic, native, spring, useReducedMotion } from "../../lib/motion";
 import { fonts, layout, radius, shadow, space, type, usePalette, useType } from "../../lib/theme";
@@ -194,6 +194,18 @@ export function CodeSheet({ startEmail, verifyEmail, onClose, extra }: { startEm
     Keyboard.dismiss();
     Animated.timing(up, { toValue: 0, duration: reduced ? 150 : 300, easing: ease.sheet, useNativeDriver: native }).start(onClose);
   };
+  // Android's Back closes the sheet as a drag down does, and goes no further: the welcome underneath stays where it is
+  // (before, its own Back listener stepped the page back while the sheet stayed up).
+  const closing = useRef(close);
+  closing.current = close;
+  useEffect(() => {
+    if (Platform.OS !== "android") return;
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      closing.current();
+      return true;
+    });
+    return () => sub.remove();
+  }, []);
   // Drag down to dismiss: a flick over 0.11 px/ms or a drag past 35% of the sheet closes it; otherwise it snaps back.
   const pan = useRef(
     PanResponder.create({
