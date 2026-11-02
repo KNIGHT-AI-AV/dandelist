@@ -97,6 +97,22 @@ afterEach(() => vi.useRealTimers());
 const base = () => ({ onStep: (_s: Step) => undefined, now: () => new Date(), fetcher: fakeWeb, homeCurrency: "USD" });
 
 describe("the fast card's photo", () => {
+  it("never holds the priced card back for a photo check (bench 2026-11-02: up to 9.5 s, for nothing)", async () => {
+    const photos = gate();
+    const answer = gate();
+    const sent: HuntResult[] = [];
+    const hunt = huntWish(huntMeta(photos.opened, answer.opened), { ...base(), text: "A Rolex Submariner date in steel", onProvisional: (r) => void sent.push(structuredClone(r)) });
+    // The photo checks hang; the card still goes within a second of being priced, with no photo yet.
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.options[0]).toMatchObject({ url: SHOP, upfrontCents: 1_050_000 });
+    expect(sent[0]!.options[0]!.imageUrl).toBeUndefined();
+    photos.open();
+    answer.open();
+    await vi.advanceTimersByTimeAsync(60_000);
+    await hunt;
+  });
+
   it("follows the card as soon as the hunt's checked pick lands, while the research is still out", async () => {
     const photos = gate();
     const answer = gate();

@@ -235,31 +235,37 @@ export async function huntWish(meta: Meta, ctx: HuntContext): Promise<HuntResult
   const tell = (q: PriceOption) => {
     card.fast = q;
     card.told = (async () => {
-      // The hunt's checked pick first; else the card's own photo (its page's, or a stand-in) once it passes the
-      // checks; else no photo yet, and the full card brings the hunt's.
+      // The card goes the moment it is priced, without a photo, and goes again once one is checked. It used to wait
+      // here up to 9.5 s for one, but on the bench (2026-11-02, 6 hunts with shops refused) the price was ready at 10
+      // to 17.5 s and the hunt's checked pick landed at 23 to 46 s: every card was held back, and most still went
+      // without a photo. Only a checked photo ever goes on it, chosen as before: the hunt's pick first; else the card's
+      // own photo (its page's, or a stand-in) once it passes the checks; else the hunt's pick whenever it lands (live
+      // hunts, 2026-10-31: fast cards at 13 to 22 s, full cards at 52 to 54 s). Only while the hunt runs and this is
+      // still the card; it is part of `told`, so it never lands after the full card.
       const own = q.imageUrl;
+      const ownMedia = q.media;
+      delete q.imageUrl;
+      delete q.media;
+      const questions = await questionsBy(2_000);
+      const send = () => ctx.onProvisional?.({ options: [q], explanation: "", note: "", horizonYears: HORIZON_YEARS, draft, questions, provisional: true });
+      await send();
       const [found, ownOk] = await Promise.all([within(searched, 5_000), own ? within(stands(own), 5_000) : Promise.resolve(null)]);
       if (found) withPhoto(q, found);
-      else if (!own || !ownOk) {
+      else if (own && ownOk) {
+        q.imageUrl = own;
+        if (ownMedia) q.media = ownMedia;
+      } else {
         const stand = await within(standIn, 500);
         if (stand && stand.url !== own && (await within(stands(stand.url), 4_000))) {
           q.imageUrl = stand.url;
           q.media = { kind: mediaKindOf(draft)[0]!, images: [stand] };
         } else {
-          delete q.imageUrl;
-          delete q.media;
+          const later = await within(searched, Math.max(0, t0 + HUNT_STOP_MS - 2_000 - Date.now()));
+          if (later && !card.settled && card.fast === q) withPhoto(q, later);
         }
       }
-      const questions = await questionsBy(2_000);
-      await ctx.onProvisional?.({ options: [q], explanation: "", note: "", horizonYears: HORIZON_YEARS, draft, questions, provisional: true });
-      // Sent without a photo, the card goes again the moment the hunt's checked pick lands, rather than half a minute
-      // later with the full card (live hunts, 2026-10-31: fast cards at 13 to 22 s, full cards at 52 to 54 s). Only
-      // while the hunt runs and this is still the card; it is part of `told`, so it never lands after the full card.
-      if (q.imageUrl) return;
-      const later = await within(searched, Math.max(0, t0 + HUNT_STOP_MS - 2_000 - Date.now()));
-      if (!later || card.settled || card.fast !== q) return;
-      withPhoto(q, later);
-      await ctx.onProvisional?.({ options: [q], explanation: "", note: "", horizonYears: HORIZON_YEARS, draft, questions, provisional: true });
+      if (!q.imageUrl || card.settled || card.fast !== q) return;
+      await send();
     })().then(
       () => undefined,
       (e) => console.error("could not send the fast card", e),
