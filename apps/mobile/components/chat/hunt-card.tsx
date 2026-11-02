@@ -235,7 +235,7 @@ export function HuntCard({ id: item, text, watched = true, onPhase, onShowOnList
     const media = h.shot ? h.shot.media : option?.media;
     if (!h.savedId || !photo || !media || savedWith.current === undefined || savedWith.current === photo) return;
     savedWith.current = photo;
-    void setPhoto(h.savedId, { imageUrl: photo, media });
+    setPhoto(h.savedId, { imageUrl: photo, media }).catch(() => undefined);
   }, [h.savedId, h.shot, option?.media, photo, setPhoto]);
 
   // The picture: being made while the hunt has none to show, or a retake (asked for, or about to start by itself) looks

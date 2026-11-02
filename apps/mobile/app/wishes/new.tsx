@@ -352,8 +352,9 @@ export default function NewWish() {
   const steps = run?.steps ?? [];
   const settled = !!run && run.status !== "running";
   // The hero is the chosen option's checked photo, or none while it is on its way: never a page the agent opened, whose
-  // picture no check has passed (owner, 2026-10-29), and never another wish's photo.
-  const heroImage = cardPhoto(undefined, option);
+  // picture no check has passed (owner, 2026-10-29), and never another wish's photo. Like Save, it falls back to another
+  // option's checked photo of this same wish.
+  const heroImage = cardPhoto(undefined, option) ?? run?.result?.options.find((o) => o.imageUrl)?.imageUrl ?? null;
   const best = steps.filter((s): s is Extract<Step, { type: "price" }> => s.type === "price" && s.upfrontCents != null).sort((a, b) => a.upfrontCents! - b.upfrontCents!)[0];
   const pages = steps.filter((s) => s.type === "open" && s.ok).length;
   const checks = steps.filter((s) => s.type === "check").length;
