@@ -67,7 +67,8 @@ export default function PickDetail() {
   }, [owner, id, auth.api]);
   useEffect(() => () => clearTimeout(closing.current), []);
 
-  if (!id || auth.status === "signedOut" || (lost && sameOwner(lost, owner))) return <Redirect href="/" />;
+  // Signed in, a pick that can't show goes back to the list itself, not through the welcome back at "/".
+  if (!id || auth.status === "signedOut" || (lost && sameOwner(lost, owner))) return <Redirect href={auth.status === "signedIn" ? "/wishes" : "/"} />;
   if (!pick || !owner) {
     return (
       <View style={{ flex: 1, backgroundColor: p.bg }}>
@@ -77,7 +78,7 @@ export default function PickDetail() {
   }
 
   const me = owner;
-  const leave = () => (router.canGoBack() ? router.back() : router.replace("/"));
+  const leave = () => (router.canGoBack() ? router.back() : router.replace("/wishes"));
   const add = () => router.replace({ pathname: "/wishes/new", params: { text: pick.title, pick: pick.id } });
   const skip = () => {
     rememberPick({ ...pick, status: "skipped" }, me);

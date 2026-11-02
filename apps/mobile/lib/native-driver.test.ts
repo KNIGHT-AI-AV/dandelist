@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 // Clocks that run with useNativeDriver: false, where interpolate() honours `easing`.
-const JS_DRIVEN = new Set(["components/welcome/title.tsx"]);
+const JS_DRIVEN = new Set(["components/welcome/title.tsx", "components/welcome-back.tsx"]);
 
 function sources(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((e) => {

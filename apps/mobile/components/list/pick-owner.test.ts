@@ -201,10 +201,10 @@ describe("today's pick belongs to the sign-in that asked for it (review R50-PICK
     await act(async () => auth.verifyEmail("bob@example.com", "123456"));
     await act(async () => root!.update(tree({ card: true, page: true })));
     await act(() => until(() => h.rendered.includes("bob | Porsche 911 GT3") && redirected().length > 0));
-    // Nothing of Ada's was ever on Bob's screen; the page asked for today's pick as Bob, found it isn't that one, went home.
+    // Nothing of Ada's was ever on Bob's screen; the page asked for today's pick as Bob, found it isn't that one, went to the list.
     expect(onBobsScreen("Leica M11-P")).toBe(false);
     expect(onBobsScreen("Picked for Ada, from what Ada wrote.")).toBe(false);
-    expect(redirected()).toEqual(["/"]);
+    expect(redirected()).toEqual(["/wishes"]);
     expect(h.log.filter((l) => l.startsWith("POST /picks/today"))).toEqual(["POST /picks/today as tok-ada", "POST /picks/today as tok-bob", "POST /picks/today as tok-bob"]);
   });
 
@@ -226,13 +226,13 @@ describe("today's pick belongs to the sign-in that asked for it (review R50-PICK
     expect(onBobsScreen("Riva Aquariva Super")).toBe(false);
     expect(onBobsScreen("Picked for Ada, from what Ada wrote.")).toBe(false);
     expect(redirected()).toEqual([]);
-    // Then Bob's own answer: today's pick for him is another one, so the page goes home.
+    // Then Bob's own answer: today's pick for him is another one, so the page goes to the list.
     await act(async () => {
       release("POST /picks/today as tok-bob");
       await settle();
     });
     await act(() => until(() => redirected().length > 0));
-    expect(redirected()).toEqual(["/"]);
+    expect(redirected()).toEqual(["/wishes"]);
     expect(onBobsScreen("Riva Aquariva Super")).toBe(false);
   });
 
