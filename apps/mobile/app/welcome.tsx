@@ -1,6 +1,6 @@
 import { entry, type Entry } from "@dandelist/catalogue";
-import { router } from "expo-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { router, useFocusEffect } from "expo-router";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Animated, BackHandler, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Grain, IconButton, PrimaryButton, Wordmark } from "../components/lux";
@@ -199,9 +199,13 @@ export default function Welcome() {
   }, []);
 
   // Signed in by any route (code, Apple, Google, GitHub): through the welcome back to the list, which adopts what was
-  // kept (see useAdoptWelcome). The same place sign-in's own redirect goes, so whichever runs first, they agree.
+  // kept (see useAdoptWelcome). The same place sign-in's own redirect goes, so whichever runs first, they agree. Sign-in
+  // opened from here sits on top, so it is closed first: nothing of the guest's welcome stays under the list for a
+  // swipe or Back to uncover.
   useEffect(() => {
-    if (auth.status === "signedIn") router.replace("/");
+    if (auth.status !== "signedIn") return;
+    if (router.canDismiss()) router.dismissAll();
+    router.replace("/");
   }, [auth.status]);
 
   /** Changes the list and keeps it on this device; event handlers arriving later always see the latest list. */
@@ -365,17 +369,20 @@ export default function Welcome() {
     if (leaving?.kind === "agent") setResult(null);
   };
   // Android's back gesture steps back through the welcome like the Back button; with nowhere to go it leaves as usual.
+  // Only while the welcome is on screen: under sign-in or another page, Back belongs to that page.
   const back = useRef(goBack);
   back.current = goBack;
-  useEffect(() => {
-    if (Platform.OS !== "android") return;
-    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
-      if (!steps.canGoBack()) return false;
-      back.current();
-      return true;
-    });
-    return () => sub.remove();
-  }, [steps]);
+  useFocusEffect(
+    useCallback(() => {
+      if (Platform.OS !== "android") return;
+      const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+        if (!steps.canGoBack()) return false;
+        back.current();
+        return true;
+      });
+      return () => sub.remove();
+    }, [steps]),
+  );
 
   /** Clears the list and goes back to the first wish, with what they asked for still in the field. */
   const restart = (from: Step) => {
