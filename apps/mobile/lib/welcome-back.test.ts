@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { heroWish, welcomeLines } from "./welcome-back";
 
 const wish = (name: string, imageUrl?: string) => ({
+  id: name.toLowerCase().replace(/\W+/g, "-"),
   name,
   details: imageUrl ? { agent: { imageUrl } } : {},
 });
@@ -26,11 +27,26 @@ describe("the welcome back", () => {
     expect(welcomeLines(null)).toEqual({ title: "Welcome", line: null });
   });
 
-  it("stands the first wish with a checked photo behind the glass, and none when no wish has one", () => {
-    expect(heroWish([wish("A week in Lisbon"), wish("Leica Q3", "https://upload.wikimedia.org/leica.jpg"), wish("Rolex", "https://x/rolex.jpg")])?.name).toBe(
-      "Leica Q3",
-    );
-    expect(heroWish([wish("A week in Lisbon")])).toBeNull();
-    expect(heroWish([])).toBeNull();
+  // Owner, 2026-11-02: "one of their items randomly changing every time".
+  const list = [wish("A week in Lisbon"), wish("Leica Q3", "https://upload.wikimedia.org/leica.jpg"), wish("Rolex", "https://x/rolex.jpg"), wish("Riva", "https://x/riva.jpg")];
+
+  it("stands a random one of the wishes with a checked photo behind the glass, never one without", () => {
+    expect(heroWish(list, null, () => 0)?.name).toBe("Leica Q3");
+    expect(heroWish(list, null, () => 0.5)?.name).toBe("Rolex");
+    expect(heroWish(list, null, () => 0.999)?.name).toBe("Riva");
+    const seen = new Set(Array.from({ length: 60 }, (_, i) => heroWish(list, null, () => i / 60)?.name));
+    expect([...seen].sort()).toEqual(["Leica Q3", "Riva", "Rolex"]);
+  });
+
+  it("changes from the one shown last time whenever there is another to show", () => {
+    for (const [last, name] of [["leica-q3", "Leica Q3"], ["rolex", "Rolex"], ["riva", "Riva"]] as const) {
+      for (let i = 0; i < 30; i++) expect(heroWish(list, last, () => i / 30)?.name).not.toBe(name);
+    }
+    expect(heroWish([wish("Leica Q3", "https://upload.wikimedia.org/leica.jpg")], "leica-q3", () => 0.4)?.name).toBe("Leica Q3");
+  });
+
+  it("shows no photo when no wish has one", () => {
+    expect(heroWish([wish("A week in Lisbon")], null, () => 0)).toBeNull();
+    expect(heroWish([], "rolex", () => 0)).toBeNull();
   });
 });
