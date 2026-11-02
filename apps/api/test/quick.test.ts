@@ -412,9 +412,12 @@ describe("the whole hunt", () => {
     const { meta, calls } = huntMeta({ slow });
     const sent: HuntResult[] = [];
     const drafts: Draft[] = [];
-    const hunt = huntWish(meta, { ...base(), text: "A Rolex Submariner date in steel", onDraft: (d) => void drafts.push(d), onProvisional: (r) => void sent.push(r) });
-    await vi.waitFor(() => expect(sent).toHaveLength(1));
-    expect(sent[0]).toMatchObject({ provisional: true, options: [{ url: ROLEX, status: "verified", imageUrl: "https://www.rolex.com/img/m126610ln-0001.jpg" }], questions: [{ id: "bracelet", picked: "Oyster", answered: false }] });
+    const hunt = huntWish(meta, { ...base(), text: "A Rolex Submariner date in steel", onDraft: (d) => void drafts.push(d), onProvisional: (r) => void sent.push(structuredClone(r)) });
+    // Priced, it goes at once with no photo; once the checks pass its own product photo, it goes again with it.
+    await vi.waitFor(() => expect(sent).toHaveLength(2));
+    expect(sent[0]).toMatchObject({ provisional: true, options: [{ url: ROLEX, status: "verified" }], questions: [{ id: "bracelet", picked: "Oyster", answered: false }] });
+    expect(sent[0]!.options[0]!.imageUrl).toBeUndefined();
+    expect(sent[1]).toMatchObject({ provisional: true, options: [{ url: ROLEX, status: "verified", imageUrl: "https://www.rolex.com/img/m126610ln-0001.jpg" }] });
     release();
     const done = await hunt;
     expect(done.provisional).toBe(false);

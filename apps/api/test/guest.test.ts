@@ -226,12 +226,17 @@ describe("pricing the first wish before sign-in", () => {
     expect(drafts.at(-1)).toMatchObject({ questions: [{ id: "package", label: "Which package?", options: ["Basics", "Essentials"], picked: "Basics", answered: false }] });
     expect(evs.some((e) => e.type === "step" && e.step.type === "note" && e.step.event?.kind === "thought")).toBe(true);
     expect(evs.filter((e) => e.type === "step").every((e) => typeof e.step.line === "string" && e.step.line.length > 0)).toBe(true);
-    // The first card is the fast one: the seller's own page, its price and its own product photo.
+    // The first card is the fast one: the seller's own page and its price, the moment it is priced; then the same card
+    // again with its own product photo once the checks pass it.
     const cards = evs.filter((e) => e.type === "priced");
-    expect(cards[0]).toMatchObject({ provisional: true, title: "Peloton Bike+", option: { url: SHOP, upfrontCents: 249_500, status: "verified", imageUrl: "https://www.onepeloton.com/img/bike-plus.jpg" }, questions: [{ id: "package", picked: "Basics" }] });
+    const fast = cards.filter((c) => c.provisional);
+    expect(fast[0]).toMatchObject({ provisional: true, title: "Peloton Bike+", option: { url: SHOP, upfrontCents: 249_500, status: "verified" }, questions: [{ id: "package", picked: "Basics" }] });
+    expect(fast[0].option.imageUrl).toBeUndefined();
+    expect(fast.at(-1)).toMatchObject({ option: { url: SHOP, upfrontCents: 249_500, imageUrl: "https://www.onepeloton.com/img/bike-plus.jpg" } });
     expect(evs.indexOf(cards[0])).toBeGreaterThan(evs.findIndex((e) => e.type === "draft"));
     // The research's card follows only when it differs, never marked provisional; no error after a card.
-    expect(cards.slice(1).every((c) => !c.provisional)).toBe(true);
+    expect(cards.slice(0, fast.length).every((c) => c.provisional)).toBe(true);
+    expect(cards.slice(fast.length).every((c) => !c.provisional)).toBe(true);
     const priced = cards.at(-1);
     expect(priced.option).toMatchObject({ upfrontCents: 249_500, status: "verified" });
     expect(evs.some((e) => e.type === "error")).toBe(false);
