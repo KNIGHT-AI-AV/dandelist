@@ -255,7 +255,7 @@ export function meRoutes(deps: AgentDeps) {
     if (Number(used.rows[0]?.n ?? 0) >= FACTS_PER_USER_PER_DAY) return c.json({ error: "That's today's new facts. More tomorrow." }, 429);
     const guard = async () => {
       await assertBudget(db, caps, deps.now());
-      await assertUserBudget(db, userId, await userCapUsd(db, userId, USER_DAILY_USD, deps.judge, caps), deps.now());
+      await assertUserBudget(db, userId, await userCapUsd(db, userId, USER_DAILY_USD, deps.judge, caps, deps.now()), deps.now());
     };
     try {
       await guard();

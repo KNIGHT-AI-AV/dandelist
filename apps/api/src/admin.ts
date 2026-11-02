@@ -3,6 +3,7 @@ import { Hono, type Context } from "hono";
 import { requireAuth, type AuthVars } from "./auth";
 import type { Db } from "./db";
 import { GUEST_DAILY_USD } from "./guest";
+import { dailyCapUsd } from "./spend";
 
 /**
  * GET /admin/*: the owner's own read-only view of the service (owner, 2026-11-02: "I need a admin page for viewing usage
@@ -90,7 +91,7 @@ export function adminRoutes(deps: AdminDeps) {
       from: from.toISOString().slice(0, 10),
       days: rows.map((r) => ({ day: r.day, kind: r.kind, calls: num(r.calls), inputTokens: num(r.input_tokens), outputTokens: num(r.output_tokens), searches: num(r.searches), usd: num(r.usd) })),
       totals: { todayUsd: num(totals.today_usd), guestsTodayUsd: num(totals.guests_today_usd), totalUsd: num(totals.total_usd), totalCalls: num(totals.total_calls) },
-      caps: { dailyUsd: deps.spendCaps?.dailyUsd ?? null, totalUsd: deps.spendCaps?.totalUsd ?? null, guestDailyUsd: GUEST_DAILY_USD },
+      caps: { dailyUsd: deps.spendCaps ? dailyCapUsd(deps.spendCaps, now) : null, totalUsd: deps.spendCaps?.totalUsd ?? null, guestDailyUsd: GUEST_DAILY_USD },
     });
   });
 

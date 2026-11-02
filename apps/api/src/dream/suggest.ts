@@ -144,7 +144,7 @@ async function ask(deps: SuggestDeps, userId: string, memory: SuggestMemory): Pr
   const { db } = deps;
   const check = async () => {
     await assertBudget(db, deps.caps, deps.now());
-    await assertUserBudget(db, userId, await userCapUsd(db, userId, deps.personUsd, deps.judge, deps.caps), deps.now());
+    await assertUserBudget(db, userId, await userCapUsd(db, userId, deps.personUsd, deps.judge, deps.caps, deps.now()), deps.now());
   };
   const client = new MetaClient({ ...deps.meta, onUsage: (usage, cost) => recordSpend(db, userId, "suggest", usage, cost, deps.now()) });
   const voice = voiceLine(memory.persona);

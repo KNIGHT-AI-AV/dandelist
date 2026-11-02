@@ -1266,9 +1266,9 @@ describe("spend caps", () => {
     const id = async (email: string) => (await d.query<{ id: string }>("insert into users (email) values ($1) returning id", [email])).rows[0]!.id;
     const caps = { dailyUsd: 10, totalUsd: 120 };
     const judge = { email: "judge@dandelist.com" };
-    expect(await userCapUsd(d, await id("judge@dandelist.com"), 2, judge, caps)).toBe(6);
-    expect(await userCapUsd(d, await id("ada@example.com"), 2, judge, caps)).toBe(2);
-    expect(await userCapUsd(d, await id("bo@example.com"), 2, undefined, caps)).toBe(2);
+    expect(await userCapUsd(d, await id("judge@dandelist.com"), 2, judge, caps, new Date("2026-10-30T12:00:00Z"))).toBe(6);
+    expect(await userCapUsd(d, await id("ada@example.com"), 2, judge, caps, new Date("2026-10-30T12:00:00Z"))).toBe(2);
+    expect(await userCapUsd(d, await id("bo@example.com"), 2, undefined, caps, new Date("2026-10-30T12:00:00Z"))).toBe(2);
   });
 
   it("gives a team account the judge account's allowance, set by hand, with or without a judge configured", async () => {
@@ -1278,10 +1278,10 @@ describe("spend caps", () => {
     const id = async (email: string) => (await d.query<{ id: string }>("insert into users (email) values ($1) returning id", [email])).rows[0]!.id;
     const caps = { dailyUsd: 10, totalUsd: 120 };
     const owner = await id("owner@example.com");
-    expect(await userCapUsd(d, owner, 2, undefined, caps)).toBe(2);
+    expect(await userCapUsd(d, owner, 2, undefined, caps, new Date("2026-10-30T12:00:00Z"))).toBe(2);
     await d.query("update users set team = true where id = $1", [owner]);
-    expect(await userCapUsd(d, owner, 2, undefined, caps)).toBe(6);
-    expect(await userCapUsd(d, owner, 2, { email: "judge@dandelist.com" }, caps)).toBe(6);
+    expect(await userCapUsd(d, owner, 2, undefined, caps, new Date("2026-10-30T12:00:00Z"))).toBe(6);
+    expect(await userCapUsd(d, owner, 2, { email: "judge@dandelist.com" }, caps, new Date("2026-10-30T12:00:00Z"))).toBe(6);
     expect(await isJudge(d, owner, undefined)).toBe(true);
     expect(await isJudge(d, await id("cy@example.com"), undefined)).toBe(false);
   });

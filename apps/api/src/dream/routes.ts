@@ -178,7 +178,7 @@ export function dreamRoutes(deps: DreamDeps) {
     const now = deps.now();
     try {
       await assertBudget(db, caps, now);
-      await assertUserBudget(db, userId, await userCapUsd(db, userId, USER_DAILY_USD, deps.judge, caps), now);
+      await assertUserBudget(db, userId, await userCapUsd(db, userId, USER_DAILY_USD, deps.judge, caps, now), now);
     } catch (e) {
       return c.json({ error: friendly(e) }, 429);
     }
@@ -222,7 +222,7 @@ export function dreamRoutes(deps: DreamDeps) {
           return withHold(
             async () => {
               await assertBudget(db, caps, deps.now());
-              await assertUserBudget(db, userId, await userCapUsd(db, userId, USER_DAILY_USD, deps.judge, caps), deps.now());
+              await assertUserBudget(db, userId, await userCapUsd(db, userId, USER_DAILY_USD, deps.judge, caps, deps.now()), deps.now());
             },
             () => client.responses(b),
             userId,

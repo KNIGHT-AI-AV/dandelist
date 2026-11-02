@@ -151,7 +151,7 @@ export function agentRoutes(deps: AgentDeps) {
     });
     const guard = async () => {
       await assertBudget(db, caps, deps.now());
-      await assertUserBudget(db, userId, await userCapUsd(db, userId, USER_DAILY_USD, deps.judge, caps), deps.now());
+      await assertUserBudget(db, userId, await userCapUsd(db, userId, USER_DAILY_USD, deps.judge, caps, deps.now()), deps.now());
     };
     return {
       responses: (body) => withHold(guard, () => client.responses(body), userId, holdFor(body), stop),
@@ -262,7 +262,7 @@ export function agentRoutes(deps: AgentDeps) {
     try {
       const guard = async () => {
         await assertBudget(db, caps, deps.now());
-        await assertUserBudget(db, userId, await userCapUsd(db, userId, USER_DAILY_USD, deps.judge, caps), deps.now());
+        await assertUserBudget(db, userId, await userCapUsd(db, userId, USER_DAILY_USD, deps.judge, caps, deps.now()), deps.now());
       };
       const client = new MetaClient(deps.meta!);
       const heard = await withHold(guard, () => client.transcribe(new Blob([bytes], { type: "audio/wav" }), { keywords: WISH_KEYWORDS }), userId);
@@ -312,7 +312,7 @@ export function agentRoutes(deps: AgentDeps) {
 
     try {
       await assertBudget(db, caps, now);
-      await assertUserBudget(db, userId, await userCapUsd(db, userId, USER_DAILY_USD, deps.judge, caps), now);
+      await assertUserBudget(db, userId, await userCapUsd(db, userId, USER_DAILY_USD, deps.judge, caps, now), now);
     } catch (e) {
       return c.json({ error: friendly(e) }, 429);
     }

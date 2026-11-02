@@ -144,6 +144,19 @@ export async function withBudgetScope<T>(scope: string, check: () => Promise<voi
   }
 }
 
+/**
+ * Judging week (owner, 2026-11-02: "Yes, $30 for Nov 4-8"): on these UTC days the service's daily cap is $30, so judges
+ * (JUDGE_SHARE of it) and visitors aren't stopped mid-judging; either side it is SPEND_DAILY_USD as set, with nothing to
+ * undo. The all-time cap is untouched, so the most that can ever be spent stays the same.
+ */
+export const JUDGING = { from: "2026-11-04", to: "2026-11-08", dailyUsd: 30 } as const;
+
+/** The service's daily cap on the UTC day of `now`: the judging-week cap on those days (never lower than the set one). */
+export function dailyCapUsd(caps: SpendCaps, now: Date): number {
+  const day = now.toISOString().slice(0, 10);
+  return day >= JUDGING.from && day <= JUDGING.to ? Math.max(caps.dailyUsd, JUDGING.dailyUsd) : caps.dailyUsd;
+}
+
 /** Refuses a Meta call when today's or the all-time spend has reached its cap, counting calls still in flight. */
 export async function assertBudget(db: Db, caps: SpendCaps, now: Date): Promise<void> {
   const { rows } = await db.query<{ today: string | null; total: string | null }>(
@@ -153,7 +166,8 @@ export async function assertBudget(db: Db, caps: SpendCaps, now: Date): Promise<
   const today = Number(rows[0]?.today ?? 0);
   const total = Number(rows[0]?.total ?? 0);
   if (total >= caps.totalUsd || total + held > caps.totalUsd) throw new SpendLimitError("total");
-  if (today >= caps.dailyUsd || today + held > caps.dailyUsd) throw new SpendLimitError("daily");
+  const daily = dailyCapUsd(caps, now);
+  if (today >= daily || today + held > daily) throw new SpendLimitError("daily");
 }
 
 export async function recordSpend(db: Db, userId: string | null, kind: string, usage: Usage, costUsd: number, now: Date): Promise<void> {
@@ -183,8 +197,8 @@ export const JUDGE_SHARE = 0.6;
  * share of the service's daily cap rather than one person's allowance, as does a team account; everyone else gets
  * `personUsd`.
  */
-export async function userCapUsd(db: Db, userId: string, personUsd: number, judge: { email: string } | undefined, caps: SpendCaps): Promise<number> {
-  return (await isJudge(db, userId, judge)) ? Math.max(personUsd, caps.dailyUsd * JUDGE_SHARE) : personUsd;
+export async function userCapUsd(db: Db, userId: string, personUsd: number, judge: { email: string } | undefined, caps: SpendCaps, now: Date): Promise<number> {
+  return (await isJudge(db, userId, judge)) ? Math.max(personUsd, dailyCapUsd(caps, now) * JUDGE_SHARE) : personUsd;
 }
 
 /** True for the one account every judge signs in to, and for a team account (users.team, set by hand). */
