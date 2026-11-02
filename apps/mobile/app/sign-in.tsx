@@ -108,7 +108,8 @@ export default function SignIn() {
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: p.bg }} {...MAIN}>
+    // Clipped, so the photograph settling from 1.06 never spills past the screen and flashes scrollbars on the web.
+    <View style={{ flex: 1, overflow: "hidden", backgroundColor: p.bg }} {...MAIN}>
       <Atmosphere />
       <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { opacity: scene, transform: [{ scale: scene.interpolate({ inputRange: [0, 1], outputRange: [1.06, 1] }) }] }]}>
         <Backdrop source={require("../assets/backdrop.jpg")} />
