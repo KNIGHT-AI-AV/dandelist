@@ -786,6 +786,11 @@ export interface ResearchContext {
   effort?: string;
   /** The waits before asking Meta again for a response it can't yet see. Missing: CHAIN_RETRY_MS (tests set zeros). */
   chainRetryMs?: readonly number[];
+  /**
+   * Whether the hunt's own photo search found a checked photo, which find.ts puts on a thing to buy's first option.
+   * Only once it has can the options' own photo hunt be cut short (researchTail). Missing: never cut short.
+   */
+  photoFound?: Promise<boolean>;
 }
 
 /** Before each retry of a follow-up call that names a response Meta can't yet see: a second, then three. */
@@ -801,6 +806,37 @@ export const RESEARCH_EFFORT: string | undefined = "low";
 
 /** What research keeps after its last tool round: the final answer, the price checks and the photos. */
 export const WRAP_UP_MS = 20_000;
+
+/**
+ * The reasoning effort of the card's two-sentence summary, the last model call before the full card. Chosen against the
+ * real API on 14 saved cards (2026-11-02): the model's default took 10.2 s at the median and 16.4 s at p90, minimal
+ * 3.0 s and 4.5 s, with no retry or fallback either way and sentences as plain by eye; low once garbled a monthly figure.
+ */
+export const EXPLAIN_EFFORT = "minimal";
+
+/** How long a thing to buy's other options keep their photo hunt once the summary is in (researchTail). */
+export const PHOTO_GRACE_MS = 3_000;
+
+/**
+ * Research's last two steps, the summary and the options' photos, inside `ms`; resolves with the summary, or null when
+ * it didn't come in time. `covered` is set for a thing to buy and says whether the hunt's own photo search found a
+ * checked photo, which then goes on its first option whatever this photo hunt finds (find.ts). Its other options rarely
+ * got one from this hunt: 1 of 6 in a week of live hunts (2026-10-26 to 11-01), while it held the full card to the
+ * deadline (2 of 3 bench hunts with shops refused, 2026-11-02). So once the summary is in and `covered` came back true,
+ * the photos get `graceMs` more. Without a found photo the first option may need this hunt's, so it keeps the whole
+ * time, as does a home, a trip or a service, whose options each show their own page's photos.
+ */
+export async function researchTail<T>(said: Promise<T>, photos: Promise<void>, ms: number, covered: Promise<boolean> | null, graceMs = PHOTO_GRACE_MS): Promise<T | null> {
+  const settled = said.then(
+    () => undefined,
+    () => undefined,
+  );
+  // The photos being done always ends the wait; a found photo can only shorten it, never make it wait for the search.
+  const capped = covered ? Promise.all([settled, covered.catch(() => false)]).then(([, yes]) => (yes ? within(photos, graceMs) : photos)) : photos;
+  const due = Promise.race([photos, capped]);
+  const [explanation] = await Promise.all([within(said, ms), within(due, ms)]);
+  return explanation;
+}
 
 /** Research ran out of time before the model gave its options; the fast card, if there is one, stands. */
 export class ResearchTimeout extends Error {
@@ -1163,8 +1199,8 @@ export async function research(meta: Meta, ctx: ResearchContext): Promise<Resear
   }
   options.sort((a, b) => trust(b, offSite) - trust(a, offSite) || a.totals.horizonCents - b.totals.horizonCents);
 
-  // Pictures and the explanation don't depend on each other, so they run side by side, each inside the time left.
-  // A media failure never fails the run.
+  // Pictures and the explanation don't depend on each other, so they run side by side, inside the time left
+  // (researchTail says how long the pictures may take). A media failure never fails the run.
   let photosDone = false;
   const photos = options.length
     ? huntMedia(meta, { ...ctx, fetcher, onStep }, hint, options, optionPages, offers, models, [...pages.values()]).then(
@@ -1176,7 +1212,7 @@ export async function research(meta: Meta, ctx: ResearchContext): Promise<Resear
     await onStep({ type: "explain", at: at() });
     return options.length ? explain(meta, ctx.draft, options, ctx.voice) : "";
   })();
-  const [explanation] = await Promise.all([within(said, left() - 500), within(photos, left() - 500)]);
+  const explanation = await researchTail(said, photos, left() - 500, ctx.draft.kind === "buy" ? (ctx.photoFound ?? null) : null);
   // What is returned is a copy, so a photo hunt still running past the deadline can't change a result already sent.
   // Without the hunt, a page's share picture only stays when it fits the subject: on many pages it is a logo or a banner.
   const result = options.map((o): PriceOption => {
@@ -1258,6 +1294,7 @@ export async function explain(meta: Meta, draft: Draft, options: PriceOption[], 
       instructions:
         "Write at most two short sentences, under 40 words in all, that help someone choose between these ways to get their wish. Lead with the best choice and why. Use only numbers that appear in FACTS, written exactly as given, and say 'over N years' for the horizon. When a price was not checked on the seller's page, say where it came from, as price_source puts it; otherwise don't mention checking. No financial advice." + (voice ? `\n${voice}` : ""),
       input: `FACTS: ${JSON.stringify(facts)}${feedback}`,
+      reasoning: { effort: EXPLAIN_EFFORT },
     });
     const text = res.text.trim();
     if (text && !unknownNumbers(text, facts).length) return text;

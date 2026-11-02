@@ -1,6 +1,6 @@
 import { PGlite } from "@electric-sql/pglite";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanThought, json, RESEARCH_EFFORT, fallbackExplanation, unknownNumbers } from "../src/agent/agent";
+import { cleanThought, EXPLAIN_EFFORT, json, RESEARCH_EFFORT, fallbackExplanation, unknownNumbers } from "../src/agent/agent";
 import { assertPublicUrl, htmlToText, pageNamesItem, pageShowsPrice, privateIp, sellerOwnsHost, structuredPrices } from "../src/agent/tools";
 
 // Shop hostnames resolve to a public documentation address, so no test touches real DNS.
@@ -260,6 +260,17 @@ describe("wish agent", () => {
     expect(research.length).toBeGreaterThanOrEqual(2);
     for (const c of research) expect(c.reasoning).toEqual({ effort: "low" });
     expect(RESEARCH_EFFORT).toBe("low");
+  });
+
+  it("writes the card's summary at minimal reasoning effort (eval on 14 saved cards, 2026-11-02)", async () => {
+    const t = await signIn("ada@example.com");
+    const { draft } = (await (await call("POST", "/agent/interpret", t, { text: "a peloton bike plus" })).json()) as { draft: unknown };
+    const start = await call("POST", "/agent/runs", t, { draft, answers: [] });
+    expect((await finished(t, ((await start.json()) as { run: { id: string } }).run.id)).status).toBe("done");
+    const summaries = metaCalls.filter((c) => String(c.instructions ?? "").startsWith("Write at most two short sentences"));
+    expect(summaries.length).toBeGreaterThanOrEqual(1);
+    for (const c of summaries) expect(c.reasoning).toEqual({ effort: "minimal" });
+    expect(EXPLAIN_EFFORT).toBe("minimal");
   });
 
   it("starts from the person's words, shows the fast card while it runs and ends with the research's, by question", async () => {
