@@ -482,6 +482,54 @@ describe("pause_turn", () => {
     expect(claude.sent.length).toBeLessThanOrEqual(6);
     expect(r.text).toBe("");
   });
+
+  // Half a dollar of fast-mode output: 12,500 tokens at $40 a million.
+  const costly = usage({ input_tokens: 0, output_tokens: 12_500 });
+  const pausedWithWords = [
+    { type: "text", text: "Looking it up." },
+    { type: "server_tool_use", id: "srvtoolu_1", name: "web_search", input: { query: "q3 price" } },
+    { type: "web_search_tool_result", tool_use_id: "srvtoolu_1", content: [{ type: "web_search_result", url: "https://shop.example/q3", title: "Q3", encrypted_content: "e", page_age: null }] },
+    { type: "server_tool_use", id: "srvtoolu_2", name: "web_search", input: { query: "q3 used" } },
+  ];
+
+  it("asks mayResume before each resume, with what the call has spent so far, and resumes when it agrees", async () => {
+    const asked: number[] = [];
+    const claude = fakeClaude(message(pausedWithWords, { stop_reason: "pause_turn", usage: costly }), message([{ type: "text", text: "Done." }]));
+    const r = await client(claude.fetch, { mayResume: async (spent) => (asked.push(spent), true) }).responses({ input: "price", tools: [{ type: "web_search" }] });
+    expect(claude.sent).toHaveLength(2);
+    expect(asked).toHaveLength(1);
+    expect(asked[0]).toBeCloseTo(0.5, 12);
+    expect(r.text).toBe("Looking it up. Done.");
+  });
+
+  it("stops resuming when mayResume says no, and answers with what it has, as from a final reply", async () => {
+    const reported: number[] = [];
+    const claude = fakeClaude(message(pausedWithWords, { stop_reason: "pause_turn", usage: costly }), message([{ type: "text", text: "more" }]), message([{ type: "text", text: "next" }]));
+    const c = client(claude.fetch, { mayResume: async () => false, onUsage: (_u, cost) => void reported.push(cost) });
+    const r = await c.responses({ input: "price", tools: [{ type: "web_search" }] });
+    expect(claude.sent).toHaveLength(1);
+    expect(r.text).toBe("Looking it up.");
+    expect(r.searchQueries).toEqual(["q3 price", "q3 used"]);
+    expect(reported).toHaveLength(1);
+    expect(reported[0]).toBeCloseTo(r.costUsd, 12);
+    // A follow-up reads: the search that never ran (no result after it) is not left dangling in the history.
+    await c.responses({ previous_response_id: r.id, input: "Answer with what you have." });
+    expect(claude.sent[1]!.body.messages).toEqual([
+      { role: "user", content: "price" },
+      { role: "assistant", content: pausedWithWords.slice(0, 3) },
+      { role: "user", content: "Answer with what you have." },
+    ]);
+  });
+
+  it("fails the call, with what it spent reported, when mayResume itself fails", async () => {
+    const reported: number[] = [];
+    const claude = fakeClaude(message(pausedWithWords, { stop_reason: "pause_turn", usage: costly }));
+    const broken = new Error("ledger unreachable");
+    const c = client(claude.fetch, { mayResume: async () => Promise.reject(broken), onUsage: (_u, cost) => void reported.push(cost) });
+    await expect(c.responses({ input: "price", tools: [{ type: "web_search" }] })).rejects.toBe(broken);
+    expect(reported).toHaveLength(1);
+    expect(reported[0]).toBeCloseTo(0.5, 12);
+  });
 });
 
 describe("cost", () => {

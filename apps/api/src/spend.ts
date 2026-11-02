@@ -185,20 +185,23 @@ export async function assertBudget(db: Db, caps: SpendCaps, now: Date): Promise<
   if (today >= caps.dailyUsd || today + held.meta > caps.dailyUsd) throw new SpendLimitError("daily");
 }
 
-/** Refuses a Claude call once today's (UTC) Claude spend, with Claude calls in flight, reaches Claude's own daily cap. */
-export async function assertClaudeBudget(db: Db, dailyUsd: number, now: Date): Promise<void> {
-  const spent = await spentToday(db, CLAUDE_MODEL_PREFIX, now);
+/**
+ * Refuses a Claude call once today's (UTC) Claude spend, with Claude calls in flight, reaches Claude's own daily cap.
+ * `extraUsd` is spend not in the ledger yet: what a call about to resume has already spent (under.ts).
+ */
+export async function assertClaudeBudget(db: Db, dailyUsd: number, now: Date, extraUsd = 0): Promise<void> {
+  const spent = (await spentToday(db, CLAUDE_MODEL_PREFIX, now)) + extraUsd;
   if (spent >= dailyUsd || spent + held.claude > dailyUsd) throw new SpendLimitError("daily");
 }
 
 /** One person's Claude spend in any 24 hours against their share of Claude's cap, as assertUserBudget is for Meta's. */
-export async function assertUserClaudeBudget(db: Db, userId: string, capUsd: number, now: Date): Promise<void> {
+export async function assertUserClaudeBudget(db: Db, userId: string, capUsd: number, now: Date, extraUsd = 0): Promise<void> {
   const { rows } = await db.query<{ spent: string | null }>("select coalesce(sum(cost_usd), 0) as spent from spend_ledger where user_id = $1 and created_at > $2 and model like $3", [
     userId,
     new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString(),
     `${CLAUDE_MODEL_PREFIX}%`,
   ]);
-  const spent = Number(rows[0]?.spent ?? 0);
+  const spent = Number(rows[0]?.spent ?? 0) + extraUsd;
   if (spent >= capUsd || spent + heldFor(userId, "claude") > capUsd) throw new SpendLimitError("user");
 }
 

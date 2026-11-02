@@ -136,7 +136,25 @@ export function claudeGuard(deps: UnderDeps, userId: string, personUsd: number):
 /** What a Claude call holds: CLAUDE_HOLD_USD, scaled as the route scales Meta's (a photo check a fifth of a full call). */
 const claudeHold = (metaUsd: number) => CLAUDE_HOLD_USD * (metaUsd / HOLD_USD);
 
-const clientFor = (setup: ClaudeSetup, onUsage: ConstructorParameters<typeof ClaudeClient>[0]["onUsage"], signal?: AbortSignal) =>
+/**
+ * The check before a paused search resumes. One call can resume four times at up to 16k fast-mode tokens each, far
+ * past its hold, so each resume first re-reads Claude's day and the caller's share, with every hold in flight (this
+ * call's included) and what this call has already spent, which isn't in the ledger until it ends. A refusal stops the
+ * resuming, and the call answers with what it has; any other failure fails the call.
+ */
+const resumeWhen =
+  (check: (spentUsd: number) => Promise<void>) =>
+  async (spentUsd: number): Promise<boolean> => {
+    try {
+      await check(spentUsd);
+      return true;
+    } catch (e) {
+      if (e instanceof SpendLimitError) return false;
+      throw e;
+    }
+  };
+
+const clientFor = (setup: ClaudeSetup, onUsage: ConstructorParameters<typeof ClaudeClient>[0]["onUsage"], signal: AbortSignal | undefined, mayResume: (spentUsd: number) => Promise<void>) =>
   new ClaudeClient({
     apiKey: setup.apiKey,
     baseUrl: setup.baseUrl,
@@ -144,6 +162,7 @@ const clientFor = (setup: ClaudeSetup, onUsage: ConstructorParameters<typeof Cla
     maxRetries: setup.maxRetries,
     fetch: signal ? stoppable(setup.fetch ?? fetch, signal) : setup.fetch,
     onUsage,
+    mayResume: resumeWhen(mayResume),
   });
 
 /**
@@ -167,6 +186,12 @@ export function claudeFor(
       await opts.onCost?.(cost);
     },
     opts.signal,
+    // The person's share counts $0.10 a call at the start; a resume counts what the call has really spent.
+    async (spentUsd) => {
+      await assertClaudeBudget(deps.db, setup.dailyUsd, deps.now(), spentUsd);
+      const cap = await userCapUsd(deps.db, userId, opts.personUsd, deps.judge, { dailyUsd: setup.dailyUsd, totalUsd: Number.POSITIVE_INFINITY });
+      await assertUserClaudeBudget(deps.db, userId, cap, deps.now(), spentUsd);
+    },
   );
   return {
     setup,
@@ -185,14 +210,16 @@ export function claudeFor(
 export function claudeForGuests(deps: UnderDeps, kind: string, opts: { shareUsd: number; signal?: AbortSignal }): Under | undefined {
   const setup = deps.claude;
   if (!setup) return undefined;
-  const guard = async () => {
+  /** Claude's day and the guests' share, with `extraUsd` a resuming call has spent that the ledger doesn't hold yet. */
+  const check = async (extraUsd = 0) => {
     const now = deps.now();
-    await assertClaudeBudget(deps.db, setup.dailyUsd, now);
+    await assertClaudeBudget(deps.db, setup.dailyUsd, now, extraUsd);
     const dayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).toISOString();
     const spent = (await deps.db.query<{ s: string | null }>(`select coalesce(sum(cost_usd), 0) as s from spend_ledger where user_id is null and kind like 'guest%' and not (${NOT_CLAUDE}) and created_at >= $1`, [dayStart])).rows[0];
-    const usd = Number(spent?.s ?? 0);
+    const usd = Number(spent?.s ?? 0) + extraUsd;
     if (usd >= opts.shareUsd || usd + heldForScope("guest", "claude") > opts.shareUsd) throw new SpendLimitError("daily");
   };
-  const client = clientFor(setup, (usage, cost) => recordSpend(deps.db, null, kind, usage, cost, deps.now()), opts.signal);
+  const guard = () => check();
+  const client = clientFor(setup, (usage, cost) => recordSpend(deps.db, null, kind, usage, cost, deps.now()), opts.signal, check);
   return { setup, guard, run: (body) => withBudgetScope("guest", guard, () => client.responses(body), "claude", CLAUDE_HOLD_USD) };
 }

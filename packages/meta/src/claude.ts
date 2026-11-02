@@ -34,7 +34,8 @@ import { claudeCostUsd, type Usage } from "./pricing";
  *   none.
  * - Thinking can't be switched off on Opus 5.5 and a forced tool_choice is refused, so neither is sent. Meta's
  *   reasoning effort and `include` have no counterpart and are dropped; the effort is always low.
- * - A server-side search loop that pauses (`pause_turn`) is resumed by sending the paused turn back unchanged.
+ * - A server-side search loop that pauses (`pause_turn`) is resumed by sending the paused turn back unchanged, at most
+ *   four times, and only while `mayResume` agrees (the API checks Claude's caps there, with what the call has spent).
  */
 
 export const CLAUDE_MODEL = "claude-opus-5-5";
@@ -144,6 +145,12 @@ export interface ClaudeClientOptions {
   history?: ClaudeHistory;
   /** Retries of a 408, 409, 429 or 5xx; one, as Meta's client does. Tests set 0. */
   maxRetries?: number;
+  /**
+   * Asked before each resume of a paused search, with what the call has spent so far (not yet in any ledger). Each
+   * resume can run to another 16k tokens, so false stops resuming and the call answers with what it has, as from a
+   * final reply. A failure here fails the call, with what it spent reported.
+   */
+  mayResume?: (spentUsd: number) => Promise<boolean>;
 }
 
 type Json = Record<string, unknown>;
@@ -409,6 +416,7 @@ export class ClaudeClient {
         replies.push(reply);
         sent = [...sent, { role: "assistant", content: reply.content as unknown as BetaContentBlockParam[] }];
         if (reply.stop_reason !== "pause_turn" || resumes >= MAX_RESUMES) break;
+        if (this.opts.mayResume && !(await this.opts.mayResume(this.tally(replies).costUsd))) break;
       }
     } catch (e) {
       // What the finished replies cost is spent all the same.
@@ -421,11 +429,19 @@ export class ClaudeClient {
     // Kept only when it can go on: the request offered tools, or the reply stopped for a tool or a pause. Every other
     // call (a photo check, a reading, the answer that closes a chain) is over, and its photos needn't wait in memory.
     if (asked.length || stop === "tool_use" || stop === "pause_turn") {
-      if (stop === "max_tokens" || stop === "refusal") {
-        // read() drops a call cut off or refused, so the history does too: a tool_use with no tool_result after it
-        // would fail the next request. A turn that was nothing but that call (and its thinking) goes altogether.
-        const kept = (sent.at(-1)!.content as BetaContentBlockParam[]).filter((b) => b.type !== "tool_use");
+      // A turn that was nothing but what is taken out (and its thinking) goes altogether.
+      const trimLast = (out: (b: BetaContentBlockParam) => boolean) => {
+        const kept = (sent.at(-1)!.content as BetaContentBlockParam[]).filter((b) => !out(b));
         sent = kept.some((b) => b.type !== "thinking" && b.type !== "redacted_thinking") ? [...sent.slice(0, -1), { role: "assistant", content: kept }] : sent.slice(0, -1);
+      };
+      // read() drops a call cut off or refused, so the history does too: a tool_use with no tool_result after it would
+      // fail the next request.
+      if (stop === "max_tokens" || stop === "refusal") trimLast((b) => b.type === "tool_use");
+      // A search left paused (the caps stopped its resumes, or it paused too often) ran no further than its last result:
+      // a server_tool_use with no result after it would leave the next request a search to finish, not a turn to answer.
+      if (stop === "pause_turn") {
+        const answered = new Set((sent.at(-1)!.content as BetaContentBlockParam[]).map((b) => (b as { tool_use_id?: unknown }).tool_use_id).filter((v): v is string => typeof v === "string"));
+        trimLast((b) => b.type === "server_tool_use" && !answered.has(b.id));
       }
       const bytes = prior ? prior.bytes + weight(fresh) + weight(sent.slice(prior.messages.length)) : weight(conversation.system) + weight(tools) + weight(sent);
       this.history.set(id, { ...conversation, messages: sent, bytes });
@@ -434,8 +450,15 @@ export class ClaudeClient {
     return { id, ...read(replies, json, id, format?.schema), usage, costUsd };
   }
 
-  /** Adds up what the replies used, prices each at the speed it ran, and reports it once. */
+  /** Adds up what the replies used, prices them, and reports it once. */
   private async report(replies: BetaMessage[]): Promise<{ usage: Usage; costUsd: number }> {
+    const { usage, costUsd } = this.tally(replies);
+    await this.opts.onUsage?.(usage, costUsd);
+    return { usage, costUsd };
+  }
+
+  /** What the replies used, each priced at the speed it ran. */
+  private tally(replies: BetaMessage[]): { usage: Usage; costUsd: number } {
     const usage: Usage = { model: CLAUDE_MODEL, inputTokens: 0, cachedInputTokens: 0, cacheWriteTokens: 0, outputTokens: 0, searches: 0 };
     let costUsd = 0;
     for (const reply of replies) {
@@ -455,7 +478,6 @@ export class ClaudeClient {
       usage.searches += one.searches;
       costUsd += claudeCostUsd(one, u.speed ? u.speed === "fast" : this.fast);
     }
-    await this.opts.onUsage?.(usage, costUsd);
     return { usage, costUsd };
   }
 }
