@@ -73,7 +73,16 @@ function walk(dir, bad) {
   }
 }
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === realpathSync(process.argv[1])) {
+/** Run as a script (not imported by a test): compared through the real path, so a linked folder still counts. */
+function runAsScript() {
+  try {
+    return fileURLToPath(import.meta.url) === realpathSync(process.argv[1]);
+  } catch {
+    return false;
+  }
+}
+
+if (process.argv[1] && runAsScript()) {
   const bad = [];
   for (const dir of ["app", "components", "lib"]) walk(join(root, dir), bad);
   if (bad.length) {
