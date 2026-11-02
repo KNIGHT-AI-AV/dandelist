@@ -1,10 +1,11 @@
 import { useRef, useState } from "react";
-import { Text, TextInput, View } from "react-native";
+import { Platform, Text, TextInput, View } from "react-native";
 import type { WishQuestion } from "../lib/agent";
 import { answerAsk, pickedLine, reopenAsk, startAsk, timeUpAsk, type Ask } from "../lib/ask";
 import { OWN } from "../lib/own";
 import { answerOf, refineChanged } from "../lib/refine";
 import { layout, type, usePalette } from "../lib/theme";
+import { useGrow } from "./inputs/grow";
 import { AskBar, AskRow, useAskClock } from "./ask";
 import { Chip } from "./lux";
 
@@ -98,18 +99,15 @@ export function RefinePanel({
               />
             </View>
             {own ? (
-              <TextInput
+              <OwnAnswer
+                label={q.label}
                 value={value}
-                onChangeText={(v) => onEdit(q.id, v.slice(0, 60))}
-                placeholder="Your own answer"
-                placeholderTextColor={p.ink3}
-                accessibilityLabel={q.label}
                 autoFocus={!!typing[q.id]}
-                returnKeyType="done"
-                onSubmitEditing={() => value.trim() && answer(q.id, value.trim())}
-                onFocus={() => clock.typing(true)}
-                onBlur={() => clock.typing(false)}
-                style={[type.body, { color: p.ink, borderBottomWidth: 1, borderBottomColor: p.line, paddingVertical: layout.stack.tight }]}
+                onChange={(v) => onEdit(q.id, v.slice(0, 60))}
+                onAnswer={() => {
+                  if (value.trim()) answer(q.id, value.trim());
+                }}
+                onTyping={(on) => clock.typing(on)}
               />
             ) : null}
             <AskBar windowMs={clock.windowMs} round={clock.round} />
@@ -117,5 +115,35 @@ export function RefinePanel({
         );
       })}
     </View>
+  );
+}
+
+/** The own answer's one line, its padding and underline included, and the three lines it grows to. */
+const OWN_LINE = (type.body.lineHeight ?? 23) + 2 * layout.stack.tight + 1;
+const OWN_MOST = 3 * (type.body.lineHeight ?? 23) + 2 * layout.stack.tight + 1;
+
+/** An answer in the person's own words: it wraps onto lines in sight as it grows (owner, 2026-11-02), and Return answers. */
+function OwnAnswer({ label, value, autoFocus, onChange, onAnswer, onTyping }: { label: string; value: string; autoFocus: boolean; onChange(v: string): void; onAnswer(): void; onTyping(on: boolean): void }) {
+  const p = usePalette();
+  const grow = useGrow(OWN_LINE, OWN_MOST, onAnswer, Platform.OS === "web");
+  return (
+    <TextInput
+      value={value}
+      onChangeText={onChange}
+      placeholder="Your own answer"
+      placeholderTextColor={p.ink3}
+      accessibilityLabel={label}
+      autoFocus={autoFocus}
+      returnKeyType="done"
+      multiline={grow.multiline}
+      submitBehavior={grow.submitBehavior}
+      onSubmitEditing={grow.onSubmitEditing}
+      onKeyPress={grow.onKeyPress}
+      ref={grow.ref}
+      scrollEnabled={grow.scrollEnabled}
+      onFocus={() => onTyping(true)}
+      onBlur={() => onTyping(false)}
+      style={[type.body, { color: p.ink, borderBottomWidth: 1, borderBottomColor: p.line, paddingVertical: layout.stack.tight }, grow.style]}
+    />
   );
 }
