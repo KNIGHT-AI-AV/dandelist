@@ -14,12 +14,15 @@ import { poolSource, typicalSource } from "./pool";
 import { previewRoutes } from "./preview";
 import { isStoredKey } from "./media-store";
 import { agentKeyRoutes, mcpRoutes } from "./mcp";
+import { adminRoutes } from "./admin";
 import { meRoutes } from "./me";
 import { pickRoutes } from "./picks";
 import { wishRoutes } from "./wishes";
 
 export interface AppDeps extends AgentDeps {
   webOrigins: string[];
+  /** The sha256 of each address that may read /admin (admin.ts); its ADMIN_EMAIL_SHA256 when missing. */
+  admins?: ReadonlySet<string>;
 }
 
 export function createApp(deps: AppDeps) {
@@ -86,6 +89,8 @@ export function createApp(deps: AppDeps) {
   app.route("/me", meRoutes(deps));
   // What someone saw when they asked for help, kept private for the team (help.ts).
   app.route("/help", helpRoutes(deps));
+  // The owner's read-only view of use, accounts and issues; a 404 to anyone else (admin.ts).
+  app.route("/admin", adminRoutes(deps));
 
   app.use("/me", requireAuth(deps));
   app.get("/me", async (c) => {
