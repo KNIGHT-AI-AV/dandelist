@@ -2,6 +2,7 @@ import { router } from "expo-router";
 import { useEffect, useRef, type ReactNode } from "react";
 import { ScrollView, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useAuth } from "../lib/auth";
 import { layout, type, usePalette, useType } from "../lib/theme";
 import { MAIN } from "../lib/landmark";
 import { Chip, EdgeFade, Eyebrow, Hairline, IconButton, Wordmark } from "./lux";
@@ -28,6 +29,8 @@ export interface LegalDocument {
 export function LegalPage({ eyebrow, title, documents, focus, after }: { eyebrow: string; title: string; documents: LegalDocument[]; focus?: string; after?: ReactNode }) {
   const p = usePalette();
   const insets = useSafeAreaInsets();
+  // With no history, Back leads to the list for someone signed in, past the welcome back at "/".
+  const signedIn = useAuth().status === "signedIn";
   const t = useType();
   const { width } = useWindowDimensions();
   const scroll = useRef<ScrollView>(null);
@@ -123,7 +126,7 @@ export function LegalPage({ eyebrow, title, documents, focus, after }: { eyebrow
       <View pointerEvents="none" style={{ position: "absolute", top: 0, left: 0, right: 0, height: insets.top + 64, transform: [{ scaleY: -1 }] }}>
         <EdgeFade height={insets.top + 64} />
       </View>
-      <IconButton icon="back" label="Back" onPress={() => (router.canGoBack() ? router.back() : router.replace("/"))} style={{ position: "absolute", top: insets.top + (layout.headerBar - layout.control.icon) / 2, left: layout.gutter(width) }} />
+      <IconButton icon="back" label="Back" onPress={() => (router.canGoBack() ? router.back() : router.replace(signedIn ? "/wishes" : "/"))} style={{ position: "absolute", top: insets.top + (layout.headerBar - layout.control.icon) / 2, left: layout.gutter(width) }} />
     </View>
   );
 }

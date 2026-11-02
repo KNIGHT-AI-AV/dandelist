@@ -198,9 +198,10 @@ export default function Welcome() {
     };
   }, []);
 
-  // Signed in by any route (code, Apple, Google, GitHub): the list adopts what was kept (see useAdoptWelcome).
+  // Signed in by any route (code, Apple, Google, GitHub): through the welcome back to the list, which adopts what was
+  // kept (see useAdoptWelcome). The same place sign-in's own redirect goes, so whichever runs first, they agree.
   useEffect(() => {
-    if (auth.status === "signedIn") router.replace("/wishes");
+    if (auth.status === "signedIn") router.replace("/");
   }, [auth.status]);
 
   /** Changes the list and keeps it on this device; event handlers arriving later always see the latest list. */

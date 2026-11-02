@@ -47,10 +47,21 @@ export default function SignIn() {
   const emailInput = useRef<TextInput>(null);
   const codeInput = useRef<CodeFieldHandle>(null);
   const reduced = useReducedMotion();
-  const scene = useRef(new Animated.Value(reduced ? 1 : 0)).current;
+  const scene = useRef(new Animated.Value(0)).current;
+  // Reduce Motion is only known a moment after the first frame, so the settle can be under way when it arrives: it
+  // stops there and the photograph simply stands.
   useEffect(() => {
-    if (!reduced) Animated.timing(scene, { toValue: 1, duration: SCENE_MS, easing: ease.cinema, useNativeDriver: native }).start();
+    if (reduced) {
+      scene.stopAnimation();
+      scene.setValue(1);
+      return;
+    }
+    const settle = Animated.timing(scene, { toValue: 1, duration: SCENE_MS, easing: ease.cinema, useNativeDriver: native });
+    settle.start();
+    return () => settle.stop();
   }, [scene, reduced]);
+  // Back from the code step the email form returns quickly, so the field it focuses is never typed into unseen.
+  const enter = (i: number) => (returning ? { ...CODE_ENTER, delay: 0 } : { ...ENTER, delay: ENTER_DELAYS[i] });
 
   // Signed in, they pass through the welcome on the way to their list (app/index.tsx), not straight to it.
   if (auth.status === "signedIn") return <Redirect href="/" />;
@@ -133,23 +144,23 @@ export default function SignIn() {
         >
           {!sentTo ? (
             <>
-              <Rise {...ENTER} delay={ENTER_DELAYS[0]}>
+              <Rise {...enter(0)}>
                 <Wordmark height={30} />
               </Rise>
-              <Rise {...ENTER} delay={ENTER_DELAYS[1]}>
+              <Rise {...enter(1)}>
                 <Text accessibilityRole="header" style={[t.display, { color: p.ink }]}>
                   Price everything{"\n"}you <Text style={{ fontFamily: fonts.displayItalic, color: p.accentText }}>want</Text>.
                 </Text>
               </Rise>
-              <Rise {...ENTER} delay={ENTER_DELAYS[2]}>
+              <Rise {...enter(2)}>
                 <Text style={[type.body, { color: p.ink2, marginBottom: layout.stack.tight }]}>Dandelist finds the real price of everything you want, and what it costs over the years.</Text>
               </Rise>
               {options ? (
-                <Rise {...ENTER} delay={ENTER_DELAYS[3]}>
+                <Rise {...enter(3)}>
                   <SignInOptions options={options} pending={provider} disabled={busy} onChoose={continueWith} />
                 </Rise>
               ) : null}
-              <Rise {...ENTER} delay={ENTER_DELAYS[4]}>
+              <Rise {...enter(4)}>
               <Field
                 ref={emailInput}
                 label="Email"
@@ -173,7 +184,7 @@ export default function SignIn() {
                 submitted={submitted || !!error}
               />
               </Rise>
-              <Rise {...ENTER} delay={ENTER_DELAYS[5]}>
+              <Rise {...enter(5)}>
                 <PrimaryButton label="Email me a code" busyLabel="Sending..." busy={busy} disabled={!email.trim() || provider !== null} onPress={sendCode} />
               </Rise>
             </>

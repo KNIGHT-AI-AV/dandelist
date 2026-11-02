@@ -49,17 +49,19 @@ export function WelcomeBack({ onDone }: { onDone(): void }) {
   const photoIn = useRef(new Animated.Value(0)).current;
   const out = useRef(new Animated.Value(0)).current;
 
-  // What it says is fixed once it starts, so a list still arriving never rewrites a line on screen.
+  // What it says is fixed once it starts, so a list still arriving never rewrites a line on screen. It speaks about the
+  // list only once the list has loaded: a slow or failed load gets the greeting alone, never "empty".
   const said = useRef<{
     title: string;
-    line: string;
+    line: string | null;
     hero: string | null;
     heroName: string | null;
   } | null>(null);
   if (started && !said.current) {
-    const hero = heroWish(wishes);
+    const known = status === "ready" ? wishes : null;
+    const hero = known ? heroWish(known) : null;
     said.current = {
-      ...welcomeLines(wishes),
+      ...welcomeLines(known),
       hero: hero?.details?.agent?.imageUrl ?? null,
       heroName: hero?.name ?? null,
     };
@@ -245,19 +247,21 @@ export function WelcomeBack({ onDone }: { onDone(): void }) {
                 words.title
               )}
             </Animated.Text>
-            <Animated.Text
-              style={[
-                type.callout,
-                {
-                  color: p.ink2,
-                  textAlign: "center",
-                  opacity: range(2200, 2900),
-                  transform: [{ translateY: range(2200, 2900, 8, 0) }],
-                },
-              ]}
-            >
-              {words.line}
-            </Animated.Text>
+            {words.line ? (
+              <Animated.Text
+                style={[
+                  type.callout,
+                  {
+                    color: p.ink2,
+                    textAlign: "center",
+                    opacity: range(2200, 2900),
+                    transform: [{ translateY: range(2200, 2900, 8, 0) }],
+                  },
+                ]}
+              >
+                {words.line}
+              </Animated.Text>
+            ) : null}
           </View>
 
           {words.heroName ? (

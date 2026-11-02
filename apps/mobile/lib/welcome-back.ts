@@ -13,13 +13,17 @@ export function heroWish<W extends WelcomeWish>(wishes: readonly W[]): W | null 
   return wishes.find((w) => !!w.details?.agent?.imageUrl) ?? null;
 }
 
-/** The two lines: a greeting, then their list in a few words. Before a first wish it says what comes next. */
-export function welcomeLines(wishes: readonly WelcomeWish[]): {
+/**
+ * The two lines: a greeting, then their list in a few words. An empty list gets a plain start, since a guest's kept
+ * wish joins it once the list opens; a list that hasn't loaded (null) gets the greeting alone.
+ */
+export function welcomeLines(wishes: readonly WelcomeWish[] | null): {
   title: string;
-  line: string;
+  line: string | null;
 } {
+  if (!wishes) return { title: "Welcome", line: null };
   const n = wishes.length;
-  if (!n) return { title: "Welcome", line: "Let's find the first thing you want." };
+  if (!n) return { title: "Welcome", line: "Your Dandelist starts here." };
   return {
     title: "Welcome back",
     line: `Your Dandelist so far · ${n} ${n === 1 ? "wish" : "wishes"}`,

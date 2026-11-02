@@ -15,11 +15,15 @@ describe("the welcome back", () => {
     expect(welcomeLines([wish("Leica Q3")]).line).toBe("Your Dandelist so far · 1 wish");
   });
 
-  it("says what comes next before a first wish, without claiming they were here before", () => {
+  it("greets an empty list without claiming they were here before, or that nothing is coming (a guest's kept wish joins it next)", () => {
     expect(welcomeLines([])).toEqual({
       title: "Welcome",
-      line: "Let's find the first thing you want.",
+      line: "Your Dandelist starts here.",
     });
+  });
+
+  it("says nothing about a list it couldn't read, so a slow or failed load never calls a full list empty", () => {
+    expect(welcomeLines(null)).toEqual({ title: "Welcome", line: null });
   });
 
   it("stands the first wish with a checked photo behind the glass, and none when no wish has one", () => {
