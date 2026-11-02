@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
-import { Text, View, useWindowDimensions, type TextInput } from "react-native";
+import { Platform, Text, View, useWindowDimensions, type TextInput } from "react-native";
 import { haptic } from "../../lib/motion";
-import { placeAgain, restTop, type Frame } from "../../lib/rest-top";
+import { placeAgain, restTop, rests, type Frame } from "../../lib/rest-top";
 import { fonts, layout, type, usePalette, useType } from "../../lib/theme";
 import { transcribeGuest } from "../../lib/welcome";
 import { KeyboardDock, KeyboardScroll, dockRoom } from "../inputs";
@@ -26,8 +26,8 @@ export function Ask({ ideas, initial, bottomInset, onSubmit }: { ideas: string[]
   const [heard, setHeard] = useState(0);
   const [dock, setDock] = useState<number>(layout.control.primary);
   const field = useRef<TextInput>(null);
-  // The words rest at the optical centre of the room above the button (lib/rest-top.ts), measured while the screen is
-  // untouched and kept once someone types, taps an idea or speaks, so nothing moves under them.
+  // On a wide screen the words rest at the optical centre of the room above the button (lib/rest-top.ts), measured
+  // while the screen is untouched and kept once someone types, taps an idea or speaks, so nothing moves under them.
   const [frame, setFrame] = useState<Frame | null>(null);
   const [block, setBlock] = useState(0);
   const voice = useVoiceWish({
@@ -46,7 +46,7 @@ export function Ask({ ideas, initial, bottomInset, onSubmit }: { ideas: string[]
   };
   const untouched = text === initial && !error && voice.phase === "idle";
   const below = dockRoom(dock, bottomInset);
-  const top = frame && block ? restTop(frame.height, below, block) : 0;
+  const top = rests(Platform.OS === "web", width) && frame && block ? restTop(frame.height, below, block) : 0;
   const wishField = <WishField ref={field} value={text} onChangeText={setText} onSubmit={submit} editable placeholder="A week at Amanzoe with my wife in May" inset={voice.supported ? layout.control.icon + layout.stack.tight : 0} />;
 
   return (

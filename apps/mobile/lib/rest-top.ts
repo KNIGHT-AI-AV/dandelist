@@ -10,6 +10,17 @@ export function restTop(viewport: number, below: number, block: number): number 
   return Math.max(0, Math.round((viewport - below - block) * OPTICAL));
 }
 
+/**
+ * Only a wide screen on the web rests its words lower. A phone types on a keyboard that rises over the room below (the
+ * app opens it with the screen), so resting the words lower there pushed the field into the button's fade (review of
+ * #217); phones keep their words under the header, where the keyboard leaves them in sight.
+ */
+export const REST_MIN_WIDTH = 744;
+
+export function rests(web: boolean, width: number): boolean {
+  return web && width >= REST_MIN_WIDTH;
+}
+
 export type Frame = { width: number; height: number };
 
 /**
