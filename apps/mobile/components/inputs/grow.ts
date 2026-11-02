@@ -11,18 +11,22 @@ import type { NativeSyntheticEvent, TextInput, TextInputKeyPressEventData, TextS
  */
 
 /** The parts of a web textarea the measuring reads. */
-export type Measured = { style: { height: string }; scrollHeight: number; offsetHeight: number; clientHeight: number };
+export type Measured = { style: { height: string }; value: string; placeholder?: string; scrollHeight: number; offsetHeight: number; clientHeight: number };
 
 /**
  * The height a web textarea needs for its words, between `min` and `max`. A textarea never reports shrinking, so it is
  * measured at zero height (the composer's way, components/inputs/composer.tsx), and its border is added back: the box
- * counts it and scrollHeight does not, and a box a pixel short drew a scrollbar on Windows.
+ * counts it and scrollHeight does not, and a box a pixel short drew a scrollbar on Windows. An empty box is measured
+ * with its placeholder in it: Safari leaves a placeholder out of scrollHeight, and a wrapping one was cut off.
  */
 export function measure(el: Measured, min: number, max: number): number {
   const was = el.style.height;
+  const hint = !el.value && el.placeholder ? el.placeholder : null;
+  if (hint) el.value = hint;
   el.style.height = "0px";
   const content = el.scrollHeight + el.offsetHeight - el.clientHeight;
   el.style.height = was;
+  if (hint) el.value = "";
   return Math.min(max, Math.max(min, Math.ceil(content)));
 }
 

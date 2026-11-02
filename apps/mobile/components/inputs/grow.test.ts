@@ -31,9 +31,10 @@ describe("a text box that grows with its words", () => {
   });
 
   // A textarea's scrollHeight never drops below its own height, so it is read at zero height; the underline is added.
-  const textarea = (words: number, border: number, height = "44px"): Measured & { readAt: string[] } => {
+  const textarea = (words: number, border: number, height = "44px", value = "words"): Measured & { readAt: string[] } => {
     const el = {
       style: { height },
+      value,
       readAt: [] as string[],
       get scrollHeight() {
         el.readAt.push(el.style.height);
@@ -56,6 +57,28 @@ describe("a text box that grows with its words", () => {
     expect(el.style.height).toBe("120px");
     expect(measure(textarea(70, 0), 44, 120)).toBe(70);
     expect(measure(textarea(400, 0), 44, 120)).toBe(120);
+  });
+
+  it("measures an empty box with its placeholder in it, so a wrapping placeholder is never cut off (Safari)", () => {
+    // Safari's empty box: one line tall whatever its placeholder, two lines once the placeholder is its text.
+    const seen: string[] = [];
+    const el = {
+      style: { height: "55px" },
+      value: "",
+      placeholder: "The black dial, the newer model, another size",
+      offsetHeight: 55,
+      clientHeight: 55,
+      get scrollHeight() {
+        seen.push(el.value);
+        return el.value ? 78 : 55;
+      },
+    };
+    expect(measure(el, 55, 124)).toBe(78);
+    expect(seen).toEqual(["The black dial, the newer model, another size"]);
+    expect(el.value).toBe("");
+    expect(el.style.height).toBe("55px");
+    // A box with words in it is measured by its words.
+    expect(measure({ ...el, value: "Black dial", get scrollHeight() { return 55; } }, 55, 124)).toBe(55);
   });
 
   it("counts an underline, so a one-line answer is never a pixel short", () => {
