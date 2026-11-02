@@ -11,7 +11,7 @@ import { Icon } from "./lux";
 export function SongNote({ id, align = "center", style }: { id: ThemeId; align?: "center" | "end"; style?: StyleProp<ViewStyle> }) {
   const p = usePalette();
   return (
-    <View style={[{ flexDirection: "row", alignItems: "center", gap: 5, alignSelf: align === "end" ? "flex-end" : "center", maxWidth: "100%" }, style]}>
+    <View style={[{ flexDirection: "row", alignItems: "center", gap: 4, alignSelf: align === "end" ? "flex-end" : "center", maxWidth: "100%" }, style]}>
       <Icon name="music" size={12} color={p.ink3} />
       <Text style={[type.footnote, { color: p.ink3, flexShrink: 1 }]} numberOfLines={1}>
         {THEME_SONGS[id].name}

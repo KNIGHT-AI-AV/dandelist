@@ -70,7 +70,7 @@ function HeaderButton({ label, icon, onPress, hint }: { label: string; icon?: "p
   return (
     <Pressable accessibilityRole="button" accessibilityHint={hint} onPress={() => { haptic.select(); onPress(); }} onPressIn={press.onPressIn} onPressOut={press.onPressOut} hitSlop={{ top: 4, bottom: 4, left: 2, right: 2 }}>
       <Animated.View style={{ transform: [{ scale: press.scale }] }}>
-        <Glass intensity={40} style={{ height: 36, paddingHorizontal: 14, borderRadius: radius.pill, flexDirection: "row", alignItems: "center", gap: 6 }}>
+        <Glass intensity={40} style={{ height: 36, paddingHorizontal: 16, borderRadius: radius.pill, flexDirection: "row", alignItems: "center", gap: 8 }}>
           {icon ? <Icon name={icon} size={11} color={p.ink} /> : null}
           <Text style={[type.footnote, { fontFamily: fonts.label, color: p.ink }]}>{label}</Text>
         </Glass>
@@ -504,7 +504,7 @@ export function ChatPage() {
         return <CarBuilder w={w} live={live} waiting={asking === w.id} onApply={(values) => send({ type: "builder", widgetId: w.id, values })} />;
       case "deck":
         return (
-          <View style={{ gap: 10 }}>
+          <View style={{ gap: 12 }}>
             <Text style={[type.title3, { color: p.ink, paddingHorizontal: 4 }]}>{w.title}</Text>
             <SwipeDeck
               cards={w.cards}
@@ -555,7 +555,7 @@ export function ChatPage() {
       case "you":
         return (
           <Rise style={{ alignSelf: "flex-end", maxWidth: "86%" }}>
-            <Glass style={{ paddingHorizontal: 16, paddingVertical: 11, borderRadius: radius.md }}>
+            <Glass style={{ paddingHorizontal: 16, paddingVertical: 12, borderRadius: radius.md }}>
               <Text style={[type.callout, { color: p.ink }]}>{f.text}</Text>
             </Glass>
           </Rise>

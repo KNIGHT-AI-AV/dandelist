@@ -121,7 +121,7 @@ export function WishNote({ wish, onReveal }: { wish: Wish; onReveal?: (dy: numbe
             onContentSizeChange={Platform.OS === "web" ? (e) => setHeight(Math.min(NOTE_MAX_HEIGHT, Math.max(NOTE_MIN, e.nativeEvent.contentSize.height))) : undefined}
             style={[
               type.body,
-              { color: p.ink, paddingHorizontal: layout.stack.base, paddingTop: 14, paddingBottom: 14, textAlignVertical: "top" },
+              { color: p.ink, paddingHorizontal: layout.stack.base, paddingTop: 16, paddingBottom: 16, textAlignVertical: "top" },
               Platform.OS === "web" ? { height } : { minHeight: NOTE_MIN, maxHeight: NOTE_MAX_HEIGHT },
               webInput(p),
             ]}

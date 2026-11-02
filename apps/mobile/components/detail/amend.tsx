@@ -108,7 +108,7 @@ export function AmendWish({ wish, autoFocus = false, onReveal }: { wish: Wish; a
                 {...caretColors(p)}
                 onFocus={() => setFocused(true)}
                 onBlur={() => setFocused(false)}
-                style={[type.body, { color: p.ink, paddingHorizontal: layout.stack.base, paddingVertical: 14 }, webInput(p)]}
+                style={[type.body, { color: p.ink, paddingHorizontal: layout.stack.base, paddingVertical: 16 }, webInput(p)]}
               />
             </Glass>
             <Ring color={p.ink} opacity={focus} />

@@ -120,7 +120,7 @@ export function RevealCard({ picks, upfrontCents, monthlyRunningCents, onKeep, o
               })
             : null}
         </View>
-        <Animated.View style={{ flexDirection: "row", alignItems: "center", gap: 10, opacity: date, transform: [{ translateY: date.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }) }] }}>
+        <Animated.View style={{ flexDirection: "row", alignItems: "center", gap: 12, opacity: date, transform: [{ translateY: date.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }) }] }}>
           <DandyAvatar dandy={dandy} size={28} />
           <Text style={[t.title2, { color: p.ink }]}>
             Curated by <Text style={{ fontFamily: fonts.titleItalic, color: p.accentText }}>{dandy.name}</Text>
@@ -129,9 +129,9 @@ export function RevealCard({ picks, upfrontCents, monthlyRunningCents, onKeep, o
         <Animated.Text style={[type.figure13, { color: p.ink2, textAlign: "center", opacity: date }]}>{facts}</Animated.Text>
       </View>
       {confirm ? (
-        <Rise style={{ gap: 10 }}>
+        <Rise style={{ gap: 12 }}>
           <Text style={[type.callout, { color: p.ink, textAlign: "center" }]}>Start over? Your list and picks will be cleared.</Text>
-          <View style={{ flexDirection: "row", gap: 10 }}>
+          <View style={{ flexDirection: "row", gap: 12 }}>
             <Chip label="Keep my list" onPress={() => setConfirm(false)} style={{ flex: 1 }} />
             <Chip label="Start over" onPress={() => { haptic.select(); onRestart(); }} style={{ flex: 1 }} />
           </View>

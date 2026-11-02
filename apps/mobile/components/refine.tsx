@@ -55,7 +55,7 @@ export function RefinePanel({
   });
 
   return (
-    <View style={{ gap: 6 }}>
+    <View style={{ gap: 8 }}>
       {questions.map((q) => {
         const value = answerOf(q, edits);
         if (ask.open !== q.id) {
@@ -73,7 +73,7 @@ export function RefinePanel({
         }
         const own = !!typing[q.id] || (!!value && !q.options.includes(value));
         return (
-          <View key={q.id} style={{ gap: 10, paddingVertical: 4 }}>
+          <View key={q.id} style={{ gap: 12, paddingVertical: 4 }}>
             <Text style={[type.callout, { color: p.ink }]}>{q.label}</Text>
             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
               {q.options.map((c) => (

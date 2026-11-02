@@ -43,7 +43,7 @@ export function CandidateRow({ pick, onConfirm, onPick, onElse, center = false }
   return (
     <View style={{ gap: layout.stack.tight, alignItems: center ? "center" : "flex-start", alignSelf: "stretch" }}>
       <Text style={[type.footnote, { color: p.ink2, textAlign: center ? "center" : "left" }]}>Which one did you mean?</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ alignSelf: "stretch" }} contentContainerStyle={{ gap: 10, paddingVertical: 2, ...(center ? { flexGrow: 1, justifyContent: "center" } : {}) }}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ alignSelf: "stretch" }} contentContainerStyle={{ gap: 12, paddingVertical: 2, ...(center ? { flexGrow: 1, justifyContent: "center" } : {}) }}>
         {pick.candidates.map((c, i) => (
           <CandidateTile key={c.name} candidate={c} current={i === pick.current} onPress={() => (i === pick.current ? onConfirm() : onPick(c.name))} />
         ))}
@@ -59,7 +59,7 @@ function CandidateTile({ candidate: c, current, onPress }: { candidate: WishCand
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={c.name} accessibilityState={{ selected: current }} aria-selected={current} onPress={onPress} onPressIn={press.onPressIn} onPressOut={press.onPressOut}>
       <Animated.View style={{ width: TILE, gap: 2, transform: [{ scale: press.scale }] }}>
-        <View style={{ width: TILE, height: (TILE * 3) / 4, borderRadius: radius.sm, overflow: "hidden", borderWidth: current ? 2 : 1, borderColor: current ? p.accent : p.line, marginBottom: 6 }}>
+        <View style={{ width: TILE, height: (TILE * 3) / 4, borderRadius: radius.sm, overflow: "hidden", borderWidth: current ? 2 : 1, borderColor: current ? p.accent : p.line, marginBottom: 8 }}>
           <Photo uri={c.image?.url} />
           {current ? (
             <View style={{ position: "absolute", top: 6, right: 6, width: 22, height: 22, borderRadius: 11, backgroundColor: p.accent, alignItems: "center", justifyContent: "center" }}>

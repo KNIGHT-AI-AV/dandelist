@@ -63,6 +63,9 @@ function useClock(since: number | null) {
 
 const asItem = (o: PriceOption): Item => ({ id: o.url, upfrontCents: o.upfrontCents, recurring: o.recurring });
 
+/** How far the title block rides up onto the hero photo, over its shade. */
+const TITLE_OVER = 150;
+
 export default function NewWish() {
   const { api } = useAuth();
   const { wishes, add } = useWishes();
@@ -372,7 +375,7 @@ export default function NewWish() {
           )}
           <Shade from={0.15} />
         </View>
-        <View style={[column, { marginTop: -150, gap: layout.stack.tight }]}>
+        <View style={[column, { marginTop: -TITLE_OVER, gap: layout.stack.tight }]}>
           {/* Text protection over the photo: a 35% dimming layer behind the title block (HIG Materials, P1-22). */}
           <Protect />
           <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
@@ -435,7 +438,7 @@ export default function NewWish() {
               ) : null}
               {result.note ? <Text style={[type.footnote, { color: p.ink2 }]}>{result.note}</Text> : null}
               {questions.length ? (
-                <View style={{ gap: 10 }}>
+                <View style={{ gap: 12 }}>
                   <QuietButton
                     label={refining ? "Done refining" : "Refine it"}
                     onPress={() => {

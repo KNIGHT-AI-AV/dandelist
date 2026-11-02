@@ -22,7 +22,7 @@ const KEEP_SHOWN = 5;
 function Pips({ rank }: { rank: 1 | 2 | 3 }) {
   const p = usePalette();
   return (
-    <View style={{ flexDirection: "row", gap: 3 }} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+    <View style={{ flexDirection: "row", gap: 4 }} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
       {[0, 1, 2].map((i) => (
         <View key={i} style={{ width: 5, height: 5, borderRadius: 2.5, backgroundColor: i < 4 - rank ? p.accent : p.track }} />
       ))}
@@ -94,7 +94,7 @@ export function MoneyPage() {
 
   return (
     <ScrollView style={{ scrollbarWidth: "none" } as object} contentContainerStyle={{ paddingTop: top + layout.stack.base, paddingBottom: insets.bottom + space[40], paddingHorizontal: gutter, gap: layout.stack.section, width: "100%", maxWidth: layout.list + 2 * gutter, alignSelf: "center" }}>
-      <View style={{ alignItems: "center", gap: 6, paddingTop: layout.stack.base }}>
+      <View style={{ alignItems: "center", gap: 8, paddingTop: layout.stack.base }}>
         <Eyebrow>Money</Eyebrow>
         <Money cents={total} size="hero" style={{ alignSelf: "center" }} />
         <Text style={[type.callout, { color: p.ink2, textAlign: "center" }]}>{`Everything on your list, ${wishes.length} ${wishes.length === 1 ? "wish" : "wishes"}`}</Text>
@@ -115,7 +115,7 @@ export function MoneyPage() {
               {(allLines ? lines : lines.slice(0, KEEP_SHOWN)).map((l, i) => (
                 <View key={`${l.text}:${i}`}>
                   <Hairline />
-                  <View style={{ flexDirection: "row", justifyContent: "space-between", gap: space[12], paddingVertical: 10 }}>
+                  <View style={{ flexDirection: "row", justifyContent: "space-between", gap: space[12], paddingVertical: 12 }}>
                     <Text style={[type.footnote, { color: p.ink, flex: 1 }]} numberOfLines={2}>
                       {l.text}
                     </Text>
@@ -151,7 +151,7 @@ export function MoneyPage() {
 
       <Section title="By how much you want it">
         {tiers.map((tr) => (
-          <View key={tr.tier} style={{ gap: 6 }}>
+          <View key={tr.tier} style={{ gap: 8 }}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: space[8] }}>
               <Pips rank={TIER_RANK[tr.tier]} />
               <Text style={[type.label, { color: p.ink, flex: 1 }]}>{TIER_LABEL[tr.tier]}</Text>
@@ -165,7 +165,7 @@ export function MoneyPage() {
 
       <Section title="The biggest">
         {top5.map(({ wish, share }) => (
-          <Pressable key={wish.id} accessibilityRole="button" accessibilityLabel={`${wish.name}, ${money.format(wish.item.upfrontCents)}, ${Math.round(share * 100)} percent of the list`} onPress={() => router.push(`/wishes/${wish.id}`)} style={{ gap: 6 }}>
+          <Pressable key={wish.id} accessibilityRole="button" accessibilityLabel={`${wish.name}, ${money.format(wish.item.upfrontCents)}, ${Math.round(share * 100)} percent of the list`} onPress={() => router.push(`/wishes/${wish.id}`)} style={{ gap: 8 }}>
             <View style={{ flexDirection: "row", alignItems: "baseline", gap: space[8] }}>
               <Text style={[type.callout, { color: p.ink, flex: 1, fontFamily: fonts.title }]} numberOfLines={1}>
                 {wish.name}

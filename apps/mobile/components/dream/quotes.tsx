@@ -15,9 +15,9 @@ export function KeepStatement({ lines, currency }: { lines: KeepLine[]; currency
   const money = moneyIn(currency);
   const per = (l: KeepLine) => (l.period === "month" ? "/mo" : l.period === "year" ? "/yr" : "/wk");
   return (
-    <View style={{ gap: 10 }}>
+    <View style={{ gap: 12 }}>
       {lines.map((l) => (
-        <View key={l.label} style={{ gap: 3 }}>
+        <View key={l.label} style={{ gap: 4 }}>
           <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "baseline", gap: 12 }}>
             <Text style={[type.callout, { flexShrink: 1, color: p.ink }]}>{l.label}</Text>
             <Text style={[type.figure13, { color: p.ink }]}>{`${money(l.amountCents)}${per(l)}`}</Text>
@@ -49,7 +49,7 @@ export function ServiceQuote({ w, onAccept }: { w: Extract<Widget, { kind: "serv
   const [accepted, setAccepted] = useState(false);
   const [busy, setBusy] = useState(false);
   return (
-    <Glass style={{ padding: 16, gap: 14, borderRadius: radius.lg }}>
+    <Glass style={{ padding: 16, gap: 16, borderRadius: radius.lg }}>
       <Hero images={w.images} />
       <View style={{ gap: 4 }}>
         <Eyebrow color={p.accentText}>{w.region}</Eyebrow>
@@ -86,7 +86,7 @@ export function WishReady({ w, onAdd, listedId = null, onShowOnList }: { w: Extr
   const [error, setError] = useState<string | null>(null);
   const wish = w.wish;
   return (
-    <Glass style={{ padding: 16, gap: 14, borderRadius: radius.lg }}>
+    <Glass style={{ padding: 16, gap: 16, borderRadius: radius.lg }}>
       <Hero images={wish.images} height={260} />
       <View style={{ gap: 4 }}>
         <Eyebrow color={p.accentText}>{[wish.region, wish.seller].filter(Boolean).join(" · ") || "Found it"}</Eyebrow>

@@ -11,7 +11,7 @@
     "export:web": "expo export --platform web",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "deploy:web": "node scripts/deploy-web.mjs",
-    "test": "node scripts/check-type.mjs && vitest run"
+    "test": "node scripts/check-type.mjs && node scripts/check-space.mjs && vitest run --maxWorkers=2 --minWorkers=1"
   },
   "dependencies": {
     "@dandelist/catalogue": "workspace:*",

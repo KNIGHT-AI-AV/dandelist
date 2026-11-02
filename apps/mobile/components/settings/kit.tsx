@@ -59,7 +59,7 @@ export function Row({
   const p = usePalette();
   const [hovered, setHovered] = useState(false);
   const body = (pressed: boolean) => (
-    <View style={{ minHeight: 56, flexDirection: "row", alignItems: "center", gap: 14, paddingHorizontal: layout.cardPad, paddingVertical: 10, borderRadius: radius.md, backgroundColor: pressed || hovered ? p.track : "transparent" }}>
+    <View style={{ minHeight: 56, flexDirection: "row", alignItems: "center", gap: 16, paddingHorizontal: layout.cardPad, paddingVertical: 12, borderRadius: radius.md, backgroundColor: pressed || hovered ? p.track : "transparent" }}>
       {leading}
       <View style={{ flex: 1, gap: 2 }}>
         <Text style={[type.body, { color: danger ? p.danger : p.ink }]}>{label}</Text>
@@ -116,7 +116,7 @@ export function RowAction({ label, onPress, busy = false, disabled = false, tone
       disabled={blocked}
       onPress={blocked ? undefined : onPress}
       hitSlop={8}
-      style={({ pressed }) => [{ minHeight: 44, minWidth: 64, paddingHorizontal: 14, alignItems: "center", justifyContent: "center", borderRadius: radius.control, borderCurve: "continuous", borderWidth: 1, borderColor: p.line, opacity: blocked ? 0.5 : pressed ? 0.7 : 1 }]}
+      style={({ pressed }) => [{ minHeight: 44, minWidth: 64, paddingHorizontal: 16, alignItems: "center", justifyContent: "center", borderRadius: radius.control, borderCurve: "continuous", borderWidth: 1, borderColor: p.line, opacity: blocked ? 0.5 : pressed ? 0.7 : 1 }]}
     >
       <Text style={[type.label, { color }]}>{busy ? "..." : label}</Text>
     </Pressable>

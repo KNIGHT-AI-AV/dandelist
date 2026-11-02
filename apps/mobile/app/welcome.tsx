@@ -569,7 +569,7 @@ export default function Welcome() {
         <Animated.View pointerEvents="box-none" style={{ position: "absolute", top: insets.top, left: 0, right: 0, alignItems: "center", paddingHorizontal: gutter, opacity: chrome }}>
           <View pointerEvents="box-none" style={{ width: "100%", maxWidth: headerColumn }}>
             <View pointerEvents="box-none" style={{ height: layout.headerBar, flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-              <View pointerEvents="box-none" style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+              <View pointerEvents="box-none" style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
                 {canGoBack ? <IconButton icon="back" label="Back" onPress={goBack} /> : null}
                 <Wordmark />
               </View>

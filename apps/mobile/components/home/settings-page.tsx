@@ -136,7 +136,7 @@ export function SettingsPage() {
           <Card>
             <Row first label="Where you'd live" value={home === undefined ? " " : (home?.label ?? "Choose a place")} onPress={() => setPlaceOpen(true)} hint="Opens a list of countries and cities" />
             <RowRule />
-            <View style={{ paddingHorizontal: layout.cardPad, paddingVertical: 14, gap: 12 }}>
+            <View style={{ paddingHorizontal: layout.cardPad, paddingVertical: 16, gap: 12 }}>
               <Text style={[type.body, { color: p.ink }]}>Currency</Text>
               <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }} accessibilityRole="radiogroup">
                 {CURRENCIES.map((c) => (
