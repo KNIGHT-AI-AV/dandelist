@@ -95,6 +95,7 @@ vi.mock("../odometer", () => ({ Odometer: "Odometer", dollars: () => "" }));
 vi.mock("../reveal", () => ({ GlassReveal: "GlassReveal" }));
 
 const { CodeSheet } = await import("./finale");
+const { welcomeBack } = await import("../../lib/back-target");
 
 let root: ReactTestRenderer | null = null;
 const open = async (onClose: () => void) => {
@@ -127,6 +128,24 @@ describe("the save sheet and Android's Back", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(h.moves).toEqual([0]);
     expect(underneath).not.toHaveBeenCalled();
+  });
+
+  it("still closes the sheet when the welcome's listener was registered after it (a sign-in attempt from the sheet that came back)", async () => {
+    const onClose = vi.fn();
+    await open(onClose);
+    // The welcome lost and regained focus while the sheet stayed up, so its listener is now the newest. It decides as
+    // app/welcome.tsx does, through welcomeBack, on the reveal step where the page could step back.
+    const stepped = vi.fn();
+    h.back.push(() => {
+      if (welcomeBack({ sheet: true, canGoBack: true }) !== "step") return false;
+      stepped();
+      return true;
+    });
+    h.moves = [];
+    await act(async () => void expect(pressBack()).toBe(true));
+    expect(stepped).not.toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(h.moves).toEqual([0]);
   });
 
   it("lets Back through again once the sheet is gone", async () => {
