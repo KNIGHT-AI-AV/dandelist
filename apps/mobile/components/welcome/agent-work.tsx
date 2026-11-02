@@ -11,11 +11,11 @@ import { Chip, Rise } from "./kit";
 type Row = { id: string; state: "running" | "done"; text: string };
 export type Result = Extract<PreviewEvent, { type: "result" }>;
 
-/** A row enters when the server sends it; "running" breathes the dot until the server says it's done. */
 /** A row's mark column and the gap after it; a line under the row lines up with its text by both. */
 const MARK = 17;
 const MARK_GAP = 12;
 
+/** A row enters when the server sends it; "running" breathes the dot until the server says it's done. */
 function AgentRow({ row }: { row: Row }) {
   const p = usePalette();
   return (

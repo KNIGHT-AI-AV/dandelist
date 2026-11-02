@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Keyboard, Platform, Text, TextInput, View } from "react-native";
 import { useDandy } from "../../lib/dandy";
-import { layout, radius, type, usePalette } from "../../lib/theme";
+import { layout, radius, space, type, usePalette } from "../../lib/theme";
 import { useWishes, type Wish } from "../../lib/wishes";
 import { Ring, caretColors, useToggle, webInput } from "../inputs/field";
 import { ErrorLine, Eyebrow, Glass, QuietButton } from "../lux";
@@ -12,9 +12,11 @@ export const NOTE_MAX = 600;
 const COUNT_FROM = 500;
 /** A pause in typing this long saves. */
 const SAVE_AFTER_MS = 800;
+/** The field's padding above and below the words; the heights below count it. */
+const NOTE_PAD = space[16];
 /** Four lines to start; the field grows to about eight, then scrolls inside itself. */
-const NOTE_MIN = 4 * (type.body.lineHeight ?? 23) + 2 * 14;
-const NOTE_MAX_HEIGHT = 8 * (type.body.lineHeight ?? 23) + 2 * 14;
+const NOTE_MIN = 4 * (type.body.lineHeight ?? 23) + 2 * NOTE_PAD;
+const NOTE_MAX_HEIGHT = 8 * (type.body.lineHeight ?? 23) + 2 * NOTE_PAD;
 
 /** What goes to the server for what's typed: the words, or null for nothing. */
 export const noteValue = (text: string): string | null => (text.trim() ? text : null);
@@ -121,7 +123,7 @@ export function WishNote({ wish, onReveal }: { wish: Wish; onReveal?: (dy: numbe
             onContentSizeChange={Platform.OS === "web" ? (e) => setHeight(Math.min(NOTE_MAX_HEIGHT, Math.max(NOTE_MIN, e.nativeEvent.contentSize.height))) : undefined}
             style={[
               type.body,
-              { color: p.ink, paddingHorizontal: layout.stack.base, paddingTop: 16, paddingBottom: 16, textAlignVertical: "top" },
+              { color: p.ink, paddingHorizontal: layout.stack.base, paddingTop: NOTE_PAD, paddingBottom: NOTE_PAD, textAlignVertical: "top" },
               Platform.OS === "web" ? { height } : { minHeight: NOTE_MIN, maxHeight: NOTE_MAX_HEIGHT },
               webInput(p),
             ]}

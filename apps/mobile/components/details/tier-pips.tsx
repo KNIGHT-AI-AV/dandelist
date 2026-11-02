@@ -12,7 +12,7 @@ export const TIER_PIPS: Record<WishTier, 1 | 2 | 3> = { must: 3, nice: 2, dream:
  * every theme, light ones included. It is decoration beside the tier's name, so screen readers skip it unless
  * `label` is true, when it says the tier and its place on the scale.
  */
-export function TierPips({ tier, size = 6, gap = 3, color, label = false, style }: { tier: WishTier; size?: number; gap?: number; color?: string; label?: boolean; style?: StyleProp<ViewStyle> }) {
+export function TierPips({ tier, size = 6, gap = 4, color, label = false, style }: { tier: WishTier; size?: number; gap?: number; color?: string; label?: boolean; style?: StyleProp<ViewStyle> }) {
   const p = usePalette();
   const ink = color ?? p.ink;
   const filled = TIER_PIPS[tier];
