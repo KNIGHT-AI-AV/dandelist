@@ -8,10 +8,14 @@ import { layout, radius, space, type, usePalette } from "../../lib/theme";
 import { useWishes, type Wish } from "../../lib/wishes";
 import { hostOf } from "../../lib/words";
 import { Ring, caretColors, useToggle, webInput } from "../inputs/field";
+import { useGrow } from "../inputs/grow";
 import { ErrorLine, Eyebrow, Glass, QuietButton } from "../lux";
 
 /** The longest description the reading takes in one go, with the wish's name before it. */
 const SAID_MAX = 300;
+/** One line of words with the field's padding; it grows to four lines with them, then scrolls inside itself. */
+const LINE = (type.body.lineHeight ?? 23) + 2 * space[16];
+const MOST = 4 * (type.body.lineHeight ?? 23) + 2 * space[16];
 
 /**
  * Tell the Dandy what you meant (owner, 2026-10-31: "clicking item that you already added and amend it someway by
@@ -54,6 +58,7 @@ export function AmendWish({ wish, autoFocus = false, onReveal }: { wish: Wish; a
     setError(null);
     void amendWish(api, wish, words);
   };
+  const grow = useGrow(LINE, MOST, look, Platform.OS === "web");
   // Both answers belong to this look (r.attempt); neither works while its result is being saved.
   const saving = busy || !!r?.saving;
   const use = async () => {
@@ -104,11 +109,16 @@ export function AmendWish({ wish, autoFocus = false, onReveal }: { wish: Wish; a
                 autoCorrect
                 autoFocus={autoFocus}
                 returnKeyType="search"
-                onSubmitEditing={look}
+                multiline={grow.multiline}
+                submitBehavior={grow.submitBehavior}
+                onSubmitEditing={grow.onSubmitEditing}
+                onKeyPress={grow.onKeyPress}
+                onContentSizeChange={grow.onContentSizeChange}
+                scrollEnabled={grow.scrollEnabled}
                 {...caretColors(p)}
                 onFocus={() => setFocused(true)}
                 onBlur={() => setFocused(false)}
-                style={[type.body, { color: p.ink, paddingHorizontal: layout.stack.base, paddingVertical: 16 }, webInput(p)]}
+                style={[type.body, { color: p.ink, paddingHorizontal: layout.stack.base, paddingVertical: space[16] }, grow.style, webInput(p)]}
               />
             </Glass>
             <Ring color={p.ink} opacity={focus} />

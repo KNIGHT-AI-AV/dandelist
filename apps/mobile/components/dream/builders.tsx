@@ -1,6 +1,6 @@
 import type { LifeContext, Widget } from "@dandelist/catalogue/dream";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { answerAsk, askDone, pickedLine, reopenAsk, startAsk, timeUpAsk, type Ask } from "../../lib/ask";
 import { haptic } from "../../lib/motion";
 import { moneyIn } from "../../lib/dream";
@@ -9,6 +9,7 @@ import { autoPickCar, carSelectionSummary, carSelectionValues, carStepLabels, co
 import { fonts, layout, radius, usePalette, type } from "../../lib/theme";
 import { AskBar, AskNote, AskRow, useAskClock } from "../ask";
 import { Field } from "../inputs";
+import { useGrow } from "../inputs/grow";
 import { TARGET } from "../inputs/tokens";
 import { Eyebrow, Glass, Shade } from "../lux";
 import { GlassReveal } from "../reveal";
@@ -50,6 +51,10 @@ function JustSearch({ onPress }: { onPress(): void }) {
  * the offered chips, picked; tapping one takes it out. `children` are the section's own chips, in the same row. The
  * Dandy's clock holds while the field has focus.
  */
+/** The own-answer field's one line, padding included, and the three lines it grows to. */
+const OWN_LINE = (type.body.lineHeight ?? 23) + 2 * layout.stack.tight;
+const OWN_MOST = 3 * (type.body.lineHeight ?? 23) + 2 * layout.stack.tight;
+
 function OwnRow({ label, own, draft, onDraft, onCommit, onRemove, onTyping, children }: { label: string; own: string[]; draft: string | null; onDraft(v: string | null): void; onCommit(): void; onRemove(v: string): void; onTyping?(on: boolean): void; children?: ReactNode }) {
   const p = usePalette();
   // A field that closes or leaves with its section never reports its blur, so the clock is let go here too.
@@ -59,6 +64,8 @@ function OwnRow({ label, own, draft, onDraft, onCommit, onRemove, onTyping, chil
     if (draft === null) typing.current?.(false);
   }, [draft]);
   useEffect(() => () => typing.current?.(false), []);
+  // A longer answer wraps onto a second and third line in sight, rather than scrolling its start away.
+  const grow = useGrow(OWN_LINE, OWN_MOST, onCommit, Platform.OS === "web");
   return (
     <>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
@@ -77,10 +84,15 @@ function OwnRow({ label, own, draft, onDraft, onCommit, onRemove, onTyping, chil
           accessibilityLabel={label}
           autoFocus
           returnKeyType="done"
-          onSubmitEditing={onCommit}
+          multiline={grow.multiline}
+          submitBehavior={grow.submitBehavior}
+          onSubmitEditing={grow.onSubmitEditing}
+          onKeyPress={grow.onKeyPress}
+          onContentSizeChange={grow.onContentSizeChange}
+          scrollEnabled={grow.scrollEnabled}
           onFocus={() => onTyping?.(true)}
           onBlur={() => onTyping?.(false)}
-          style={[type.body, { color: p.ink, borderBottomWidth: 1, borderBottomColor: p.line, paddingVertical: layout.stack.tight }]}
+          style={[type.body, { color: p.ink, borderBottomWidth: 1, borderBottomColor: p.line, paddingVertical: layout.stack.tight }, grow.style]}
         />
       ) : null}
     </>
