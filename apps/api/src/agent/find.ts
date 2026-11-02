@@ -54,7 +54,7 @@ export interface HuntResult extends ResearchResult {
   worth?: WorthCard;
 }
 
-export interface HuntContext extends Omit<ResearchContext, "draft" | "answers" | "deadline"> {
+export interface HuntContext extends Omit<ResearchContext, "draft" | "answers" | "deadline" | "photoFound"> {
   /** What the person said; read into a draft here unless a draft comes with it. */
   text?: string;
   /** A draft read before (hunting again with new answers): no second read, and the fast find uses its answers. */
@@ -279,7 +279,7 @@ export async function huntWish(meta: Meta, ctx: HuntContext): Promise<HuntResult
   let researched: ResearchResult | null = null;
   let failure: unknown = null;
   try {
-    researched = await research(meta, { ...ctx, fetcher, draft, answers: extra, deadline: t0 + RESEARCH_MS });
+    researched = await research(meta, { ...ctx, fetcher, draft, answers: extra, deadline: t0 + RESEARCH_MS, photoFound: searched.then((f) => !!f) });
   } catch (e) {
     failure = e;
   }

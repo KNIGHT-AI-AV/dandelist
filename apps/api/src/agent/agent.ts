@@ -786,6 +786,11 @@ export interface ResearchContext {
   effort?: string;
   /** The waits before asking Meta again for a response it can't yet see. Missing: CHAIN_RETRY_MS (tests set zeros). */
   chainRetryMs?: readonly number[];
+  /**
+   * Whether the hunt's own photo search found a checked photo, which find.ts puts on a thing to buy's first option.
+   * Only once it has can the options' own photo hunt be cut short (researchTail). Missing: never cut short.
+   */
+  photoFound?: Promise<boolean>;
 }
 
 /** Before each retry of a follow-up call that names a response Meta can't yet see: a second, then three. */
@@ -814,14 +819,21 @@ export const PHOTO_GRACE_MS = 3_000;
 
 /**
  * Research's last two steps, the summary and the options' photos, inside `ms`; resolves with the summary, or null when
- * it didn't come in time. A thing to buy shows the hunt's own checked photo on its first option whatever this photo hunt
- * finds (find.ts), and its other options rarely got one from it: 1 of 6 in a week of live hunts (2026-10-26 to 11-01),
- * while it held the full card to the deadline (2 of 3 bench hunts with shops refused, 2026-11-02). So for one, the
- * photos get `graceMs` once the summary is in; for a home, a trip or a service each option shows its own page's photos,
- * so they keep the whole time.
+ * it didn't come in time. `covered` is set for a thing to buy and says whether the hunt's own photo search found a
+ * checked photo, which then goes on its first option whatever this photo hunt finds (find.ts). Its other options rarely
+ * got one from this hunt: 1 of 6 in a week of live hunts (2026-10-26 to 11-01), while it held the full card to the
+ * deadline (2 of 3 bench hunts with shops refused, 2026-11-02). So once the summary is in and `covered` came back true,
+ * the photos get `graceMs` more. Without a found photo the first option may need this hunt's, so it keeps the whole
+ * time, as does a home, a trip or a service, whose options each show their own page's photos.
  */
-export async function researchTail<T>(said: Promise<T>, photos: Promise<void>, ms: number, buy: boolean, graceMs = PHOTO_GRACE_MS): Promise<T | null> {
-  const due = buy ? said.then(() => within(photos, graceMs), () => within(photos, graceMs)) : photos;
+export async function researchTail<T>(said: Promise<T>, photos: Promise<void>, ms: number, covered: Promise<boolean> | null, graceMs = PHOTO_GRACE_MS): Promise<T | null> {
+  const settled = said.then(
+    () => undefined,
+    () => undefined,
+  );
+  // The photos being done always ends the wait; a found photo can only shorten it, never make it wait for the search.
+  const capped = covered ? Promise.all([settled, covered.catch(() => false)]).then(([, yes]) => (yes ? within(photos, graceMs) : photos)) : photos;
+  const due = Promise.race([photos, capped]);
   const [explanation] = await Promise.all([within(said, ms), within(due, ms)]);
   return explanation;
 }
@@ -1200,7 +1212,7 @@ export async function research(meta: Meta, ctx: ResearchContext): Promise<Resear
     await onStep({ type: "explain", at: at() });
     return options.length ? explain(meta, ctx.draft, options, ctx.voice) : "";
   })();
-  const explanation = await researchTail(said, photos, left() - 500, ctx.draft.kind === "buy");
+  const explanation = await researchTail(said, photos, left() - 500, ctx.draft.kind === "buy" ? (ctx.photoFound ?? null) : null);
   // What is returned is a copy, so a photo hunt still running past the deadline can't change a result already sent.
   // Without the hunt, a page's share picture only stays when it fits the subject: on many pages it is a logo or a banner.
   const result = options.map((o): PriceOption => {
