@@ -30,6 +30,7 @@ const deps: Parameters<typeof createApp>[0] = {
   now: () => new Date(),
   remember: true,
   meta: env.MODEL_API_KEY ? { apiKey: env.MODEL_API_KEY } : undefined,
+  claude: env.ANTHROPIC_API_KEY ? { apiKey: env.ANTHROPIC_API_KEY, dailyUsd: env.CLAUDE_DAILY_USD, fast: env.CLAUDE_SPEED === "fast", onMetaErrors: env.CLAUDE_ON_META_ERRORS } : undefined,
   spendCaps: { dailyUsd: env.SPEND_DAILY_USD, totalUsd: env.SPEND_TOTAL_USD },
   apify: env.APIFY_TOKEN ? { token: env.APIFY_TOKEN, dailyUsd: env.APIFY_DAILY_USD } : undefined,
   media: {

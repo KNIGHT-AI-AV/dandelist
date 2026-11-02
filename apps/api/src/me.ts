@@ -12,6 +12,7 @@ import { forgetMemories, readMemories } from "./memory";
 import { PROVIDERS, listIdentities, type Provider } from "./oauth";
 import { RateLimiter } from "./ratelimit";
 import { SpendLimitError, assertBudget, assertUserBudget, recordSpend, userCapUsd, withHold } from "./spend";
+import { claudeFor, claudeGuard, eitherReady, metaFirst } from "./under";
 
 /**
  * The person, for settings (owner's walkthrough, 2026-10-28):
@@ -258,7 +259,7 @@ export function meRoutes(deps: AgentDeps) {
       await assertUserBudget(db, userId, await userCapUsd(db, userId, USER_DAILY_USD, deps.judge, caps), deps.now());
     };
     try {
-      await guard();
+      await eitherReady(guard, claudeGuard(deps, userId, USER_DAILY_USD));
     } catch (e) {
       if (e instanceof SpendLimitError) return c.json({ error: "That's all for today. Try again tomorrow." }, 429);
       throw e;
@@ -293,18 +294,15 @@ export function meRoutes(deps: AgentDeps) {
     };
 
     const client = new MetaClient({ ...deps.meta, onUsage: (usage, cost) => recordSpend(db, userId, "facts", usage, cost, deps.now()) });
+    // Meta first; Claude only once Meta's spend is used up (under.ts).
+    const responses = metaFirst((body) => withHold(guard, () => client.responses(body), userId), claudeFor(deps, userId, "facts", { personUsd: USER_DAILY_USD }));
     let lines: string[];
     try {
-      const res = await withHold(
-        guard,
-        () =>
-          client.responses({
-            instructions: [FACTS_INSTRUCTIONS, voiceLine(persona)].filter(Boolean).join("\n"),
-            input: JSON.stringify(data),
-            text: { format: { type: "json_schema", name: "facts", schema: FACTS_JSON, strict: true } },
-          }),
-        userId,
-      );
+      const res = await responses({
+        instructions: [FACTS_INSTRUCTIONS, voiceLine(persona)].filter(Boolean).join("\n"),
+        input: JSON.stringify(data),
+        text: { format: { type: "json_schema", name: "facts", schema: FACTS_JSON, strict: true } },
+      });
       const out = z.object({ facts: z.array(z.string()).length(3) }).parse(JSON.parse(res.text));
       lines = out.facts.map(cleanFact);
       if (lines.some((l) => l.length < 4)) throw new Error("a fact came back empty");

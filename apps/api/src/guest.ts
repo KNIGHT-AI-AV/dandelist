@@ -15,7 +15,8 @@ import { pgArchive } from "./archive/archive";
 import { PAIRS_MS, makePairs } from "./pairs";
 import type { PoolItem, TypicalEntity } from "./pool";
 import { ipOf } from "./preview";
-import { SpendLimitError, assertBudget, heldForScope, recordSpend, recordToolSpend, withBudgetScope } from "./spend";
+import { NOT_CLAUDE, SpendLimitError, assertBudget, heldForScope, recordSpend, recordToolSpend, withBudgetScope } from "./spend";
+import { claudeForGuests, eitherReady, guestShareUsd, metaFirst } from "./under";
 import { heartbeat, stoppable } from "./sse";
 
 /**
@@ -113,23 +114,26 @@ export function guestRoutes(deps: AgentDeps & { pool: () => Promise<PoolItem[]>;
   const wishes = limiter(GUEST_WISHES_PER_IP_PER_HOUR, GUEST_WISHES_PER_DAY);
   const voice = limiter(GUEST_VOICE_PER_IP_PER_HOUR, GUEST_VOICE_PER_DAY);
 
-  /** Refuses when the whole service or today's guest share is spent. */
+  /** Refuses when the whole service or today's guest share of Meta is spent (Claude's guest rows count apart, under.ts). */
   const guard = async () => {
     const now = deps.now();
     await assertBudget(db, caps, now);
     const dayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).toISOString();
-    const spent = (await db.query<{ s: string | null }>("select coalesce(sum(cost_usd), 0) as s from spend_ledger where user_id is null and kind like 'guest%' and created_at >= $1", [dayStart])).rows[0];
+    const spent = (await db.query<{ s: string | null }>(`select coalesce(sum(cost_usd), 0) as s from spend_ledger where user_id is null and kind like 'guest%' and ${NOT_CLAUDE} and created_at >= $1`, [dayStart])).rows[0];
     const usd = Number(spent?.s ?? 0);
     if (usd >= GUEST_DAILY_USD || usd + heldForScope("guest") > GUEST_DAILY_USD) throw new SpendLimitError("daily");
   };
+  /** The guests' share of Claude's day: the same part of it as GUEST_DAILY_USD is of Meta's ($3 of $5), never all of it. */
+  const claudeShareUsd = deps.claude ? guestShareUsd(deps.claude.dailyUsd, GUEST_DAILY_USD, caps.dailyUsd) : 0;
   /**
    * Guest model calls under the guest allowance; once `stop` fires, any call still running is dropped. `kind` names the
-   * ledger rows ("guest-pairs" for this or that); every guest kind shares the one daily allowance.
+   * ledger rows ("guest-pairs" for this or that); every guest kind shares the one daily allowance. Meta first; once
+   * Meta's share is spent, Claude under it, within the guests' share of Claude's day (under.ts).
    */
   const guestMeta = (stop?: AbortSignal, kind = "guest"): Meta => {
     const base = deps.meta!.fetch ?? fetch;
     const client = new MetaClient({ ...deps.meta!, fetch: stop ? stoppable(base, stop) : base, onUsage: (usage, cost) => recordSpend(db, null, kind, usage, cost, deps.now()) });
-    return { responses: (body) => withBudgetScope("guest", guard, () => client.responses(body)) };
+    return { responses: metaFirst((body) => withBudgetScope("guest", guard, () => client.responses(body)), claudeForGuests(deps, kind, { shareUsd: claudeShareUsd, signal: stop })) };
   };
   const busy = (why: "hour" | "day") => (why === "hour" ? "That's a lot for one hour. Try again soon, or sign in." : "The agent is resting until tomorrow. Sign in to keep going.");
 
@@ -146,7 +150,7 @@ export function guestRoutes(deps: AgentDeps & { pool: () => Promise<PoolItem[]>;
     const allowed = wishes(ipOf((n) => c.req.header(n)), deps.now());
     if (allowed !== "ok") return c.json({ error: busy(allowed) }, 429);
     try {
-      await guard();
+      await eitherReady(guard, claudeForGuests(deps, "guest", { shareUsd: claudeShareUsd })?.guard);
     } catch {
       return c.json({ error: busy("day") }, 429);
     }

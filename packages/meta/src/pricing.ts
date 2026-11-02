@@ -28,6 +28,8 @@ export interface Usage {
   searches: number;
   /** Images segmented or returned, for the models billed per image. */
   images?: number;
+  /** Input tokens written to the prompt cache, for Claude (claude.ts); counted in inputTokens too. */
+  cacheWriteTokens?: number;
 }
 
 export function estimateCostUsd(u: Usage): number {
@@ -40,4 +42,23 @@ export function estimateCostUsd(u: Usage): number {
     (uncached * p.input + u.cachedInputTokens * p.cachedInput + u.outputTokens * p.output) / 1_000_000 +
     u.searches * SEARCH_PRICE_PER_QUERY
   );
+}
+
+/**
+ * Claude Opus 5.5, the agent under Meta (claude.ts), from https://platform.claude.com/docs/en/about-claude/pricing
+ * (read 2026-11-02): $4 a million input tokens and $20 output; cache reads 0.05x input and five-minute cache writes
+ * 1.25x. Fast mode is twice the price, and the cache multipliers apply on top of it. Web search is $10 a thousand.
+ */
+export const CLAUDE_PRICES = {
+  standard: { input: 4, cachedInput: 0.2, cacheWrite: 5, output: 20 },
+  fast: { input: 8, cachedInput: 0.4, cacheWrite: 10, output: 40 },
+} as const;
+export const CLAUDE_SEARCH_PRICE = 10 / 1000;
+
+/** What one Claude reply cost, at the speed it ran. */
+export function claudeCostUsd(u: Usage, fast: boolean): number {
+  const p = fast ? CLAUDE_PRICES.fast : CLAUDE_PRICES.standard;
+  const written = u.cacheWriteTokens ?? 0;
+  const uncached = Math.max(0, u.inputTokens - u.cachedInputTokens - written);
+  return (uncached * p.input + u.cachedInputTokens * p.cachedInput + written * p.cacheWrite + u.outputTokens * p.output) / 1_000_000 + u.searches * CLAUDE_SEARCH_PRICE;
 }

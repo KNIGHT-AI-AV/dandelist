@@ -6,6 +6,7 @@ import { USER_DAILY_USD } from "./agent/routes";
 import type { AuthDeps, AuthVars } from "./auth";
 import { readLife } from "./dream/life";
 import { SpendLimitError, assertBudget, assertUserBudget, recordSpend, userCapUsd, withHold, type SpendCaps } from "./spend";
+import { claudeFor, metaFirst, type ClaudeSetup } from "./under";
 
 /**
  * Search by meaning over a person's own wishes (owner, recording 03: "travel" should find trips, "car" a G-Wagon,
@@ -75,6 +76,8 @@ export interface Comfort {
 export interface DescribeDeps extends AuthDeps {
   /** Missing when no Meta key is configured; both routes then answer 503. */
   meta?: { apiKey: string; baseUrl?: string; fetch?: typeof fetch };
+  /** Claude under Meta, for calls Meta refuses once its spend is used up (under.ts). Missing: Meta only. */
+  claude?: ClaudeSetup;
   spendCaps?: SpendCaps;
 }
 
@@ -223,7 +226,7 @@ export function describeRoutes(deps: DescribeDeps) {
       await assertBudget(db, caps, deps.now());
       await assertUserBudget(db, userId, await userCapUsd(db, userId, USER_DAILY_USD, deps.judge, caps), deps.now());
     };
-    return { responses: (body) => withHold(guard, () => client.responses(body), userId) };
+    return { responses: metaFirst((body) => withHold(guard, () => client.responses(body), userId), claudeFor(deps, userId, kind, { personUsd: USER_DAILY_USD })) };
   };
 
   /** True when the person has made `limit` calls of this kind in the last 24 hours. */

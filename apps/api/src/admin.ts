@@ -3,6 +3,8 @@ import { Hono, type Context } from "hono";
 import { requireAuth, type AuthVars } from "./auth";
 import type { Db } from "./db";
 import { GUEST_DAILY_USD } from "./guest";
+import { CLAUDE_MODEL_PREFIX, META_ONLY } from "./spend";
+import { guestShareUsd } from "./under";
 
 /**
  * GET /admin/*: the owner's own read-only view of the service (owner, 2026-11-02: "I need a admin page for viewing usage
@@ -35,6 +37,8 @@ export interface AdminDeps {
   codePepper: string;
   now: () => Date;
   spendCaps?: { dailyUsd: number; totalUsd: number };
+  /** Claude under Meta (under.ts), for its own line beside Meta's totals. */
+  claude?: { dailyUsd: number };
   /** The digest (adminDigest) of each address that may read /admin; ADMIN_DIGESTS unless a test passes its own. */
   admins?: ReadonlySet<string>;
 }
@@ -77,20 +81,30 @@ export function adminRoutes(deps: AdminDeps) {
         [from.toISOString()],
       )
     ).rows;
-    const totals = (
-      await deps.db.query<Record<string, unknown>>(
-        `select coalesce(sum(cost_usd) filter (where created_at >= $1), 0)::float8 as today_usd,
-           coalesce(sum(cost_usd) filter (where created_at >= $1 and user_id is null), 0)::float8 as guests_today_usd,
-           coalesce(sum(cost_usd), 0)::float8 as total_usd, count(*)::int as total_calls
-         from spend_ledger`,
-        [new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).toISOString()],
-      )
-    ).rows[0]!;
+    // The totals stand beside the caps, so they count what each cap counts: Meta's rows for Meta's (spend.ts
+    // META_ONLY), and Claude's on a line of their own.
+    const totalsOf = async (rowsOf: string) =>
+      (
+        await deps.db.query<Record<string, unknown>>(
+          `select coalesce(sum(cost_usd) filter (where created_at >= $1), 0)::float8 as today_usd,
+             coalesce(sum(cost_usd) filter (where created_at >= $1 and user_id is null), 0)::float8 as guests_today_usd,
+             coalesce(sum(cost_usd), 0)::float8 as total_usd, count(*)::int as total_calls
+           from spend_ledger where ${rowsOf}`,
+          [new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).toISOString()],
+        )
+      ).rows[0]!;
+    const shown = (t: Record<string, unknown>) => ({ todayUsd: num(t.today_usd), guestsTodayUsd: num(t.guests_today_usd), totalUsd: num(t.total_usd), totalCalls: num(t.total_calls) });
+    const metaDaily = deps.spendCaps?.dailyUsd ?? 10;
     return c.json({
       from: from.toISOString().slice(0, 10),
       days: rows.map((r) => ({ day: r.day, kind: r.kind, calls: num(r.calls), inputTokens: num(r.input_tokens), outputTokens: num(r.output_tokens), searches: num(r.searches), usd: num(r.usd) })),
-      totals: { todayUsd: num(totals.today_usd), guestsTodayUsd: num(totals.guests_today_usd), totalUsd: num(totals.total_usd), totalCalls: num(totals.total_calls) },
+      totals: shown(await totalsOf(META_ONLY)),
       caps: { dailyUsd: deps.spendCaps?.dailyUsd ?? null, totalUsd: deps.spendCaps?.totalUsd ?? null, guestDailyUsd: GUEST_DAILY_USD },
+      claude: {
+        ...shown(await totalsOf(`model like '${CLAUDE_MODEL_PREFIX}%'`)),
+        dailyUsd: deps.claude?.dailyUsd ?? null,
+        guestDailyUsd: deps.claude ? guestShareUsd(deps.claude.dailyUsd, GUEST_DAILY_USD, metaDaily) : null,
+      },
     });
   });
 

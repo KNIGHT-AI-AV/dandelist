@@ -19,6 +19,12 @@ const schema = z.object({
   MODEL_API_KEY: z.string().optional(),
   SPEND_DAILY_USD: z.coerce.number().positive().default(10),
   SPEND_TOTAL_USD: z.coerce.number().positive().default(120),
+  // Claude under Meta (under.ts): a call goes to Claude only when Meta's spend is used up. Off without a key.
+  ANTHROPIC_API_KEY: optional,
+  CLAUDE_DAILY_USD: z.coerce.number().positive().default(5),
+  CLAUDE_SPEED: z.enum(["fast", "standard"]).default("fast"),
+  // Also hand Claude the calls Meta's service fails (a 5xx after its retry). Off unless set.
+  CLAUDE_ON_META_ERRORS: flag,
   // Google Shopping through Apify's free plan ($5 of credit a month). The daily cap keeps cash spend at $0.
   APIFY_TOKEN: z.string().optional(),
   APIFY_DAILY_USD: z.coerce.number().positive().default(0.15),

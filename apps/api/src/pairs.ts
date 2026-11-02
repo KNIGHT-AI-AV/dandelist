@@ -16,6 +16,7 @@ import { sameThing } from "./picks";
 import type { PoolGroup, PoolItem, TypicalEntity } from "./pool";
 import { stoppable } from "./sse";
 import { HOLD_USD, SpendLimitError, assertBudget, assertUserBudget, recordSpend, userCapUsd, withHold } from "./spend";
+import { claudeFor, claudeGuard, eitherReady, metaFirst } from "./under";
 
 /**
  * This or that, made from what the person asked for (owner, 2026-10-30: "it has nothing to do with their initial
@@ -471,14 +472,15 @@ export function pairRoutes(deps: AgentDeps & { pool: () => Promise<PoolItem[]>; 
       await assertUserBudget(db, userId, await userCapUsd(db, userId, USER_DAILY_USD, deps.judge, caps), deps.now());
     };
     try {
-      await guard();
+      await eitherReady(guard, claudeGuard(deps, userId, USER_DAILY_USD));
     } catch (e) {
       if (e instanceof SpendLimitError) return c.json({ pairs: [] });
       throw e;
     }
     const stop = new AbortController();
     const client = new MetaClient({ ...deps.meta, fetch: stoppable(deps.meta.fetch ?? fetch, stop.signal), onUsage: (usage, cost) => recordSpend(db, userId, "pairs", usage, cost, deps.now()) });
-    const meta: Meta = { responses: (b) => withHold(guard, () => client.responses(b), userId, HOLD_USD, stop.signal) };
+    // Meta first; Claude only once Meta's spend is used up (under.ts).
+    const meta: Meta = { responses: metaFirst((b) => withHold(guard, () => client.responses(b), userId, HOLD_USD, stop.signal), claudeFor(deps, userId, "pairs", { personUsd: USER_DAILY_USD, signal: stop.signal })) };
     try {
       const notes = await notesFor(db, userId);
       const pairs = await makePairs(meta, { wish: body.data.text, wishes, notes }, { pool: deps.pool, typicals: deps.typicals ?? (async () => []), archive, api: deps.webFetch ?? publicFetch, now: deps.now, by: Date.now() + PAIRS_MS });

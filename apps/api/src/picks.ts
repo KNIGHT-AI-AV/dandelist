@@ -14,6 +14,7 @@ import { readLife } from "./dream/life";
 import { notesFor } from "./notes";
 import { stoppable } from "./sse";
 import { HOLD_USD, SpendLimitError, assertBudget, assertUserBudget, recordSpend, userCapUsd, withHold } from "./spend";
+import { claudeFor, claudeGuard, eitherReady, metaFirst } from "./under";
 
 /**
  * Today's pick (owner, 2026-10-29: "intelligent suggestions... Maybe we'll do something like daily item suggestions
@@ -385,7 +386,7 @@ export function pickRoutes(deps: AgentDeps) {
 
     // Over the person's allowance, or the service's: no pick today, and no more tries today.
     try {
-      await guard();
+      await eitherReady(guard, claudeGuard(deps, userId, USER_DAILY_USD));
     } catch (e) {
       await close(e instanceof SpendLimitError ? "none" : "failed");
       if (e instanceof SpendLimitError) return c.json({ pick: null });
@@ -397,7 +398,8 @@ export function pickRoutes(deps: AgentDeps) {
     // Every call holds its own share of the caps while it runs, as the agent's do (agent/routes.ts): a look at one
     // photo a fifth of a full call, and past the person's in-flight slots a call waits its turn (spend.ts). The stop
     // reaches the queue too, so no call starts once this pick has answered.
-    const meta: Meta = { responses: (b) => withHold(guard, () => client.responses(b), userId, holdFor(b), stop.signal) };
+    // Meta first; Claude only once Meta's spend is used up (under.ts).
+    const meta: Meta = { responses: metaFirst((b) => withHold(guard, () => client.responses(b), userId, holdFor(b), stop.signal), claudeFor(deps, userId, "pick", { personUsd: USER_DAILY_USD, signal: stop.signal, usd: holdFor })) };
     try {
       const [life, notes, past] = await Promise.all([
         readLife(db, userId),
