@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
-import { Text, View, useWindowDimensions, type TextInput } from "react-native";
+import { Platform, Text, View, useWindowDimensions, type TextInput } from "react-native";
 import { haptic } from "../../lib/motion";
+import { placeAgain, restTop, rests, type Frame } from "../../lib/rest-top";
 import { fonts, layout, type, usePalette, useType } from "../../lib/theme";
 import { transcribeGuest } from "../../lib/welcome";
 import { KeyboardDock, KeyboardScroll, dockRoom } from "../inputs";
@@ -25,6 +26,10 @@ export function Ask({ ideas, initial, bottomInset, onSubmit }: { ideas: string[]
   const [heard, setHeard] = useState(0);
   const [dock, setDock] = useState<number>(layout.control.primary);
   const field = useRef<TextInput>(null);
+  // On a wide screen the words rest at the optical centre of the room above the button (lib/rest-top.ts), measured
+  // while the screen is untouched and kept once someone types, taps an idea or speaks, so nothing moves under them.
+  const [frame, setFrame] = useState<Frame | null>(null);
+  const [block, setBlock] = useState(0);
   const voice = useVoiceWish({
     transcribe: transcribeGuest,
     onHeard: (words) => {
@@ -39,35 +44,52 @@ export function Ask({ ideas, initial, bottomInset, onSubmit }: { ideas: string[]
     haptic.select();
     onSubmit(wish);
   };
+  const untouched = text === initial && !error && voice.phase === "idle";
+  const below = dockRoom(dock, bottomInset);
+  const top = rests(Platform.OS === "web", width) && frame && block ? restTop(frame.height, below, block) : 0;
   const wishField = <WishField ref={field} value={text} onChangeText={setText} onSubmit={submit} editable placeholder="A week at Amanzoe with my wife in May" inset={voice.supported ? layout.control.icon + layout.stack.tight : 0} />;
 
   return (
     <View style={{ flex: 1 }}>
-      <KeyboardScroll dock={dock} contentContainerStyle={{ paddingHorizontal: gutter, paddingBottom: dockRoom(dock, bottomInset), gap: layout.stack.section, width: "100%", maxWidth: layout.column + 2 * gutter, alignSelf: "center" }}>
-        <Rise style={{ gap: layout.stack.tight }}>
-          <Eyebrow>Your first wish</Eyebrow>
-          <Text accessibilityRole="header" style={[t.title1, { color: p.ink }]}>
-            What would you love to <Text style={{ fontFamily: fonts.displayItalic, color: p.accentText }}>have</Text>?
-          </Text>
-          <Text style={[type.callout, { color: p.ink2, marginTop: layout.stack.tight }]}>Type it or say it.</Text>
-        </Rise>
-        <Rise delay={60}>
-          <View>
-            {voice.phase !== "idle" ? <ListeningPanel voice={voice} height={FIELD_MIN + layout.stack.tight + 1} /> : heard ? <Rise key={heard}>{wishField}</Rise> : wishField}
-            <View style={{ position: "absolute", top: 0, right: 0 }}>
-              <MicButton voice={voice} />
+      <KeyboardScroll
+        dock={dock}
+        onLayout={(e) => {
+          const next = { width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height };
+          setFrame((prev) => (placeAgain(prev, next) ? next : prev));
+        }}
+        contentContainerStyle={{ paddingHorizontal: gutter, paddingTop: top, paddingBottom: below, width: "100%", maxWidth: layout.column + 2 * gutter, alignSelf: "center" }}
+      >
+        <View
+          onLayout={(e) => {
+            if (untouched || !block) setBlock(e.nativeEvent.layout.height);
+          }}
+          style={{ gap: layout.stack.section }}
+        >
+          <Rise style={{ gap: layout.stack.tight }}>
+            <Eyebrow>Your first wish</Eyebrow>
+            <Text accessibilityRole="header" style={[t.title1, { color: p.ink }]}>
+              What would you love to <Text style={{ fontFamily: fonts.displayItalic, color: p.accentText }}>have</Text>?
+            </Text>
+            <Text style={[type.callout, { color: p.ink2, marginTop: layout.stack.tight }]}>Type it or say it.</Text>
+          </Rise>
+          <Rise delay={60}>
+            <View>
+              {voice.phase !== "idle" ? <ListeningPanel voice={voice} height={FIELD_MIN + layout.stack.tight + 1} /> : heard ? <Rise key={heard}>{wishField}</Rise> : wishField}
+              <View style={{ position: "absolute", top: 0, right: 0 }}>
+                <MicButton voice={voice} />
+              </View>
             </View>
-          </View>
-        </Rise>
-        <Rise delay={120} style={{ gap: layout.stack.tight }}>
-          <Eyebrow color={p.ink3}>Or start from an idea</Eyebrow>
-          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: layout.stack.tight }}>
-            {ideas.map((idea) => (
-              <Chip key={idea} label={idea} selected={text === idea} onPress={() => { haptic.select(); setText(idea); setError(null); field.current?.focus(); }} />
-            ))}
-          </View>
-        </Rise>
-        <ErrorLine>{error}</ErrorLine>
+          </Rise>
+          <Rise delay={120} style={{ gap: layout.stack.tight }}>
+            <Eyebrow color={p.ink3}>Or start from an idea</Eyebrow>
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: layout.stack.tight }}>
+              {ideas.map((idea) => (
+                <Chip key={idea} label={idea} selected={text === idea} onPress={() => { haptic.select(); setText(idea); setError(null); field.current?.focus(); }} />
+              ))}
+            </View>
+          </Rise>
+          <ErrorLine>{error}</ErrorLine>
+        </View>
       </KeyboardScroll>
       <KeyboardDock onHeight={setDock}>
         <PrimaryButton label="Find the real price" disabled={voice.phase !== "idle"} onPress={submit} />
