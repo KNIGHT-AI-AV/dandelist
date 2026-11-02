@@ -10,8 +10,11 @@ describe("the picture beside a look's result", () => {
     expect(foundPhoto({ kind: "amended", option: {} }, saved)).toBeNull();
   });
 
-  it("shows a new or unchanged price with its find's photo, or else the saved one", () => {
-    expect(foundPhoto({ kind: "changed", option: { imageUrl: "https://x/new.jpg" } }, saved)).toBe("https://x/new.jpg");
+  it("shows a new or unchanged price with the wish's saved photo, as saving keeps it, or else its find's", () => {
+    expect(foundPhoto({ kind: "changed", option: { imageUrl: "https://x/new.jpg" } }, saved)).toBe(saved);
+    expect(foundPhoto({ kind: "same", option: { imageUrl: "https://x/new.jpg" } }, saved)).toBe(saved);
+    expect(foundPhoto({ kind: "changed", option: { imageUrl: "https://x/new.jpg" } }, null)).toBe("https://x/new.jpg");
+    expect(foundPhoto({ kind: "changed", option: { imageUrl: "https://x/new.jpg" } }, "")).toBe("https://x/new.jpg");
     expect(foundPhoto({ kind: "changed", option: {} }, saved)).toBe(saved);
     expect(foundPhoto({ kind: "same", option: {} }, saved)).toBe(saved);
     expect(foundPhoto({ kind: "same", option: {} }, null)).toBeNull();

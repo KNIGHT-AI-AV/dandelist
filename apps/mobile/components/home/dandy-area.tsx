@@ -49,7 +49,7 @@ function Outcome({ r }: { r: Recheck }) {
     return () => clearTimeout(t);
   }, [o.kind, r.wishId]);
   if (o.kind === "running") return null;
-  // The picture beside a result: the amendment's own find, or a price's find or else the saved wish's photo.
+  // The picture beside a result: the amendment's own find, or for a price the wish's saved photo, else its find's.
   const photo = foundPhoto(o, wish?.details.agent?.imageUrl);
   if (o.kind === "same") {
     return (
