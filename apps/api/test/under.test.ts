@@ -265,6 +265,79 @@ describe("Claude's holds", () => {
   });
 });
 
+describe("Claude's resumes", () => {
+  const now = new Date("2026-11-02T12:00:00Z");
+  /** A Claude that pauses its search once, at $0.50 of fast-mode output, then finishes; it counts the requests. */
+  const pausingClaude = () => {
+    const replies = [
+      { content: [{ type: "text", text: "Looking it up." }, { type: "server_tool_use", id: "srvtoolu_1", name: "web_search", input: { query: "q3" } }], stop_reason: "pause_turn" },
+      { content: [{ type: "text", text: "It is $5,995." }], stop_reason: "end_turn" },
+    ];
+    const sent = { n: 0 };
+    const fetch = (async () => {
+      const r = replies[Math.min(sent.n++, replies.length - 1)]!;
+      return new Response(JSON.stringify({ id: `msg_${sent.n}`, type: "message", role: "assistant", model: "claude-opus-5-5", ...r, stop_sequence: null, usage: { input_tokens: 0, output_tokens: 12_500 } }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }) as unknown as typeof globalThis.fetch;
+    return { fetch, sent };
+  };
+  const person = async (email: string) => (await db.query<{ id: string }>("insert into users (email) values ($1) returning id", [email])).rows[0]!.id;
+  const claudeRow = (userId: string | null, usd: number) =>
+    db.query("insert into spend_ledger (user_id, model, kind, cost_usd, created_at) values ($1, 'claude-opus-5-5', 'guest', $2, $3)", [userId, usd.toFixed(6), now.toISOString()]);
+  const search = { input: "price the Q3", tools: [{ type: "web_search" }] };
+
+  it("stop a paused search that would resume past Claude's day, with the answer so far", async () => {
+    const userId = await person("cap@example.com");
+    // $4.00 spent of $5: the call starts ($4.60 with its hold), but its first $0.50 leaves no room to resume ($5.10).
+    await claudeRow(null, 4);
+    const claude = pausingClaude();
+    const u = claudeFor({ db, now: () => now, claude: { apiKey: "k", dailyUsd: 5, fetch: claude.fetch, maxRetries: 0 } }, userId, "research", { personUsd: 2 })!;
+    const r = await u.run(search);
+    expect(claude.sent.n).toBe(1);
+    expect(r.text).toBe("Looking it up.");
+    expect(r.costUsd).toBeCloseTo(0.5, 12);
+  });
+
+  it("stop a guests' paused search that would resume past the guests' share", async () => {
+    // $2.20 of the guests' $3: the call starts ($2.80 with its hold), but a resume after its first $0.50 would make $3.30.
+    await claudeRow(null, 2.2);
+    const claude = pausingClaude();
+    const g = claudeForGuests({ db, now: () => now, claude: { apiKey: "k", dailyUsd: 5, fetch: claude.fetch, maxRetries: 0 } }, "guest", { shareUsd: 3 })!;
+    expect((await g.run(search)).text).toBe("Looking it up.");
+    expect(claude.sent.n).toBe(1);
+  });
+
+  it("resume a paused search that stays within the caps", async () => {
+    const userId = await person("room@example.com");
+    const claude = pausingClaude();
+    const u = claudeFor({ db, now: () => now, claude: { apiKey: "k", dailyUsd: 5, fetch: claude.fetch, maxRetries: 0 } }, userId, "research", { personUsd: 2 })!;
+    const r = await u.run(search);
+    expect(claude.sent.n).toBe(2);
+    expect(r.text).toBe("Looking it up. It is $5,995.");
+  });
+
+  it("stop resuming once the person's own spend, with what is in flight, passes their share", async () => {
+    const userId = await person("share@example.com");
+    // $1.50 of their $2: the call starts ($1.60 with its $0.10), but after its first $0.50 a resume would make $2.10.
+    await claudeRow(userId, 1.5);
+    const claude = pausingClaude();
+    const u = claudeFor({ db, now: () => now, claude: { apiKey: "k", dailyUsd: 20, fetch: claude.fetch, maxRetries: 0 } }, userId, "research", { personUsd: 2 })!;
+    const r = await u.run(search);
+    expect(claude.sent.n).toBe(1);
+    expect(r.text).toBe("Looking it up.");
+  });
+
+  it("change nothing without a Claude key", async () => {
+    const userId = await person("nokey@example.com");
+    expect(claudeFor({ db, now: () => now }, userId, "research", { personUsd: 2 })).toBeUndefined();
+    expect(claudeForGuests({ db, now: () => now }, "guest", { shareUsd: 3 })).toBeUndefined();
+    const refusal = new SpendLimitError("daily");
+    await expect(metaFirst(meta(refusal).responses, claudeFor({ db, now: () => now }, userId, "research", { personUsd: 2 }))({ input: "hi" })).rejects.toBe(refusal);
+  });
+});
+
 // ---------------------------------------------------------------- end to end: the facts route on Claude
 
 const metaReply = () =>
