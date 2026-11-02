@@ -26,3 +26,13 @@ export function listedWish(wishes: readonly { id: string; name: string }[], save
   const wanted = new Set(names.map(key).filter(Boolean));
   return wishes.find((w) => wanted.has(key(w.name)))?.id ?? null;
 }
+
+/**
+ * The photo a chat wish card shows and saves: a retake's, else the hunt's own, both checked; otherwise none, so the card
+ * waits under frosted glass and a finished hunt asks for one by itself. Never a picture from a page the research
+ * opened: no check has passed it (owner, 2026-10-29: "Not any photo will do!!"), and since the fast card goes out the
+ * moment it is priced (#205), that picture would stand in for seconds and could be saved with the wish.
+ */
+export function cardPhoto(shot: { imageUrl?: string } | null | undefined, option: { imageUrl?: string } | null | undefined): string | null {
+  return shot?.imageUrl ?? option?.imageUrl ?? null;
+}

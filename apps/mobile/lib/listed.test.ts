@@ -1,5 +1,8 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { cardState, listedWish } from "./listed";
+import { cardPhoto, cardState, listedWish } from "./listed";
 
 const list = [
   { id: "w1", name: "Leica Q3" },
@@ -37,5 +40,23 @@ describe("the wish a card put on the list", () => {
     expect(listedWish(list, "gone", [])).toBeNull();
     expect(listedWish([], "w1", ["Leica Q3"])).toBeNull();
     expect(listedWish(list, undefined, ["Rolex Daytona"])).toBeNull();
+  });
+});
+
+describe("the photo a chat wish card shows", () => {
+  it("is only ever a checked one: the retake's, else the hunt's own", () => {
+    expect(cardPhoto({ imageUrl: "https://a/retake.jpg" }, { imageUrl: "https://a/hunt.jpg" })).toBe("https://a/retake.jpg");
+    expect(cardPhoto(null, { imageUrl: "https://a/hunt.jpg" })).toBe("https://a/hunt.jpg");
+  });
+
+  it("is none while the hunt has no checked photo, so the card waits under frosted glass, and a finished one asks again", () => {
+    expect(cardPhoto(null, undefined)).toBeNull();
+    expect(cardPhoto(undefined, {})).toBeNull();
+  });
+
+  it("is what the chat card shows, never a picture from a page the research opened, which no check has passed (owner, 2026-10-29)", () => {
+    const card = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "components", "chat", "hunt-card.tsx"), "utf8");
+    expect(card).toContain("cardPhoto(h.shot, option)");
+    expect(card).not.toMatch(/s\.type === "open" && !!s\.imageUrl/);
   });
 });

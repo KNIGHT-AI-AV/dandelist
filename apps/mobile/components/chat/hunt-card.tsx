@@ -9,7 +9,7 @@ import { haptic } from "../../lib/motion";
 import { stepLine } from "../../lib/recheck";
 import { answersFrom, refineChanged, withGiven } from "../../lib/refine";
 import { guessCandidates, guessOthers } from "../../lib/guess";
-import { cardState, listedWish } from "../../lib/listed";
+import { cardPhoto, cardState, listedWish } from "../../lib/listed";
 import { fonts, radius, type, usePalette } from "../../lib/theme";
 import { useWaitingMusic, type WaitPhase } from "../../lib/waiting";
 import { useWishes, type NewWish } from "../../lib/wishes";
@@ -192,8 +192,7 @@ export function HuntCard({ id: item, text, watched = true, onPhase, onShowOnList
   const questions = questionsOf(h);
   const option: PriceOption | undefined = h.run?.result?.options[0];
   const done = h.run?.status === "done" || h.run?.status === "error";
-  const opened = h.run?.steps.slice().reverse().find((s): s is Extract<Step, { type: "open" }> => s.type === "open" && !!s.imageUrl);
-  const photo = h.shot?.imageUrl ?? option?.imageUrl ?? opened?.imageUrl ?? null;
+  const photo = cardPhoto(h.shot, option);
   const [retaking, setRetaking] = useState(false);
 
   // Retake photo: the AI looks again with what the wish is, never offering a photo this card has shown.
