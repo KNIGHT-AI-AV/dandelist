@@ -136,7 +136,9 @@ export default function NewWish() {
   // checked photo is in; as it lands, the haptic ramp and the chime (lib/card-music.ts, lib/waiting.ts). Money and the
   // priceless land with their own card.
   const landed = !!run?.result?.options.length || !!run?.result?.worth;
-  const photoIn = !!(cardPhoto(undefined, run?.result?.options[chosen]) ?? run?.result?.options.find((o) => o.imageUrl)?.imageUrl);
+  // The hero shows the photo only once the run has finished (RevealPhoto lands `final` when done), so the music lands
+  // then too, never while the photo is still hidden behind the shuffle.
+  const photoIn = run?.status !== "running" && !!(cardPhoto(undefined, run?.result?.options[chosen]) ?? run?.result?.options.find((o) => o.imageUrl)?.imageUrl);
   useWaitingMusic(stage !== "research" ? "idle" : cardMusic({ priced: landed, needsPhoto: !run?.result?.worth, photo: photoIn, looking: working }));
 
   // Poll the research run until the agent finishes.
