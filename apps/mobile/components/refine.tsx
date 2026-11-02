@@ -118,9 +118,9 @@ export function RefinePanel({
   );
 }
 
-/** The own answer's one line, padding included, and the three lines it grows to. */
-const OWN_LINE = (type.body.lineHeight ?? 23) + 2 * layout.stack.tight;
-const OWN_MOST = 3 * (type.body.lineHeight ?? 23) + 2 * layout.stack.tight;
+/** The own answer's one line, its padding and underline included, and the three lines it grows to. */
+const OWN_LINE = (type.body.lineHeight ?? 23) + 2 * layout.stack.tight + 1;
+const OWN_MOST = 3 * (type.body.lineHeight ?? 23) + 2 * layout.stack.tight + 1;
 
 /** An answer in the person's own words: it wraps onto lines in sight as it grows (owner, 2026-11-02), and Return answers. */
 function OwnAnswer({ label, value, autoFocus, onChange, onAnswer, onTyping }: { label: string; value: string; autoFocus: boolean; onChange(v: string): void; onAnswer(): void; onTyping(on: boolean): void }) {
@@ -139,7 +139,7 @@ function OwnAnswer({ label, value, autoFocus, onChange, onAnswer, onTyping }: { 
       submitBehavior={grow.submitBehavior}
       onSubmitEditing={grow.onSubmitEditing}
       onKeyPress={grow.onKeyPress}
-      onContentSizeChange={grow.onContentSizeChange}
+      ref={grow.ref}
       scrollEnabled={grow.scrollEnabled}
       onFocus={() => onTyping(true)}
       onBlur={() => onTyping(false)}

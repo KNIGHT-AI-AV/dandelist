@@ -46,15 +46,15 @@ function JustSearch({ onPress }: { onPress(): void }) {
   );
 }
 
+/** The own-answer field's one line, its padding and underline included, and the three lines it grows to. */
+const OWN_LINE = (type.body.lineHeight ?? 23) + 2 * layout.stack.tight + 1;
+const OWN_MOST = 3 * (type.body.lineHeight ?? 23) + 2 * layout.stack.tight + 1;
+
 /**
  * "Type your own" for a builder section (owner, 2026-10-29: every generated section gets one). Typed entries sit with
  * the offered chips, picked; tapping one takes it out. `children` are the section's own chips, in the same row. The
  * Dandy's clock holds while the field has focus.
  */
-/** The own-answer field's one line, padding included, and the three lines it grows to. */
-const OWN_LINE = (type.body.lineHeight ?? 23) + 2 * layout.stack.tight;
-const OWN_MOST = 3 * (type.body.lineHeight ?? 23) + 2 * layout.stack.tight;
-
 function OwnRow({ label, own, draft, onDraft, onCommit, onRemove, onTyping, children }: { label: string; own: string[]; draft: string | null; onDraft(v: string | null): void; onCommit(): void; onRemove(v: string): void; onTyping?(on: boolean): void; children?: ReactNode }) {
   const p = usePalette();
   // A field that closes or leaves with its section never reports its blur, so the clock is let go here too.
@@ -88,7 +88,7 @@ function OwnRow({ label, own, draft, onDraft, onCommit, onRemove, onTyping, chil
           submitBehavior={grow.submitBehavior}
           onSubmitEditing={grow.onSubmitEditing}
           onKeyPress={grow.onKeyPress}
-          onContentSizeChange={grow.onContentSizeChange}
+          ref={grow.ref}
           scrollEnabled={grow.scrollEnabled}
           onFocus={() => onTyping?.(true)}
           onBlur={() => onTyping?.(false)}

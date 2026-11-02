@@ -113,7 +113,7 @@ export function AmendWish({ wish, autoFocus = false, onReveal }: { wish: Wish; a
                 submitBehavior={grow.submitBehavior}
                 onSubmitEditing={grow.onSubmitEditing}
                 onKeyPress={grow.onKeyPress}
-                onContentSizeChange={grow.onContentSizeChange}
+                ref={grow.ref}
                 scrollEnabled={grow.scrollEnabled}
                 {...caretColors(p)}
                 onFocus={() => setFocused(true)}
