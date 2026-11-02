@@ -28,6 +28,7 @@ import { KeyboardDock, KeyboardScroll, dockRoom } from "../../components/inputs"
 import { Rise } from "../../components/welcome/kit";
 import { haptic } from "../../lib/motion";
 import { useWaitingMusic } from "../../lib/waiting";
+import { cardMusic } from "../../lib/card-music";
 import { clarityOf, deckFor, thoughtOf } from "../../lib/reveal";
 import { useMoney } from "../../lib/currency";
 import { amountSteps, photoOnly, startAmount, wholeCents } from "../../lib/worth";
@@ -131,10 +132,14 @@ export default function NewWish() {
   }, [working, draft?.title]);
   const clock = useClock(working ? startedAt : null);
 
-  // The first card landing is the moment that matters. While the agent works, the waiting ballad; as the card lands, the
-  // haptic ramp and the chime (lib/waiting.ts). Money and the priceless land with their own card.
+  // The first card landing is the moment that matters. While the agent works, the waiting ballad, on until the card's
+  // checked photo is in; as it lands, the haptic ramp and the chime (lib/card-music.ts, lib/waiting.ts). Money and the
+  // priceless land with their own card.
   const landed = !!run?.result?.options.length || !!run?.result?.worth;
-  useWaitingMusic(stage !== "research" ? "idle" : landed ? "landed" : working ? "waiting" : "idle");
+  // The hero shows the photo only once the run has finished (RevealPhoto lands `final` when done), so the music lands
+  // then too, never while the photo is still hidden behind the shuffle.
+  const photoIn = run?.status !== "running" && !!(cardPhoto(undefined, run?.result?.options[chosen]) ?? run?.result?.options.find((o) => o.imageUrl)?.imageUrl);
+  useWaitingMusic(stage !== "research" ? "idle" : cardMusic({ priced: landed, needsPhoto: !run?.result?.worth, photo: photoIn, looking: working }));
 
   // Poll the research run until the agent finishes.
   useEffect(() => {
