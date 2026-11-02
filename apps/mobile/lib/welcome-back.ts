@@ -12,6 +12,29 @@ export type WelcomeWish = {
 /** Where the welcome remembers which wish it showed, so the next one is another. */
 export const LAST_HERO_KEY = "dandelist.welcome.hero";
 
+/** How long the welcome waits for the keychain to say which wish it showed last time. */
+export const LAST_READ_MS = 400;
+
+/**
+ * Which wish the welcome showed last time, from the device's keychain (`read` is lib/storage's getSecret). A keychain
+ * that refuses, as an app without the keychain entitlement does (expo-secure-store -34018, Mac Team Attack 11-02), or
+ * that takes too long, answers "none": the welcome then shows any wish with a photo, and never waits on it.
+ */
+export function readLast(read: (key: string) => Promise<string | null>, ms = LAST_READ_MS): Promise<string | null> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(null), ms);
+    const done = (v: string | null) => {
+      clearTimeout(timer);
+      resolve(v);
+    };
+    try {
+      read(LAST_HERO_KEY).then((v) => done(v ?? null), () => done(null));
+    } catch {
+      done(null);
+    }
+  });
+}
+
 /**
  * The wish whose photograph stands behind the welcome (owner, 2026-11-02: "one of their items randomly changing every
  * time"): a random one of the wishes with a checked photo, and never the one shown last time while there is another.

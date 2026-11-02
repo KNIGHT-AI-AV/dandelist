@@ -8,7 +8,7 @@ import { play, preloadSounds } from "../lib/sound";
 import { fonts, layout, type, usePalette } from "../lib/theme";
 import { zoom } from "../lib/viewport";
 import { getSecret, setSecret } from "../lib/storage";
-import { LAST_HERO_KEY, heroWish, welcomeLines } from "../lib/welcome-back";
+import { LAST_HERO_KEY, heroWish, readLast, welcomeLines } from "../lib/welcome-back";
 import { useWishes } from "../lib/wishes";
 import { Glass, Grain, Shade, Wordmark } from "./lux";
 
@@ -62,10 +62,7 @@ export function WelcomeBack({ onDone }: { onDone(): void }) {
   const [last, setLast] = useState<string | null | undefined>(undefined);
   useEffect(() => {
     let live = true;
-    getSecret(LAST_HERO_KEY).then(
-      (v) => live && setLast(v),
-      () => live && setLast(null),
-    );
+    void readLast(getSecret).then((v) => live && setLast(v));
     return () => {
       live = false;
     };
