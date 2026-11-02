@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cardState, listedWish } from "./listed";
+import { asksForPhoto, cardPhoto, cardState, listedWish } from "./listed";
 
 const list = [
   { id: "w1", name: "Leica Q3" },
@@ -37,5 +37,36 @@ describe("the wish a card put on the list", () => {
     expect(listedWish(list, "gone", [])).toBeNull();
     expect(listedWish([], "w1", ["Leica Q3"])).toBeNull();
     expect(listedWish(list, undefined, ["Rolex Daytona"])).toBeNull();
+  });
+});
+
+describe("the photo a chat wish card shows", () => {
+  it("is only ever a checked one: the retake's, else the hunt's own", () => {
+    expect(cardPhoto({ imageUrl: "https://a/retake.jpg" }, { imageUrl: "https://a/hunt.jpg" })).toBe("https://a/retake.jpg");
+    expect(cardPhoto(null, { imageUrl: "https://a/hunt.jpg" })).toBe("https://a/hunt.jpg");
+  });
+
+  it("is none while the hunt has no checked photo, so the card waits under frosted glass, and a finished one asks again", () => {
+    expect(cardPhoto(null, undefined)).toBeNull();
+    expect(cardPhoto(undefined, {})).toBeNull();
+  });
+
+});
+
+describe("a finished chat card asks for a photo by itself", () => {
+  const card = { option: true, done: true, photo: null, opened: false, asked: false };
+  it("once, when it has an option and no photo of any kind", () => {
+    expect(asksForPhoto(card)).toBe(true);
+    expect(asksForPhoto({ ...card, asked: true })).toBe(false);
+  });
+
+  it("not while it hunts, without an option, or with a checked photo", () => {
+    expect(asksForPhoto({ ...card, done: false })).toBe(false);
+    expect(asksForPhoto({ ...card, option: false })).toBe(false);
+    expect(asksForPhoto({ ...card, photo: "https://a/hunt.jpg" })).toBe(false);
+  });
+
+  it("not when a page the research opened had a picture, as before, so retakes don't grow", () => {
+    expect(asksForPhoto({ ...card, opened: true })).toBe(false);
   });
 });

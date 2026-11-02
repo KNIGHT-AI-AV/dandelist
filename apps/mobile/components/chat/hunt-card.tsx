@@ -9,7 +9,7 @@ import { haptic } from "../../lib/motion";
 import { stepLine } from "../../lib/recheck";
 import { answersFrom, refineChanged, withGiven } from "../../lib/refine";
 import { guessCandidates, guessOthers } from "../../lib/guess";
-import { cardState, listedWish } from "../../lib/listed";
+import { asksForPhoto, cardPhoto, cardState, listedWish } from "../../lib/listed";
 import { fonts, radius, type, usePalette } from "../../lib/theme";
 import { useWaitingMusic, type WaitPhase } from "../../lib/waiting";
 import { useWishes, type NewWish } from "../../lib/wishes";
@@ -101,7 +101,7 @@ export function HuntCard({ id: item, text, watched = true, onPhase, onShowOnList
   const { api } = useAuth();
   const dandy = useDandy();
   const money = useMoney();
-  const { add, wishes } = useWishes();
+  const { add, setPhoto, wishes } = useWishes();
   const [h, setH] = useState<Hunt>(() => hunts.get(id) ?? fresh());
   const [refining, setRefining] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -192,8 +192,10 @@ export function HuntCard({ id: item, text, watched = true, onPhase, onShowOnList
   const questions = questionsOf(h);
   const option: PriceOption | undefined = h.run?.result?.options[0];
   const done = h.run?.status === "done" || h.run?.status === "error";
-  const opened = h.run?.steps.slice().reverse().find((s): s is Extract<Step, { type: "open" }> => s.type === "open" && !!s.imageUrl);
-  const photo = h.shot?.imageUrl ?? option?.imageUrl ?? opened?.imageUrl ?? null;
+  const photo = cardPhoto(h.shot, option);
+  // A page the research opened may have a picture no check has passed: never shown or saved, but it still decides
+  // whether the finished card asks for a photo by itself, as before (asksForPhoto).
+  const opened = !!h.run?.steps.some((s) => s.type === "open" && !!s.imageUrl);
   const [retaking, setRetaking] = useState(false);
 
   // Retake photo: the AI looks again with what the wish is, never offering a photo this card has shown.
@@ -221,14 +223,24 @@ export function HuntCard({ id: item, text, watched = true, onPhase, onShowOnList
   // Photos always come (owner, 2026-10-29): a finished hunt with no photo asks for one once, by itself.
   const asked = useRef(false);
   useEffect(() => {
-    if (asked.current || !option || photo || h.run?.status !== "done") return;
+    if (!asksForPhoto({ option: !!option, done: h.run?.status === "done", photo, opened, asked: asked.current })) return;
     asked.current = true;
     void retake();
-  }, [option, photo, h.run?.status, retake]);
+  }, [option, photo, opened, h.run?.status, retake]);
+
+  // A checked photo that lands after the wish was saved goes onto it too: the card goes out the moment it is priced
+  // (#205), so Save can come before its photo does.
+  const savedWith = useRef<string | null | undefined>(undefined);
+  useEffect(() => {
+    const media = h.shot ? h.shot.media : option?.media;
+    if (!h.savedId || !photo || !media || savedWith.current === undefined || savedWith.current === photo) return;
+    savedWith.current = photo;
+    setPhoto(h.savedId, { imageUrl: photo, media }).catch(() => undefined);
+  }, [h.savedId, h.shot, option?.media, photo, setPhoto]);
 
   // The picture: being made while the hunt has none to show, or a retake (asked for, or about to start by itself) looks
   // for one; landed once one is in. The ballad plays while it's made, and the ramp and the chime come as it lands.
-  const autoRetake = !!option && !photo && h.run?.status === "done" && !asked.current;
+  const autoRetake = asksForPhoto({ option: !!option, done: h.run?.status === "done", photo, opened, asked: asked.current });
   const picture: WaitPhase = retaking || autoRetake ? "waiting" : retook === "failed" ? "idle" : h.run?.result?.worth || (option && photo) ? "landed" : !done && !h.error ? "waiting" : "idle";
   useWaitingMusic(picture, watched);
 
@@ -279,6 +291,7 @@ export function HuntCard({ id: item, text, watched = true, onPhase, onShowOnList
           },
         },
       };
+      savedWith.current = photo;
       const saved = await add(wish);
       haptic.success();
       keep({ ...(hunts.get(id) ?? h), savedId: saved.id });

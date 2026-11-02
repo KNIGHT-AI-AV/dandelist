@@ -26,3 +26,23 @@ export function listedWish(wishes: readonly { id: string; name: string }[], save
   const wanted = new Set(names.map(key).filter(Boolean));
   return wishes.find((w) => wanted.has(key(w.name)))?.id ?? null;
 }
+
+/**
+ * The photo a chat wish card shows and saves: a retake's, else the hunt's own, both checked; otherwise none, so the card
+ * waits under frosted glass and a finished hunt asks for one by itself. Never a picture from a page the research
+ * opened: no check has passed it (owner, 2026-10-29: "Not any photo will do!!"), and since the fast card goes out the
+ * moment it is priced (#205), that picture would stand in for seconds and could be saved with the wish.
+ */
+export function cardPhoto(shot: { imageUrl?: string } | null | undefined, option: { imageUrl?: string } | null | undefined): string | null {
+  return shot?.imageUrl ?? option?.imageUrl ?? null;
+}
+
+/**
+ * Whether a finished chat card asks for a photo by itself: once, when it has an option and no photo of any kind. A
+ * picture from a page the research opened is never shown or saved (cardPhoto), but it still counts here, as it did
+ * before cardPhoto, so no card asks for more retakes than it used to: each is up to 28 model calls, of 30 retakes a
+ * day per person (api/src/agent/routes.ts).
+ */
+export function asksForPhoto(c: { option: boolean; done: boolean; photo: string | null; opened: boolean; asked: boolean }): boolean {
+  return c.option && c.done && !c.photo && !c.opened && !c.asked;
+}

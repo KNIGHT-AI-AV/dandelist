@@ -8,6 +8,7 @@ import { AgentDot, Backdrop, Chip, EdgeFade, ErrorLine, Eyebrow, Glass, Grain, I
 import { SoundButton } from "../../components/sound-button";
 import { Statement, Take } from "../../components/statement";
 import { getRun, startHunt, transcribeWish, type Answer, type Draft, type PriceOption, type Run, type Step } from "../../lib/agent";
+import { cardPhoto } from "../../lib/listed";
 import { answerPick, pickAdded } from "../../lib/picks";
 import { answersFrom, refineChanged, withGiven } from "../../lib/refine";
 import { RefinePanel } from "../../components/refine";
@@ -350,9 +351,10 @@ export default function NewWish() {
   const amountCents = amount ?? startAmount(amountSteps(money.rate, money.unit, named), named);
   const steps = run?.steps ?? [];
   const settled = !!run && run.status !== "running";
-  // The hero is the chosen option's photo, else the last page the agent opened that had one. Never another wish's photo.
-  const opened = [...steps].reverse().find((s): s is Extract<Step, { type: "open" }> => s.type === "open" && !!s.imageUrl);
-  const heroImage = option?.imageUrl ?? opened?.imageUrl ?? null;
+  // The hero is the chosen option's checked photo, or none while it is on its way: never a page the agent opened, whose
+  // picture no check has passed (owner, 2026-10-29), and never another wish's photo. Like Save, it falls back to another
+  // option's checked photo of this same wish.
+  const heroImage = cardPhoto(undefined, option) ?? run?.result?.options.find((o) => o.imageUrl)?.imageUrl ?? null;
   const best = steps.filter((s): s is Extract<Step, { type: "price" }> => s.type === "price" && s.upfrontCents != null).sort((a, b) => a.upfrontCents! - b.upfrontCents!)[0];
   const pages = steps.filter((s) => s.type === "open" && s.ok).length;
   const checks = steps.filter((s) => s.type === "check").length;
