@@ -1,8 +1,5 @@
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { cardPhoto, cardState, listedWish } from "./listed";
+import { asksForPhoto, cardPhoto, cardState, listedWish } from "./listed";
 
 const list = [
   { id: "w1", name: "Leica Q3" },
@@ -54,9 +51,22 @@ describe("the photo a chat wish card shows", () => {
     expect(cardPhoto(undefined, {})).toBeNull();
   });
 
-  it("is what the chat card shows, never a picture from a page the research opened, which no check has passed (owner, 2026-10-29)", () => {
-    const card = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "components", "chat", "hunt-card.tsx"), "utf8");
-    expect(card).toContain("cardPhoto(h.shot, option)");
-    expect(card).not.toMatch(/s\.type === "open" && !!s\.imageUrl/);
+});
+
+describe("a finished chat card asks for a photo by itself", () => {
+  const card = { option: true, done: true, photo: null, opened: false, asked: false };
+  it("once, when it has an option and no photo of any kind", () => {
+    expect(asksForPhoto(card)).toBe(true);
+    expect(asksForPhoto({ ...card, asked: true })).toBe(false);
+  });
+
+  it("not while it hunts, without an option, or with a checked photo", () => {
+    expect(asksForPhoto({ ...card, done: false })).toBe(false);
+    expect(asksForPhoto({ ...card, option: false })).toBe(false);
+    expect(asksForPhoto({ ...card, photo: "https://a/hunt.jpg" })).toBe(false);
+  });
+
+  it("not when a page the research opened had a picture, as before, so retakes don't grow", () => {
+    expect(asksForPhoto({ ...card, opened: true })).toBe(false);
   });
 });

@@ -36,3 +36,13 @@ export function listedWish(wishes: readonly { id: string; name: string }[], save
 export function cardPhoto(shot: { imageUrl?: string } | null | undefined, option: { imageUrl?: string } | null | undefined): string | null {
   return shot?.imageUrl ?? option?.imageUrl ?? null;
 }
+
+/**
+ * Whether a finished chat card asks for a photo by itself: once, when it has an option and no photo of any kind. A
+ * picture from a page the research opened is never shown or saved (cardPhoto), but it still counts here, as it did
+ * before cardPhoto, so no card asks for more retakes than it used to: each is up to 28 model calls, of 30 retakes a
+ * day per person (api/src/agent/routes.ts).
+ */
+export function asksForPhoto(c: { option: boolean; done: boolean; photo: string | null; opened: boolean; asked: boolean }): boolean {
+  return c.option && c.done && !c.photo && !c.opened && !c.asked;
+}
