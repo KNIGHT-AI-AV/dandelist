@@ -10,7 +10,7 @@ import { zoom } from "../lib/viewport";
 import { getSecret, setSecret } from "../lib/storage";
 import { LAST_HERO_KEY, heroWish, welcomeLines } from "../lib/welcome-back";
 import { useWishes } from "../lib/wishes";
-import { Grain, Shade, Wordmark } from "./lux";
+import { Glass, Grain, Shade, Wordmark } from "./lux";
 
 /** The welcome back runs this long before it dissolves into the list by itself; a touch ends it sooner. */
 const WELCOME_MS = 4200;
@@ -19,8 +19,15 @@ const LIST_WAIT_MS = 1500;
 /** A touch skips it from here on, so the very first frame never swallows a tap meant for the list. */
 const SKIP_AFTER_MS = 400;
 const DISSOLVE_MS = 1100;
-/** How soft the wish's photograph is behind the words, so the wordmark and the greeting stand out (owner, 2026-11-02). */
+/**
+ * How soft the wish's photograph is behind the words, so the wordmark and the greeting stand out (owner, 2026-11-02).
+ * Android and the web blur the picture itself; iOS blurs it in the photo's own pixels, which on a full-size photo is
+ * barely a point on screen, so there a pane of glass over it does the softening instead.
+ */
 const HERO_BLUR = 10;
+const HERO_GLASS = 28;
+/** The photograph is drawn this much larger than the page, which clips it, so its blurred edges never show. */
+const HERO_BLEED = 1.12;
 /** With reduced motion: everything shown at once, held this long, then the list. */
 const STILL_MS = 1400;
 /** The dissolve's edge on phones: how much wider each disc is than the core, and how opaque (as the title). */
@@ -33,7 +40,7 @@ const FEATHER = [
 /**
  * The welcome for someone signed in who comes back (owner, 2026-11-02: "something that welcomes them back, something
  * better than just going straight to the same page"): a short cut of the opening, on one axis and in the same film.
- * The photograph of the first wish on their list surfaces behind the glass and drifts in slowly, the wordmark
+ * The photograph of one of their wishes, a different one each time, surfaces behind the glass and drifts in slowly, the wordmark
  * resolves and its gold dot settles, a champagne hairline draws, then "Welcome back" and what their list holds. It
  * dissolves into the list by itself; a touch anywhere dissolves it from that point, as the opening does.
  */
@@ -84,10 +91,13 @@ export function WelcomeBack({ onDone }: { onDone(): void }) {
     };
   }
 
+  // At most LIST_WAIT_MS from the first frame, whatever arrives when; sooner once the list and last time's wish are in.
   useEffect(() => {
-    if (listReady && last !== undefined) return setStarted(true);
     const wait = setTimeout(() => setStarted(true), LIST_WAIT_MS);
     return () => clearTimeout(wait);
+  }, []);
+  useEffect(() => {
+    if (listReady && last !== undefined) setStarted(true);
   }, [listReady, last]);
 
   // Remembered once it is on screen, so the next welcome shows another of their wishes.
@@ -193,10 +203,10 @@ export function WelcomeBack({ onDone }: { onDone(): void }) {
                 <ExpoImage
                   source={{ uri: words.hero }}
                   contentFit="cover"
-                  blurRadius={HERO_BLUR}
+                  blurRadius={Platform.OS === "ios" ? undefined : HERO_BLUR}
                   transition={0}
                   accessible={false}
-                  style={StyleSheet.absoluteFill}
+                  style={[StyleSheet.absoluteFill, { transform: [{ scale: HERO_BLEED }] }]}
                   onLoad={() =>
                     Animated.timing(photoIn, {
                       toValue: 1,
@@ -207,6 +217,7 @@ export function WelcomeBack({ onDone }: { onDone(): void }) {
                   }
                 />
               </View>
+              {Platform.OS === "ios" ? <Glass intensity={HERO_GLASS} style={[StyleSheet.absoluteFill, { borderRadius: 0, borderWidth: 0 }]} /> : null}
               <Shade look="title" />
             </Animated.View>
           ) : null}
