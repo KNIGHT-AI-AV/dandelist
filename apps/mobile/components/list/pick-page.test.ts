@@ -215,7 +215,7 @@ describe("today's pick, opened from its card", () => {
     expect(edge().props.style).toMatchObject({ height: 119, opacity: { inputRange: [0, 4] } });
   });
 
-  it("finds today's pick again when opened without its card, and goes home when that isn't the one", async () => {
+  it("finds today's pick again when opened without its card, and goes to the list when that isn't the one", async () => {
     h.today = { ...pick, id: "pick-4" };
     await open("pick-4");
     expect(h.requests.map((r) => `${r.method} ${r.path}`)).toEqual(["POST /picks/today"]);
@@ -223,6 +223,6 @@ describe("today's pick, opened from its card", () => {
     await act(async () => root?.unmount());
     h.today = { ...pick, id: "another" };
     await open("pick-5");
-    expect(root!.root.findByType("Redirect" as never).props.href).toBe("/");
+    expect(root!.root.findByType("Redirect" as never).props.href).toBe("/wishes");
   });
 });

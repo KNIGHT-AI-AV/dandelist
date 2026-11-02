@@ -63,14 +63,17 @@ function Segment({ on }: { on: boolean }) {
   );
 }
 
-/** Content enters with an 8 px rise and a fade (320 ms, ease.out); `delay` staggers blocks 50 ms apart. */
-export function Rise({ children, delay = 0, style, onLayout }: { children: ReactNode; delay?: number; style?: StyleProp<ViewStyle>; onLayout?: (e: LayoutChangeEvent) => void }) {
+/**
+ * Content enters with an 8 px rise and a fade (320 ms, ease.out); `delay` staggers blocks 50 ms apart. An entrance that
+ * should feel like arriving somewhere (the sign-in page) passes a longer `duration`, a deeper `distance` and ease.cinema.
+ */
+export function Rise({ children, delay = 0, duration = 320, distance = 8, easing = ease.out, style, onLayout }: { children: ReactNode; delay?: number; duration?: number; distance?: number; easing?: (t: number) => number; style?: StyleProp<ViewStyle>; onLayout?: (e: LayoutChangeEvent) => void }) {
   const reduced = useReducedMotion();
   const v = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    Animated.timing(v, { toValue: 1, duration: reduced ? 200 : 320, delay: reduced ? 0 : delay, easing: ease.out, useNativeDriver: native }).start();
-  }, [v, delay, reduced]);
-  return <Animated.View onLayout={onLayout} style={[{ opacity: v, transform: [{ translateY: v.interpolate({ inputRange: [0, 1], outputRange: [reduced ? 0 : 8, 0] }) }] }, style]}>{children}</Animated.View>;
+    Animated.timing(v, { toValue: 1, duration: reduced ? 200 : duration, delay: reduced ? 0 : delay, easing, useNativeDriver: native }).start();
+  }, [v, delay, duration, easing, reduced]);
+  return <Animated.View onLayout={onLayout} style={[{ opacity: v, transform: [{ translateY: v.interpolate({ inputRange: [0, 1], outputRange: [reduced ? 0 : distance, 0] }) }] }, style]}>{children}</Animated.View>;
 }
 
 /**
