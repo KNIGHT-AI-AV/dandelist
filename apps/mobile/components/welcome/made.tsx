@@ -6,6 +6,7 @@ import { useDandy } from "../../lib/dandy";
 import { ease, native, useReducedMotion } from "../../lib/motion";
 import { layout, radius, type, usePalette, useType } from "../../lib/theme";
 import { useWaitingMusic } from "../../lib/waiting";
+import { cardMusic } from "../../lib/card-music";
 import type { FirstWish } from "../../lib/welcome";
 import { Working } from "../chat/working";
 import { FrostedWait } from "../frosted-wait";
@@ -97,9 +98,9 @@ export function MadeStep({
     return () => loop.stop();
   }, [reduced, landed, failed, breathe]);
 
-  // The waiting ballad while the card is made; as it lands, the haptic ramp and the chime, once: a better card replacing
-  // it later stays quiet.
-  useWaitingMusic(landed ? "landed" : failed ? "idle" : "waiting");
+  // The waiting ballad while the card is made, on until its checked photo is in (lib/card-music.ts); as the photo lands,
+  // the haptic ramp and the chime, once: a better card replacing it later stays quiet.
+  useWaitingMusic(cardMusic({ priced: landed, needsPhoto: !worth, photo: !!(option?.imageUrl ?? wish.photo?.imageUrl), looking: landed ? looking : !failed }));
 
   // The real card fades up, slowly, when it lands; a card that couldn't be priced shows its panel at once.
   useEffect(() => {
