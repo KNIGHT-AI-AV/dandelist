@@ -10,7 +10,9 @@ import { adoptAmend, adoptRecheck, amendWish, dismissRecheck, recheckWish, useAc
 import { fonts, layout, radius, space, type, usePalette } from "../../lib/theme";
 import { useWishes } from "../../lib/wishes";
 import { hostOf } from "../../lib/words";
+import { foundPhoto } from "../../lib/found-photo";
 import { DandyAvatar } from "../dandy-avatar";
+import { FoundLine } from "../found-line";
 import { AgentDot, Eyebrow, Glass, QuietButton } from "../lux";
 import { Swap } from "../list/presence";
 
@@ -47,8 +49,14 @@ function Outcome({ r }: { r: Recheck }) {
     return () => clearTimeout(t);
   }, [o.kind, r.wishId]);
   if (o.kind === "running") return null;
+  // The picture beside a result: the amendment's own find, or a price's find or else the saved wish's photo.
+  const photo = foundPhoto(o, wish?.details.agent?.imageUrl);
   if (o.kind === "same") {
-    return <Text style={[type.callout, { color: p.ink }]}>{`${r.name} is still ${money.format(o.option.upfrontCents)} at ${hostOf(o.option.url) || "the seller"}. Marked as checked today.`}</Text>;
+    return (
+      <FoundLine photo={photo}>
+        <Text style={[type.callout, { color: p.ink }]}>{`${r.name} is still ${money.format(o.option.upfrontCents)} at ${hostOf(o.option.url) || "the seller"}. Marked as checked today.`}</Text>
+      </FoundLine>
+    );
   }
   if (o.kind === "failed") {
     return (
@@ -80,11 +88,13 @@ function Outcome({ r }: { r: Recheck }) {
   if (o.kind === "amended") {
     return (
       <View style={{ gap: space[8] }}>
-        <Text style={[type.callout, { color: p.ink }]}>
-          {`${o.name}: `}
-          <Text style={{ color: p.accentText }}>{money.format(o.option.upfrontCents)}</Text>
-          {` at ${hostOf(o.option.url) || "the seller"}.`}
-        </Text>
+        <FoundLine photo={photo}>
+          <Text style={[type.callout, { color: p.ink }]}>
+            {`${o.name}: `}
+            <Text style={{ color: p.accentText }}>{money.format(o.option.upfrontCents)}</Text>
+            {` at ${hostOf(o.option.url) || "the seller"}.`}
+          </Text>
+        </FoundLine>
         {error ? <Text style={[type.footnote, { color: p.danger }]}>{error}</Text> : null}
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[8] }}>
           <QuietButton label={saving ? "Saving..." : "Use it"} onPress={() => void use()} />
@@ -97,11 +107,13 @@ function Outcome({ r }: { r: Recheck }) {
   const delta = Math.abs(o.option.upfrontCents - o.was);
   return (
     <View style={{ gap: space[8] }}>
-      <Text style={[type.callout, { color: p.ink }]}>
-        {`${r.name} is now `}
-        <Text style={{ color: p.accentText }}>{money.format(o.option.upfrontCents)}</Text>
-        {` at ${hostOf(o.option.url) || "the seller"}, ${down ? "down" : "up"} ${money.format(delta)} from ${money.format(o.was)}.`}
-      </Text>
+      <FoundLine photo={photo}>
+        <Text style={[type.callout, { color: p.ink }]}>
+          {`${r.name} is now `}
+          <Text style={{ color: p.accentText }}>{money.format(o.option.upfrontCents)}</Text>
+          {` at ${hostOf(o.option.url) || "the seller"}, ${down ? "down" : "up"} ${money.format(delta)} from ${money.format(o.was)}.`}
+        </Text>
+      </FoundLine>
       {error ? <Text style={[type.footnote, { color: p.danger }]}>{error}</Text> : null}
       <View style={{ flexDirection: "row", gap: space[8] }}>
         <QuietButton label={saving ? "Saving..." : "Use the new price"} onPress={() => void use()} />
