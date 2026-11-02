@@ -9,6 +9,8 @@ import { useWishes, type Wish } from "../../lib/wishes";
 import { hostOf } from "../../lib/words";
 import { Ring, caretColors, useToggle, webInput } from "../inputs/field";
 import { useGrow } from "../inputs/grow";
+import { foundPhoto } from "../../lib/found-photo";
+import { FoundLine } from "../found-line";
 import { ErrorLine, Eyebrow, Glass, QuietButton } from "../lux";
 
 /** The longest description the reading takes in one go, with the wish's name before it. */
@@ -82,11 +84,13 @@ export function AmendWish({ wish, autoFocus = false, onReveal }: { wish: Wish; a
         <Text accessibilityLiveRegion="polite" style={[type.callout, { color: p.ink2 }]}>{`Looking again for "${r!.said}"...`}</Text>
       ) : o?.kind === "amended" ? (
         <View style={{ gap: space[8] }}>
-          <Text accessibilityLiveRegion="polite" style={[type.callout, { color: p.ink }]}>
-            {`${o.name}: `}
-            <Text style={{ color: p.accentText }}>{money.format(o.option.upfrontCents)}</Text>
-            {` at ${hostOf(o.option.url) || "the seller"}.`}
-          </Text>
+          <FoundLine photo={foundPhoto(o)}>
+            <Text accessibilityLiveRegion="polite" style={[type.callout, { color: p.ink }]}>
+              {`${o.name}: `}
+              <Text style={{ color: p.accentText }}>{money.format(o.option.upfrontCents)}</Text>
+              {` at ${hostOf(o.option.url) || "the seller"}.`}
+            </Text>
+          </FoundLine>
           {error ? <ErrorLine>{error}</ErrorLine> : null}
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[8] }}>
             <QuietButton label={saving ? "Saving..." : "Use it"} onPress={() => void use()} />
