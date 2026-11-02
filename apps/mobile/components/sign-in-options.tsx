@@ -136,7 +136,7 @@ export function SignInOptions({ options, pending, disabled, onChoose }: { option
   const p = usePalette();
   if (!options.length) return null;
   return (
-    <View style={{ gap: 10 }}>
+    <View style={{ gap: 12 }}>
       {options.map((o) =>
         o.native && o.id === "apple" ? (
           <AppleSheetButton key={o.id} busy={pending === o.id} disabled={disabled || (pending !== null && pending !== o.id)} onPress={() => onChoose(o)} />
@@ -146,7 +146,7 @@ export function SignInOptions({ options, pending, disabled, onChoose }: { option
           <ProviderButton key={o.id} id={o.id} busy={pending === o.id} disabled={disabled || (pending !== null && pending !== o.id)} onPress={() => onChoose(o)} />
         ),
       )}
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 14, marginTop: 8 }} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 16, marginTop: 8 }} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
         <Hairline style={{ flex: 1 }} />
         <Eyebrow color={p.ink3}>or</Eyebrow>
         <Hairline style={{ flex: 1 }} />

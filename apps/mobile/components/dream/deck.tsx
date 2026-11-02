@@ -37,9 +37,9 @@ function ListingCard({ l }: { l: Listing }) {
           {moneyIn(l.currency)(l.priceCents)}
           {l.status === "estimate" ? <Text style={[type.figure, { color: p.ink2 }]}>{"  estimate"}</Text> : null}
         </Text>
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
           {l.facts.slice(0, 4).map((f) => (
-            <View key={f} style={{ paddingHorizontal: 10, paddingVertical: 5, borderRadius: radius.pill, backgroundColor: p.glassTint, borderWidth: StyleSheet.hairlineWidth, borderColor: p.hair }}>
+            <View key={f} style={{ paddingHorizontal: 12, paddingVertical: 4, borderRadius: radius.pill, backgroundColor: p.glassTint, borderWidth: StyleSheet.hairlineWidth, borderColor: p.hair }}>
               <Text style={[type.footnote, { fontFamily: fonts.label, color: p.ink }]}>{f}</Text>
             </View>
           ))}
@@ -123,7 +123,7 @@ export function SwipeDeck({ cards, onSwipe, onPick, onSearchNow, onEnough }: { c
   const no = x.interpolate({ inputRange: [-cardW * 0.3, 0], outputRange: [1, 0], extrapolate: "clamp" });
 
   return (
-    <View style={{ gap: 14, alignItems: "center" }}>
+    <View style={{ gap: 16, alignItems: "center" }}>
       <View style={{ width: cardW, height: cardW * 1.22 }}>
         {next ? (
           <Animated.View style={[StyleSheet.absoluteFill, { transform: [{ scale: nextScale }] }]}>
@@ -140,12 +140,12 @@ export function SwipeDeck({ cards, onSwipe, onPick, onSearchNow, onEnough }: { c
           </Animated.View>
         </Animated.View>
       </View>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 18 }}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 20 }}>
         <RoundButton label="Pass" icon="close" onPress={() => commit("no")} />
         <Eyebrow>{`${index + 1} of ${cards.length}`}</Eyebrow>
         <RoundButton label="Yes" icon="heart" accent onPress={() => commit("yes")} />
       </View>
-      <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "center", columnGap: 22, rowGap: 8 }}>
+      <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "center", columnGap: 24, rowGap: 8 }}>
         <Pressable accessibilityRole="button" onPress={() => top && onPick(top)} hitSlop={10}>
           <Text style={[type.footnote, { fontFamily: fonts.label, color: p.accentText }]}>Choose this one</Text>
         </Pressable>

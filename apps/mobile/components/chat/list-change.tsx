@@ -57,14 +57,14 @@ export function ListChangeCard({ w, onShowOnList }: { w: Extract<Widget, { kind:
   };
 
   return (
-    <Glass style={{ padding: 16, gap: 14, borderRadius: radius.lg }}>
+    <Glass style={{ padding: 16, gap: 16, borderRadius: radius.lg }}>
       <View style={{ gap: 4 }}>
         <Eyebrow color={p.accentText}>Your list</Eyebrow>
         <Text style={[type.title3, { color: p.ink }]}>{w.title}</Text>
       </View>
       <View style={{ gap: 8 }} accessibilityLabel={`The top of your list: ${top.map((x) => x.name).join(", ")}`}>
         {top.map((x, i) => (
-          <View key={x.id} style={{ flexDirection: "row", alignItems: "baseline", gap: 10 }}>
+          <View key={x.id} style={{ flexDirection: "row", alignItems: "baseline", gap: 12 }}>
             <Text style={[type.figure, { color: p.ink3, minWidth: 16 }]}>{i + 1}</Text>
             <Text numberOfLines={1} style={[type.callout, { color: p.ink, flexShrink: 1 }]}>
               {x.name}

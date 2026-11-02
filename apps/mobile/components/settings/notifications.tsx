@@ -66,7 +66,7 @@ function Settings() {
           />
         ) : null}
         <RowRule />
-        <View style={{ paddingHorizontal: layout.cardPad, paddingVertical: 14, gap: 12 }}>
+        <View style={{ paddingHorizontal: layout.cardPad, paddingVertical: 16, gap: 12 }}>
           <Text style={[type.body, { color: p.ink }]}>Nudges</Text>
           <View style={{ flexDirection: "row", gap: 8 }} accessibilityRole="radiogroup">
             <Chip label="Off" selected={nudges === "off"} onPress={() => void change({ nudges: "off" }, false)} style={{ flex: 1 }} />

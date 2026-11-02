@@ -181,7 +181,7 @@ export function TitleSequence({ hero, short, onDone }: { hero: Entry; short: boo
         </View>
 
         {/* The word resolves in the centre, its gold dot drifts down onto the i, a champagne hairline draws beneath. */}
-        <View pointerEvents="none" style={[centre, { gap: 18 }]}>
+        <View pointerEvents="none" style={[centre, { gap: 20 }]}>
           <Wordmark
             height={72}
             word={{ opacity: range(6800, 8200, 0, 1, ease.cinema), transform: [{ translateY: range(6800, 8200, 10, 0, ease.cinema) }, { scale: range(6800, 8600, 1.04, 1, ease.cinema) }] }}

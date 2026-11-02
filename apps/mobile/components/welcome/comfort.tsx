@@ -72,7 +72,7 @@ function Face({ index, size: FACE = 112 }: { index: number; size?: number }) {
 export function CurrencyChips() {
   const money = useMoney();
   return (
-    <View accessibilityRole="radiogroup" accessibilityLabel="Currency" style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 6, marginTop: layout.stack.base }}>
+    <View accessibilityRole="radiogroup" accessibilityLabel="Currency" style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 8, marginTop: layout.stack.base }}>
       {CURRENCIES.map((c) => (
         <Chip key={c.code} label={`${symbolOf(c.code)} ${c.code}`} selected={money.code === c.code} onPress={() => !faderJustMoved() && money.choose(c.code)} />
       ))}
@@ -105,7 +105,7 @@ export function IncomeFader({ incomeCents, needCents, onChange, size = 52, compa
         <View style={{ flexDirection: "row", alignItems: "center", gap: layout.stack.base }}>
           <Face index={stage.index} size={56} />
           <View style={{ flex: 1, gap: 2 }}>
-            <View style={{ flexDirection: "row", alignItems: "baseline", gap: 6 }}>
+            <View style={{ flexDirection: "row", alignItems: "baseline", gap: 8 }}>
               {figure}
               <Text style={[type.figure, { color: p.ink3 }]}>a year</Text>
             </View>

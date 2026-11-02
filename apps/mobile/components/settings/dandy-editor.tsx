@@ -61,7 +61,7 @@ export function useDandyDraft(): DandyDraft {
 export function Group({ label, children }: { label: string; children: ReactNode }) {
   const p = usePalette();
   return (
-    <View style={{ gap: 10 }}>
+    <View style={{ gap: 12 }}>
       <Eyebrow color={p.ink3}>{label}</Eyebrow>
       {children}
     </View>
@@ -95,12 +95,12 @@ export function DandyFields({ draft }: { draft: DandyDraft }) {
       </Group>
 
       <Group label="Its personality">
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }} accessibilityRole="radiogroup" accessibilityLabel="Personality">
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12 }} accessibilityRole="radiogroup" accessibilityLabel="Personality">
           {PERSONAS.map((pe) => {
             const on = dandy.persona === pe.id;
             return (
               <Pressable key={pe.id} accessibilityRole="radio" aria-checked={on} accessibilityState={{ checked: on }} accessibilityLabel={`${pe.name}. ${pe.line}`} onPress={() => choose({ persona: pe.id })} style={{ flexBasis: "47%", flexGrow: 1 }}>
-                <Glass intensity={on ? 70 : 40} style={{ minHeight: 88, borderRadius: radius.control, borderCurve: "continuous", padding: 14, gap: 4, borderColor: on ? p.accent : p.line }}>
+                <Glass intensity={on ? 70 : 40} style={{ minHeight: 88, borderRadius: radius.control, borderCurve: "continuous", padding: 16, gap: 4, borderColor: on ? p.accent : p.line }}>
                   <Text style={[type.title3, { color: p.ink }]}>{pe.name}</Text>
                   <Text style={[type.footnote, { color: p.ink2 }]}>{pe.line}</Text>
                 </Glass>

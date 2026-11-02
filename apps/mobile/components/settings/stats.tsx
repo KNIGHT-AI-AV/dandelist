@@ -11,7 +11,7 @@ function Tile({ figure, label, wide = false }: { figure: string; label: string; 
   const p = usePalette();
   const t = useType();
   return (
-    <Glass style={{ flexBasis: wide ? "100%" : "47%", flexGrow: 1, minHeight: 104, borderRadius: radius.lg, borderCurve: "continuous", padding: 18, justifyContent: "space-between", gap: 10 }}>
+    <Glass style={{ flexBasis: wide ? "100%" : "47%", flexGrow: 1, minHeight: 104, borderRadius: radius.lg, borderCurve: "continuous", padding: 20, justifyContent: "space-between", gap: 12 }}>
       <Text style={[t.title2, { color: p.ink, fontVariant: ["tabular-nums", "lining-nums"] }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
         {figure}
       </Text>
@@ -31,7 +31,7 @@ export function StatsTiles({ stats, dandyName }: { stats: Stats | null; dandyNam
   const money = useMoney();
   if (!stats) {
     return (
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }} accessibilityLabel="Loading your numbers">
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12 }} accessibilityLabel="Loading your numbers">
         {[0, 1, 2, 3].map((i) => (
           <Breathing key={i} style={{ flexBasis: "47%", flexGrow: 1, height: 104 }} />
         ))}
@@ -39,15 +39,15 @@ export function StatsTiles({ stats, dandyName }: { stats: Stats | null; dandyNam
     );
   }
   return (
-    <View style={{ gap: 10 }}>
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
+    <View style={{ gap: 12 }}>
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12 }}>
         <Tile figure={stats.wishes.toLocaleString("en-US")} label={stats.wishes === 1 ? "Wish" : "Wishes"} />
         <Tile figure={money.compact(stats.totalCents)} label="All of it together" />
         <Tile figure={stats.pricesChecked.toLocaleString("en-US")} label={stats.pricesChecked === 1 ? "Price checked at the seller" : "Prices checked at the seller"} />
         <Tile figure={stats.conversations.toLocaleString("en-US")} label={`Talks with ${dandyName}`} />
       </View>
       {stats.biggest ? (
-        <Glass style={{ borderRadius: radius.lg, borderCurve: "continuous", padding: 18, gap: 6 }}>
+        <Glass style={{ borderRadius: radius.lg, borderCurve: "continuous", padding: 20, gap: 8 }}>
           <Eyebrow color={p.ink3}>The biggest wish</Eyebrow>
           <Text style={[t.title3, { color: p.ink }]} numberOfLines={2}>
             {stats.biggest.name}
@@ -55,7 +55,7 @@ export function StatsTiles({ stats, dandyName }: { stats: Stats | null; dandyNam
           <Text style={[type.cardPrice, { color: p.accentText }]}>{money.format(stats.biggest.cents)}</Text>
         </Glass>
       ) : null}
-      <Glass style={{ borderRadius: radius.lg, borderCurve: "continuous", paddingVertical: 16, paddingHorizontal: 18, flexDirection: "row", justifyContent: "space-between", gap: 8 }}>
+      <Glass style={{ borderRadius: radius.lg, borderCurve: "continuous", paddingVertical: 16, paddingHorizontal: 20, flexDirection: "row", justifyContent: "space-between", gap: 8 }}>
         {[
           [stats.places, "Places"],
           [stats.things, "Things"],

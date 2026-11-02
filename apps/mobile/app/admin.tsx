@@ -75,7 +75,7 @@ export default function AdminScreen() {
 function Stat({ label, value, note }: { label: string; value: string; note?: string }) {
   const p = usePalette();
   return (
-    <Glass style={{ padding: 14, borderRadius: radius.md, gap: 4, minWidth: 150, flexGrow: 1, flexBasis: 150 }}>
+    <Glass style={{ padding: 16, borderRadius: radius.md, gap: 4, minWidth: 150, flexGrow: 1, flexBasis: 150 }}>
       <Text style={[type.eyebrow, { color: p.ink2 }]}>{label}</Text>
       <Text style={[type.figure15, { color: p.ink }]}>{value}</Text>
       {note ? <Text style={[type.footnote, { color: p.ink2 }]}>{note}</Text> : null}
@@ -98,7 +98,7 @@ function Usage({ usage }: { usage: AdminUsage }) {
   const { totals, caps } = usage;
   return (
     <View style={{ gap: 16 }}>
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12 }}>
         <Stat label="Today" value={adminMoney(totals.todayUsd)} note={caps.dailyUsd != null ? `of ${adminMoney(caps.dailyUsd)} a day` : undefined} />
         <Stat label="Guests today" value={adminMoney(totals.guestsTodayUsd)} note={`of ${adminMoney(caps.guestDailyUsd)} a day`} />
         <Stat label="All time" value={adminMoney(totals.totalUsd)} note={caps.totalUsd != null ? `of ${adminMoney(caps.totalUsd)} in all` : undefined} />
@@ -106,7 +106,7 @@ function Usage({ usage }: { usage: AdminUsage }) {
       </View>
       <Text style={[type.eyebrow, { color: p.ink2 }]}>{`By UTC day since ${adminDay(usage.from)}`}</Text>
       {byDay(usage.days).map((d) => (
-        <Glass key={d.day} style={{ padding: 14, borderRadius: radius.md, gap: 6 }}>
+        <Glass key={d.day} style={{ padding: 16, borderRadius: radius.md, gap: 8 }}>
           <Line left={adminDay(d.day)} right={`${adminMoney(d.usd)} · ${adminNumber(d.calls)} calls`} strong />
           {d.kinds.map((k) => (
             <Line key={k.kind} left={`${k.kind} · ${adminNumber(k.calls)} calls · ${adminNumber(k.inputTokens)} in / ${adminNumber(k.outputTokens)} out`} right={adminMoney(k.usd)} />
@@ -123,14 +123,14 @@ function Accounts({ accounts }: { accounts: AdminAccounts }) {
   const g = accounts.guests;
   return (
     <View style={{ gap: 12 }}>
-      <Glass style={{ padding: 14, borderRadius: radius.md, gap: 6 }}>
+      <Glass style={{ padding: 16, borderRadius: radius.md, gap: 8 }}>
         <Line left="Signed-out visitors" right={adminMoney(g.usd)} strong />
         <Line left={`${adminNumber(g.calls)} calls · ${adminNumber(g.inputTokens)} in / ${adminNumber(g.outputTokens)} out`} right={`${adminMoney(g.usdWeek)} this week`} />
         <Line left="Last used" right={adminWhen(g.lastUsed)} />
       </Glass>
       <Text style={[type.eyebrow, { color: p.ink2 }]}>{`${accounts.accounts.length} accounts`}</Text>
       {accounts.accounts.map((a) => (
-        <Glass key={a.id} style={{ padding: 14, borderRadius: radius.md, gap: 6 }}>
+        <Glass key={a.id} style={{ padding: 16, borderRadius: radius.md, gap: 8 }}>
           <Line left={a.email} right={adminMoney(a.usd)} strong />
           <Line left={`Signs in with ${a.providers.length ? a.providers.join(", ") : "an emailed code"} · since ${adminDate(a.createdAt)}`} right={`${adminMoney(a.usdWeek)} this week`} />
           <Line left={`${adminNumber(a.calls)} calls · ${adminNumber(a.inputTokens)} in / ${adminNumber(a.outputTokens)} out tokens`} right="" />
@@ -148,7 +148,7 @@ function Issues({ issues }: { issues: AdminIssues }) {
     <View style={{ gap: 12 }}>
       <Text style={[type.eyebrow, { color: p.ink2 }]}>{`Help reports (${issues.reports.length})`}</Text>
       {issues.reports.map((r) => (
-        <Glass key={r.id} style={{ padding: 14, borderRadius: radius.md, gap: 6 }}>
+        <Glass key={r.id} style={{ padding: 16, borderRadius: radius.md, gap: 8 }}>
           <Line left={`${r.code} · ${r.email}`} right={adminWhen(r.at)} strong />
           <Line left={[r.platform, r.os, r.version && `v${r.version}`, r.build && `build ${r.build}`, r.route].filter(Boolean).join(" · ")} right={r.screen ? "with screenshot" : ""} />
           {r.lastSaid ? <Text style={[type.footnote, { color: p.ink }]}>{`Last said: ${r.lastSaid}`}</Text> : null}
@@ -161,7 +161,7 @@ function Issues({ issues }: { issues: AdminIssues }) {
       {issues.reports.length ? null : <Text style={[type.body, { color: p.ink2 }]}>No help reports.</Text>}
       <Text style={[type.eyebrow, { color: p.ink2 }]}>{`Hunts that ended in an error (${issues.failedRuns.length})`}</Text>
       {issues.failedRuns.map((f) => (
-        <Glass key={f.id} style={{ padding: 14, borderRadius: radius.md, gap: 6 }}>
+        <Glass key={f.id} style={{ padding: 16, borderRadius: radius.md, gap: 8 }}>
           <Line left={`${f.title ?? "A hunt"} · ${f.email}`} right={adminWhen(f.at)} strong />
           {f.error ? <Text style={[type.footnote, { color: p.ink2 }]}>{f.error}</Text> : null}
         </Glass>

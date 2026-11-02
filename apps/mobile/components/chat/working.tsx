@@ -42,11 +42,11 @@ export function Working({ dandy, label }: { dandy: Pick<Dandy, "name" | "shape" 
   }, [reduced, breathe, dots]);
 
   return (
-    <View accessible accessibilityLabel={label ? `${dandy.name}: ${label}` : `${dandy.name} is on it`} accessibilityLiveRegion="polite" style={{ flexDirection: "row", alignItems: "center", gap: 10, minHeight: 32 }}>
+    <View accessible accessibilityLabel={label ? `${dandy.name}: ${label}` : `${dandy.name} is on it`} accessibilityLiveRegion="polite" style={{ flexDirection: "row", alignItems: "center", gap: 12, minHeight: 32 }}>
       <Animated.View style={{ opacity: breathe.interpolate({ inputRange: [0, 1], outputRange: [0.82, 1] }), transform: [{ scale: breathe.interpolate({ inputRange: [0, 1], outputRange: [0.96, 1.04] }) }] }}>
         <DandyAvatar dandy={dandy} size={26} />
       </Animated.View>
-      <Glass intensity={30} style={{ height: 28, paddingHorizontal: 11, borderRadius: radius.pill, flexDirection: "row", alignItems: "center", gap: 5 }}>
+      <Glass intensity={30} style={{ height: 28, paddingHorizontal: 12, borderRadius: radius.pill, flexDirection: "row", alignItems: "center", gap: 4 }}>
         {dots.map((d, i) => (
           <Animated.View
             key={i}
@@ -80,7 +80,7 @@ function StepRow({ step }: { step: StepLine }) {
   const p = usePalette();
   const live = step.state === "running";
   return (
-    <View style={{ flexDirection: "row", alignItems: "center", gap: 10, minHeight: 22 }}>
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 12, minHeight: 22 }}>
       <View style={{ width: 14, alignItems: "center" }}>{live ? <AgentDot busy size={6} /> : <Icon name="check" size={12} color={p.accentText} />}</View>
       <Text style={[type.footnote, { flex: 1, color: live ? p.ink2 : p.ink3 }]}>{step.text}</Text>
     </View>
@@ -100,7 +100,7 @@ export function WorkLog({ steps, live }: { steps: StepLine[]; live: boolean }) {
   if (!live && !running && !open) {
     const n = steps.length;
     return (
-      <Pressable accessibilityRole="button" accessibilityLabel={`Show the ${n} ${n === 1 ? "step" : "steps"} behind this`} accessibilityState={{ expanded: false }} onPress={() => setOpen(true)} hitSlop={8} style={{ flexDirection: "row", alignItems: "center", gap: 10, minHeight: 32 }}>
+      <Pressable accessibilityRole="button" accessibilityLabel={`Show the ${n} ${n === 1 ? "step" : "steps"} behind this`} accessibilityState={{ expanded: false }} onPress={() => setOpen(true)} hitSlop={8} style={{ flexDirection: "row", alignItems: "center", gap: 12, minHeight: 32 }}>
         <View style={{ width: 14, alignItems: "center" }}>
           <Icon name="check" size={12} color={p.accentText} />
         </View>
@@ -111,7 +111,7 @@ export function WorkLog({ steps, live }: { steps: StepLine[]; live: boolean }) {
     );
   }
   return (
-    <View style={{ gap: 6, paddingLeft: 10, borderLeftWidth: StyleSheet.hairlineWidth * 2, borderLeftColor: p.hair }}>
+    <View style={{ gap: 8, paddingLeft: 12, borderLeftWidth: StyleSheet.hairlineWidth * 2, borderLeftColor: p.hair }}>
       {steps.map((s) => (
         <StepRow key={s.id} step={s} />
       ))}

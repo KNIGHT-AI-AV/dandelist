@@ -335,7 +335,7 @@ export function HuntCard({ id: item, text, watched = true, onPhase, onShowOnList
         <View style={{ width: "100%", aspectRatio: 4 / 3 }}>
           <Photo uri={shot?.imageUrl} glyph={glyphFor(worth.worth, worth.title, money.symbol)} />
         </View>
-        <View style={{ padding: 18, gap: 10 }}>
+        <View style={{ padding: 20, gap: 12 }}>
           <Text style={[type.title2, { color: p.ink }]} numberOfLines={2}>
             {worth.title}
           </Text>
@@ -358,7 +358,7 @@ export function HuntCard({ id: item, text, watched = true, onPhase, onShowOnList
           <Photo />
           <WaitingLight active />
         </View>
-        <View style={{ padding: 18, gap: 12 }}>
+        <View style={{ padding: 20, gap: 12 }}>
           <Text style={[type.title3, { fontFamily: fonts.displayItalic, color: p.ink }]} numberOfLines={2}>
             {draft?.title ?? text}
           </Text>
@@ -371,7 +371,7 @@ export function HuntCard({ id: item, text, watched = true, onPhase, onShowOnList
 
   if (!option) {
     return (
-      <Glass style={{ padding: 18, gap: 12, borderRadius: radius.lg }}>
+      <Glass style={{ padding: 20, gap: 12, borderRadius: radius.lg }}>
         <Text style={[type.title3, { fontFamily: fonts.displayItalic, color: p.ink }]}>{draft?.title ?? text}</Text>
         <ErrorLine>{h.error ?? h.run?.error ?? "Couldn't find a price for that just now."}</ErrorLine>
         <QuietButton label="Try again" onPress={retry} style={{ alignSelf: "flex-start" }} />
@@ -388,7 +388,7 @@ export function HuntCard({ id: item, text, watched = true, onPhase, onShowOnList
           <WaitingLight active={picture === "waiting"} />
         </View>
       ) : null}
-      <View style={{ padding: 18, gap: 10 }}>
+      <View style={{ padding: 20, gap: 12 }}>
         <Text style={[type.title2, { color: p.ink }]} numberOfLines={2}>
           {draft?.title}
         </Text>

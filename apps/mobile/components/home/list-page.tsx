@@ -216,7 +216,7 @@ export function ListPage() {
       >
         <View style={{ paddingHorizontal: gutter, width: "100%", maxWidth: layout.list + 2 * gutter, alignSelf: "center", gap: layout.stack.base }}>
           <Presence show={visible.length > 0} appear={0}>
-            <View style={{ alignItems: "center", paddingTop: layout.stack.base, gap: 6 }}>
+            <View style={{ alignItems: "center", paddingTop: layout.stack.base, gap: 8 }}>
               <Eyebrow>The list</Eyebrow>
               <Pressable accessibilityRole="button" accessibilityLabel={`${money.format(total)}. Comfortable on ${money.format(income)} a year. Open money.`} onPress={() => pager.go("money")} style={{ alignItems: "center", gap: 4 }}>
                 <Money cents={total} size="hero" style={{ alignSelf: "center" }} />

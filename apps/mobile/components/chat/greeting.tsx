@@ -60,7 +60,7 @@ export function Greeting({ dandy, items, loading, onPick }: { dandy: Dandy; item
         <Text style={{ fontFamily: fonts.displayItalic, color: p.accentText }}>{g.ask}</Text>
       </Text>
       <Text style={[type.callout, { color: p.ink2 }]}>{g.intro}</Text>
-      <View style={{ gap: 10 }}>
+      <View style={{ gap: 12 }}>
         {items.length
           ? items.map((s, i) => <Suggestion key={s} label={s} delay={80 + i * 60} onPress={() => onPick(s)} />)
           : loading

@@ -183,7 +183,7 @@ export function MadeStep({
                 </Animated.View>
               ) : null}
             </View>
-            <View style={{ padding: 18, gap: 8, minHeight: 104, justifyContent: "center" }}>
+            <View style={{ padding: 20, gap: 8, minHeight: 104, justifyContent: "center" }}>
               {worth === "money" || worth === "priceless" ? (
                 <Animated.View style={{ opacity: shown, gap: 4 }}>
                   {worth === "money" ? <AmountPicker cents={wish.amountCents ?? 0} namedCents={wish.namedCents} onChange={onAmount} /> : <PricelessPrice line={wish.line} />}
@@ -191,7 +191,7 @@ export function MadeStep({
                   <QuietButton label="Price it" onPress={onPrice} style={{ alignSelf: "flex-start" }} />
                 </Animated.View>
               ) : option ? (
-                <Animated.View style={{ gap: 6, opacity: shown }}>
+                <Animated.View style={{ gap: 8, opacity: shown }}>
                   <Money cents={option.upfrontCents} size="card" rollOnMount="cinema" />
                   <Text style={[type.footnote, { color: p.ink2 }]} numberOfLines={2}>
                     {option.statusLabel}

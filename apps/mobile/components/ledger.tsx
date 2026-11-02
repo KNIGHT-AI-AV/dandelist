@@ -41,7 +41,7 @@ export function Ledger({ steps, startedAt, working }: { steps: Step[]; startedAt
         return (
           <View key={i}>
             <Hairline />
-            <View style={{ flexDirection: "row", alignItems: "baseline", gap: 10, paddingVertical: 11 }}>
+            <View style={{ flexDirection: "row", alignItems: "baseline", gap: 12, paddingVertical: 12 }}>
               <Text style={[type.figure, { width: 44, color: p.ink3 }]}>{clock(new Date(s.at).getTime() - t0)}</Text>
               <Text style={[type.footnote, { flex: 1, color: p.ink }]} numberOfLines={2}>
                 {d.verb} <Text style={{ color: p.ink2 }}>{d.detail}</Text>
@@ -54,7 +54,7 @@ export function Ledger({ steps, startedAt, working }: { steps: Step[]; startedAt
       {working ? (
         <View>
           <Hairline />
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 12 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 12 }}>
             <View style={{ width: 44 }}>
               <AgentDot busy />
             </View>

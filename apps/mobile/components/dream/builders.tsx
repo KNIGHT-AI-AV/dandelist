@@ -226,7 +226,7 @@ export function HomeBuilder({ w, live = false, waiting = false, onApply, onSearc
         return (
           <>
             <Text style={[type.title3, { color: p.ink }]}>Which feels like home?</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }} onScrollBeginDrag={clock.touch}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12 }} onScrollBeginDrag={clock.touch}>
               {w.styles.map((s) => {
                 const on = sel.styles.includes(s.id);
                 return (
@@ -307,7 +307,7 @@ export function HomeBuilder({ w, live = false, waiting = false, onApply, onSearc
   };
 
   return (
-    <Glass style={{ padding: 18, gap: 12, borderRadius: radius.lg }}>
+    <Glass style={{ padding: 20, gap: 12, borderRadius: radius.lg }}>
       <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
         <Eyebrow color={p.accentText}>Your home</Eyebrow>
         {w.region ? (
@@ -318,7 +318,7 @@ export function HomeBuilder({ w, live = false, waiting = false, onApply, onSearc
       </View>
       {HOME_STEPS.map((step) =>
         ask.open === step ? (
-          <View key={step} style={{ gap: 10, paddingBottom: 4 }}>
+          <View key={step} style={{ gap: 12, paddingBottom: 4 }}>
             {section(step)}
             <AskBar windowMs={clock.windowMs} round={clock.round} />
           </View>
@@ -443,13 +443,13 @@ export function CarBuilder({ w, live = false, waiting = false, onApply }: { w: C
   const summary = carSelectionSummary(w, commitCarDrafts(w, selection, drafts));
 
   return (
-    <Glass style={{ padding: 18, gap: 12, borderRadius: radius.lg }}>
+    <Glass style={{ padding: 20, gap: 12, borderRadius: radius.lg }}>
       <Eyebrow color={p.accentText}>Build your car</Eyebrow>
       {w.steps.map((step) =>
         ask.open === step.id ? (
-          <View key={step.id} style={{ gap: 10, paddingBottom: 4 }}>
+          <View key={step.id} style={{ gap: 12, paddingBottom: 4 }}>
             <Text style={[type.title3, { color: p.ink }]}>{step.title}</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }} onScrollBeginDrag={clock.touch}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12 }} onScrollBeginDrag={clock.touch}>
               {step.choices.filter((c) => !c.custom).map((c) => {
                 const on = (selection.picked[step.id] ?? []).includes(c.id);
                 return (
@@ -503,7 +503,7 @@ export function CarBuilder({ w, live = false, waiting = false, onApply }: { w: C
         ) : null,
       )}
       {summary.unpriced.length ? (
-        <View style={{ gap: 6 }}>
+        <View style={{ gap: 8 }}>
           <Text style={[type.label, { color: p.ink }]}>{`Priced parts: ${money(summary.subtotal)}`}</Text>
           <Text style={[type.footnote, { color: p.ink2 }]}>{`Not priced: ${summary.unpriced.join("; ")}. This is not a complete price. Your choices stay in the build.`}</Text>
         </View>
@@ -544,13 +544,13 @@ export function RegionPicker({ current, onPick }: { current: LifeContext["home"]
   };
   if (!open) {
     return (
-      <Glass style={{ paddingHorizontal: 18, paddingVertical: 4, borderRadius: radius.lg }}>
+      <Glass style={{ paddingHorizontal: 20, paddingVertical: 4, borderRadius: radius.lg }}>
         <AskRow title="Where you'll live" answer={picked ?? current?.label ?? ""} onPress={() => setOpen(true)} />
       </Glass>
     );
   }
   return (
-    <Glass style={{ padding: 18, gap: 14, borderRadius: radius.lg }}>
+    <Glass style={{ padding: 20, gap: 16, borderRadius: radius.lg }}>
       <Eyebrow color={p.accentText}>Where you'll live</Eyebrow>
       <Text style={[type.callout, { color: p.ink2 }]}>Homes, staff, services and running costs are priced for this place.</Text>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>

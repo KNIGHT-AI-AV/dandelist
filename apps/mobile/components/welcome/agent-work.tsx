@@ -11,12 +11,16 @@ import { Chip, Rise } from "./kit";
 type Row = { id: string; state: "running" | "done"; text: string };
 export type Result = Extract<PreviewEvent, { type: "result" }>;
 
+/** A row's mark column and the gap after it; a line under the row lines up with its text by both. */
+const MARK = 17;
+const MARK_GAP = 12;
+
 /** A row enters when the server sends it; "running" breathes the dot until the server says it's done. */
 function AgentRow({ row }: { row: Row }) {
   const p = usePalette();
   return (
-    <Rise style={{ flexDirection: "row", alignItems: "center", gap: 12, minHeight: 24 }}>
-      <View style={{ width: 17, alignItems: "center" }}>{row.state === "running" ? <AgentDot busy /> : <Icon name="check" color={p.accentText} size={14} />}</View>
+    <Rise style={{ flexDirection: "row", alignItems: "center", gap: MARK_GAP, minHeight: 24 }}>
+      <View style={{ width: MARK, alignItems: "center" }}>{row.state === "running" ? <AgentDot busy /> : <Icon name="check" color={p.accentText} size={14} />}</View>
       <Text style={[type.footnote, { flex: 1, color: row.state === "running" ? p.ink2 : p.ink }]}>{row.text}</Text>
     </Rise>
   );
@@ -97,11 +101,11 @@ export function AgentWork({ state, ready, waiting, onResult, onRestart }: { stat
             </View>
           </Rise>
 
-          <Glass style={{ padding: layout.cardPad, gap: 10 }}>
+          <Glass style={{ padding: layout.cardPad, gap: 12 }}>
             {waiting ? (
-              <View style={{ gap: 6 }}>
+              <View style={{ gap: 8 }}>
                 <AgentRow row={{ id: "wish", state: "running", text: `Finding the real price of ${waiting.title}` }} />
-                {waiting.line ? <Text style={[type.footnote, { fontFamily: fonts.titleItalic, color: p.ink2, marginLeft: 29 }]}>{waiting.line}</Text> : null}
+                {waiting.line ? <Text style={[type.footnote, { fontFamily: fonts.titleItalic, color: p.ink2, marginLeft: MARK + MARK_GAP }]}>{waiting.line}</Text> : null}
               </View>
             ) : null}
             {rows.map((r) => (

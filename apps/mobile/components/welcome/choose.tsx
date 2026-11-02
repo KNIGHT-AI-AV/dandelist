@@ -59,7 +59,7 @@ export function PhotoCard({ e, onPress, style, big = false }: { e: PoolItem; onP
         <Shade />
         {/* Wide cards keep their words in a left column over a scrim, so a name never runs into the photo. */}
         {big ? null : <LinearGradient pointerEvents="none" colors={[`rgba(${p.bgRgb}, 0.9)`, `rgba(${p.bgRgb}, 0.7)`, `rgba(${p.bgRgb}, 0)`]} locations={[0, 0.38, 0.72]} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={StyleSheet.absoluteFill} />}
-        <View style={{ position: "absolute", left: layout.cardPad, right: big ? layout.cardPad : "30%", bottom: layout.cardPad, gap: 6 }}>
+        <View style={{ position: "absolute", left: layout.cardPad, right: big ? layout.cardPad : "30%", bottom: layout.cardPad, gap: 8 }}>
           <Text style={[type.title2, { color: p.ink }]} numberOfLines={2}>
             {e.name}
           </Text>
@@ -163,7 +163,7 @@ function WhenOption({ label, hint, selected, onPress }: { label: string; hint: s
   return (
     <Pressable accessibilityRole="radio" accessibilityState={{ selected }} accessibilityLabel={`${label}. ${hint}`} onPress={onPress} onPressIn={press.onPressIn} onPressOut={press.onPressOut}>
       <Animated.View style={{ transform: [{ scale: press.scale }] }}>
-        <Glass intensity={selected ? 70 : 40} style={{ minHeight: 84, borderRadius: radius.control, borderCurve: "continuous", paddingHorizontal: 16, paddingVertical: 14, gap: 4, justifyContent: "center", borderColor: selected ? p.accent : p.line }}>
+        <Glass intensity={selected ? 70 : 40} style={{ minHeight: 84, borderRadius: radius.control, borderCurve: "continuous", paddingHorizontal: 16, paddingVertical: 16, gap: 4, justifyContent: "center", borderColor: selected ? p.accent : p.line }}>
           <Text style={[type.title3, { color: p.ink }]}>{label}</Text>
           <Text style={[type.footnote, { color: p.ink2 }]}>{hint}</Text>
         </Glass>
@@ -188,7 +188,7 @@ export function WhenStep({ value, onPick }: { value: When | null | undefined; on
       </Rise>
       <Rise delay={50}>
         {/* Two by two, so all four fit above the list meter on a phone. */}
-        <View accessibilityRole="radiogroup" style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
+        <View accessibilityRole="radiogroup" style={{ flexDirection: "row", flexWrap: "wrap", gap: 12 }}>
           {WHEN_OPTIONS.map((o) => (
             <View key={o.id} style={{ flexBasis: "47%", flexGrow: 1 }}>
               <WhenOption label={o.label} hint={o.hint} selected={value === o.id} onPress={() => { haptic.select(); onPick(o.id); }} />

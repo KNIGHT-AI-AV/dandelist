@@ -20,12 +20,12 @@ export function FactsCard({ facts, loading, busy, error, dandyName, onNew }: { f
   return (
     <Glass style={{ borderRadius: radius.lg, borderCurve: "continuous", padding: 20, gap: 16 }}>
       {busy ? (
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 10, minHeight: 28 }} accessibilityLiveRegion="polite">
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 12, minHeight: 28 }} accessibilityLiveRegion="polite">
           <AgentDot busy />
           <Text style={[type.callout, { color: p.ink2 }]}>{`${dandyName} is reading your list`}</Text>
         </View>
       ) : lines.length ? (
-        <View style={{ gap: 14 }} accessibilityRole="list">
+        <View style={{ gap: 16 }} accessibilityRole="list">
           {lines.map((line, i) => (
             <View key={i} style={{ flexDirection: "row", gap: 12 }} accessibilityRole="text">
               <Text style={[type.figure13, { color: p.accentText, width: 18, paddingTop: 4 }]}>{`0${i + 1}`}</Text>

@@ -23,7 +23,7 @@ export function LifePill({ cents, label = "Your Dandelist so far", style, onLayo
   }, [cents, reduced, fill]);
   return (
     <View ref={onLayoutRef} collapsable={false} style={style}>
-      <Glass intensity={60} style={{ borderRadius: radius.pill, paddingHorizontal: 20, paddingTop: 10, paddingBottom: 12, gap: 8 }}>
+      <Glass intensity={60} style={{ borderRadius: radius.pill, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 12, gap: 8 }}>
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", minHeight: 24 }}>
           <Eyebrow>{label}</Eyebrow>
           <Odometer cents={cents} format={dollars} size={20} family="bodoni" align="right" pulse live onLand={haptic.quietSelect} announce={(v) => `${label}, ${v}`} />
@@ -95,7 +95,7 @@ export function AgentTicker({ text, done = false, style }: { text: string; done?
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [text]);
   return (
-    <Glass intensity={50} style={[{ borderRadius: radius.pill, paddingHorizontal: 14, paddingVertical: 8, flexDirection: "row", alignItems: "center", gap: 10 }, style]}>
+    <Glass intensity={50} style={[{ borderRadius: radius.pill, paddingHorizontal: 16, paddingVertical: 8, flexDirection: "row", alignItems: "center", gap: 12 }, style]}>
       {done ? <Icon name="check" color={p.accentText} size={13} /> : <AgentDot busy />}
       <Animated.Text accessibilityLiveRegion="polite" numberOfLines={1} style={[type.footnote, { flex: 1, color: p.ink2, fontFamily: done ? fonts.medium : fonts.body, opacity: v }]}>
         {shown}

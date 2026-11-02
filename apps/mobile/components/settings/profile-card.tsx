@@ -110,7 +110,7 @@ export function ProfileCard() {
         </Text>
         <Text style={[type.footnote, { color: p.ink3 }]}>{profile?.email ?? auth.user?.email ?? ""}</Text>
       </View>
-      <View style={{ flexDirection: "row", gap: 10 }}>
+      <View style={{ flexDirection: "row", gap: 12 }}>
         <RowAction label={profile?.avatarKey ? "Change photo" : "Add a photo"} onPress={change} busy={busy === "pick" || busy === "upload"} disabled={blocked} />
         {profile?.avatarKey ? <RowAction label="Remove" tone="quiet" onPress={remove} busy={busy === "remove"} disabled={blocked} accessibilityLabel="Remove your photo" /> : null}
       </View>
@@ -150,7 +150,7 @@ export function NameField() {
   };
 
   return (
-    <View style={{ gap: 6 }}>
+    <View style={{ gap: 8 }}>
       <Field
         label="Your name"
         value={value}
