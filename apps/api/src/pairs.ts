@@ -469,7 +469,7 @@ export function pairRoutes(deps: AgentDeps & { pool: () => Promise<PoolItem[]>; 
     if (!allowed(userId, deps.now())) return c.json({ error: "That's a lot for one hour. Try again soon." }, 429);
     const guard = async () => {
       await assertBudget(db, caps, deps.now());
-      await assertUserBudget(db, userId, await userCapUsd(db, userId, USER_DAILY_USD, deps.judge, caps), deps.now());
+      await assertUserBudget(db, userId, await userCapUsd(db, userId, USER_DAILY_USD, deps.judge, caps, deps.now()), deps.now());
     };
     try {
       await eitherReady(guard, claudeGuard(deps, userId, USER_DAILY_USD));

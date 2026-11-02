@@ -3,7 +3,7 @@ import { Hono, type Context } from "hono";
 import { requireAuth, type AuthVars } from "./auth";
 import type { Db } from "./db";
 import { GUEST_DAILY_USD } from "./guest";
-import { CLAUDE_MODEL_PREFIX, META_ONLY } from "./spend";
+import { CLAUDE_MODEL_PREFIX, META_ONLY, dailyCapUsd } from "./spend";
 import { guestShareUsd } from "./under";
 
 /**
@@ -99,7 +99,7 @@ export function adminRoutes(deps: AdminDeps) {
       from: from.toISOString().slice(0, 10),
       days: rows.map((r) => ({ day: r.day, kind: r.kind, calls: num(r.calls), inputTokens: num(r.input_tokens), outputTokens: num(r.output_tokens), searches: num(r.searches), usd: num(r.usd) })),
       totals: shown(await totalsOf(META_ONLY)),
-      caps: { dailyUsd: deps.spendCaps?.dailyUsd ?? null, totalUsd: deps.spendCaps?.totalUsd ?? null, guestDailyUsd: GUEST_DAILY_USD },
+      caps: { dailyUsd: deps.spendCaps ? dailyCapUsd(deps.spendCaps, now) : null, totalUsd: deps.spendCaps?.totalUsd ?? null, guestDailyUsd: GUEST_DAILY_USD },
       claude: {
         ...shown(await totalsOf(`model like '${CLAUDE_MODEL_PREFIX}%'`)),
         dailyUsd: deps.claude?.dailyUsd ?? null,

@@ -224,7 +224,7 @@ export function describeRoutes(deps: DescribeDeps) {
     const client = new MetaClient({ ...deps.meta!, onUsage: (usage, cost) => recordSpend(db, userId, kind, usage, cost, deps.now()) });
     const guard = async () => {
       await assertBudget(db, caps, deps.now());
-      await assertUserBudget(db, userId, await userCapUsd(db, userId, USER_DAILY_USD, deps.judge, caps), deps.now());
+      await assertUserBudget(db, userId, await userCapUsd(db, userId, USER_DAILY_USD, deps.judge, caps, deps.now()), deps.now());
     };
     return { responses: metaFirst((body) => withHold(guard, () => client.responses(body), userId), claudeFor(deps, userId, kind, { personUsd: USER_DAILY_USD })) };
   };

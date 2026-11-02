@@ -180,7 +180,7 @@ export function dreamRoutes(deps: DreamDeps) {
     try {
       await eitherReady(async () => {
         await assertBudget(db, caps, now);
-        await assertUserBudget(db, userId, await userCapUsd(db, userId, USER_DAILY_USD, deps.judge, caps), now);
+        await assertUserBudget(db, userId, await userCapUsd(db, userId, USER_DAILY_USD, deps.judge, caps, now), now);
       }, claudeGuard(deps, userId, USER_DAILY_USD));
     } catch (e) {
       return c.json({ error: friendly(e) }, 429);
@@ -225,7 +225,7 @@ export function dreamRoutes(deps: DreamDeps) {
           withHold(
             async () => {
               await assertBudget(db, caps, deps.now());
-              await assertUserBudget(db, userId, await userCapUsd(db, userId, USER_DAILY_USD, deps.judge, caps), deps.now());
+              await assertUserBudget(db, userId, await userCapUsd(db, userId, USER_DAILY_USD, deps.judge, caps, deps.now()), deps.now());
             },
             () => client.responses(b),
             userId,
