@@ -23,6 +23,7 @@ import { ANSWERED_ROUNDS, chosen as chosenBy, groupsFor, pickPair, unseenCount, 
 import { thoughtOf } from "../lib/reveal";
 import { play, preloadSounds } from "../lib/sound";
 import { layout, type, usePalette, useTheme } from "../lib/theme";
+import { welcomeBack } from "../lib/back-target";
 import { cataloguePool, emptyWelcome, fetchPool, keepsHunt, listTotal, listed, loadWelcome, markTitleSeen, saveWelcome, seenTitle, settled, streamGuestWish, type FirstWish, type PoolItem, type WelcomeState } from "../lib/welcome";
 import { startWelcome } from "../lib/welcome-start";
 import { welcomeSteps, type Fade } from "../lib/welcome-steps";
@@ -370,13 +371,16 @@ export default function Welcome() {
   };
   // Android's back gesture steps back through the welcome like the Back button; with nowhere to go it leaves as usual.
   // Only while the welcome is on screen: under sign-in or another page, Back belongs to that page.
+  // With the save sheet up, Back is the sheet's (it closes itself), whichever listener Android asks first.
   const back = useRef(goBack);
   back.current = goBack;
+  const sheetUp = useRef(sheet);
+  sheetUp.current = sheet;
   useFocusEffect(
     useCallback(() => {
       if (Platform.OS !== "android") return;
       const sub = BackHandler.addEventListener("hardwareBackPress", () => {
-        if (!steps.canGoBack()) return false;
+        if (welcomeBack({ sheet: sheetUp.current, canGoBack: steps.canGoBack() }) !== "step") return false;
         back.current();
         return true;
       });
