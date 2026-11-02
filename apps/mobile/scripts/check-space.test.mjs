@@ -18,10 +18,23 @@ describe("the spacing guard", () => {
     expect(offScale("{ marginLeft: 17 + 12 }")).toEqual([]);
     expect(offScale("{ padding: 1.5 * size, margin: 3.5 * size, gap: size / 2 }")).toEqual([]);
     expect(offScale("{ paddingBottom: Math.max(insets.bottom, 10) }")).toEqual([]);
+    // A choice inside a call, an index or a sum is part of the computation too.
+    expect(offScale("{ padding: layout.gutter(wide ? 1024 : 375) }")).toEqual([]);
+    expect(offScale("{ gap: GAPS[compact ? 1 : 0] }")).toEqual([]);
+    expect(offScale("{ paddingBottom: (open ? 10 : 0) + kb.inset }")).toEqual([]);
+    expect(offScale("{ marginTop: Math.max(insets.top, compact ? 10 : 20) }")).toEqual([]);
+  });
+
+  it("leaves a variable that only shares a spacing name alone", () => {
+    expect(offScale("const inset = fit ? padding : 10;")).toEqual([]);
+    expect(offScale("const margin = 0.05;")).toEqual([]);
+    expect(offScale("let gap = 300;")).toEqual([]);
   });
 
   it("reads each branch of a choice and a fallback, but not what a choice compares", () => {
     expect(offScale("{ padding: compact ? 10 : 16 }")).toHaveLength(1);
+    expect(offScale("{ padding: (compact ? 10 : 16) }")).toHaveLength(1);
+    expect(offScale("function Gap(gap = 10) {")).toHaveLength(1);
     expect(offScale("{ padding: compact ? 12 : 14 }")).toHaveLength(1);
     expect(offScale("{ gap: x ?? 10 }")).toHaveLength(1);
     expect(offScale("{ gap: i > 3 ? 8 : 12, marginTop: n === 1 ? 0 : 4 }")).toEqual([]);
