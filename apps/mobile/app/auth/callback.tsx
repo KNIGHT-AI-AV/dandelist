@@ -62,7 +62,7 @@ export default function AuthReturn() {
     // False when a newer sign-in or a sign-out took over meanwhile: that one decides where to go, so this stays put.
     auth.redeemTicket(ticket).then(
       (took) => {
-        if (took && here.current) router.replace("/wishes");
+        if (took && here.current) router.replace("/");
       },
       () => {
         if (here.current) router.replace({ pathname: "/sign-in", params: { error: "failed" } });
