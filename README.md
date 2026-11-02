@@ -19,7 +19,7 @@ Dandelist runs on iPhone, Android and the web from one codebase, with sign-in by
 
 ## How it uses Meta models
 
-All model calls go through the Meta Model API (`https://api.meta.ai/v1`).
+All model calls go through the Meta Model API (`https://api.meta.ai/v1`) first. Claude backs it up once Meta's spend cap is used up or Meta's credit runs out (see below).
 
 | Model | What it does in Dandelist |
 | --- | --- |
@@ -30,12 +30,18 @@ All model calls go through the Meta Model API (`https://api.meta.ai/v1`).
 
 Model output is treated as data. Prices count as verified only when our server finds them on the seller's page; numbers in the agent's sentences that the facts do not hold are dropped; links are accepted only as web addresses.
 
+### Claude under Meta
+
+The owner's note, in his words: (i cant afford credits on Meta and claude gifted me credits but i want to use meta for all!)
+
+So Meta answers every call first, as before. When Meta's daily or all-time spend cap, or the guests' share of the day, is used up, or Meta's account is out of credit, the API hands that same call to Claude Opus 5.5 at low effort in fast mode instead of turning it down. Claude has its own daily cap, and the spend ledger keeps each provider's spend apart, so neither cap counts the other. A person's own daily allowance still applies. Voice, pictures and cutouts stay on Meta. Without `ANTHROPIC_API_KEY`, nothing changes. The adapter is `packages/meta/src/claude.ts`; the hand-off is `apps/api/src/under.ts`.
+
 ## Architecture
 
 ```
 apps/mobile     Expo (React Native) app for iOS, Android and web; Expo Router
 apps/api        Hono API on Node: auth, wishes, the price agent, the dream builder, spend caps
-packages/meta   Meta Model API client (Responses API, images, segmentation)
+packages/meta   Meta Model API client (Responses API, images, segmentation), and the Claude adapter under it
 packages/cost   The cost engine: money in cents, recurring costs, plans; fully unit tested
 packages/catalogue  The onboarding catalogue and the dream builder's wire contract
 infra/aws       Provisioning and deploy scripts (App Runner, RDS Postgres, S3, CodeBuild)

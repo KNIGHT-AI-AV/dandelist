@@ -7,7 +7,7 @@ import type { LegalSection } from "../components/legal";
  * https://dandelist.knightaiav.com/legal?section=deletion
  */
 
-export const PRIVACY_UPDATED = "Last updated October 31, 2026";
+export const PRIVACY_UPDATED = "Last updated November 2, 2026";
 export const PRIVACY: LegalSection[] = [
   {
     heading: "What Dandelist is",
@@ -21,7 +21,7 @@ export const PRIVACY: LegalSection[] = [
       "Your email address, so you can sign in. If you sign in with Apple, Google, GitHub or Facebook, we receive your email address and, when the service shares it, your name. From Facebook we ask only for your public profile and your email address.",
       "If you add them in Settings, a display name, a profile photo and where you would like to live. You can change or remove each of them at any time.",
       "The wishes you add: what you describe, the prices and sources the agent found, and the choices you make, such as your monthly amount, your timeline and your theme.",
-      "Before you create an account, your picks and your first wish are kept on your device, not in an account. To price that wish and preview your list, the app sends them to our server, which passes them to Meta's Model API. We don't store them; they join an account only when you save your list to one.",
+      "Before you create an account, your picks and your first wish are kept on your device, not in an account. To price that wish and preview your list, the app sends them to our server, which passes them to Meta's Model API, or to Anthropic's Claude API when Meta can't take more of the app's requests, such as once its allowance for the day is used up. We don't store them; they join an account only when you save your list to one.",
       "If you send us a report with Help, we keep a picture of the screen you were on, your latest conversation, your list and the app's state, so we can see what went wrong. Only our team sees them, and deleting your account deletes them.",
     ],
   },
@@ -29,10 +29,11 @@ export const PRIVACY: LegalSection[] = [
     heading: "How the agent uses your words",
     body: [
       "To price a wish, we send what you typed, and the answers you give to its questions, to Meta's Model API, which runs the Muse Spark model. The agent then searches the web and reads sellers' pages to check prices.",
+      "When Meta can't take more of the app's requests, such as once the app's Meta allowance for the day is used up, the same words may go to Anthropic's Claude API instead, which does the same work. Recordings are only ever written down by Meta.",
       "If you say a wish instead of typing it, the recording goes to Meta's Model API to be written down. We don't store the recording.",
       "When you ask for facts about your list in Settings, we send your wishes and the place you would like to live, so the agent can write them.",
       "In the chat, your Dandy keeps a few short lines about you for next time, such as who you buy for or what you love, read from what you tell it. It is told to leave out your health, beliefs, income, debts and contact details, and lines that look like an address, a phone number, an email or a money figure are dropped. You can see and remove each line in Settings, and they are deleted with your account.",
-      "We don't send your email address or name to Meta. We use Meta's standard models, not the modes that let Meta train on your data.",
+      "We don't send your email address or name to Meta or Anthropic. We use Meta's standard models, not the modes that let Meta train on your data, and Anthropic doesn't train its models on what its API is sent.",
     ],
   },
   {

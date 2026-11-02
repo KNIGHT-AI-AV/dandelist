@@ -99,6 +99,11 @@ for (const [key, name] of [
   if (arn) secrets[key] = arn;
 }
 
+// Claude under Meta (apps/api/src/under.ts): stored by the owner under this name, read only. Without it Claude stays off.
+const claudeKey = await existingSecret("dandelist/api/anthropic-key");
+if (claudeKey) secrets.ANTHROPIC_API_KEY = claudeKey;
+console.log(`claude under meta: ${claudeKey ? "on" : "off"}`);
+
 const existing = (await ar.send(new ListServicesCommand({}))).ServiceSummaryList?.find((s) => s.ServiceName === SERVICE);
 
 // Client IDs aren't secret, so they travel as plain variables. Pass them to a deploy
@@ -182,6 +187,8 @@ const source: SourceConfiguration = {
         WEB_ORIGINS: "https://dandelist.knightaiav.com,https://dandelist.pages.dev,https://dandelist.com,https://www.dandelist.com,http://localhost:8081",
         SPEND_DAILY_USD: "10",
         SPEND_TOTAL_USD: "120",
+        // Claude's own daily cap, apart from Meta's; it only spends once Meta's is used up.
+        CLAUDE_DAILY_USD: "5",
         PUBLIC_API_URL: "https://api.dandelist.knightaiav.com",
         // Product and place photos found by the agent are stored here and served at /media/<sha256>.
         MEDIA_BUCKET: `dandelist-media-${ACCOUNT}`,

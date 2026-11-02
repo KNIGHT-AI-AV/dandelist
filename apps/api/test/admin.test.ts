@@ -97,6 +97,31 @@ describe("the admin view", () => {
     expect(body.caps).toEqual({ dailyUsd: 10, totalUsd: 120, guestDailyUsd: 6 });
   });
 
+  it("counts Meta's totals on Meta's rows, as its caps do, and shows Claude's on a line of their own", async () => {
+    app = createApp({
+      db,
+      mailer: { sendCode: async (to: string, code: string) => void mail.push({ to, code }) },
+      jwtSecret: "test-secret-that-is-at-least-32-chars-long",
+      codePepper: PEPPER,
+      now: () => now,
+      webOrigins: [],
+      spendCaps: { dailyUsd: 10, totalUsd: 120 },
+      claude: { apiKey: "k", dailyUsd: 5 },
+      oauth: { apiUrl: "https://api.test", production: false },
+      admins: new Set([adminDigest(OWNER, PEPPER)]),
+    } as Deps);
+    const owner = await signIn(OWNER);
+    await spend(owner.id, "research", 0.1, "2026-11-02T02:00:00Z");
+    const row = (userId: string | null, model: string, usd: number, at: string) =>
+      db.query("insert into spend_ledger (user_id, model, kind, cost_usd, created_at) values ($1, $2, 'guest', $3, $4)", [userId, model, usd, at]);
+    await row(null, "claude-opus-5-5", 0.5, "2026-11-02T03:00:00Z");
+    await row(owner.id, "claude-opus-5-5", 0.25, "2026-11-01T03:00:00Z");
+    await row(null, "apify:google-shopping", 0.02, "2026-11-02T03:00:00Z");
+    const body = (await (await call("/admin/usage?days=2", owner.token)).json()) as Json;
+    expect(body.totals).toEqual({ todayUsd: 0.1, guestsTodayUsd: 0, totalUsd: 0.1, totalCalls: 1 });
+    expect(body.claude).toEqual({ todayUsd: 0.5, guestsTodayUsd: 0.5, totalUsd: 0.75, totalCalls: 2, dailyUsd: 5, guestDailyUsd: 3 });
+  });
+
   it("lists every account with how it signs in, what it holds and its tokens, and signed-out visitors as one line", async () => {
     const ada = await signIn("ada@example.com");
     const owner = await signIn(OWNER);

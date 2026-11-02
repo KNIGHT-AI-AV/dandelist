@@ -20,6 +20,7 @@ import { personaSchema, voiceLine } from "./persona";
 import { moneyPhoto, photoMedia, pricelessPhoto } from "./worth";
 import { stoppable } from "../sse";
 import { notesFor, withNotes } from "../notes";
+import { claudeFor, claudeGuard, eitherReady, metaFirst, type ClaudeSetup } from "../under";
 
 export const RUNS_PER_USER_PER_DAY = 40;
 /** Every judge shares one account, so it gets more runs; its share of the daily spend cap still bounds it. */
@@ -36,6 +37,8 @@ const CACHE_MS = 24 * 60 * 60 * 1000;
 export interface AgentDeps extends AuthDeps {
   /** Missing when no Meta key is configured; the agent routes then answer 503. */
   meta?: { apiKey: string; baseUrl?: string; fetch?: typeof fetch };
+  /** Claude under Meta, for calls Meta refuses once its spend is used up (under.ts). Missing: Meta only, as before. */
+  claude?: ClaudeSetup;
   spendCaps?: SpendCaps;
   /** Used for pages, images, exchange rates, Commons and Sketchfab; tests replace it. */
   webFetch?: Fetcher;
@@ -154,7 +157,8 @@ export function agentRoutes(deps: AgentDeps) {
       await assertUserBudget(db, userId, await userCapUsd(db, userId, USER_DAILY_USD, deps.judge, caps), deps.now());
     };
     return {
-      responses: (body) => withHold(guard, () => client.responses(body), userId, holdFor(body), stop),
+      // Meta first; Claude only once Meta's spend is used up. Pictures (Muse Image) stay Meta's.
+      responses: metaFirst((body) => withHold(guard, () => client.responses(body), userId, holdFor(body), stop), claudeFor(deps, userId, kind, { personUsd: USER_DAILY_USD, onCost, signal: stop, usd: holdFor })),
       images: (op, body) => withHold(guard, () => client.images(op, body), userId),
     };
   };
@@ -311,8 +315,10 @@ export function agentRoutes(deps: AgentDeps) {
     if (cached.rows[0]) return c.json({ run: { ...toRun(cached.rows[0]), cached: true } });
 
     try {
-      await assertBudget(db, caps, now);
-      await assertUserBudget(db, userId, await userCapUsd(db, userId, USER_DAILY_USD, deps.judge, caps), now);
+      await eitherReady(async () => {
+        await assertBudget(db, caps, now);
+        await assertUserBudget(db, userId, await userCapUsd(db, userId, USER_DAILY_USD, deps.judge, caps), now);
+      }, claudeGuard(deps, userId, USER_DAILY_USD));
     } catch (e) {
       return c.json({ error: friendly(e) }, 429);
     }
