@@ -127,7 +127,7 @@ export function claudeGuard(deps: UnderDeps, userId: string, personUsd: number):
   if (!setup) return undefined;
   const metaCaps = deps.spendCaps ?? { dailyUsd: 10, totalUsd: 120 };
   return async () => {
-    await assertUserBudget(deps.db, userId, await userCapUsd(deps.db, userId, personUsd, deps.judge, metaCaps), deps.now());
+    await assertUserBudget(deps.db, userId, await userCapUsd(deps.db, userId, personUsd, deps.judge, metaCaps, deps.now()), deps.now());
     await assertClaudeBudget(deps.db, setup.dailyUsd, deps.now());
     await assertUserClaudeBudget(deps.db, userId, await userCapUsd(deps.db, userId, personUsd, deps.judge, { dailyUsd: setup.dailyUsd, totalUsd: Number.POSITIVE_INFINITY }), deps.now());
   };

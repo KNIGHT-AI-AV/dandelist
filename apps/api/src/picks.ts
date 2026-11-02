@@ -381,7 +381,7 @@ export function pickRoutes(deps: AgentDeps) {
     const close = (status: "failed" | "none") => db.query("update daily_picks set status = $2, updated_at = $3 where id = $1", [id, status, deps.now().toISOString()]);
     const guard = async () => {
       await assertBudget(db, caps, deps.now());
-      await assertUserBudget(db, userId, await userCapUsd(db, userId, USER_DAILY_USD, deps.judge, caps), deps.now());
+      await assertUserBudget(db, userId, await userCapUsd(db, userId, USER_DAILY_USD, deps.judge, caps, deps.now()), deps.now());
     };
 
     // Over the person's allowance, or the service's: no pick today, and no more tries today.
