@@ -99,7 +99,7 @@ export function WelcomeBack({ onDone }: { onDone(): void }) {
       toValue: WELCOME_MS,
       duration: WELCOME_MS,
       easing: Easing.linear,
-      useNativeDriver: native,
+      useNativeDriver: false, // In JS, as the title's clock: the native driver drops interpolate()'s easing on a phone (iOS audit, 2026-10-29).
     }).start(({ finished: ran }) => ran && finish());
     return () => {
       clearTimeout(skip);
@@ -176,7 +176,7 @@ export function WelcomeBack({ onDone }: { onDone(): void }) {
                       toValue: 1,
                       duration: reduced ? 0 : 900,
                       easing: ease.cinema,
-                      useNativeDriver: native,
+                      useNativeDriver: false,
                     }).start()
                   }
                 />

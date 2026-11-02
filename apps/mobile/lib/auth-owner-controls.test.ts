@@ -563,7 +563,8 @@ describe("the provider return screen against a newer sign-in (round41)", () => {
     store.map.set(VERIFIER, "verifier-1");
     await mount("ticket-1");
     await settle();
-    expect(route.moves).toEqual(["/wishes"]);
+    // Through the welcome back (app/index.tsx), which then opens the list.
+    expect(route.moves).toEqual(["/"]);
     expect(store.map.has(VERIFIER)).toBe(false);
     expect(await state()).toEqual(asBob);
   });
