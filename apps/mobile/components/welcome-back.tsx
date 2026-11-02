@@ -7,7 +7,8 @@ import { ease, native, useReducedMotion } from "../lib/motion";
 import { play, preloadSounds } from "../lib/sound";
 import { fonts, layout, type, usePalette } from "../lib/theme";
 import { zoom } from "../lib/viewport";
-import { heroWish, welcomeLines } from "../lib/welcome-back";
+import { getSecret, setSecret } from "../lib/storage";
+import { LAST_HERO_KEY, heroWish, welcomeLines } from "../lib/welcome-back";
 import { useWishes } from "../lib/wishes";
 import { Grain, Shade, Wordmark } from "./lux";
 
@@ -18,6 +19,8 @@ const LIST_WAIT_MS = 1500;
 /** A touch skips it from here on, so the very first frame never swallows a tap meant for the list. */
 const SKIP_AFTER_MS = 400;
 const DISSOLVE_MS = 1100;
+/** How soft the wish's photograph is behind the words, so the wordmark and the greeting stand out (owner, 2026-11-02). */
+const HERO_BLUR = 10;
 /** With reduced motion: everything shown at once, held this long, then the list. */
 const STILL_MS = 1400;
 /** The dissolve's edge on phones: how much wider each disc is than the core, and how opaque (as the title). */
@@ -48,6 +51,18 @@ export function WelcomeBack({ onDone }: { onDone(): void }) {
   const t = useRef(new Animated.Value(0)).current;
   const photoIn = useRef(new Animated.Value(0)).current;
   const out = useRef(new Animated.Value(0)).current;
+  // The wish shown last time, so this time's is another; read before the welcome starts (undefined until read).
+  const [last, setLast] = useState<string | null | undefined>(undefined);
+  useEffect(() => {
+    let live = true;
+    getSecret(LAST_HERO_KEY).then(
+      (v) => live && setLast(v),
+      () => live && setLast(null),
+    );
+    return () => {
+      live = false;
+    };
+  }, []);
 
   // What it says is fixed once it starts, so a list still arriving never rewrites a line on screen. It speaks about the
   // list only once the list has loaded: a slow or failed load gets the greeting alone, never "empty".
@@ -55,23 +70,31 @@ export function WelcomeBack({ onDone }: { onDone(): void }) {
     title: string;
     line: string | null;
     hero: string | null;
+    heroId: string | null;
     heroName: string | null;
   } | null>(null);
   if (started && !said.current) {
     const known = status === "ready" ? wishes : null;
-    const hero = known ? heroWish(known) : null;
+    const hero = known ? heroWish(known, last ?? null) : null;
     said.current = {
       ...welcomeLines(known),
       hero: hero?.details?.agent?.imageUrl ?? null,
+      heroId: hero?.id ?? null,
       heroName: hero?.name ?? null,
     };
   }
 
   useEffect(() => {
-    if (listReady) return setStarted(true);
+    if (listReady && last !== undefined) return setStarted(true);
     const wait = setTimeout(() => setStarted(true), LIST_WAIT_MS);
     return () => clearTimeout(wait);
-  }, [listReady]);
+  }, [listReady, last]);
+
+  // Remembered once it is on screen, so the next welcome shows another of their wishes.
+  useEffect(() => {
+    const id = started ? said.current?.heroId : null;
+    if (id) void setSecret(LAST_HERO_KEY, id).catch(() => undefined);
+  }, [started]);
 
   useEffect(() => preloadSounds("title"), []);
 
@@ -170,6 +193,7 @@ export function WelcomeBack({ onDone }: { onDone(): void }) {
                 <ExpoImage
                   source={{ uri: words.hero }}
                   contentFit="cover"
+                  blurRadius={HERO_BLUR}
                   transition={0}
                   accessible={false}
                   style={StyleSheet.absoluteFill}
