@@ -80,6 +80,10 @@ writeFileSync(
   new URL("../dist/_headers", import.meta.url),
   IMMUTABLE.map((dir) => `/${dir}/*\n  Cache-Control: public, max-age=31536000, immutable\n`).join("") +
     // Every app asks for this on each launch: never from a cache without checking.
-    "/latest.json\n  Cache-Control: no-cache\n",
+    "/latest.json\n  Cache-Control: no-cache\n" +
+    // The film page streams HLS (Pages answers no byte ranges, which Safari needs for an MP4): give the playlist and its
+    // segments their media types, since a .ts file could otherwise be served as TypeScript.
+    "/film/hls/film.m3u8\n  Content-Type: application/vnd.apple.mpegurl\n" +
+    "/film/hls/film-*\n  Content-Type: video/mp2t\n",
 );
 run("npx -y wrangler@4.149.0 pages deploy dist --project-name dandelist --branch main --commit-dirty=true");
