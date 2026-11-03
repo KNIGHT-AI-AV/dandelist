@@ -468,7 +468,7 @@ async function pickListing(ctx: DreamCtx, t: TranscriptEntry[], state: DreamStat
   const card = deck.cards.find((c) => c.id === listingId);
   if (!card) return "That listing isn't in the deck.";
   const extra = deck.extra[card.id] ?? {};
-  await ctx.step("keep", "running", `Working out what the ${card.title} costs to keep`);
+  await ctx.step("keep", "running", `Working out what the ${listingWishName(card.title)} costs to keep`);
   let keep: KeepLine[] = [];
   let currency = ctx.life.currency;
   let region: string | undefined;
@@ -549,7 +549,7 @@ async function commonsImages(ctx: DreamCtx, title: string): Promise<MediaImage[]
 async function endDeck(ctx: DreamCtx, t: TranscriptEntry[], state: DreamState, deck: DeckState): Promise<void> {
   deck.refined = true;
   const best = bestCard(deck);
-  if (best) return slow(ctx, t, state, `pick:${deck.id}`, `Pricing the ${best.title}`, (c, tt, ss) => pickListing(c, tt, ss, ss.decks[deck.id] ?? deck, best.id));
+  if (best) return slow(ctx, t, state, `pick:${deck.id}`, `Pricing the ${listingWishName(best.title)}`, (c, tt, ss) => pickListing(c, tt, ss, ss.decks[deck.id] ?? deck, best.id));
   return slow(ctx, t, state, `refine:${deck.id}`, "Finding more like the ones you liked", (c, tt, ss) => refineAndSearch(c, tt, ss, ss.decks[deck.id], ss.decks[deck.id]?.criteria ?? deck.criteria, ""));
 }
 
@@ -1249,7 +1249,7 @@ async function converse(ctx: DreamCtx, t: TranscriptEntry[], state: DreamState, 
       }
       outputs.push({ type: "function_call_output", call_id: fc.callId, output: out.slice(0, 4000) });
     }
-    const mustSay = outputs.some((o) => /Say so|Not run/.test(o.output));
+    const mustSay = outputs.some((o) => MUST_SAY.test(o.output));
     // Things the message asked for that no call has taken yet: asked for once, beside the outputs.
     const input: unknown[] = [...outputs];
     if (!stop && !reminded && wants.length > handled) {
@@ -1269,6 +1269,12 @@ async function converse(ctx: DreamCtx, t: TranscriptEntry[], state: DreamState, 
     }
   }
 }
+
+/**
+ * A tool output that tells the concierge to speak ("... Say so.", "Not run: ...") keeps its reply from being held back.
+ * These were backspace characters where \b belonged (an escaping slip), so the test could never match.
+ */
+export const MUST_SAY = /\bSay so\b|\bNot run\b/;
 
 // ---- actions from the app ----
 
