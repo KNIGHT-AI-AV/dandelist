@@ -2,7 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 // Hosts resolve to a public documentation address, so no test touches real DNS.
 vi.mock("node:dns/promises", async (importOriginal) => ({ ...(await importOriginal<object>()), lookup: async () => [{ address: "93.184.215.14", family: 4 }] }));
 import { readListing } from "../src/dream/pages";
-import { getPage, safeGet } from "../src/agent/tools";
+import { commonsPhotos, sketchfabSearch } from "../src/agent/media";
+import { fxRate, getPage, safeGet } from "../src/agent/tools";
 
 /**
  * Every response the agent won't read is let go (2026-11-03): mercedes-amg.com answered a page with a 307 and
@@ -37,5 +38,17 @@ describe("responses the agent won't read", () => {
     expect((await getPage("https://shop.example/brochure", web)).error).toMatch(/Not a web page/);
     expect((await readListing("https://shop.example/brochure", web)).error).toMatch(/Not a web page/);
     expect(cancelled).toEqual(["pdf", "pdf"]);
+  });
+
+  // The crashing 307 carried 421 bytes, so a small error answer from a fixed API is no safer left unread.
+  it("lets go of a fixed API's error answer too", async () => {
+    const cancelled: string[] = [];
+    const down = (name: string) => (async () => answer(503, { "content-type": "text/html", connection: "close" }, cancelled, name)) as unknown as typeof fetch;
+    await expect(fxRate("EUR", "USD", down("fx"))).rejects.toThrow(/No rate/);
+    await expect(sketchfabSearch("Porsche 911", down("sketchfab"))).rejects.toThrow(/Sketchfab answered 503/);
+    expect(await commonsPhotos("Lisbon", down("commons"))).toEqual([]);
+    expect(cancelled).toContain("fx");
+    expect(cancelled).toContain("sketchfab");
+    expect(cancelled).toContain("commons");
   });
 });

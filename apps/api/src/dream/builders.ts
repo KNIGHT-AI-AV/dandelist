@@ -1,6 +1,6 @@
 import type { Widget } from "@dandelist/catalogue/dream";
 import { z } from "zod";
-import { fxRate, pageShowsPrice } from "../agent/tools";
+import { drop, fxRate, pageShowsPrice } from "../agent/tools";
 import { json, strictObject, type DreamCtx } from "./context";
 import { rateMoney } from "./keep";
 import { FEATURE_PATTERNS, featurePattern, readListing } from "./pages";
@@ -43,7 +43,8 @@ export async function commonsPhoto(ctx: Pick<DreamCtx, "api">, query: string): P
   let best: { url: string; credit: string } | null = null;
   try {
     const res = await ctx.api(`${COMMONS}?${params}`, { headers: { "User-Agent": COMMONS_UA }, signal: AbortSignal.timeout(COMMONS_TIMEOUT_MS) });
-    if (res.ok) {
+    if (!res.ok) await drop(res);
+    else {
       const body = (await res.json()) as { query?: { pages?: Record<string, any> } };
       const pages = Object.values(body.query?.pages ?? {}).sort((a: any, b: any) => (a.index ?? 99) - (b.index ?? 99));
       for (const p of pages) {

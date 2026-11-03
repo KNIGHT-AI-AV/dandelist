@@ -1,6 +1,6 @@
 import { safeCommonsSourcePage } from "@dandelist/catalogue";
 import { COMMONS_UA, type MediaImage } from "./agent/media";
-import type { Fetcher } from "./agent/tools";
+import { drop, type Fetcher } from "./agent/tools";
 import { words } from "./archive/archive";
 
 /*
@@ -80,7 +80,10 @@ export async function wikiPhotos(titles: string[], api: Fetcher, ms = 6_000): Pr
   if (!wanted.length) return out;
   const get = async (base: string, params: Record<string, string>) => {
     const res = await api(`${base}?${new URLSearchParams({ format: "json", ...params })}`, { headers: { "User-Agent": COMMONS_UA }, signal: AbortSignal.timeout(ms) });
-    if (!res.ok) throw new Error(`${new URL(base).hostname} ${res.status}`);
+    if (!res.ok) {
+      await drop(res);
+      throw new Error(`${new URL(base).hostname} ${res.status}`);
+    }
     return (await res.json()) as Record<string, any>;
   };
   /** Each file's photo for a card, when it is one, by file. */

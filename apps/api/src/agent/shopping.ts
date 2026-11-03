@@ -1,4 +1,4 @@
-import type { Fetcher } from "./tools";
+import { drop, type Fetcher } from "./tools";
 
 /**
  * Shopping search through Apify's Google Shopping actor. Big stores like B&H and Adorama refuse our page reads, but
@@ -137,7 +137,10 @@ export async function shoppingSearch(query: string, region: string, currency: st
     body: JSON.stringify({ query: query.slice(0, 200), country: countryFor(region), language: "en", num: "10", max_pages: 1 }),
     signal: AbortSignal.timeout((RUN_TIMEOUT_SECS + 15) * 1000),
   });
-  if (!res.ok) throw new Error(res.status === 402 || res.status === 403 ? "The shopping search allowance is used up." : `Shopping search answered ${res.status}`);
+  if (!res.ok) {
+    await drop(res);
+    throw new Error(res.status === 402 || res.status === 403 ? "The shopping search allowance is used up." : `Shopping search answered ${res.status}`);
+  }
   const items = (await res.json()) as unknown;
   const list = Array.isArray(items) ? items.slice(0, max) : [];
   return { offers: toOffers(list, currency), costUsd: (Array.isArray(items) ? Math.min(items.length, max) : 0) * SHOPPING_PRICE_PER_RESULT_USD };
