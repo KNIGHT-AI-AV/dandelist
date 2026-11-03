@@ -932,7 +932,8 @@ describe("dream turn", () => {
     expect(carbon.detail).toMatch(/^Estimate/);
     const done = await turn(t, { type: "builder", widgetId: cb.id, values: { options: ["night_package"], done: true } }, sessionId);
     const wish = widgets(done.events, "wish_ready")[0].wish;
-    expect(wish).toMatchObject({ upfrontCents: Math.round((186550 + 1300) * 0.92 * 100), status: "verified", currency: "EUR", region: "Malta" });
+    // The model's name, not every chosen label joined (demo film, 2026-11-03).
+    expect(wish).toMatchObject({ name: "Mercedes-AMG G 63", upfrontCents: Math.round((186550 + 1300) * 0.92 * 100), status: "verified", currency: "EUR", region: "Malta" });
     expect(wish.keep.map((l: Ev) => l.label)).toEqual(expect.arrayContaining(["Insurance", "Fuel", "Maintenance", "Registration and road licence"]));
   });
 
