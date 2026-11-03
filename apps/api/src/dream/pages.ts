@@ -1,4 +1,4 @@
-import { assertPublicUrl, htmlToText, priceBasis, publicFetch, structuredPrices, type Fetcher, type MarkupPrice } from "../agent/tools";
+import { assertPublicUrl, drop, htmlToText, priceBasis, publicFetch, structuredPrices, type Fetcher, type MarkupPrice } from "../agent/tools";
 
 /**
  * Reads one listing page (a home, a car, a provider) the way the price agent reads product pages: our server fetches
@@ -248,11 +248,15 @@ export async function readListing(raw: string, fetcher: Fetcher = publicFetch, t
       });
       const next = res.status >= 300 && res.status < 400 ? res.headers.get("location") : null;
       if (!next) break;
+      await drop(res);
       url = await assertPublicUrl(new URL(next, url).toString());
     }
     if (!res) return { ...empty, error: "No response" };
     const type = res.headers.get("content-type") ?? "";
-    if (!/html|text/i.test(type)) return { ...empty, url: url.toString(), status: res.status, error: `Not a web page (${type || "unknown type"})` };
+    if (!/html|text/i.test(type)) {
+      await drop(res);
+      return { ...empty, url: url.toString(), status: res.status, error: `Not a web page (${type || "unknown type"})` };
+    }
     const reader = res.body?.getReader();
     const chunks: Uint8Array[] = [];
     let size = 0;

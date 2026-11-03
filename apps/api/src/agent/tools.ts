@@ -176,6 +176,13 @@ export function structuredPrices(html: string): MarkupPrice[] {
 }
 
 /**
+ * Lets go of a response that won't be read. A body left unread on a socket the site then closes trips an assertion in
+ * undici's parser, thrown from a socket event where nothing can catch it, so the whole process exits: a 307 from
+ * mercedes-amg.com did it every time (2026-11-03), and with it every hunt in flight.
+ */
+export const drop = (res: Response) => res.body?.cancel().catch(() => undefined);
+
+/**
  * GETs a public URL. Redirects are followed by hand so each hop is checked against the private-host rule.
  * Throws when the URL or a redirect points somewhere private.
  */
@@ -186,6 +193,7 @@ export async function safeGet(raw: string, fetcher: Fetcher, headers: Record<str
     res = await fetcher(url, { redirect: "manual", signal: AbortSignal.timeout(timeoutMs), headers: { "User-Agent": UA, ...headers } });
     const next = res.status >= 300 && res.status < 400 ? res.headers.get("location") : null;
     if (!next) break;
+    await drop(res);
     url = await assertPublicUrl(new URL(next, url).toString());
   }
   if (!res) throw new Error("No response");
@@ -303,7 +311,10 @@ export async function getPage(raw: string, fetcher: Fetcher = publicFetch): Prom
     const res = got.res;
     url = got.url;
     const type = res.headers.get("content-type") ?? "";
-    if (!/html|text|json/i.test(type)) return { ...empty, url: url.toString(), status: res.status, error: `Not a web page (${type || "unknown type"})` };
+    if (!/html|text|json/i.test(type)) {
+      await drop(res);
+      return { ...empty, url: url.toString(), status: res.status, error: `Not a web page (${type || "unknown type"})` };
+    }
     const html = new TextDecoder().decode((await readCapped(res, MAX_BYTES)).bytes);
     const title = htmlToText(/<title[^>]*>([\s\S]*?)<\/title>/i.exec(html)?.[1] ?? "").slice(0, 200);
     const image = meta(html, "og:image");
