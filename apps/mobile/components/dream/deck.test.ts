@@ -14,7 +14,7 @@ g.IS_REACT_ACT_ENVIRONMENT = true;
 g.IS_REACT_NATIVE_TEST_ENVIRONMENT = true;
 
 type Release = (e: unknown, g: { dx: number; dy: number; vx: number }) => void;
-const pans = vi.hoisted(() => [] as { onPanResponderRelease: Release }[]);
+const pans = vi.hoisted(() => [] as { onPanResponderRelease: Release; onPanResponderTerminationRequest?: () => boolean }[]);
 vi.mock("react-native", () => {
   class Value {
     setValue() {}
@@ -85,6 +85,13 @@ describe("the chat's swipe deck (round 44)", () => {
     await press("Yes");
     await press("Pass");
     expect(swiped).toEqual(["a:yes", "b:no"]);
+  });
+
+  // Filming the demo (2026-11-03), a sideways drag on a listing turned the app to its list page instead of moving the
+  // card: the pages around the chat asked for the drag once it passed their own threshold, and the card gave it up.
+  it("keeps a drag it has started, so the pages can't take it mid-swipe", async () => {
+    await mount(["a", "b"]);
+    expect(pans[0]!.onPanResponderTerminationRequest?.()).toBe(false);
   });
 
   it("says the best match is being priced once the last card goes after a yes, and that it's finding more after none", async () => {
