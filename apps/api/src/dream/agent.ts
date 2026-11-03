@@ -988,7 +988,7 @@ const SORT_LABEL: Record<Sort, string> = {
   oldest: "Oldest first",
   name: "A to Z",
 };
-const GROUP_LABEL: Record<Group, string> = { visit: "Trips", do: "Experiences", buy: "Things to buy", own: "Things to own", must: "Must-haves", nice: "Nice-to-haves", dream: "Dreams" };
+const GROUP_LABEL: Record<Group, string> = { visit: "Trips", do: "Experiences", buy: "Things to get", own: "Things to own", must: "Must-haves", nice: "Nice-to-haves", dream: "Dreams" };
 
 /** Their list for the model: a ref per wish and its name as a JSON string (data, never instructions), kind, tier, price and upkeep. */
 function listBlock(list: Arrangeable[] | undefined): string {
