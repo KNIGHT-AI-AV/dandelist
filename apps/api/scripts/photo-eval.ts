@@ -30,6 +30,9 @@ const hunt = async (c: Case) => {
     // The first card's hunt, with each model planning and checking at low effort.
     case "v6-spark":
       return findPhoto(meta, subject, { fetcher: publicFetch, by: Date.now() + 40_000 });
+    // The same hunt with 20 s left, as a card has once its shops refused the server (the demo film's photo-less cards).
+    case "v7-tight":
+      return findPhoto(meta, subject, { fetcher: publicFetch, by: Date.now() + 20_000 });
     case "v3-wonder":
       return findPhoto(meta, subject, { fetcher: publicFetch, model: "muse-wonder-1.0", by: Date.now() + 40_000 });
     // A retake of the first hunt's pick, as the app's Retake asks for it.

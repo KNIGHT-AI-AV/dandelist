@@ -107,6 +107,18 @@ describe("the photo search (owner, 2026-10-29: 'Not any photo will do!!', 'right
     expect(await findPhoto(planMeta(leicaPlan()), leica, { fetcher: web, webPhotos, verify: passing([]) })).toBeNull();
   });
 
+  // Filming the demo (2026-11-03), a camera's, a city's and a breed's cards saved without a photo: no candidate was
+  // looked at until the slowest source (the web search) answered, and then the time ran out mid-check.
+  it("looks at the Wikipedia lead while a slow web search is still running, so a slow source can't leave the card bare", async () => {
+    const web = imagesAt({ [BIG]: [5184, 3456], [MAKER]: [2400, 1600] }, wikipedia(leads));
+    const by = Date.now() + 1_500;
+    const webPhotos = vi.fn(() => new Promise<string[]>((done) => setTimeout(() => done([MAKER]), 1_400)));
+    const pass = passing([BIG]);
+    const verify = (url: string, plan: PhotoPlan) => new Promise<PhotoVerdict>((done) => setTimeout(() => done(pass(url) as unknown as PhotoVerdict), 300));
+    const found = await findPhoto(planMeta(leicaPlan()), leica, { fetcher: web, webPhotos, verify: verify as never, by });
+    expect(found).toMatchObject({ how: "wikipedia", image: { url: BIG } });
+  });
+
   it("looks first, for a thing, at the page it was priced on and then the maker's photo, every time", async () => {
     const PAGE = "https://dealer.example/leica-q3";
     const SHOT = "https://dealer.example/img/leica-q3-front.jpg";
