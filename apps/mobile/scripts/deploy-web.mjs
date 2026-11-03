@@ -82,7 +82,7 @@ writeFileSync(
     // Every app asks for this on each launch: never from a cache without checking.
     "/latest.json\n  Cache-Control: no-cache\n" +
     // The film page streams HLS (Pages answers no byte ranges, which Safari needs for an MP4): give the playlist and its
-    // segments their media types, since a .ts file could otherwise be served as TypeScript.
+    // segments their media types. The segments are .m2ts, not .ts, because the app's typecheck reads every .ts file.
     "/film/hls/film.m3u8\n  Content-Type: application/vnd.apple.mpegurl\n" +
     "/film/hls/film-*\n  Content-Type: video/mp2t\n",
 );
