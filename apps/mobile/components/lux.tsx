@@ -10,7 +10,7 @@ export type { IconName } from "../lib/icon-glyphs";
 import { useMoney } from "../lib/currency";
 import { ease, haptic, native, usePress, useReducedMotion } from "../lib/motion";
 import { usePhotoLoad } from "../lib/photo-load";
-import { fonts, layout, radius, type, usePalette, useTheme, useType, type ThemeId } from "../lib/theme";
+import { fonts, layout, radius, space, type, usePalette, useTheme, useType, type ThemeId } from "../lib/theme";
 import { INFINITY } from "../lib/worth";
 import { Odometer, type OdometerProps } from "./odometer";
 
@@ -368,7 +368,7 @@ export function QuietButton({ label, onPress, style, color }: { label: string; o
  * a filled tonal surface with a faint hairline, continuous corners, Inter 600 15; ink-filled when selected. Parents
  * give it `flex: 1` to set choices in equal columns.
  */
-export function Chip({ label, selected = false, onPress, style, accessibilityLabel }: { label: string; selected?: boolean; onPress?: () => void; style?: StyleProp<ViewStyle>; /** What a screen reader says, when the label alone doesn't (an arrow, say). */ accessibilityLabel?: string }) {
+export function Chip({ label, selected = false, onPress, style, accessibilityLabel, dense = false }: { label: string; selected?: boolean; onPress?: () => void; style?: StyleProp<ViewStyle>; /** What a screen reader says, when the label alone doesn't (an arrow, say). */ accessibilityLabel?: string; /** Tighter sides, so a row of short choices fits one line on a small phone; the same height. */ dense?: boolean }) {
   const p = usePalette();
   const press = usePress(0.97);
   return (
@@ -388,7 +388,7 @@ export function Chip({ label, selected = false, onPress, style, accessibilityLab
       <Animated.View
         style={{
           minHeight: layout.control.chip,
-          paddingHorizontal: layout.stack.base,
+          paddingHorizontal: dense ? space[12] : layout.stack.base,
           alignItems: "center",
           justifyContent: "center",
           borderRadius: radius.control,

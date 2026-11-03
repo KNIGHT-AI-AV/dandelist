@@ -114,16 +114,17 @@ function FocusVeil({ on, ideas, dock, onIdea }: { on: boolean; ideas: string[]; 
 const SORT_KEYS: SortKey[] = ["date", "name", "price"];
 
 /**
- * The sort chips over the cards (owner, 2026-11-03): Your order, then Date, A–Z and Price. A tap sorts by one, a tap on
- * the one already on turns it around (the arrow shows which way), and Your order shows the list as they keep it.
+ * The sort chips over the cards (owner, 2026-11-03): Yours, then Date, A-Z and Price. A tap sorts by one, a tap on the
+ * one already on turns it around (the arrow shows which way), and Yours shows the list as they keep it. Dense chips, so
+ * the four keep one line on a 360-wide phone with an arrow showing (they wrapped Price onto a second line at 390).
  */
 function SortBar({ sort }: { sort: ListSort }) {
   return (
     <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: space[8] }}>
-      <Chip label="Your order" selected={!sort} onPress={() => setListSort(null)} accessibilityLabel={sort ? "Show your own order" : "Your own order"} />
+      <Chip dense label="Yours" selected={!sort} onPress={() => setListSort(null)} accessibilityLabel={sort ? "Show your own order" : "Your own order"} />
       {SORT_KEYS.map((key) => {
         const chip = sortChip(key, sort);
-        return <Chip key={key} label={chip.label} selected={sort?.key === key} onPress={() => setListSort(tapSort(sort, key))} accessibilityLabel={chip.spoken} />;
+        return <Chip dense key={key} label={chip.label} selected={sort?.key === key} onPress={() => setListSort(tapSort(sort, key))} accessibilityLabel={chip.spoken} />;
       })}
     </View>
   );
