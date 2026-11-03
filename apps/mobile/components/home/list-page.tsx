@@ -6,6 +6,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { adoptWelcome, priceFirstWish } from "../../lib/adopt";
 import { useAuth } from "../../lib/auth";
 import { comfortableIncome, needOf, wishEntry } from "../../lib/comfort";
+import { setListSort, sortChip, sortWishes, tapSort, type ListSort, type SortKey } from "../../lib/list-sort";
+import { useListSort } from "../../lib/use-list-sort";
 import { useMoney } from "../../lib/currency";
 import { useDandy } from "../../lib/dandy";
 import { ease, haptic, native, useReducedMotion } from "../../lib/motion";
@@ -109,6 +111,24 @@ function FocusVeil({ on, ideas, dock, onIdea }: { on: boolean; ideas: string[]; 
   );
 }
 
+const SORT_KEYS: SortKey[] = ["date", "name", "price"];
+
+/**
+ * The sort chips over the cards (owner, 2026-11-03): Your order, then Date, A–Z and Price. A tap sorts by one, a tap on
+ * the one already on turns it around (the arrow shows which way), and Your order shows the list as they keep it.
+ */
+function SortBar({ sort }: { sort: ListSort }) {
+  return (
+    <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: space[8] }}>
+      <Chip label="Your order" selected={!sort} onPress={() => setListSort(null)} accessibilityLabel={sort ? "Show your own order" : "Your own order"} />
+      {SORT_KEYS.map((key) => {
+        const chip = sortChip(key, sort);
+        return <Chip key={key} label={chip.label} selected={sort?.key === key} onPress={() => setListSort(tapSort(sort, key))} accessibilityLabel={chip.spoken} />;
+      })}
+    </View>
+  );
+}
+
 /**
  * The list (owner, recording 03): the total in the middle with the income that carries it comfortably (tap for the
  * money page), the Dandy's corner, then every wish as a full-width photograph, the one at the focus line opened up.
@@ -136,6 +156,9 @@ export function ListPage() {
   // One undo window for every page (a wish removed on Details leaves here too), with its toast at the host.
   const { pendingId, remove: removeWish, showError } = useHomeRemovals();
   const visible = useMemo(() => wishes.filter((w) => w.id !== pendingId), [wishes, pendingId]);
+  // The cards in the order the sort chips show; the totals don't care about order.
+  const sort = useListSort();
+  const cards = useMemo(() => sortWishes(visible, sort), [visible, sort]);
 
   // Quick actions: which card, where it sits, and what to do once the sheet has left.
   const [quick, setQuick] = useState<{ wish: Wish; at: Rect } | null>(null);
@@ -197,11 +220,11 @@ export function ListPage() {
   const { shown, clearShown } = home;
   useEffect(() => {
     if (!shown) return;
-    const i = visible.findIndex((w) => w.id === shown);
+    const i = cards.findIndex((w) => w.id === shown);
     if (i < 0 && status === "loading") return;
     if (i >= 0) scroller.current?.scrollTo({ y: revealAt(i, g, listTop, focus), animated: !reduced });
     clearShown();
-  }, [shown, clearShown, visible, status, g, listTop, focus, reduced]);
+  }, [shown, clearShown, cards, status, g, listTop, focus, reduced]);
 
   return (
     <View style={{ flex: 1 }}>
@@ -234,11 +257,14 @@ export function ListPage() {
           </Rise>
           {/* Today's pick, and the ask about notifications, at the head of the list. */}
           <TodayCards />
+          <Presence show={visible.length > 1} appear={0}>
+            <SortBar sort={sort} />
+          </Presence>
         </View>
 
         <View onLayout={(e) => setListTop(e.nativeEvent.layout.y)} style={{ marginTop: layout.stack.base, width: column, alignSelf: "center" }}>
           {visible.length ? (
-            <GrowingCards wishes={visible} g={g} scrollY={scrollY} listTop={listTop} focus={focus} width={column} onOpen={openWish} onQuick={openQuick} onRemove={(w) => removeWish(w, true)} />
+            <GrowingCards wishes={cards} g={g} scrollY={scrollY} listTop={listTop} focus={focus} width={column} onOpen={openWish} onQuick={openQuick} onRemove={(w) => removeWish(w, true)} />
           ) : null}
 
           <View style={{ paddingHorizontal: gutter }}>

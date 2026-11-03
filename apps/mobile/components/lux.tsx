@@ -368,12 +368,13 @@ export function QuietButton({ label, onPress, style, color }: { label: string; o
  * a filled tonal surface with a faint hairline, continuous corners, Inter 600 15; ink-filled when selected. Parents
  * give it `flex: 1` to set choices in equal columns.
  */
-export function Chip({ label, selected = false, onPress, style }: { label: string; selected?: boolean; onPress?: () => void; style?: StyleProp<ViewStyle> }) {
+export function Chip({ label, selected = false, onPress, style, accessibilityLabel }: { label: string; selected?: boolean; onPress?: () => void; style?: StyleProp<ViewStyle>; /** What a screen reader says, when the label alone doesn't (an arrow, say). */ accessibilityLabel?: string }) {
   const p = usePalette();
   const press = usePress(0.97);
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
       accessibilityState={{ selected, disabled: !onPress }}
       disabled={!onPress}
       onPress={onPress ? () => {
