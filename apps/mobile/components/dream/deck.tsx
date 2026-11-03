@@ -93,6 +93,10 @@ export function SwipeDeck({ cards, onSwipe, onPick, onSearchNow, onEnough }: { c
   const pan = useRef(
     PanResponder.create({
       onMoveShouldSetPanResponder: (_e, g) => Math.abs(g.dx) > 8 && Math.abs(g.dx) > Math.abs(g.dy),
+      // Once the card has the drag it keeps it, like every other sideways gesture here (the pages, the swipe to remove):
+      // the pages around the chat ask for it past their own threshold, and a card that let go turned the app to the
+      // list mid-swipe (demo film, 2026-11-03).
+      onPanResponderTerminationRequest: () => false,
       onPanResponderMove: (_e, g) => {
         x.setValue(g.dx);
         y.setValue(g.dy * 0.15);
