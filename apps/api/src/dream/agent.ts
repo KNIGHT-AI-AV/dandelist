@@ -147,7 +147,21 @@ export function tidy(text: string): string {
     .trim();
 }
 
-const say = (ctx: DreamCtx, text: string) => ctx.emit({ type: "text", text: tidy(text) });
+/**
+ * Without the list refs (w5) the model reads in THEIR LIST, which mean nothing to the person: "That's your Maine Coon
+ * kitten on your list, w5." was said aloud while filming the demo (2026-11-03). Only a lone lowercase w and a number
+ * goes, so a name like "Mercedes W123" stays.
+ */
+export function unref(text: string): string {
+  return text
+    .replace(/\s*\(\s*w\d{1,3}(?:\s*(?:,|and)\s*w\d{1,3})*\s*\)/g, "")
+    .replace(/,?\s*(?<![\p{L}\p{N}])w\d{1,3}(?![\p{L}\p{N}])/gu, "")
+    .replace(/\s+([.,!?;:])/g, "$1")
+    .replace(/ {2,}/g, " ")
+    .trim();
+}
+
+const say = (ctx: DreamCtx, text: string) => ctx.emit({ type: "text", text: unref(tidy(text)) });
 
 /**
  * The first regional place someone dreams about becomes where they live when nothing is set yet ("a villa in Malta"
@@ -904,8 +918,8 @@ async function runTool(ctx: DreamCtx, t: TranscriptEntry[], state: DreamState, n
     case "ask_region":
       return askRegion(ctx, t, state);
     case "ask_choices": {
-      const question = tidy(asStr(args.question, 200));
-      const options = [...new Set(asStrings(args.options).map(tidy).filter(Boolean))].slice(0, 4);
+      const question = unref(tidy(asStr(args.question, 200)));
+      const options = [...new Set(asStrings(args.options).map((o) => unref(tidy(o))).filter(Boolean))].slice(0, 4);
       if (!question || options.length < 2) return "Need a question and at least two answers.";
       // An ordinary line, said once and saved, so an older app shows it and a reopened chat keeps it above its answers.
       await say(ctx, question);
