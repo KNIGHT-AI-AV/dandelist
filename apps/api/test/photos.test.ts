@@ -119,6 +119,30 @@ describe("the photo search (owner, 2026-10-29: 'Not any photo will do!!', 'right
     expect(found).toMatchObject({ how: "wikipedia", image: { url: BIG } });
   });
 
+  it("stops at an early Wikipedia photo of the very thing, as it did when that photo was in the first batch", async () => {
+    const shots = Array.from({ length: 10 }, (_, i) => `https://shop.example/q2-${i}.jpg`);
+    const web = imagesAt({ [BIG]: [5184, 3456], ...Object.fromEntries(shots.map((s) => [s, [2400, 1600] as [number, number]])) }, wikipedia(leads));
+    const webPhotos = vi.fn(() => new Promise<string[]>((done) => setTimeout(() => done(shots), 50)));
+    const asked: string[] = [];
+    const found = await findPhoto(planMeta(leicaPlan()), leica, { fetcher: web, webPhotos, verify: passing([BIG], asked) });
+    expect(found).toMatchObject({ how: "wikipedia", image: { url: BIG } });
+    // The lead and three web photos: one batch's worth, not every web photo after the right one was found.
+    expect(asked).toHaveLength(4);
+  });
+
+  it("keeps a Commons photo's credit when Wikipedia leads with the same file", async () => {
+    const FILE = "https://upload.wikimedia.org/Lisbon_from_Graca.jpg";
+    const commonsPage = { pageid: 1, title: "File:Lisbon_from_Graca.jpg", index: 1, categories: [{ title: "Category:Featured pictures on Wikimedia Commons" }], imageinfo: [{ width: 2400, height: 1600, mime: "image/jpeg", url: `${FILE}?utm_source=commons`, extmetadata: { Artist: { value: "Ana Lima" }, LicenseShortName: { value: "CC BY-SA 4.0" } } }] };
+    const api = (u: string) => (u.startsWith("https://commons.wikimedia.org/w/api.php") ? Response.json({ query: { pages: { 1: commonsPage } } }) : wikipedia({ Lisbon: { source: FILE, width: 2400, height: 1600 } })(u));
+    const web = imagesAt({ [FILE]: [2400, 1600] }, api);
+    const plan = leicaPlan({ identity: "Lisbon", lookalikes: [], exact: false, official: "", articles: ["Lisbon"], commons: "Lisbon", web: "Lisbon view", kind: "place" });
+    const asked: string[] = [];
+    const found = await findPhoto(planMeta(plan), { title: "A week in Lisbon", kind: "visit", place: "Lisbon" }, { fetcher: web, webPhotos: async () => [], verify: passing([FILE], asked) });
+    expect(found).toMatchObject({ how: "commons", image: { source: "commons.wikimedia.org", credit: "Ana Lima", license: "CC BY-SA 4.0" } });
+    // Looked at once, though two sources offered it.
+    expect(asked).toEqual([FILE]);
+  });
+
   it("looks first, for a thing, at the page it was priced on and then the maker's photo, every time", async () => {
     const PAGE = "https://dealer.example/leica-q3";
     const SHOT = "https://dealer.example/img/leica-q3-front.jpg";

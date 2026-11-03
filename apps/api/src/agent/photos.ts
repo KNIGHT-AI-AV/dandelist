@@ -526,25 +526,33 @@ export async function findPhoto(meta: Meta, subject: PhotoSubject, ctx: PhotoSea
   // The best grade wins; then the most trusted source; then a studio photograph over an editorial one; then the order.
   const order = (a: Judged, b: Judged) =>
     a.grade - b.grade || (rank.get(a.c) ?? 2) - (rank.get(b.c) ?? 2) || (a.verdict.quality === "studio" ? -1 : 0) - (b.verdict.quality === "studio" ? -1 : 0) || queue.indexOf(a.c) - queue.indexOf(b.c);
-  // The early Wikipedia candidate ranks as its source does, though it never joins the queue.
-  const earlyC = early.url ? wiki!.find((x) => x.url === early.url) : undefined;
-  if (earlyC) rank.set(earlyC, sources.indexOf(wiki!));
+  // The early Wikipedia look stands for its file from the most trusted source that offered it (a Commons copy carries
+  // its photographer and licence), and ranks as that source does, though it never joins the queue.
+  const twin = early.url ? sources.map((s) => s.find((x) => key(x.url) === key(early.url!))).find((x) => !!x) : undefined;
+  if (twin) rank.set(twin, sources.findIndex((s) => s.includes(twin)));
+  const asTwin = (j: Judged | null | undefined) => (j && twin ? { ...j, c: twin } : null);
   let best: Judged | null = null;
   let since = 0;
-  // The early look counts as one of the first batch, so a search makes no more looks than before.
+  let joined = false;
+  // The early look counts as one of the first batch, so a search makes no more looks than before, and it joins the
+  // batch that finishes after it, so a photo of the very thing ends the hunt there as it did inside the first batch.
   for (let i = 0, n = batch - (early.url ? 1 : 0); i < queue.length && left() > 0; i += n, n = batch) {
     const judged = await Promise.all(queue.slice(i, i + n).map((c) => judge(c, lineUp)));
-    const good: Judged[] = [...judged.filter((j): j is Judged => !!j), ...(best ? [best] : [])];
+    const lead = joined ? null : asTwin(early.result);
+    if (early.result !== undefined) joined = true;
+    const good: Judged[] = [...judged.filter((j): j is Judged => !!j), ...(lead ? [lead] : []), ...(best ? [best] : [])];
     good.sort(order);
     best = good[0] ?? null;
     if (best?.grade === 1) break;
     // A photo of the very thing gets one more batch to find a better-taken one; a broad one keeps looking.
     if (best && best.grade === 2 && ++since > 1) break;
   }
-  // The early Wikipedia look joins the rest, ranked the same way, when it answered in time.
-  // A look that already finished stands even when the time is up; one still running gets what time is left.
-  const fromEarly = early.result !== undefined ? early.result : await within(early.judged, left());
-  if (fromEarly) best = [fromEarly, ...(best ? [best] : [])].sort(order)[0]!;
+  // An early look still running when the batches end gets what time is left; one that already finished stands even
+  // when the time is up, since within() answers nothing at once for no time.
+  if (!joined) {
+    const lead = asTwin(early.result !== undefined ? early.result : await within(early.judged, left()));
+    if (lead) best = [lead, ...(best ? [best] : [])].sort(order)[0]!;
+  }
   if (!best) return null;
   const { c, sized, verdict, grade } = best;
   const image: MediaImage = c.commons
