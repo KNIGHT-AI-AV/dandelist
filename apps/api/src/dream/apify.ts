@@ -216,7 +216,9 @@ export async function runActor<C>(ctx: DreamCtx, actor: Actor<C>, criteria: C): 
       signal: AbortSignal.timeout((RUN_TIMEOUT_SECS + 15) * 1000),
     });
     if (res.ok) items = await res.json();
-    else console.warn("apify run answered", actor.id, res.status);
+    // Apify's own error text says why (a failed run, a rejected input field); the status alone left the demo film's
+    // 400s unexplained (2026-11-03). It never holds the token, which travels in the header.
+    else console.warn("apify run answered", actor.id, res.status, (await res.text().catch(() => "")).replace(/\s+/g, " ").slice(0, 300));
   } catch (e) {
     console.warn("apify run failed", actor.id, (e as Error).name);
   }
