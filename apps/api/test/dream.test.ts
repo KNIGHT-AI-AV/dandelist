@@ -871,6 +871,28 @@ describe("dream turn", () => {
     expect(after.find((w) => w.id === rolex)?.tier).toBe("nice");
   });
 
+  it("shows the card when they asked to sort and the first answer only talked about it (demo film, 2026-11-03)", async () => {
+    const t = await signIn("ada@example.com");
+    await call("POST", "/wishes", t, { name: "Rolex Submariner", kind: "buy", upfrontCents: 1_000_000 });
+    await call("POST", "/wishes", t, { name: "Two weeks in Bali", kind: "visit", upfrontCents: 420_000 });
+    concierge = [
+      // The real reply, word for word: no tool, and none of the words the promise check knows.
+      [message("Perhaps ordered by price, from the most modest to the most considered.")],
+      [fc("edit_list", { sort: "price_low", first: [], top: [], bottom: [], changes: [] })],
+      [message("")],
+    ];
+    const { events } = await turn(t, { type: "message", text: "sort by price" });
+    expect(metaCalls.some((b) => JSON.stringify(b.input ?? "").includes("They asked to change the order of their list"))).toBe(true);
+    expect(widgets(events, "list_change")).toHaveLength(1);
+  });
+
+  it("doesn't take 'what sort of' for a request to sort the list", async () => {
+    const t = await signIn("ada@example.com");
+    concierge = [[message("A diver: the Submariner.")]];
+    await turn(t, { type: "message", text: "what sort of watch is a Rolex Submariner?" });
+    expect(metaCalls.some((b) => JSON.stringify(b.input ?? "").includes("They asked to change the order of their list"))).toBe(false);
+  });
+
   it("puts one removal on a card and leaves the next for later, since the app can undo one at a time (#114 review)", async () => {
     const t = await signIn("ada@example.com");
     const add = async (name: string) => ((await (await call("POST", "/wishes", t, { name, kind: "buy", upfrontCents: 1000 })).json()) as { wish: { id: string } }).wish.id;
