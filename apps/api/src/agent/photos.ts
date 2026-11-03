@@ -526,9 +526,11 @@ export async function findPhoto(meta: Meta, subject: PhotoSubject, ctx: PhotoSea
   // The best grade wins; then the most trusted source; then a studio photograph over an editorial one; then the order.
   const order = (a: Judged, b: Judged) =>
     a.grade - b.grade || (rank.get(a.c) ?? 2) - (rank.get(b.c) ?? 2) || (a.verdict.quality === "studio" ? -1 : 0) - (b.verdict.quality === "studio" ? -1 : 0) || queue.indexOf(a.c) - queue.indexOf(b.c);
-  // The early Wikipedia look stands for its file from the most trusted source that offered it (a Commons copy carries
-  // its photographer and licence), and ranks as that source does, though it never joins the queue.
-  const twin = early.url ? sources.map((s) => s.find((x) => key(x.url) === key(early.url!))).find((x) => !!x) : undefined;
+  // The early Wikipedia look stands for its file from the most trusted source that offered it with a credit (a Commons
+  // copy carries its photographer and licence, Wikipedia's its article), and ranks as that source does, though it never
+  // joins the queue.
+  const twins = early.url ? sources.flatMap((s) => s.filter((x) => key(x.url) === key(early.url!))) : [];
+  const twin = twins.find((x) => x.commons || x.credit) ?? twins[0];
   if (twin) rank.set(twin, sources.findIndex((s) => s.includes(twin)));
   const asTwin = (j: Judged | null | undefined) => (j && twin ? { ...j, c: twin } : null);
   let best: Judged | null = null;
