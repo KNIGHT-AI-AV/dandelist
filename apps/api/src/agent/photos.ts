@@ -498,10 +498,11 @@ export async function findPhoto(meta: Meta, subject: PhotoSubject, ctx: PhotoSea
   };
   // The Wikipedia lead is judged the moment Wikipedia answers, not after the slowest source: a camera's, a city's or a
   // breed's card ran out of time waiting for the web search before any photo was looked at (demo film, 2026-11-03).
-  // A retake waits, since its line-up needs the turned-down photo's looks.
+  // A retake of a photo waits, since its line-up needs the turned-down photo's looks; a retake for a wish with no photo
+  // yet has none to wait for (three for a house ran out their 35 s with nothing looked at, demo film, 2026-11-03).
   const early: { url?: string; judged: Promise<Judged | null>; result?: Judged | null } = { judged: Promise.resolve(null) };
   const wikiFound = fromWikipedia().catch(() => [] as Candidate[]);
-  if (!ctx.deep)
+  if (!(ctx.deep && exclude[0]))
     void wikiFound.then((w) => {
       const c = w.find((x) => !exclude.some((e) => key(e) === key(x.url)));
       if (c && left() > 0) Object.assign(early, { url: c.url, judged: judge(c, plan).catch(() => null).then((j) => (early.result = j)) });
