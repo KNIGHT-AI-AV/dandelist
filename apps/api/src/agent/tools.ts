@@ -342,7 +342,10 @@ export async function fxRate(from: string, to: string, fetcher: Fetcher = fetch)
   if (a === b) return { rate: 1, date: new Date().toISOString().slice(0, 10) };
   if (!/^[A-Z]{3}$/.test(a) || !/^[A-Z]{3}$/.test(b)) throw new Error("Use three-letter currency codes");
   const res = await fetcher(`https://api.frankfurter.dev/v1/latest?base=${a}&symbols=${b}`, { signal: AbortSignal.timeout(TIMEOUT_MS) });
-  if (!res.ok) throw new Error(`No rate for ${a} to ${b}`);
+  if (!res.ok) {
+    await drop(res);
+    throw new Error(`No rate for ${a} to ${b}`);
+  }
   const body = (await res.json()) as { date: string; rates: Record<string, number> };
   const rate = body.rates[b];
   if (!rate) throw new Error(`No rate for ${a} to ${b}`);

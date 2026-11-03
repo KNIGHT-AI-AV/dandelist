@@ -1,6 +1,6 @@
 import { safeCommonsSourcePage, UNSPLASH_PAGE, UNSPLASH_PROFILE } from "@dandelist/catalogue";
 import { z } from "zod";
-import { readCapped, safeGet, type Fetcher } from "./tools";
+import { drop, readCapped, safeGet, type Fetcher } from "./tools";
 
 /**
  * Media hunting: real photos first, at the highest resolution we can find, with their source and credit. Products
@@ -443,7 +443,10 @@ export async function commonsPhotos(subject: string, fetcher: Fetcher, opts: { m
     let body: { query?: { pages?: Record<string, unknown> } };
     try {
       const res = await fetcher(`${COMMONS_API}?${params}`, { headers: { "User-Agent": COMMONS_UA }, signal: AbortSignal.timeout(8000) });
-      if (!res.ok) continue;
+      if (!res.ok) {
+        await drop(res);
+        continue;
+      }
       body = (await res.json()) as typeof body;
     } catch {
       continue;
@@ -509,7 +512,10 @@ export async function sketchfabSearch(query: string, fetcher: Fetcher): Promise<
   const q = query.replace(/\s+/g, " ").trim().slice(0, 80);
   if (!q) return [];
   const res = await fetcher(`https://api.sketchfab.com/v3/search?type=models&count=8&q=${encodeURIComponent(q)}`, { signal: AbortSignal.timeout(8000) });
-  if (!res.ok) throw new Error(`Sketchfab answered ${res.status}`);
+  if (!res.ok) {
+    await drop(res);
+    throw new Error(`Sketchfab answered ${res.status}`);
+  }
   const body = (await res.json()) as { results?: Record<string, any>[] };
   const out: ModelCandidate[] = [];
   for (const r of body.results ?? []) {
