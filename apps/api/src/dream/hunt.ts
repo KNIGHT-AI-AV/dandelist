@@ -140,6 +140,24 @@ function featureFacts(text: string, wanted: string[]): { facts: string[]; matche
   return { facts, matched };
 }
 
+/** Currencies where no home to buy costs under RENT_FLOOR units. */
+const RENT_FLOOR_CURRENCIES = new Set(["USD", "EUR", "GBP", "CHF", "CAD", "AUD"]);
+const RENT_FLOOR = 10_000;
+
+/**
+ * True when a home listing's price is really its rent (demo film, 2026-11-03: a rental at "$1,950/mo" was dealt into a
+ * house-to-buy deck and priced at $1,950). Either the page shows this same number by the month, or a home to buy costs
+ * under 10,000 in a currency where none does. A sale page's mortgage estimate ("Est. payment $5,231/mo") is a different
+ * number from the price, so it doesn't count.
+ */
+export function rentLike(price: number, currency: string, text: string): boolean {
+  if (RENT_FLOOR_CURRENCIES.has(currency.toUpperCase()) && price < RENT_FLOOR) return true;
+  const digits = String(Math.round(price));
+  // The number as pages write it: 1950, 1,950 or 1.950, with or without a symbol, then a monthly marker.
+  const written = digits.replace(/\B(?=(\d{3})+(?!\d))/g, "[,. ]?");
+  return new RegExp(String.raw`(^|[^\d.,])${written}(?![\d])[^\n\d]{0,4}(?:\/\s*(?:mo|month)\b|per month|a month|monthly|pcm\b)`, "i").test(text.slice(0, 200_000));
+}
+
 function fromPage(c: Criteria, page: ListingPage, cand: z.infer<typeof candidate> | undefined, checkedAt: string): Found | null {
   if (!page.ok) return null;
   const distinct = new Set(page.prices.map((p) => p.amount));
@@ -158,6 +176,7 @@ function fromPage(c: Criteria, page: ListingPage, cand: z.infer<typeof candidate
   }
   if (!price) return null;
   const cur = (currency && /^[A-Za-z]{3}$/.test(currency) ? currency : c.currency).toUpperCase();
+  if (c.kind === "home" && rentLike(price, cur, `${page.title}\n${page.text}`)) return null; // a rental, not a home to buy
   const d = page.data;
   const facts: string[] = [];
   let score = status === "verified" ? 4 : 0;
@@ -335,7 +354,9 @@ export async function searchListings(ctx: DreamCtx, c: Criteria, exclude: string
       if (f?.listing.status === "verified") priced++;
       if (done < planned) await ctx.step("read", "running", `Read ${done} of ${planned} pages`);
       if (!f && !page.ok && REFUSED.has(page.status) && !/Not a web page|private/.test(page.error ?? "") && cand.price > 0 && shown(cand.url)) {
-        // A portal that refused our read, but whose listing the search itself showed: kept as an estimate, last.
+        // A portal that refused our read, but whose listing the search itself showed: kept as an estimate, last. A rental
+        // in a home search is dropped here too, read from the search result's own title.
+        if (c.kind === "home" && rentLike(cand.price, /^[A-Za-z]{3}$/.test(cand.currency) ? cand.currency : c.currency, cand.title)) return null;
         const url = cleanUrl(cand.url);
         return {
           listing: {
