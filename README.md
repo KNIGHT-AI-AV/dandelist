@@ -6,8 +6,15 @@ Everyone keeps a list of things they want: a car, a camera, a month somewhere wa
 
 Dandelist runs on iPhone, Android and the web from one codebase, with sign-in by email code, Apple, Google or GitHub.
 
-- Web app: https://dandelist.knightaiav.com
+## Try it
+
+- Demo film, 3 minutes: https://dandelist.knightaiav.com/film/
+- Web app, nothing to install: https://dandelist.knightaiav.com
+- iPhone: install TestFlight from the App Store, then open https://testflight.apple.com/join/tuh4Jxkw on the iPhone, tap Accept, then Install.
+- Android: on the phone, open https://github.com/KNIGHT-AI-AV/dandelist/releases/tag/android-25, download dandelist-android-25.apk and open it. Android asks once to allow installs from your browser.
 - API: https://api.dandelist.knightaiav.com
+
+Sign in with your email to see the whole app: a six-digit code arrives by email.
 
 ## What it does
 
