@@ -32,7 +32,7 @@ export const PRIVACY: LegalSection[] = [
       "When Meta can't take more of the app's requests, such as once the app's Meta allowance for the day is used up, the same words may go to Anthropic's Claude API instead, which does the same work. Recordings are only ever written down by Meta.",
       "If you say a wish instead of typing it, the recording goes to Meta's Model API to be written down. We don't store the recording.",
       "When you ask for facts about your list in Settings, we send your wishes and the place you would like to live, so the agent can write them.",
-      "In the chat, your Dandy keeps a few short lines about you for next time, such as who you buy for or what you love, read from what you tell it. It is told to leave out your health, beliefs, income, debts and contact details, and lines that look like an address, a phone number, an email or a money figure are dropped. You can see and remove each line in Settings, and they are deleted with your account.",
+      "In the chat, your Dandy keeps a few short lines about you for next time, such as who your gifts are for or what you love, read from what you tell it. It is told to leave out your health, beliefs, income, debts and contact details, and lines that look like an address, a phone number, an email or a money figure are dropped. You can see and remove each line in Settings, and they are deleted with your account.",
       "We don't send your email address or name to Meta or Anthropic. We use Meta's standard models, not the modes that let Meta train on your data, and Anthropic doesn't train its models on what its API is sent.",
     ],
   },

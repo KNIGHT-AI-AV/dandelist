@@ -172,7 +172,7 @@ export function SettingsPage() {
           <FactsCard facts={facts} loading={factsLoading} busy={factsBusy} error={factsError} dandyName={dandy.name} onNew={askFacts} />
         </Section>
 
-        <Section title={`What ${dandy.name} remembers`} hint={`What you tell ${dandy.name} in the chat that it keeps for next time, like who you buy for and what you love. Remove anything you'd rather it forgot.`}>
+        <Section title={`What ${dandy.name} remembers`} hint={`What you tell ${dandy.name} in the chat that it keeps for next time, like who your gifts are for and what you love. Remove anything you'd rather it forgot.`}>
           <MemoryCard memories={memory.memories} busy={memory.busy} error={memory.error} onForget={(id) => void forget(id)} onForgetAll={() => void forget(null)} />
         </Section>
 

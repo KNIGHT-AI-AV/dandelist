@@ -6,6 +6,7 @@ import { analytics } from "./analytics";
 import { priceBand } from "./analytics-config";
 import { useAuth } from "./auth";
 import { ordered } from "./list-order";
+import { setListSort } from "./list-sort";
 import { useRecheckOwner } from "./rechecks";
 import { createWishSession, updateWishSession, whileCurrent } from "./wish-session";
 
@@ -224,6 +225,8 @@ export function WishProvider({ children }: { children: ReactNode }) {
       },
       async reorder(ids) {
         const before = wishes;
+        // A new order of their own (theirs, or one their Dandy arranged) shows at once, not under a sort chip.
+        setListSort(null);
         setWishes((ws) => ordered(ws, ids));
         const res = await api("/wishes/order", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids }) }).catch(() => null);
         if (res?.ok) return;
