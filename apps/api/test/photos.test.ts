@@ -119,6 +119,18 @@ describe("the photo search (owner, 2026-10-29: 'Not any photo will do!!', 'right
     expect(found).toMatchObject({ how: "wikipedia", image: { url: BIG } });
   });
 
+  // Re-filming the demo (2026-11-03), three retakes for a house with no photo yet ran out their 35 s with every photo
+  // sized and none looked at (judged 0), waiting on the web search's page reads.
+  it("looks at the Wikipedia lead early on a retake for a wish with no photo yet, since nothing turned down needs its looks first", async () => {
+    const web = imagesAt({ [BIG]: [5184, 3456], [MAKER]: [2400, 1600] }, wikipedia(leads));
+    const by = Date.now() + 1_500;
+    const webPhotos = vi.fn(() => new Promise<string[]>((done) => setTimeout(() => done([MAKER]), 1_400)));
+    const pass = passing([BIG]);
+    const verify = (url: string) => new Promise<PhotoVerdict>((done) => setTimeout(() => done(pass(url) as unknown as PhotoVerdict), 300));
+    const found = await findPhoto(planMeta(leicaPlan()), leica, { fetcher: web, webPhotos, verify: verify as never, deep: true, by });
+    expect(found).toMatchObject({ how: "wikipedia", image: { url: BIG } });
+  });
+
   it("stops at an early Wikipedia photo of the very thing, as it did when that photo was in the first batch", async () => {
     const shots = Array.from({ length: 10 }, (_, i) => `https://shop.example/q2-${i}.jpg`);
     const web = imagesAt({ [BIG]: [5184, 3456], ...Object.fromEntries(shots.map((s) => [s, [2400, 1600] as [number, number]])) }, wikipedia(leads));
