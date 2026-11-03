@@ -4,7 +4,7 @@ import { createApp } from "../src/app";
 import { Jobs } from "../src/dream/jobs";
 import { migrate, type Db } from "../src/db";
 import { isJudge, userCapUsd } from "../src/spend";
-import { brief, fallbackReason, honest, keepNote, sameThing, swipeSignal, tidy } from "../src/dream/agent";
+import { brief, fallbackReason, honest, keepNote, sameThing, swipeSignal, tidy, unref } from "../src/dream/agent";
 import { MAX_TOOL_CALLS_PER_TURN, TurnBudget, TurnLimitError, searchResults } from "../src/dream/context";
 import { looksLikeListing, namesCar, priceIn } from "../src/dream/hunt";
 import { carKeep, homeKeep, maintenancePercent, serviceLines, type Fx, type Rate } from "../src/dream/keep";
@@ -1248,6 +1248,16 @@ describe("listing pages and evidence", () => {
     expect(brief("One. Two! Three? Four.")).toBe("One. Two!");
     expect(brief("Lovely choice. Opening it now. Lovely choice.")).toBe("Lovely choice. Opening it now.");
     expect(tidy("Lovely dream — opening it now… “Sea views” 1–2%")).toBe('Lovely dream, opening it now... "Sea views" 1-2%');
+  });
+
+  // Said aloud while filming the demo (2026-11-03): the list refs the model reads are nothing to the person.
+  it("never says the list refs it reads in THEIR LIST", () => {
+    expect(unref("That's your Maine Coon kitten on your list, w5.")).toBe("That's your Maine Coon kitten on your list.");
+    expect(unref("The Rolex (w3) and the Leica (w2, w4) stay where they are.")).toBe("The Rolex and the Leica stay where they are.");
+    expect(unref("Shall I move w7 to the top?")).toBe("Shall I move to the top?");
+    // A name that only looks like one stays.
+    expect(unref("A Mercedes W123 and a Bentley W12, both lovely.")).toBe("A Mercedes W123 and a Bentley W12, both lovely.");
+    expect(unref("A week in Lisbon, two weeks in Rome.")).toBe("A week in Lisbon, two weeks in Rome.");
   });
 
   it("reads swipes and keeps the model's notes honest", () => {
