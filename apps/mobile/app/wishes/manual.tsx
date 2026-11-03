@@ -13,7 +13,7 @@ import { useWishes, type WishKind, type WishTier } from "../../lib/wishes";
 import { Atmosphere } from "../../components/atmosphere";
 
 const KINDS: { value: WishKind; label: string }[] = [
-  { value: "buy", label: "Buy" },
+  { value: "buy", label: "Get" },
   { value: "own", label: "Own" },
   { value: "do", label: "Do" },
   { value: "visit", label: "Visit" },

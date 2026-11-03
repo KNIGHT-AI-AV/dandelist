@@ -1,6 +1,7 @@
 import type { Wish } from "./wishes";
 
-export const KIND_LABEL = { buy: "Buy", own: "Own", do: "Do", visit: "Visit" } as const;
+// "Get", never "Buy" (owner, 2026-11-03: "We are not a shopping cart. You can not check out").
+export const KIND_LABEL = { buy: "Get", own: "Own", do: "Do", visit: "Visit" } as const;
 /**
  * How much a wish is wanted, on a scale that reads in order (owner, recording 03: "Must/Nice/Dream is unclear"):
  * first the things they must have, then what they would love, then what can wait for someday.
