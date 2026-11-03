@@ -1,0 +1,178 @@
+WEBVTT
+
+1
+00:00:07.600 --> 00:00:10.170
+Everyone keeps a list of things they want.
+
+2
+00:00:10.240 --> 00:00:14.570
+Almost nobody knows what that life
+would cost, or when they could have it.
+
+3
+00:00:17.000 --> 00:00:20.290
+Dandelist turns that list into a plan.
+
+4
+00:00:20.360 --> 00:00:22.550
+Say or type the first thing you want.
+
+5
+00:00:22.600 --> 00:00:26.790
+A Muse Spark agent searches the web,
+reads the page the price comes from,
+
+6
+00:00:26.840 --> 00:00:30.670
+and only calls a price checked
+when it's printed there.
+
+7
+00:00:30.720 --> 00:00:34.270
+A real photo follows,
+checked for size and subject.
+
+8
+00:00:34.320 --> 00:00:38.650
+Then a few quick picks, made from your
+wish, and when you'd like it all by.
+
+9
+00:00:42.000 --> 00:00:46.170
+Make an account with a code sent to
+your email, and the list is yours.
+
+10
+00:00:46.560 --> 00:00:50.090
+Come back, and it welcomes you
+with one of your own wishes.
+
+11
+00:00:53.000 --> 00:00:57.430
+Say several wishes at once, and each
+gets its own card while you keep talking.
+
+12
+00:00:57.480 --> 00:01:03.330
+It understands what you mean: a pink
+G-Wagon is a Mercedes G-Class in pink.
+
+13
+00:01:03.740 --> 00:01:07.450
+Name only a brand, and you
+pick the model by photo.
+
+14
+00:01:07.500 --> 00:01:08.890
+Can't remember the name?
+
+15
+00:01:08.940 --> 00:01:11.510
+It makes a best guess and offers others.
+
+16
+00:01:14.000 --> 00:01:17.210
+Wish for money, and a
+slider asks how much.
+
+17
+00:01:17.520 --> 00:01:20.730
+Wish for love, and it stays priceless.
+
+18
+00:01:24.000 --> 00:01:28.890
+Describe a home or a car,
+and the agent opens the right tool:
+
+19
+00:01:28.960 --> 00:01:33.370
+real listings to swipe through,
+or a car priced from the maker.
+
+20
+00:01:33.600 --> 00:01:36.730
+When you're done,
+it prices the best match.
+
+21
+00:01:39.000 --> 00:01:41.910
+Here are ten wishes,
+arranged however you like.
+
+22
+00:01:41.960 --> 00:01:46.370
+Ask your Dandy to sort them by price,
+and one tap puts them back.
+
+23
+00:01:46.520 --> 00:01:49.890
+Each day brings a new pick that
+fits what you already want.
+
+24
+00:01:53.000 --> 00:01:56.390
+Open any wish to see what's
+behind it: the checked price
+
+25
+00:01:56.440 --> 00:01:59.190
+and where it came from,
+what it costs to keep,
+
+26
+00:01:59.240 --> 00:02:01.430
+with the published rate for every line,
+
+27
+00:02:01.480 --> 00:02:03.830
+and the options an expert would give you.
+
+28
+00:02:03.880 --> 00:02:06.690
+Slide the timeline to see
+what it takes each month.
+
+29
+00:02:06.790 --> 00:02:11.680
+Tell Dandy what you meant, and it looks
+again, with a photo of the new find.
+
+30
+00:02:15.000 --> 00:02:19.110
+The plan adds it all up:
+what it costs today,
+
+31
+00:02:19.160 --> 00:02:23.010
+what it costs to keep,
+and the income it would take.
+
+32
+00:02:27.000 --> 00:02:29.730
+Dandy remembers what matters to you.
+
+33
+00:02:30.600 --> 00:02:33.090
+Every theme has its own song.
+
+34
+00:02:33.160 --> 00:02:35.810
+And your own agent can run your list, too.
+
+35
+00:02:36.800 --> 00:02:41.870
+The agent runs on Meta's Model
+API: Muse Spark for the hunt,
+
+36
+00:02:41.920 --> 00:02:47.690
+Muse Voice Transcribe for what you say,
+and SAM and Muse Image for the pictures.
+
+37
+00:02:50.760 --> 00:02:52.210
+Dandelist.
+
+38
+00:02:52.760 --> 00:02:55.250
+Price the life you want.

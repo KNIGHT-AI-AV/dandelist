@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dandelist demo film</title>
+<meta name="description" content="The three-minute Dandelist demo film. Price the life you want.">
+<meta property="og:title" content="Dandelist demo film">
+<meta property="og:description" content="The three-minute Dandelist demo film. Price the life you want.">
+<meta property="og:image" content="https://dandelist.knightaiav.com/film/poster.jpg">
+<meta property="og:type" content="video.other">
+<meta property="og:video" content="https://dandelist.knightaiav.com/film/dandelist-demo.mp4">
+<meta name="theme-color" content="#03140D">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif&family=Inter:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  /* The film page for the hackathon entry: the app's emerald theme (lib/palette.ts), the film playing in the page. */
+  :root { --bg: #03140D; --surface: #0B2418; --ink: #F2EBDC; --ink2: rgba(242, 235, 220, 0.72); --line: rgba(242, 235, 220, 0.16); --accent: #CBA35C; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    min-height: 100vh; background: radial-gradient(120% 80% at 50% 0%, #0B2A1C 0%, var(--bg) 60%) fixed, var(--bg);
+    color: var(--ink); font-family: Inter, system-ui, sans-serif; -webkit-font-smoothing: antialiased;
+    display: flex; align-items: center; justify-content: center; padding: 32px 16px;
+  }
+  main { width: min(1120px, 100%); display: flex; flex-direction: column; align-items: center; gap: 20px; }
+  h1 { margin: 0; font-family: "Instrument Serif", Georgia, serif; font-weight: 400; font-size: clamp(40px, 6vw, 64px); letter-spacing: -0.01em; line-height: 1; }
+  .tag { margin: -8px 0 4px; font-family: "Instrument Serif", Georgia, serif; font-style: italic; font-size: clamp(20px, 2.6vw, 26px); color: var(--accent); }
+  video {
+    width: 100%; aspect-ratio: 16 / 9; display: block; background: #000; border-radius: 18px;
+    border: 1px solid var(--line); box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55), 0 2px 8px rgba(0, 0, 0, 0.4);
+  }
+  nav { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
+  nav a {
+    color: var(--ink); text-decoration: none; font-weight: 600; font-size: 15px; padding: 13px 20px; border-radius: 14px;
+    border: 1px solid var(--line); background: rgba(242, 235, 220, 0.06); transition: background 120ms ease-out, transform 100ms ease-out;
+  }
+  nav a.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+  nav a:hover { background: rgba(242, 235, 220, 0.12); }
+  nav a.primary:hover { background: #fff; }
+  nav a:active { transform: scale(0.97); }
+  nav a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) { nav a { transition: none; } nav a:active { transform: none; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>Dandelist</h1>
+  <p class="tag">Price the life you want.</p>
+  <video controls playsinline preload="metadata" poster="poster.jpg">
+    <source src="dandelist-demo.mp4" type="video/mp4">
+    <track kind="subtitles" srclang="en" label="English" src="dandelist-demo.vtt">
+  </video>
+  <nav>
+    <a class="primary" href="/">Try Dandelist</a>
+    <a href="https://github.com/KNIGHT-AI-AV/dandelist/releases/download/demo-film/dandelist-demo.mp4">Download in full quality</a>
+    <a href="https://github.com/KNIGHT-AI-AV/dandelist">Code on GitHub</a>
+  </nav>
+</main>
+</body>
+</html>
