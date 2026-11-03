@@ -8,6 +8,7 @@ import { fxRate } from "../agent/tools";
 import { applyCarValues, buildReady, buildTotal, carBuildCriteria, carBuilder, carWidget, commonsPhoto, homeBuilder } from "./builders";
 import { TurnLimitError, json, strictObject, type DreamCtx } from "./context";
 import { describe, searchListings, type Found } from "./hunt";
+import { buildExtras, buildWishName, listingWishName } from "./names";
 import { NBSP, carKeep, compact, convert, homeKeep, isTropical, money, serviceLines, type Fx, type Rate, type RateUnit, type ServiceComponent } from "./keep";
 import { homeSchema, regionKey, sameHome, writeLife, type Home } from "./life";
 import { GLOBAL, carRates, getRates, homeRates } from "./rates";
@@ -513,11 +514,12 @@ async function pickListing(ctx: DreamCtx, t: TranscriptEntry[], state: DreamStat
   } finally {
     await ctx.step("keep", "done", keep.length ? `Priced ${keep.length} running costs, each with its basis` : "Couldn't price the running costs");
   }
+  const name = listingWishName(card.title);
   const w: Widget = {
     kind: "wish_ready",
     id: nextId(state, "wish"),
     wish: {
-      name: card.title,
+      name,
       kind: "own",
       upfrontCents: upfront,
       keep,
@@ -533,8 +535,8 @@ async function pickListing(ctx: DreamCtx, t: TranscriptEntry[], state: DreamStat
   const monthly = recurringBreakdown([{ id: "w", upfrontCents: upfront, recurring: keep }]).perMonth;
   const note = keepNote(keep, deck.criteria.kind === "home" ? HOME_LINES : CAR_LINES, money(monthly, currency), deck.criteria.kind === "home" ? region : ctx.life.home?.label, deck.criteria.kind === "home");
   await say(ctx, note);
-  await show(ctx, t, state, w, `Made ${card.title} the wish (${w.id}): ${money(upfront, currency)} upfront, ${money(monthly, currency)} a month to keep.`);
-  return `Made ${card.title} the wish.`;
+  await show(ctx, t, state, w, `Made ${name} the wish (${w.id}): ${money(upfront, currency)} upfront, ${money(monthly, currency)} a month to keep.`);
+  return `Made ${name} the wish.`;
 }
 
 /** A picked card that came without a photo (a page that turned the server away) gets one from Wikimedia Commons. */
@@ -614,7 +616,7 @@ async function carEvidence(ctx: DreamCtx, car: string) {
 async function pickBuild(ctx: DreamCtx, t: TranscriptEntry[], state: DreamState, buildId: string): Promise<string> {
   const b = state.builds[buildId];
   if (!b) return "That build has closed.";
-  const { total, verified, parts, unpriced } = buildTotal(b);
+  const { total, verified, unpriced } = buildTotal(b);
   if (unpriced.length) {
     const previous = state.widgets[buildId];
     await show(ctx, t, state, carWidget(b, previous?.kind === "car_builder" ? previous.currency ?? ctx.life.currency : ctx.life.currency), "Kept the custom build with its unpriced parts.");
@@ -622,7 +624,8 @@ async function pickBuild(ctx: DreamCtx, t: TranscriptEntry[], state: DreamState,
   }
   if (!buildReady(b)) return "Choose a model and trim first.";
   if (!total) return "The build has no price yet.";
-  const name = parts.length ? parts.join(", ") : `${b.make} ${b.model}`;
+  const name = buildWishName(b);
+  const extras = buildExtras(b);
   await ctx.step("keep", "running", `Working out what the ${b.make} ${b.model} costs to keep`);
   const r = await carEvidence(ctx, `${b.make} ${b.model}`);
   const fx = await makeFx(ctx, ctx.life.currency, [b.sourceCurrency, ...Object.values(r.rates).map((x) => x?.currency)]);
@@ -642,7 +645,7 @@ async function pickBuild(ctx: DreamCtx, t: TranscriptEntry[], state: DreamState,
     kind: "wish_ready",
     id: nextId(state, "wish"),
     wish: {
-      name: name.slice(0, 120),
+      name,
       kind: "own",
       upfrontCents: Math.round(value),
       keep,
@@ -664,7 +667,7 @@ async function pickBuild(ctx: DreamCtx, t: TranscriptEntry[], state: DreamState,
   const monthly = recurringBreakdown([{ id: "w", upfrontCents: Math.round(value), recurring: keep }]).perMonth;
   const note = keepNote(keep, CAR_LINES, money(monthly, currency), ctx.life.home?.label, false);
   await say(ctx, note);
-  await show(ctx, t, state, w, `Made the ${name} build the wish (${w.id}).`);
+  await show(ctx, t, state, w, `Made the ${name} build the wish (${w.id})${extras.length ? `, with ${extras.join(", ")}` : ""}.`);
   return `Made the build the wish.`;
 }
 
