@@ -3,7 +3,7 @@ import jpeg from "jpeg-js";
 import { PNG } from "pngjs";
 import type { MediaStore } from "../media-store";
 import { imageInfo, type Cutout } from "./media";
-import { readCapped, safeGet, type Fetcher } from "./tools";
+import { drop, readCapped, safeGet, type Fetcher } from "./tools";
 
 /**
  * Product cutouts with Meta's SAM 3.1: SAM finds the product in the best real photo and returns its mask, and our
@@ -212,7 +212,10 @@ export function cutoutSource<T extends CutoutSource>(images: T[]): T | undefined
 
 export async function makeCutout(segment: Segmenter, src: CutoutSource, noun: string, fetcher: Fetcher, store: MediaStore): Promise<Cutout | null> {
   const { res } = await safeGet(src.url, fetcher, { Accept: "image/jpeg,image/png" }, 12000);
-  if (!res.ok) return null;
+  if (!res.ok) {
+    await drop(res);
+    return null;
+  }
   const { bytes, truncated } = await readCapped(res, MAX_SOURCE_BYTES);
   if (truncated) return null;
   const img = decodeImage(bytes);

@@ -4,7 +4,7 @@ import type { Draft, Meta } from "./agent";
 import { COMMONS_UA, commonsImage, commonsPhotos, photoData, probeImage, type CommonsPhoto, type MediaImage, type MediaKind } from "./media";
 import { photoCandidates, readProduct, wishWords } from "./quick";
 import { within } from "./time";
-import type { Fetcher } from "./tools";
+import { drop, type Fetcher } from "./tools";
 
 /**
  * Photos (owner, 2026-10-29). First "Photos must always come"; then, shown a card for a mint Rolex Sky-Dweller wearing
@@ -295,7 +295,10 @@ export async function wikipediaLeadPhotos(titles: string[], api: Fetcher): Promi
   let body: { query?: { pages?: Record<string, { title: string; original?: { source: string; width: number; height: number } }>; redirects?: { from: string; to: string }[]; normalized?: { from: string; to: string }[] } };
   try {
     const res = await api(`${WIKIPEDIA_API}?${params}`, { headers: { "User-Agent": COMMONS_UA }, signal: AbortSignal.timeout(8000) });
-    if (!res.ok) return [];
+    if (!res.ok) {
+      await drop(res);
+      return [];
+    }
     body = (await res.json()) as typeof body;
   } catch {
     return [];
@@ -327,7 +330,10 @@ export async function wikipediaSearchPhotos(query: string, api: Fetcher): Promis
   const params = new URLSearchParams({ action: "query", format: "json", generator: "search", gsrsearch: q, gsrlimit: "3", gsrnamespace: "0", prop: "pageimages", piprop: "original", pilicense: "any" });
   try {
     const res = await api(`${WIKIPEDIA_API}?${params}`, { headers: { "User-Agent": COMMONS_UA }, signal: AbortSignal.timeout(8000) });
-    if (!res.ok) return [];
+    if (!res.ok) {
+      await drop(res);
+      return [];
+    }
     const body = (await res.json()) as { query?: { pages?: Record<string, { title: string; index?: number; original?: { source: string; width: number; height: number } }> } };
     return Object.values(body.query?.pages ?? {})
       .sort((a, b) => (a.index ?? 99) - (b.index ?? 99))
@@ -361,7 +367,10 @@ export async function openversePhotos(query: string, api: Fetcher, opts: { limit
   try {
     // Short: Openverse answered 500 and 504 behind a Cloudflare challenge on 2026-10-30, and the hunt shouldn't wait on it.
     const res = await api(`${OPENVERSE_API}?${params}`, { headers: { "User-Agent": COMMONS_UA, Accept: "application/json" }, signal: AbortSignal.timeout(4000) });
-    if (!res.ok) return [];
+    if (!res.ok) {
+      await drop(res);
+      return [];
+    }
     const body = (await res.json()) as { results?: { url?: unknown; title?: unknown; creator?: unknown; license?: unknown; license_version?: unknown; foreign_landing_url?: unknown; width?: unknown; height?: unknown; source?: unknown }[] };
     const out: OpenversePhoto[] = [];
     for (const r of body.results ?? []) {

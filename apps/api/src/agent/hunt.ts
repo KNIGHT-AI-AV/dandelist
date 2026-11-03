@@ -28,7 +28,7 @@ import {
 } from "./media";
 import type { ShoppingOffer } from "./shopping";
 import { within } from "./time";
-import { getPage, readCapped, safeGet, type Fetcher, type PageResult } from "./tools";
+import { drop, getPage, readCapped, safeGet, type Fetcher, type PageResult } from "./tools";
 
 /** What the pictures should show, from the research model's final answer. */
 export interface MediaHint {
@@ -114,7 +114,10 @@ export async function findMakerPages(meta: Meta, hint: MediaHint, onSearch: (que
 
 async function fetchImageBytes(url: string, fetcher: Fetcher, max: number): Promise<{ bytes: Buffer; info: ImageInfo } | null> {
   const { res } = await safeGet(url, fetcher, { Accept: "image/jpeg,image/png,image/webp" }, 12000);
-  if (!res.ok) return null;
+  if (!res.ok) {
+    await drop(res);
+    return null;
+  }
   const { bytes, truncated } = await readCapped(res, max);
   const info = truncated ? null : imageInfo(bytes);
   return info && MIME[info.type] ? { bytes, info } : null;
