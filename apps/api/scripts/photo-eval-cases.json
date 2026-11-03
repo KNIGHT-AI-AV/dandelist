@@ -22,5 +22,6 @@
   { "title": "Amanzoe resort in Porto Heli", "kind": "visit", "place": "Porto Heli, Greece", "truth": "Amanzoe resort itself (white pavilions, pool, hills of the Peloponnese)" },
   { "title": "Northern lights in Tromso", "kind": "visit", "place": "Tromso", "truth": "aurora borealis over the Tromso area" },
   { "title": "Private chef for a dinner party at home", "kind": "do", "truth": "a chef cooking or plating a fine dinner (illustrative is fine)" },
-  { "title": "Hot air balloon ride over Cappadocia", "kind": "do", "place": "Cappadocia", "truth": "hot air balloons over Cappadocia's rock formations" }
+  { "title": "Hot air balloon ride over Cappadocia", "kind": "do", "place": "Cappadocia", "truth": "hot air balloons over Cappadocia's rock formations" },
+  { "title": "Maine Coon kitten", "kind": "buy", "truth": "a Maine Coon kitten (long fur, tufted ears), not a grown cat or another breed" }
 ]

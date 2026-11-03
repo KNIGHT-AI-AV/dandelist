@@ -41,6 +41,8 @@ let photoSize: [number, number] | null;
 let looksPass: boolean;
 /** What the photo search's web search answers. */
 let webSays: string;
+/** When set, the photo search's web search answers only once this settles, so the lead photo is looked at meanwhile. */
+let webWaits: Promise<unknown> | null;
 /** Whose holds each model call sees while it runs, and what they were. */
 let watch: string | null;
 let held: { format: string; usd: number }[];
@@ -67,6 +69,7 @@ const fakeMeta = (async (_url: string, init: RequestInit) => {
     const letter = (name: string) => new RegExp(`([A-G])\\. ${name}`).exec(options)?.[1];
     return reply([message(JSON.stringify({ seen: "A wooden runabout on a lake.", fits: [looksPass ? letter(RIVA.title) : letter("None of these")], quality: "studio", clean: true }))]);
   }
+  if (webWaits) await webWaits;
   return reply([message(webSays)]);
 }) as unknown as typeof fetch;
 
@@ -90,6 +93,7 @@ beforeEach(async () => {
   photoSize = [3000, 2000];
   looksPass = true;
   webSays = "Nothing.";
+  webWaits = null;
   watch = null;
   held = [];
   clock = new Date("2026-10-29T12:00:00Z");
@@ -247,12 +251,18 @@ describe("today's pick", () => {
     const { token, id } = await signIn();
     await addWish(token, "Riva boat");
     watch = id;
+    // The web search answers only after the Wikipedia lead's two looks (or 2 s), as a slow one does live.
+    const looked = () => calls.filter((b) => b.text?.format?.name === "photo_check").length >= 2;
+    webWaits = (async () => {
+      for (let i = 0; i < 200 && !looked(); i++) await new Promise((r) => setTimeout(r, 10));
+    })();
     expect((await today(token)).body.pick.photo).not.toBeNull();
     const looks = held.filter((h) => h.format === "photo_check");
     expect(looks).toHaveLength(2);
-    // Each look runs under its own small hold (one or two in flight), never one shared hold for the whole search.
+    // Each look runs under its own small hold (one or two in flight), never one shared hold for the whole search; the
+    // web search's own full hold is beside it, since the lead photo is looked at while that search still runs.
     for (const { usd } of looks) {
-      const fifths = usd / (HOLD_USD / 5);
+      const fifths = usd / (HOLD_USD / 5) - 5;
       expect(Math.abs(fifths - Math.round(fifths))).toBeLessThan(1e-9);
       expect(Math.round(fifths)).toBeGreaterThanOrEqual(1);
       expect(Math.round(fifths)).toBeLessThanOrEqual(2);
