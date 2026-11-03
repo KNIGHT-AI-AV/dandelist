@@ -1098,6 +1098,9 @@ export function paragraph(text: string): string {
 /** A reply that says the concierge is about to open, search or price something. */
 const PROMISE = /\b(let me|i'll|i will|i shall|i'm going to|i am going to|opening|searching|looking up|pulling up|arrang(?:e|ing)|gather(?:ing)?|on it|one moment|just a moment|right away)\b/i;
 const NUDGE = "You said you would do that but called no tool. Call the tool now, without repeating what you said.";
+/** A request to reorder the list ("sort by price", "reorder by upkeep"), but not "what sort of watch". */
+const SORT_ASK = /\b(?:sort(?!\s+of\b)|re-?order|rearrange)\b/i;
+const SORT_NUDGE = "They asked to change the order of their list, and no card shows it yet. Call edit_list now, or ask_choices if you need the direction, without repeating what you said.";
 
 /** The most wants one message is held to; more than that is asked about in the next turn. */
 const MAX_WANTS = 12;
@@ -1205,6 +1208,8 @@ async function converse(ctx: DreamCtx, t: TranscriptEntry[], state: DreamState, 
   let acted = false;
   let handled = 0;
   let reminded = false;
+  // True once a list card or a question about it has been shown this turn.
+  let edited = false;
   // Once the concierge has spoken, what it adds after its tools run is chatter unless a tool asked it to say something
   // (a real reply on 2026-10-31 said its piece with the calls, then listed the three things back).
   let quiet = false;
@@ -1217,9 +1222,12 @@ async function converse(ctx: DreamCtx, t: TranscriptEntry[], state: DreamState, 
       // two of the five things a long message asked for, which leaves the person waiting on nothing. Hold it to the
       // message once: the wants it hasn't handled yet, or its own word.
       const short = wants.length > handled;
-      if (reminded || (!short && (acted || !PROMISE.test(res.text)))) break;
+      // They asked to reorder their list, and nothing showed the card: the reply only talked about an order ("Perhaps
+      // ordered by price...", demo film 2026-11-03), in words the promise check doesn't know.
+      const unsorted = !edited && SORT_ASK.test(message);
+      if (reminded || (!short && !unsorted && (acted || !PROMISE.test(res.text)))) break;
       reminded = acted = true;
-      const nudge = short ? missingNudge(wants, handled) : NUDGE;
+      const nudge = short ? missingNudge(wants, handled) : unsorted ? SORT_NUDGE : NUDGE;
       res = await ctx.meta.responses({ previous_response_id: res.id, input: [{ role: "user", content: nudge }], tools: CONCIERGE_TOOLS });
       if (!res.functionCalls.length) {
         if (res.text.trim()) await speak(res.text);
@@ -1237,6 +1245,7 @@ async function converse(ctx: DreamCtx, t: TranscriptEntry[], state: DreamState, 
         try {
           ctx.budget.tool();
           handled += wantsHandled(fc.name, fc.arguments);
+          if (fc.name === "edit_list" || fc.name === "ask_choices") edited = true;
           const slow = ctx.spawn ? background(ctx, fc.name, fc.arguments) : null;
           out = slow
             ? started(ctx.spawn!(t, state, slow.lane, slow.label, (c, tt, ss) => runTool(c, tt, ss, fc.name, fc.arguments)), slow.label)
