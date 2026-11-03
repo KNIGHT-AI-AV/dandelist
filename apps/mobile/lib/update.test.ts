@@ -3,7 +3,7 @@ import shipped from "../public/latest.json";
 import { AWAY_MS, LAUNCH, buildNumber, fetchLatest, offerFor, parseLatest, promptDue, promptStep, webUpdater, type Get, type Latest, type Offer, type Prompt, type PromptEvent } from "./update";
 
 const TESTFLIGHT = "https://testflight.apple.com/join/tuh4Jxkw";
-const APK = "https://github.com/KNIGHT-AI-AV/dandelist/releases/download/android-23/dandelist-android-23.apk";
+const APK = "https://github.com/KNIGHT-AI-AV/dandelist/releases/download/android-24/dandelist-android-24.apk";
 const LATEST: Latest = { ios: { build: 21, url: TESTFLIGHT }, android: { build: 14, url: APK }, web: { version: "b2c3" } };
 const OFFER: Offer = { kind: "store", url: TESTFLIGHT, target: "ios:21" };
 const run = (s: Prompt, ...events: PromptEvent[]) => events.reduce(promptStep, s);
@@ -11,8 +11,8 @@ const run = (s: Prompt, ...events: PromptEvent[]) => events.reduce(promptStep, s
 describe("latest.json", () => {
   // The iOS entry is the build the public TestFlight link serves (the external group's newest approved build), never a
   // newer internal-only one: a tester on the link would be offered a build the link can't give them, on every visit.
-  it("ships TestFlight build 48 (the public link's build) and APK build 23, with the web version left to the deploy", () => {
-    expect(parseLatest(shipped)).toEqual({ ios: { build: 48, url: TESTFLIGHT }, android: { build: 23, url: APK }, web: null });
+  it("ships TestFlight build 49 (the public link's build) and APK build 24, with the web version left to the deploy", () => {
+    expect(parseLatest(shipped)).toEqual({ ios: { build: 49, url: TESTFLIGHT }, android: { build: 24, url: APK }, web: null });
   });
 
   it("keeps an entry only with a whole build and an https link", () => {
