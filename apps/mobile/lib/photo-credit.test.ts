@@ -1,6 +1,6 @@
 import { heroImageFor, type MediaImage } from "@dandelist/catalogue";
 import { describe, expect, it } from "vitest";
-import { cutoutSourceImage, photoCreditContent } from "./photo-credit";
+import { cutoutSourceImage, photoCreditContent, SIMILAR } from "./photo-credit";
 
 const portrait: MediaImage = {
   url: "https://images.example/portrait.jpg",
@@ -21,6 +21,13 @@ const landscape: MediaImage = {
 };
 
 describe("photo credit presentation", () => {
+  it("says a stand-in is a similar one before its credit, and alone when it has no credit", () => {
+    expect(photoCreditContent({ ...portrait, similar: true })).toEqual({ ...photoCreditContent(portrait), lead: SIMILAR });
+    expect(photoCreditContent({ source: "", similar: true })).toEqual({ kind: "plain", text: SIMILAR });
+    expect(photoCreditContent(portrait)).not.toHaveProperty("lead");
+    expect(photoCreditContent({ ...portrait, similar: true, generated: true })).toBeUndefined();
+  });
+
   it("links the Commons File page while retaining the exact photographer and licence text", () => {
     expect(photoCreditContent(portrait)).toEqual({
       kind: "commons",

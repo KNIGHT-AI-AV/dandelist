@@ -7,17 +7,31 @@ export interface CreditedImage {
   source?: string;
   sourcePage?: string;
   generated?: boolean;
+  similar?: boolean;
   author?: unknown;
 }
 
-export type PhotoCreditContent =
+export type PhotoCreditContent = (
   | { kind: "unsplash"; author: { name: string; url: string } }
   | { kind: "commons"; text: string; url: string }
-  | { kind: "plain"; text: string };
+  | { kind: "plain"; text: string }
+) & {
+  /** Said before the credit: a stand-in photo is a similar one, not the wish itself. */
+  lead?: string;
+};
+
+/** What the credit says first about a stand-in, the wish's broad form shown because the very thing was not found. */
+export const SIMILAR = "A similar one";
 
 /** Prefer the displayed photo's attribution; a card-level credit is only a fallback for missing photo metadata. */
 export function photoCreditContent(image?: CreditedImage | null, fallback?: string): PhotoCreditContent | undefined {
   if (image?.generated) return undefined;
+  const content = attribution(image, fallback);
+  if (!image?.similar) return content;
+  return content ? { ...content, lead: SIMILAR } : { kind: "plain", text: SIMILAR };
+}
+
+function attribution(image?: CreditedImage | null, fallback?: string): PhotoCreditContent | undefined {
   const author = safeAuthor(image?.author);
   if (author) return { kind: "unsplash", author };
   const page = image && safeCommonsSourcePage(image);

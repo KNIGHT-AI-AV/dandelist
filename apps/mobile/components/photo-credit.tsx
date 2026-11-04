@@ -31,11 +31,12 @@ export function PhotoCredit({ image, fallback, style, lines = 1, roomy = false }
   const content = photoCreditContent(image, fallback);
   if (!content) return null;
   const base = [type.figure, { color: p.ink3 }, style];
+  const lead = content.lead ? `${content.lead} · ` : "";
   if (content.kind === "unsplash") {
     const { author } = content;
     return (
       <Text numberOfLines={lines} style={base}>
-        {"Photo by "}
+        {`${lead}Photo by `}
         <Link url={author.url} color={p.ink2} roomy={roomy}>
           {author.name}
         </Link>
@@ -49,6 +50,7 @@ export function PhotoCredit({ image, fallback, style, lines = 1, roomy = false }
   if (content.kind === "commons") {
     return (
       <Text numberOfLines={lines} style={base}>
+        {lead}
         <Link url={content.url} color={p.ink2} roomy={roomy}>
           Wikimedia Commons
         </Link>
@@ -58,6 +60,7 @@ export function PhotoCredit({ image, fallback, style, lines = 1, roomy = false }
   }
   return (
     <Text numberOfLines={lines} style={base}>
+      {lead}
       {content.text}
     </Text>
   );

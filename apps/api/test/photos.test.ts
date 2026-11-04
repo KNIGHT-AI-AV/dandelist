@@ -107,6 +107,18 @@ describe("the photo search (owner, 2026-10-29: 'Not any photo will do!!', 'right
     expect(await findPhoto(planMeta(leicaPlan()), leica, { fetcher: web, webPhotos, verify: passing([]) })).toBeNull();
   });
 
+  // The photo eval (2026-11-03) showed a pink Birkin for a gold one with nothing to say it was a stand-in.
+  it("marks a stand-in of the wish's broad form as similar, and never the very thing", async () => {
+    const web = imagesAt({ [BIG]: [5184, 3456], [MAKER]: [2400, 1600] }, wikipedia(leads));
+    const webPhotos = vi.fn(async () => [MAKER]);
+    const broadOnly = async (url: string) =>
+      ({ seen: "Leica Q2", fits: [["Leica Q in any version"], ["Leica Q in any version"]], quality: "studio", clean: true, ok: false, exact: false, near: url === BIG }) as PhotoVerdict;
+    const standIn = await findPhoto(planMeta(leicaPlan()), leica, { fetcher: web, webPhotos, verify: broadOnly });
+    expect(standIn).toMatchObject({ image: { url: BIG, similar: true } });
+    const exact = await findPhoto(planMeta(leicaPlan()), leica, { fetcher: web, webPhotos, verify: passing([BIG]) });
+    expect(exact?.image.similar).toBeUndefined();
+  });
+
   // Filming the demo (2026-11-03), a camera's, a city's and a breed's cards saved without a photo: no candidate was
   // looked at until the slowest source (the web search) answered, and then the time ran out mid-check.
   it("looks at the Wikipedia lead while a slow web search is still running, so a slow source can't leave the card bare", async () => {

@@ -25,6 +25,11 @@ export interface MediaImage {
   clean?: boolean;
   /** Made or reworked by Muse Image, so the app can label it honestly. */
   generated?: boolean;
+  /**
+   * A stand-in: the looks kept only the wish's broad form (the model in another colour, the breed at another age),
+   * shown because the very thing was not found, so the app can say so (a pink Birkin for a gold one, 2026-11-03).
+   */
+  similar?: boolean;
   /** A catalogue photo served from Unsplash (packages/catalogue): its photographer, its page and smaller copies. */
   author?: { name: string; url: string };
   page?: string;
@@ -74,6 +79,7 @@ export const mediaSchema = z.object({
         sourcePage: z.string().max(2048).optional(),
         clean: z.boolean().optional(),
         generated: z.boolean().optional(),
+        similar: z.boolean().optional(),
         // An Unsplash photo's credit links the app makes, and nothing else: they are shown as links (#112 review).
         author: z.object({ name: z.string().trim().min(1).max(120), url: z.string().max(300).regex(UNSPLASH_PROFILE) }).optional(),
         page: z.string().max(400).regex(UNSPLASH_PAGE).optional(),

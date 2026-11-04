@@ -59,6 +59,8 @@ export interface PickPhoto {
   source: string;
   credit?: string;
   license?: string;
+  /** A stand-in of the pick's broad form, found when the very thing was not: its credit says so. */
+  similar?: boolean;
 }
 
 export interface DailyPick {
@@ -280,6 +282,7 @@ export async function photoFor(meta: Meta, made: MadePick, fetcher: Fetcher, by:
     source: i.source,
     ...(i.credit ? { credit: i.credit } : {}),
     ...(i.license ? { license: i.license } : {}),
+    ...(i.similar ? { similar: true } : {}),
   };
 }
 

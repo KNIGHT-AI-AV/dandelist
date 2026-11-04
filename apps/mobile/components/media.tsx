@@ -4,6 +4,7 @@ import { useEffect, useReducer, useRef, useState, type Dispatch, type ReactNode 
 import { Animated, Easing, PanResponder, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { selectMediaHero } from "../lib/media-hero";
 import { useReducedMotion } from "../lib/motion";
+import { SIMILAR } from "../lib/photo-credit";
 import { createSlideshow, nextSlideshowIndex, slideshowReducer, slideshowSignature, type SlideRecord, type SlideshowEvent } from "../lib/slideshow-state";
 import { type, usePalette } from "../lib/theme";
 import { Embed } from "./embed";
@@ -11,7 +12,7 @@ import { Photo } from "./lux";
 import { PhotoCredit } from "./photo-credit";
 
 /** What the agent found to show a wish: real photographs first, a 3D model when a true match exists. */
-export type MediaImage = { url: string; width?: number; height?: number; source: string; credit?: string; license?: string; sourcePage?: string; clean?: boolean; generated?: boolean; author?: { name: string; url: string } };
+export type MediaImage = { url: string; width?: number; height?: number; source: string; credit?: string; license?: string; sourcePage?: string; clean?: boolean; generated?: boolean; similar?: boolean; author?: { name: string; url: string } };
 export type Model3d = { provider: "sketchfab"; uid: string; name: string; author: string; license: string; embedUrl: string; thumbnail: string };
 export type Media = {
   kind: "product" | "vehicle" | "place" | "experience" | "other";
@@ -31,7 +32,7 @@ function Credit({ children }: { children: ReactNode }) {
 
 function creditFor(img: MediaImage): string {
   if (img.generated) return "Image made with AI";
-  return [img.credit, img.license, img.source].filter(Boolean).join(" · ");
+  return [img.similar ? SIMILAR : "", img.credit, img.license, img.source].filter(Boolean).join(" · ");
 }
 
 /**
