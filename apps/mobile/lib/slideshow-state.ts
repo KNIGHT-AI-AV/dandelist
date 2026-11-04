@@ -19,7 +19,7 @@ export type SlideshowEvent =
 
 /** Ordered identity includes every current image field, not just URLs or array length. */
 export function slideshowSignature(images: readonly MediaImage[]): string {
-  return JSON.stringify(images.map((image) => [image.url, image.width, image.height, image.source, image.credit, image.license, image.sourcePage, image.clean, image.generated, image.author?.name, image.author?.url]));
+  return JSON.stringify(images.map((image) => [image.url, image.width, image.height, image.source, image.credit, image.license, image.sourcePage, image.clean, image.generated, image.similar, image.author?.name, image.author?.url]));
 }
 
 function snapshot(image: MediaImage): MediaImage {

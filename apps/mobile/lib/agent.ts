@@ -119,6 +119,8 @@ export interface MediaImage {
   clean?: boolean;
   /** Made or reworked by Muse Image: label it as generated. */
   generated?: boolean;
+  /** A stand-in of the wish's broad form (another colour, say), found when the very thing was not: say so. */
+  similar?: boolean;
 }
 
 export interface Model3d {

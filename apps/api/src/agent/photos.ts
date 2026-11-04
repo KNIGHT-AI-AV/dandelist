@@ -570,7 +570,9 @@ export async function findPhoto(meta: Meta, subject: PhotoSubject, ctx: PhotoSea
   const image: MediaImage = c.commons
     ? commonsImage(c.commons)
     : { url: sized.url, width: sized.width, height: sized.height, source: c.how === "wikipedia" ? "wikipedia.org" : hostOf(sized.url), ...(c.credit ? { credit: c.credit } : {}), ...(c.license ? { license: c.license } : {}) };
-  return { image, kind: plan.kind, how: c.how, verdict, grade };
+  // A broad-form match stands in when the very thing is not found (photos always come), and says so.
+  const standIn = !(verdict.exact ?? verdict.ok);
+  return { image: standIn ? { ...image, similar: true } : image, kind: plan.kind, how: c.how, verdict, grade };
 }
 
 const webPrompt = (official: string) =>

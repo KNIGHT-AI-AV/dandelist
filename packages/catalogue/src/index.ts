@@ -29,6 +29,8 @@ export interface MediaImage {
   license?: string;
   clean?: boolean;
   generated?: boolean;
+  /** A hunt's stand-in of the wish's broad form, found when the very thing was not; its credit says so. */
+  similar?: boolean;
   /** Smaller copies of this same photo, narrowest first, for screens that show it smaller (see sizedFor). */
   variants?: { width: number; height: number; url: string }[];
   /** An Unsplash photo: its id, the crop (x, y, w, h) on its original of `size`, and when its download was recorded. */
