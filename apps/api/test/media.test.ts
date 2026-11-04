@@ -189,6 +189,18 @@ describe("Wikimedia Commons and Sketchfab", () => {
     expect(p).toMatch(/Ritz-Carlton/);
   });
 
+  it("puts a boat on water and an aircraft on an apron, never on a road; cars stay on the road", () => {
+    for (const boat of ["Riva Aquariva speedboat", "Sunseeker Predator 65 yacht", "a sailing catamaran", "Sea-Doo jet ski"]) {
+      expect(premiumPrompt("vehicle", boat)).toMatch(/moored in a calm turquoise bay/);
+    }
+    for (const plane of ["Gulfstream G700", "a private jet", "Pilatus PC-24", "Cessna Citation Longitude"]) {
+      expect(premiumPrompt("vehicle", plane)).toMatch(/private-aviation apron/);
+    }
+    for (const car of ["Porsche 911 GT3 RS", "Range Rover Sport in jet black", "Toyota Land Cruiser", "Ducati Panigale V4"]) {
+      expect(premiumPrompt("vehicle", car)).toMatch(/parked on an empty coastal road/);
+    }
+  });
+
   it("accepts saved media from the agent and refuses scripts and foreign embeds", () => {
     const good = {
       kind: "vehicle",

@@ -541,6 +541,13 @@ export const toModel3d = (c: ModelCandidate): Model3d => ({ provider: "sketchfab
 /* ---------- generated fallback ---------- */
 
 /**
+ * Boats and aircraft are pictured as vehicles too (the reader's kind says "a car, motorbike or boat"), and a road is no
+ * place for either: a generated Riva Aquariva came out parked on a coastal road (local Z-Image run, 2026-11-04).
+ */
+const BOAT = /\b(boat|speedboat|motorboat|yacht|superyacht|sailboat|sailing yacht|catamaran|trimaran|dinghy|riva|aquariva|aquarama|rivamare|dolceriva|jet ?ski|sea-?doo|wave ?runner)\b/i;
+const AIRCRAFT = /\b(private jet|business jet|airplane|aeroplane|aircraft|helicopter|gulfstream|cessna|learjet|pilatus|embraer|phenom \d+|citation \w+)\b/i;
+
+/**
  * A prompt for when no real photo reaches 4K-class quality: campaign-grade, editorial and quiet, never text or
  * logos, and no people. The picture is always labelled generated.
  */
@@ -552,6 +559,8 @@ export function premiumPrompt(kind: MediaKind, subject: string): string {
     case "product":
       return `A still life of ${s} on a seamless warm-grey backdrop, a single sculpted key light with a gentle falloff. ${look}`;
     case "vehicle":
+      if (BOAT.test(s)) return `${s} moored in a calm turquoise bay at blue hour, three-quarter view, soft reflections on still water. ${look}`;
+      if (AIRCRAFT.test(s)) return `${s} on a quiet private-aviation apron at blue hour, three-quarter front view, soft reflections on the tarmac. ${look}`;
       return `${s} parked on an empty coastal road at blue hour, three-quarter front view, wet asphalt reflections. ${look}`;
     case "place":
       return `${s} at golden hour, an iconic view, calm streets and soft haze. ${look}`;
