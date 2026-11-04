@@ -18,6 +18,8 @@ export interface PickPhoto {
   source: string;
   credit?: string;
   license?: string;
+  /** A stand-in of the pick's broad form: its credit says so. */
+  similar?: boolean;
 }
 
 export interface TodayPick {
