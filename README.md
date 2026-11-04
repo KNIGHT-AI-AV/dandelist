@@ -2,6 +2,10 @@
 
 Price the life you want.
 
+[![Dandelist on iPhone: this or that, the list with real photos, and one wish's price over time](docs/hero.jpg)](https://dandelist.knightaiav.com/film/)
+
+[Watch the 3-minute demo film](https://dandelist.knightaiav.com/film/)
+
 Everyone keeps a list of things they want: a car, a camera, a month somewhere warm, a home by the sea. Almost nobody knows what that life actually costs, or when they could have it. Dandelist turns the list into a plan. You say what you want, an AI agent finds the real price on the seller's own page, works out what it costs to keep each month, and shows when everything can be yours.
 
 Dandelist runs on iPhone, Android and the web from one codebase, with sign-in by email code, Apple, Google or GitHub.
