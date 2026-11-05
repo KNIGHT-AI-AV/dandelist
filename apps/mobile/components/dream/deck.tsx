@@ -1,5 +1,4 @@
 import type { Listing } from "@dandelist/catalogue/dream";
-import { Image } from "expo-image";
 import { useRef, useState } from "react";
 import { Animated, PanResponder, Pressable, StyleSheet, Text, View } from "react-native";
 import { ease, haptic, native, spring, useReducedMotion } from "../../lib/motion";
@@ -23,7 +22,7 @@ function ListingCard({ l }: { l: Listing }) {
   return (
     <View style={{ flex: 1, borderRadius: radius.lg, overflow: "hidden", backgroundColor: p.surface }}>
       {/* Under the photos: what shows if none of them loads (mobile.de's all failed for a week, 2026-11-05). */}
-      {hasSlideshow ? <Image source={require("../../assets/standby/life.jpg")} accessibilityLabel="" style={StyleSheet.absoluteFill} contentFit="cover" /> : null}
+      {hasSlideshow ? <GlassReveal uri={null} standby={require("../../assets/standby/life.jpg")} stage="clear" treatment="swirl" style={StyleSheet.absoluteFill} /> : null}
       {hasSlideshow ? (
         <Slideshow images={l.images} interval={3800} style={StyleSheet.absoluteFill}>
           <Shade from={0.38} />
