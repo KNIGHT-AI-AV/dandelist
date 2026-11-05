@@ -1,4 +1,5 @@
 import type { Listing } from "@dandelist/catalogue/dream";
+import { Image } from "expo-image";
 import { useRef, useState } from "react";
 import { Animated, PanResponder, Pressable, StyleSheet, Text, View } from "react-native";
 import { ease, haptic, native, spring, useReducedMotion } from "../../lib/motion";
@@ -21,6 +22,8 @@ function ListingCard({ l }: { l: Listing }) {
   const detailsBottom = hasSlideshow ? 10 + type.figure.lineHeight * fontScale + 8 : 20;
   return (
     <View style={{ flex: 1, borderRadius: radius.lg, overflow: "hidden", backgroundColor: p.surface }}>
+      {/* Under the photos: what shows if none of them loads (mobile.de's all failed for a week, 2026-11-05). */}
+      {hasSlideshow ? <Image source={require("../../assets/standby/life.jpg")} accessibilityLabel="" style={StyleSheet.absoluteFill} contentFit="cover" /> : null}
       {hasSlideshow ? (
         <Slideshow images={l.images} interval={3800} style={StyleSheet.absoluteFill}>
           <Shade from={0.38} />
@@ -86,6 +89,12 @@ export function SwipeDeck({ cards, onSwipe, onPick, onSearchNow, onEnough }: { c
     Animated.timing(x, { toValue: out, duration: Math.max(140, 220 - Math.abs(vx) * 40), easing: ease.out, useNativeDriver: native }).start(done);
   };
 
+  const home = () =>
+    Animated.parallel([
+      Animated.spring(x, { toValue: 0, ...spring.snap, useNativeDriver: native }),
+      Animated.spring(y, { toValue: 0, ...spring.snap, useNativeDriver: native }),
+    ]).start();
+
   // The responder is made once, so it reaches the card on top now, and the width now, through refs: it used to keep
   // the first card's, so every swipe after the first was sent as the first card's again (Codex, round 44).
   const latest = useRef({ commit, cardW });
@@ -105,11 +114,11 @@ export function SwipeDeck({ cards, onSwipe, onPick, onSearchNow, onEnough }: { c
         const far = Math.abs(g.dx) > latest.current.cardW * 0.35;
         const fast = Math.abs(g.vx) * 1000 > 900;
         if ((far || fast) && Math.sign(g.dx || g.vx) !== 0) return latest.current.commit(g.dx + g.vx > 0 ? "yes" : "no", g.vx);
-        Animated.parallel([
-          Animated.spring(x, { toValue: 0, ...spring.snap, useNativeDriver: native }),
-          Animated.spring(y, { toValue: 0, ...spring.snap, useNativeDriver: native }),
-        ]).start();
+        home();
       },
+      // A drag taken away part way (the chat's scroll, the system) puts the card back rather than leaving it tilted
+      // over the next one with PASS showing (owner, 2026-11-05).
+      onPanResponderTerminate: () => home(),
     }),
   ).current;
 

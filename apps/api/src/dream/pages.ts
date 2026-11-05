@@ -170,7 +170,36 @@ export function listingData(html: string): { data: ListingData; images: string[]
   return { data, images };
 }
 
-const NOT_A_PHOTO = /logo|icon|sprite|avatar|favicon|placeholder|blank|pixel|badge|flag|banner-ad|\.svg(\?|$)|\.gif(\?|$)/i;
+// A site's own theme artwork is not the listing's photo either: Sotheby's France gave its theme's world.png as the
+// second photo of every card, which showed as a white map (owner, 2026-11-05).
+const NOT_A_PHOTO = /logo|icon|sprite|avatar|favicon|placeholder|blank|pixel|badge|flag|banner-ad|\/themes?\/|[/_-](world|maps?|carte)\.(png|jpe?g|webp)|\.svg(\?|$)|\.gif(\?|$)/i;
+
+/** Whether an address can be a listing's photo, by its path: not a logo, an icon, a flag or a site's theme artwork. */
+export function listingPhoto(url: string): boolean {
+  try {
+    return !NOT_A_PHOTO.test(new URL(url).pathname);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * A photo address that loads outside the site. mobile.de's pages give theirs as m.mobile.de/yams-proxy/... with no size
+ * rule, which answers 400 to anyone else: all 499 mobile.de photos in a week of decks showed as blank cards (owner,
+ * 2026-11-05: "No pictures"). The same picture loads from img.classistatic.de with a size rule.
+ */
+export function photoAddress(raw: string): string {
+  let u: URL;
+  try {
+    u = new URL(raw);
+  } catch {
+    return raw;
+  }
+  const proxied = /^\/yams-proxy\/(img\.classistatic\.de\/.+)$/.exec(u.pathname);
+  if (/(^|\.)mobile\.de$/.test(u.hostname) && proxied) u = new URL(`https://${proxied[1]}${u.search}`);
+  if (u.hostname === "img.classistatic.de" && !u.searchParams.has("rule")) u.searchParams.set("rule", "mo-1024.jpg");
+  return u.toString();
+}
 
 /** The page's photos, best first: schema.org images, then og and twitter cards, then large inline images. */
 export function pagePhotos(html: string, base: string, fromLd: string[], max = 10): string[] {
@@ -199,7 +228,7 @@ export function pagePhotos(html: string, base: string, fromLd: string[], max = 1
       continue;
     }
     if (u.protocol !== "https:" || NOT_A_PHOTO.test(u.pathname)) continue;
-    const s = u.toString();
+    const s = photoAddress(u.toString());
     if (!out.includes(s)) out.push(s);
     if (out.length >= max) break;
   }

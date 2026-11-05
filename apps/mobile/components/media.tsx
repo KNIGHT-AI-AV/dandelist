@@ -204,6 +204,11 @@ export function TiltObject({ uri, style, credit, image }: { uri: string; style?:
     return () => loop.stop();
   }, [reduced, idle]);
 
+  const settle = () =>
+    Animated.parallel([
+      Animated.spring(rx, { toValue: 0, stiffness: 140, damping: 14, mass: 1, useNativeDriver: true }),
+      Animated.spring(ry, { toValue: 0, stiffness: 140, damping: 14, mass: 1, useNativeDriver: true }),
+    ]).start();
   const pan = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
@@ -212,12 +217,9 @@ export function TiltObject({ uri, style, credit, image }: { uri: string; style?:
         ry.setValue(Math.max(-35, Math.min(35, g.dx / 4)));
         rx.setValue(Math.max(-18, Math.min(18, -g.dy / 6)));
       },
-      onPanResponderRelease: () => {
-        Animated.parallel([
-          Animated.spring(rx, { toValue: 0, stiffness: 140, damping: 14, mass: 1, useNativeDriver: true }),
-          Animated.spring(ry, { toValue: 0, stiffness: 140, damping: 14, mass: 1, useNativeDriver: true }),
-        ]).start();
-      },
+      onPanResponderRelease: () => settle(),
+      // A drag taken away part way settles too, rather than leaving the object turned (2026-11-05).
+      onPanResponderTerminate: () => settle(),
     }),
   ).current;
 

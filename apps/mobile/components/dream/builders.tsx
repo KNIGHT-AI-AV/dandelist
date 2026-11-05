@@ -10,6 +10,7 @@ import { fonts, layout, radius, usePalette, type } from "../../lib/theme";
 import { AskBar, AskNote, AskRow, useAskClock } from "../ask";
 import { Field } from "../inputs";
 import { useGrow } from "../inputs/grow";
+import { useReveal } from "../inputs/reveal";
 import { TARGET } from "../inputs/tokens";
 import { Eyebrow, Glass, Shade } from "../lux";
 import { GlassReveal } from "../reveal";
@@ -67,6 +68,8 @@ function OwnRow({ label, own, draft, onDraft, onCommit, onRemove, onTyping, chil
   useEffect(() => () => typing.current?.(false), []);
   // A longer answer wraps onto a second and third line in sight, rather than scrolling its start away.
   const grow = useGrow(OWN_LINE, OWN_MOST, onCommit, Platform.OS === "web");
+  const reveal = useReveal();
+  const box = useRef<View>(null);
   return (
     <>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
@@ -77,24 +80,32 @@ function OwnRow({ label, own, draft, onDraft, onCommit, onRemove, onTyping, chil
         {own.length < MAX_OWN ? <Chip label={OWN} selected={draft !== null} onPress={() => { haptic.select(); onDraft(draft === null ? "" : null); }} /> : null}
       </View>
       {draft !== null ? (
-        <TextInput
-          value={draft}
-          onChangeText={(v) => onDraft(v.slice(0, 40))}
-          placeholder="Your own answer"
-          placeholderTextColor={p.ink3}
-          accessibilityLabel={label}
-          autoFocus
-          returnKeyType="done"
-          multiline={grow.multiline}
-          submitBehavior={grow.submitBehavior}
-          onSubmitEditing={grow.onSubmitEditing}
-          onKeyPress={grow.onKeyPress}
-          ref={grow.ref}
-          scrollEnabled={grow.scrollEnabled}
-          onFocus={() => onTyping?.(true)}
-          onBlur={() => onTyping?.(false)}
-          style={[type.body, { color: p.ink, borderBottomWidth: 1, borderBottomColor: p.line, paddingVertical: layout.stack.tight }, grow.style]}
-        />
+        <View ref={box}>
+          <TextInput
+            value={draft}
+            onChangeText={(v) => onDraft(v.slice(0, 40))}
+            placeholder="Your own answer"
+            placeholderTextColor={p.ink3}
+            accessibilityLabel={label}
+            autoFocus
+            returnKeyType="done"
+            multiline={grow.multiline}
+            submitBehavior={grow.submitBehavior}
+            onSubmitEditing={grow.onSubmitEditing}
+            onKeyPress={grow.onKeyPress}
+            ref={grow.ref}
+            scrollEnabled={grow.scrollEnabled}
+            onFocus={() => {
+              reveal?.reveal(box.current);
+              onTyping?.(true);
+            }}
+            onBlur={() => {
+              reveal?.release(box.current);
+              onTyping?.(false);
+            }}
+            style={[type.body, { color: p.ink, borderBottomWidth: 1, borderBottomColor: p.line, paddingVertical: layout.stack.tight }, grow.style]}
+          />
+        </View>
       ) : null}
     </>
   );
@@ -131,7 +142,7 @@ const homeValues = (s: HomeSel) => ({
 function homeLabels(w: HomeWidget, s: HomeSel, step: string): string[] {
   if (step === "styles") return [...s.styles.map((id) => w.styles.find((x) => x.id === id)?.label ?? id), ...s.ownStyles];
   if (step === "features") return [...w.features.filter((f) => s.features[f.id]).map((f) => f.label), ...s.ownFeatures];
-  if (step === "bedrooms") return s.rooms ? [`${roomLabel(s.rooms)} bedrooms`] : [];
+  if (step === "bedrooms") return s.rooms ? [`${roomLabel(s.rooms)} ${s.rooms === 1 ? "bedroom" : "bedrooms"}`] : [];
   return [];
 }
 

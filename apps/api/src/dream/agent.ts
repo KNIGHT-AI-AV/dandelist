@@ -6,9 +6,10 @@ import { unknownNumbers } from "../agent/agent";
 import { arrange, GROUPS, SORTS, type Arrangeable, type Group, type Sort } from "../arrange";
 import { fxRate } from "../agent/tools";
 import { applyCarValues, buildReady, buildTotal, carBuildCriteria, carBuilder, carWidget, commonsPhoto, homeBuilder } from "./builders";
-import { TurnLimitError, json, strictObject, type DreamCtx } from "./context";
+import { TurnLimitError, count, json, strictObject, type DreamCtx } from "./context";
 import { describe, searchListings, type Found } from "./hunt";
 import { buildExtras, buildWishName, listingWishName } from "./names";
+import { listingPhoto, photoAddress } from "./pages";
 import { NBSP, carKeep, compact, convert, homeKeep, isTropical, money, serviceLines, type Fx, type Rate, type RateUnit, type ServiceComponent } from "./keep";
 import { homeSchema, regionKey, sameHome, writeLife, type Home } from "./life";
 import { GLOBAL, carRates, getRates, homeRates } from "./rates";
@@ -310,7 +311,9 @@ async function makeFx(ctx: DreamCtx, to: string, currencies: (string | undefined
 // ---- decks ----
 
 export function deckWidget(d: DeckState): Extract<Widget, { kind: "deck" }> {
-  return { kind: "deck", id: d.id, title: capital(describe(d.criteria)), round: d.round, cards: d.cards };
+  // Decks saved before the photo fixes of 2026-11-05 get them on the way out (pages.ts photoAddress, listingPhoto).
+  const cards = d.cards.map((c) => ({ ...c, images: c.images.filter((i) => listingPhoto(i.url)).map((i) => ({ ...i, url: photoAddress(i.url) })) }));
+  return { kind: "deck", id: d.id, title: capital(describe(d.criteria)), round: d.round, cards };
 }
 const capital = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
@@ -792,7 +795,7 @@ async function priceService(ctx: DreamCtx, t: TranscriptEntry[], state: DreamSta
   }
   await ctx.step("photos", "running", "Finding photos");
   const photos = (await Promise.all(plan.image_queries.slice(0, 2).map((q) => commonsPhoto(ctx, q)))).filter((p): p is NonNullable<typeof p> => !!p);
-  await ctx.step("photos", "done", photos.length ? `Found ${photos.length} photos on Wikimedia Commons` : "No photos found; the app will use its own");
+  await ctx.step("photos", "done", photos.length ? `Found ${count(photos.length, "photo")} on Wikimedia Commons` : "No photos found; the app will use its own");
   const images: MediaImage[] = photos.map((p) => ({ url: p.url, source: "Wikimedia Commons", credit: p.credit }));
   const facts = { service, coverage, components: plan.components, place: place.label };
   const summary = plan.summary && !unknownNumbers(plan.summary, facts).length ? plan.summary : `${plan.title} in ${place.label}, priced from published rates.`;
