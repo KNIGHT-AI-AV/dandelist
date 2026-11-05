@@ -1,6 +1,6 @@
 import type { LifeContext, Widget } from "@dandelist/catalogue/dream";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { answerAsk, askDone, pickedLine, reopenAsk, startAsk, timeUpAsk, type Ask } from "../../lib/ask";
 import { haptic } from "../../lib/motion";
 import { moneyIn } from "../../lib/dream";
@@ -13,6 +13,7 @@ import { useGrow } from "../inputs/grow";
 import { TARGET } from "../inputs/tokens";
 import { Eyebrow, Glass, Shade } from "../lux";
 import { GlassReveal } from "../reveal";
+import { Rail } from "../rail";
 import { Chip } from "../welcome/kit";
 
 type HomeWidget = Extract<Widget, { kind: "home_builder" }>;
@@ -238,7 +239,7 @@ export function HomeBuilder({ w, live = false, waiting = false, onApply, onSearc
         return (
           <>
             <Text style={[type.title3, { color: p.ink }]}>Which feels like home?</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12 }} onScrollBeginDrag={clock.touch}>
+            <Rail style={{ marginHorizontal: -20 }} contentContainerStyle={{ gap: 12, paddingHorizontal: 20 }} onScrollBeginDrag={clock.touch}>
               {w.styles.map((s) => {
                 const on = sel.styles.includes(s.id);
                 return (
@@ -248,13 +249,13 @@ export function HomeBuilder({ w, live = false, waiting = false, onApply, onSearc
                       <Shade from={0.45} />
                       <View style={{ position: "absolute", left: 10, right: 10, bottom: 10, gap: 2 }}>
                         <Text style={[type.footnote, { fontFamily: fonts.label, color: p.ink }]}>{s.label}</Text>
-                        {s.credit ? <Text style={[type.figure, { color: p.ink2 }]} numberOfLines={1}>{s.credit}</Text> : null}
+                        {s.credit ? <Text style={[type.figure, { color: p.ink2 }]} numberOfLines={1}>{s.credit.replace(/^Unknown author,\s*/i, "")}</Text> : null}
                       </View>
                     </View>
                   </Pressable>
                 );
               })}
-            </ScrollView>
+            </Rail>
             <OwnRow
               label="Which feels like home?"
               own={sel.ownStyles}
@@ -461,7 +462,7 @@ export function CarBuilder({ w, live = false, waiting = false, onApply }: { w: C
         ask.open === step.id ? (
           <View key={step.id} style={{ gap: 12, paddingBottom: 4 }}>
             <Text style={[type.title3, { color: p.ink }]}>{step.title}</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12 }} onScrollBeginDrag={clock.touch}>
+            <Rail style={{ marginHorizontal: -20 }} contentContainerStyle={{ gap: 12, paddingHorizontal: 20 }} onScrollBeginDrag={clock.touch}>
               {step.choices.filter((c) => !c.custom).map((c) => {
                 const on = (selection.picked[step.id] ?? []).includes(c.id);
                 return (
@@ -487,7 +488,7 @@ export function CarBuilder({ w, live = false, waiting = false, onApply }: { w: C
                   </Pressable>
                 );
               })}
-            </ScrollView>
+            </Rail>
             <OwnRow
               label={`Your own ${step.title.toLowerCase()}`}
               own={selection.own[step.id] ?? []}

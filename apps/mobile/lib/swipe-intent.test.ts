@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DELIBERATE_MS, FLICK_X, PAGE_QUIET_MS, pagesStill, swipeOutcome } from "./swipe-intent";
+import { DELIBERATE_MS, FLICK_X, PAGE_QUIET_MS, RING_SLOP, pagesStill, ringTakes, swipeOutcome } from "./swipe-intent";
 
 const W = 393;
 const card = { width: W, removeAt: 0.4, pages: true };
@@ -30,5 +30,21 @@ describe("a swipe on a removable card (owner, 2026-10-31)", () => {
   it("leaves sideways drags to the pages for a moment after they move", () => {
     expect(pagesStill(1000, 1000 + PAGE_QUIET_MS - 1)).toBe(false);
     expect(pagesStill(1000, 1000 + PAGE_QUIET_MS)).toBe(true);
+  });
+});
+
+describe("the ring of pages and the rows that scroll sideways (owner, 2026-11-05)", () => {
+  it("turns on a clear sideways drag anywhere else", () => {
+    expect(ringTakes(RING_SLOP + 8, 2, false)).toBe(true);
+    expect(ringTakes(-(RING_SLOP + 8), 2, false)).toBe(true);
+  });
+
+  it("leaves a drag that started on a sideways row to the row", () => {
+    expect(ringTakes(RING_SLOP + 80, 0, true)).toBe(false);
+  });
+
+  it("leaves short and mostly downward drags to the page", () => {
+    expect(ringTakes(RING_SLOP, 0, false)).toBe(false);
+    expect(ringTakes(30, 40, false)).toBe(false);
   });
 });

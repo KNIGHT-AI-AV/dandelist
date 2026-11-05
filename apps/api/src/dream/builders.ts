@@ -24,41 +24,38 @@ const stripTags = (s: string) =>
     .replace(/\s+/g, " ")
     .trim();
 
-/** A real, freely licensed reference photo from Wikimedia Commons, with its author and licence. */
-export async function commonsPhoto(ctx: Pick<DreamCtx, "api">, query: string): Promise<{ url: string; credit: string } | null> {
-  const key = query.toLowerCase();
+/** Words in a file's name that mark it as something other than a photograph of a home (2026-11-05: Commons search
+ * answered "traditional house France" with Russian peasant girls in Kirillov, and glass and concrete with an office
+ * block). */
+const NOT_A_HOME = /\b(girls?|boys?|wom[ae]n|man|men|people|portrait|family|peasants?|plans?|floor|drawing|map|interior|room|ceiling|stairs?|office|headquarters|tower|museum|hotel|church|cathedral|station|bridge|sign|logo|rendering|3d|plate)\b/i;
+const A_HOME = /\b(house|houses|home|homes|villa|villas|mansion|estate|ch[aâ]teau|cottage|farmhouse|manor|residence|maison|casa|palazzo|bungalow|chalet|finca)\b/i;
+/** Whether a Commons file's name reads as a photograph of a home. */
+export const homeTitle = (title: string): boolean => A_HOME.test(title) && !NOT_A_HOME.test(title);
+
+/** The first landscape photo of 1000 px or more among Commons pages, in their order, whose file name passes `title`. */
+function firstPhoto(pages: any[], title: (name: string) => boolean): { url: string; credit: string } | null {
+  for (const p of [...pages].sort((a, b) => (a.index ?? 99) - (b.index ?? 99))) {
+    const info = p.imageinfo?.[0];
+    if (!info || info.width < 1000 || info.height > info.width * 1.1 || !title(String(p.title ?? ""))) continue;
+    const url = info.thumburl ?? info.url;
+    if (typeof url !== "string" || !url.startsWith("https://")) continue;
+    const meta = info.extmetadata ?? {};
+    // A photo with no author named says only its licence and where it is from.
+    const artist = stripTags(String(meta.Artist?.value ?? "")).slice(0, 80);
+    const licence = stripTags(String(meta.LicenseShortName?.value ?? "")).slice(0, 40) || "see Commons";
+    return { url, credit: `${artist ? `${artist}, ` : ""}${licence}, Wikimedia Commons` };
+  }
+  return null;
+}
+
+async function commonsQuery(ctx: Pick<DreamCtx, "api">, key: string, params: Record<string, string>, title: (name: string) => boolean): Promise<{ url: string; credit: string } | null> {
   if (styleCache.has(key)) return styleCache.get(key)!;
-  const params = new URLSearchParams({
-    action: "query",
-    format: "json",
-    origin: "*",
-    generator: "search",
-    gsrnamespace: "6",
-    gsrlimit: "8",
-    gsrsearch: `${query} filetype:bitmap`,
-    prop: "imageinfo",
-    iiprop: "url|size|extmetadata",
-    iiurlwidth: "1280",
-  });
+  const query = new URLSearchParams({ action: "query", format: "json", origin: "*", prop: "imageinfo", iiprop: "url|size|extmetadata", iiurlwidth: "1280", ...params });
   let best: { url: string; credit: string } | null = null;
   try {
-    const res = await ctx.api(`${COMMONS}?${params}`, { headers: { "User-Agent": COMMONS_UA }, signal: AbortSignal.timeout(COMMONS_TIMEOUT_MS) });
+    const res = await ctx.api(`${COMMONS}?${query}`, { headers: { "User-Agent": COMMONS_UA }, signal: AbortSignal.timeout(COMMONS_TIMEOUT_MS) });
     if (!res.ok) await drop(res);
-    else {
-      const body = (await res.json()) as { query?: { pages?: Record<string, any> } };
-      const pages = Object.values(body.query?.pages ?? {}).sort((a: any, b: any) => (a.index ?? 99) - (b.index ?? 99));
-      for (const p of pages) {
-        const info = p.imageinfo?.[0];
-        if (!info || info.width < 1000 || info.height > info.width * 1.1) continue;
-        const url = info.thumburl ?? info.url;
-        if (typeof url !== "string" || !url.startsWith("https://")) continue;
-        const meta = info.extmetadata ?? {};
-        const artist = stripTags(String(meta.Artist?.value ?? "")).slice(0, 80) || "Unknown author";
-        const licence = stripTags(String(meta.LicenseShortName?.value ?? "")).slice(0, 40) || "see Commons";
-        best = { url, credit: `${artist}, ${licence}, Wikimedia Commons` };
-        break;
-      }
-    }
+    else best = firstPhoto(Object.values(((await res.json()) as { query?: { pages?: Record<string, any> } }).query?.pages ?? {}), title);
   } catch {
     /* no reference photo is fine; the app shows the style name */
   }
@@ -67,28 +64,48 @@ export async function commonsPhoto(ctx: Pick<DreamCtx, "api">, query: string): P
   return best;
 }
 
-const STYLE_PALETTE: { id: string; label: string; query: string; match: RegExp }[] = [
-  { id: "modern", label: "Modern", query: "modern villa architecture", match: /modern/i },
-  { id: "mediterranean", label: "Mediterranean", query: "Mediterranean villa", match: /mediterr|tuscan|spanish|greek/i },
-  { id: "minimalist", label: "Minimalist", query: "minimalist house architecture", match: /minimal/i },
-  { id: "contemporary_glass", label: "Glass and concrete", query: "contemporary glass house architecture", match: /glass|concrete|brutal|contemporary/i },
-  { id: "classic", label: "Classic estate", query: "neoclassical mansion", match: /classic|neoclassical|georgian|colonial|mansion|chateau|palazzo/i },
+/**
+ * A real, freely licensed reference photo from Wikimedia Commons, with its author and licence: the first search
+ * result whose file name passes `title` (any, by default), from the first 20 when there is a check.
+ */
+export function commonsPhoto(ctx: Pick<DreamCtx, "api">, query: string, title?: (name: string) => boolean): Promise<{ url: string; credit: string } | null> {
+  return commonsQuery(ctx, `${query.toLowerCase()}${title ? "|checked" : ""}`, { generator: "search", gsrnamespace: "6", gsrlimit: title ? "20" : "8", gsrsearch: `${query} filetype:bitmap` }, title ?? (() => true));
+}
+
+/** One named Commons file, looked up for its address and credit. */
+export function commonsFile(ctx: Pick<DreamCtx, "api">, file: string): Promise<{ url: string; credit: string } | null> {
+  return commonsQuery(ctx, `file:${file.toLowerCase()}`, { titles: file }, () => true);
+}
+
+/**
+ * The fixed styles, each with one photograph chosen and checked by eye on Commons (2026-11-05), since search alone
+ * answered "Modern" with an office block. The search stays as the fallback if a file is ever gone.
+ */
+const STYLE_PALETTE: { id: string; label: string; query: string; file: string; match: RegExp }[] = [
+  { id: "modern", label: "Modern", query: "modern villa architecture", file: "File:Private Villa Ibiza.jpg", match: /modern/i },
+  { id: "mediterranean", label: "Mediterranean", query: "Mediterranean villa", file: "File:Finca-Raixa.Mallorca.jpg", match: /mediterr|tuscan|spanish|greek/i },
+  { id: "minimalist", label: "Minimalist", query: "minimalist house architecture", file: "File:Farnsworth House by Mies Van Der Rohe - exterior-9.jpg", match: /minimal/i },
+  { id: "contemporary_glass", label: "Glass and concrete", query: "contemporary glass house architecture", file: "File:Philip Johnson Glass House The House.jpg", match: /glass|concrete|brutal|contemporary/i },
+  { id: "classic", label: "Classic estate", query: "neoclassical mansion", file: "File:The Mansion at Attingham Park.jpg", match: /classic|neoclassical|georgian|colonial|mansion|chateau|palazzo/i },
 ];
 
 const DEFAULT_FEATURES = ["pool", "sea_view", "wine_cellar", "smart_home", "garden", "gym", "cinema", "spa", "guest_house", "staff_quarters", "garage", "lift", "solar"];
 
 export async function homeBuilder(ctx: DreamCtx, id: string, c: HomeCriteria, regionLabel: string): Promise<Extract<Widget, { kind: "home_builder" }>> {
   const asked = c.styles.map((s) => s.trim()).filter(Boolean);
-  const styles: { id: string; label: string; query: string; on: boolean }[] = STYLE_PALETTE.map((s) => ({ ...s, on: asked.some((a) => s.match.test(a)) }));
-  // A local tradition for the place, e.g. "Traditional Malta" photographed there.
-  styles.push({ id: "traditional", label: `Traditional ${regionLabel}`, query: `traditional house ${regionLabel}`, on: asked.some((a) => /tradition|farmhouse|vernacular|rustic/i.test(a)) });
+  type Style = { id: string; label: string; query: string; file?: string; title?: (name: string) => boolean; on: boolean };
+  const styles: Style[] = STYLE_PALETTE.map((s) => ({ ...s, title: homeTitle, on: asked.some((a) => s.match.test(a)) }));
+  // A local tradition for the place, e.g. "Traditional Malta" photographed there: a home whose file names the place
+  // (Commons gave Brasov's houses for France), or no photo rather than another country's.
+  const place = regionLabel.toLowerCase();
+  styles.push({ id: "traditional", label: `Traditional ${regionLabel}`, query: `traditional house ${regionLabel}`, title: (name) => homeTitle(name) && name.toLowerCase().includes(place), on: asked.some((a) => /tradition|farmhouse|vernacular|rustic/i.test(a)) });
   for (const a of asked) {
     if (!STYLE_PALETTE.some((s) => s.match.test(a)) && !/tradition|farmhouse|vernacular|rustic/i.test(a)) {
-      styles.unshift({ id: a.toLowerCase().replace(/[^a-z0-9]+/g, "_").slice(0, 40), label: a.slice(0, 40), query: `${a} house architecture`, on: true });
+      styles.unshift({ id: a.toLowerCase().replace(/[^a-z0-9]+/g, "_").slice(0, 40), label: a.slice(0, 40), query: `${a} house architecture`, title: homeTitle, on: true });
     }
   }
   await ctx.step("styles", "running", "Finding reference photos for each style");
-  const photos = await Promise.all(styles.map((s) => commonsPhoto(ctx, s.query)));
+  const photos = await Promise.all(styles.map(async (s) => (s.file ? await commonsFile(ctx, s.file) : null) ?? (await commonsPhoto(ctx, s.query, s.title))));
   await ctx.step("styles", "done", `Found ${photos.filter(Boolean).length} reference photos on Wikimedia Commons`);
 
   const feats = new Map<string, { id: string; label: string; on: boolean }>();

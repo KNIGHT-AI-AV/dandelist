@@ -5,13 +5,10 @@ import { haptic, native, useReducedMotion } from "../../lib/motion";
 import { PAGES, PAGE_COUNT, inView, landing, mod, nearestIn, type PageId } from "../../lib/pager";
 import { spreadOf } from "../../lib/spread";
 import { PageSizeProvider } from "../../lib/page-size";
-import { pagesStill } from "../../lib/swipe-intent";
+import { pagesStill, ringTakes } from "../../lib/swipe-intent";
 
 /** Critically damped, about a third of a second: the page arrives without bouncing (Apple: damping 1, response 0.35). */
 const SETTLE = { mass: 1, stiffness: 322, damping: 35.9 };
-/** A sideways move this long, and clearly more sideways than down, is a page swipe. */
-const SLOP = 12;
-const SIDEWAYS = 1.4;
 
 export interface Pager {
   /** The page in front (or on its way to the front); in a spread, the one on the left. */
@@ -29,13 +26,15 @@ export interface Pager {
 }
 
 const Ctx = createContext<Pager | null>(null);
-const Grab = createContext<{ grab(): number; release(target: number, velocity: number): void } | null>(null);
+const Grab = createContext<{ grab(): number; release(target: number, velocity: number): void; held(): boolean; free(): void } | null>(null);
 /** For a card that takes its own sideways swipe inside the ring (lib/swipe-intent.ts). */
 export interface PageSwipe {
   /** Whether the pages have been still long enough for a card to take a sideways drag. */
   still(): boolean;
   /** Turns the page the way a finger moving in `dir` (1 right, -1 left) would. */
   turn(dir: 1 | -1): void;
+  /** A row that scrolls sideways holds the ring while a finger is on it, so its drag scrolls it (components/rail.tsx). */
+  hold(on: boolean): void;
 }
 const Swipe = createContext<PageSwipe | null>(null);
 
@@ -92,6 +91,8 @@ export function PagerProvider({ initial, onPage, children }: { initial: PageId; 
   const [page, setPage] = useState<PageId>(initial);
   // When the pages last started moving (a swipe taken, a page set going), so a card can leave the next swipe to them.
   const movedAt = useRef(0);
+  // Whether the touch in progress started on a row that scrolls sideways.
+  const heldBy = useRef(false);
   useEffect(() => {
     const id = pos.addListener(({ value }) => (live.current = value));
     return () => pos.removeListener(id);
@@ -144,9 +145,12 @@ export function PagerProvider({ initial, onPage, children }: { initial: PageId; 
 
   const shows = useCallback((id: PageId) => inView(PAGES.indexOf(id), PAGES.indexOf(page), span), [page, span]);
   const value = useMemo<Pager>(() => ({ page, pos, width, span, shows, go, next }), [page, pos, width, span, shows, go, next]);
-  const grabber = useMemo(() => ({ grab, release: settle }), [grab, settle]);
+  const grabber = useMemo(() => ({ grab, release: settle, held: () => heldBy.current, free: () => void (heldBy.current = false) }), [grab, settle]);
   // A finger moving left brings the next page, as the ring's own swipe does.
-  const swipe = useMemo<PageSwipe>(() => ({ still: () => pagesStill(movedAt.current, Date.now()), turn: (dir) => next(dir === 1 ? -1 : 1) }), [next]);
+  const swipe = useMemo<PageSwipe>(
+    () => ({ still: () => pagesStill(movedAt.current, Date.now()), turn: (dir) => next(dir === 1 ? -1 : 1), hold: (on) => void (heldBy.current = on) }),
+    [next],
+  );
   return (
     <Ctx.Provider value={value}>
       <Grab.Provider value={grabber}>
@@ -177,7 +181,13 @@ export function PagerView({ pages }: { pages: Record<PageId, ReactNode> }) {
   const pan = useMemo(
     () =>
       PanResponder.create({
-        onMoveShouldSetPanResponder: (_e, g) => Math.abs(g.dx) > SLOP && Math.abs(g.dx) > Math.abs(g.dy) * SIDEWAYS,
+        // Each touch starts free (never claimed here); a row under the finger then holds it in its own onTouchStart,
+        // which runs after this capture step.
+        onStartShouldSetPanResponderCapture: () => {
+          grabber.free();
+          return false;
+        },
+        onMoveShouldSetPanResponder: (_e, g) => ringTakes(g.dx, g.dy, grabber.held()),
         onPanResponderGrant: () => {
           base.current = grabber.grab();
           Keyboard.dismiss();
@@ -206,6 +216,8 @@ export function PagerView({ pages }: { pages: Record<PageId, ReactNode> }) {
     let lockedUntil = 0;
     const onWheel = (e: WheelEvent) => {
       if (Math.abs(e.deltaX) <= Math.abs(e.deltaY) * 1.2) return;
+      // A sideways scroll over a row that scrolls sideways is that row's.
+      if ((e.target as HTMLElement | null)?.closest?.("[data-rail]")) return;
       const now = Date.now();
       if (now < lockedUntil) return;
       if (now - quietAt > 220) acc = 0;

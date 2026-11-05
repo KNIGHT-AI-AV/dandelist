@@ -1,10 +1,11 @@
-import { Animated, Pressable, ScrollView, Text, View } from "react-native";
+import { Animated, Pressable, Text, View } from "react-native";
 import type { WishCandidate } from "../lib/agent";
 import type { CandidatePick } from "../lib/guess";
 import { usePress } from "../lib/motion";
 import { layout, radius, type, usePalette } from "../lib/theme";
 import { Chip, Icon, Photo, QuietButton } from "./lux";
 import { PhotoCredit } from "./photo-credit";
+import { Rail } from "./rail";
 
 /**
  * Under a card the reading had to work out (owner, 2026-10-30: "one of those cats that look like a miniature lion, but
@@ -43,11 +44,11 @@ export function CandidateRow({ pick, onConfirm, onPick, onElse, center = false }
   return (
     <View style={{ gap: layout.stack.tight, alignItems: center ? "center" : "flex-start", alignSelf: "stretch" }}>
       <Text style={[type.footnote, { color: p.ink2, textAlign: center ? "center" : "left" }]}>Which one did you mean?</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ alignSelf: "stretch" }} contentContainerStyle={{ gap: 12, paddingVertical: 2, ...(center ? { flexGrow: 1, justifyContent: "center" } : {}) }}>
+      <Rail style={{ alignSelf: "stretch" }} contentContainerStyle={{ gap: 12, paddingVertical: 2, ...(center ? { flexGrow: 1, justifyContent: "center" } : {}) }}>
         {pick.candidates.map((c, i) => (
           <CandidateTile key={c.name} candidate={c} current={i === pick.current} onPress={() => (i === pick.current ? onConfirm() : onPick(c.name))} />
         ))}
-      </ScrollView>
+      </Rail>
       {onElse ? <QuietButton label="Something else" onPress={onElse} /> : null}
     </View>
   );

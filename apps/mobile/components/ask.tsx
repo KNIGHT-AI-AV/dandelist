@@ -81,7 +81,7 @@ export function AskBar({ windowMs, round }: { windowMs: number | null; round: nu
   }, [windowMs, round, reduced, v]);
   if (windowMs === null || reduced) return null;
   return (
-    <View pointerEvents="none" aria-hidden accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={{ height: 2, borderRadius: 1, overflow: "hidden" }}>
+    <View pointerEvents="none" aria-hidden accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={{ height: 2, borderRadius: 1, overflow: "hidden", backgroundColor: p.hair }}>
       <Animated.View style={{ flex: 1, backgroundColor: p.accent, opacity: 0.7, transformOrigin: "left", transform: [{ scaleX: v }] }} />
     </View>
   );
