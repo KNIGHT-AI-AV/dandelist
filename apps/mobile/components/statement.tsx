@@ -18,7 +18,7 @@ export function Statement({ item, years = HORIZON_YEARS, monthlyHint, priceless 
   const p = usePalette();
   const [months, setMonths] = useState(DEFAULT_TIMELINE_MONTHS);
   const span = timeline ? months / 12 : years;
-  const spanWords = timeline ? timelineWords(months) : `${years} years`;
+  const spanWords = timeline ? timelineWords(months) : `${years} ${years === 1 ? "year" : "years"}`;
   const monthly = recurringBreakdown([item]).perMonth;
   const total = horizonCashOutlay([item], span);
   if (priceless) {

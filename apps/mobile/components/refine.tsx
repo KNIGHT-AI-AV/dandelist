@@ -6,6 +6,7 @@ import { OWN } from "../lib/own";
 import { answerOf, refineChanged } from "../lib/refine";
 import { layout, type, usePalette } from "../lib/theme";
 import { useGrow } from "./inputs/grow";
+import { useReveal } from "./inputs/reveal";
 import { AskBar, AskRow, useAskClock } from "./ask";
 import { Chip } from "./lux";
 
@@ -126,24 +127,34 @@ const OWN_MOST = 3 * (type.body.lineHeight ?? 23) + 2 * layout.stack.tight + 1;
 function OwnAnswer({ label, value, autoFocus, onChange, onAnswer, onTyping }: { label: string; value: string; autoFocus: boolean; onChange(v: string): void; onAnswer(): void; onTyping(on: boolean): void }) {
   const p = usePalette();
   const grow = useGrow(OWN_LINE, OWN_MOST, onAnswer, Platform.OS === "web");
+  const reveal = useReveal();
+  const box = useRef<View>(null);
   return (
-    <TextInput
-      value={value}
-      onChangeText={onChange}
-      placeholder="Your own answer"
-      placeholderTextColor={p.ink3}
-      accessibilityLabel={label}
-      autoFocus={autoFocus}
-      returnKeyType="done"
-      multiline={grow.multiline}
-      submitBehavior={grow.submitBehavior}
-      onSubmitEditing={grow.onSubmitEditing}
-      onKeyPress={grow.onKeyPress}
-      ref={grow.ref}
-      scrollEnabled={grow.scrollEnabled}
-      onFocus={() => onTyping(true)}
-      onBlur={() => onTyping(false)}
-      style={[type.body, { color: p.ink, borderBottomWidth: 1, borderBottomColor: p.line, paddingVertical: layout.stack.tight }, grow.style]}
-    />
+    <View ref={box}>
+      <TextInput
+        value={value}
+        onChangeText={onChange}
+        placeholder="Your own answer"
+        placeholderTextColor={p.ink3}
+        accessibilityLabel={label}
+        autoFocus={autoFocus}
+        returnKeyType="done"
+        multiline={grow.multiline}
+        submitBehavior={grow.submitBehavior}
+        onSubmitEditing={grow.onSubmitEditing}
+        onKeyPress={grow.onKeyPress}
+        ref={grow.ref}
+        scrollEnabled={grow.scrollEnabled}
+        onFocus={() => {
+          reveal?.reveal(box.current);
+          onTyping(true);
+        }}
+        onBlur={() => {
+          reveal?.release(box.current);
+          onTyping(false);
+        }}
+        style={[type.body, { color: p.ink, borderBottomWidth: 1, borderBottomColor: p.line, paddingVertical: layout.stack.tight }, grow.style]}
+      />
+    </View>
   );
 }

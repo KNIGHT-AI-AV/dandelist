@@ -68,7 +68,7 @@ const idealista: Actor<HomeCriteria> = {
     if (!images.length && https(it.thumbnail)) images.push(it.thumbnail as string);
     const feats = (it.features ?? {}) as Record<string, boolean>;
     const facts = [
-      n(it.rooms) ? `${n(it.rooms)} bedrooms` : "",
+      n(it.rooms) ? `${n(it.rooms)} ${n(it.rooms) === 1 ? "bedroom" : "bedrooms"}` : "",
       n(it.size) ? `${Math.round(n(it.size)!)} m²` : "",
       feats.hasSwimmingPool ? "Pool" : "",
       feats.hasGarden ? "Garden" : "",
@@ -114,7 +114,7 @@ const realtor: Actor<HomeCriteria> = {
     if (!url || !price) return null;
     const photos = ((it.photos ?? []) as { href?: string }[]).map((p) => https(p.href)).filter((u): u is string => !!u).slice(0, 10);
     const addr = (it.address ?? {}) as Record<string, string>;
-    const facts = [n(it.beds) ? `${n(it.beds)} bedrooms` : "", n(it.baths) ? `${n(it.baths)} bathrooms` : "", n(it.sqft) ? `${Math.round(n(it.sqft)! * 0.092903)} m²` : ""].filter(Boolean);
+    const facts = [n(it.beds) ? `${n(it.beds)} ${n(it.beds) === 1 ? "bedroom" : "bedrooms"}` : "", n(it.baths) ? `${n(it.baths)} ${n(it.baths) === 1 ? "bathroom" : "bathrooms"}` : "", n(it.sqft) ? `${Math.round(n(it.sqft)! * 0.092903)} m²` : ""].filter(Boolean);
     return {
       id: idOf(url),
       title: [addr.street, addr.locality].filter(Boolean).join(", ") || "Home for sale",

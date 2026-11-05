@@ -4,7 +4,7 @@ import { z } from "zod";
 import { cleanUrl } from "../agent/agent";
 import { pageShowsPrice } from "../agent/tools";
 import { carActor, homeActor, runActor } from "./apify";
-import { SEARCH_INCLUDE, TurnLimitError, json, searchResults, strictObject, type DreamCtx } from "./context";
+import { SEARCH_INCLUDE, TurnLimitError, count, json, searchResults, strictObject, type DreamCtx } from "./context";
 import { FEATURE_PATTERNS, NOT_A_SOURCE, featurePattern, readListing, statedFee, type ListingPage } from "./pages";
 import type { CarCriteria, Criteria, HomeCriteria } from "./types";
 
@@ -337,7 +337,7 @@ export async function searchListings(ctx: DreamCtx, c: Criteria, exclude: string
   const indexes = [...returned.values()].filter((r) => usable(r.url) && !isPicked(r.url) && !looksLikeListing(r)).map(asCand);
   const indexUrls = new Set(indexes.map((x) => cleanUrl(x.url)));
   const unique = [...new Map([...picked, ...listingsFound, ...indexes].map((x) => [cleanUrl(x.url), x])).values()].slice(0, MAX_CANDIDATES);
-  await ctx.step("search", "done", unique.length ? `Found ${unique.length} pages to check` : "The web search found no listings");
+  await ctx.step("search", "done", unique.length ? `Found ${count(unique.length, "page")} to check` : "The web search found no listings");
 
   let done = 0;
   let priced = 0;
@@ -352,7 +352,7 @@ export async function searchListings(ctx: DreamCtx, c: Criteria, exclude: string
       if (!f && page.ok) links.push(...page.links.filter((l) => usable(l)));
       done++;
       if (f?.listing.status === "verified") priced++;
-      if (done < planned) await ctx.step("read", "running", `Read ${done} of ${planned} pages`);
+      if (done < planned) await ctx.step("read", "running", `Read ${done} of ${count(planned, "page")}`);
       if (!f && !page.ok && REFUSED.has(page.status) && !/Not a web page|private/.test(page.error ?? "") && cand.price > 0 && shown(cand.url)) {
         // A portal that refused our read, but whose listing the search itself showed: kept as an estimate, last. A rental
         // in a home search is dropped here too, read from the search result's own title.
@@ -381,17 +381,17 @@ export async function searchListings(ctx: DreamCtx, c: Criteria, exclude: string
 
   const toRead = unique.slice(0, ctx.budget.pages(Math.min(MAX_READS, unique.length)));
   planned = toRead.length;
-  if (toRead.length) await ctx.step("read", "running", `Reading ${toRead.length} pages`);
+  if (toRead.length) await ctx.step("read", "running", `Reading ${count(toRead.length, "page")}`);
   const found = (await pool(toRead, READ_CONCURRENCY, readOne)).filter((f): f is Found => !!f);
   const short = DECK_SIZE - found.filter((f) => f.listing.status === "verified").length;
   const follow = [...new Set(links.map(cleanUrl))].filter((u) => !toRead.some((t) => cleanUrl(t.url) === u) && !found.some((f) => f.listing.url === u));
   if (short > 0 && follow.length) {
     const next = follow.slice(0, ctx.budget.pages(Math.min(FOLLOW_READS, short + 2, follow.length)));
     planned += next.length;
-    await ctx.step("read", "running", `Following ${next.length} listings from results pages`);
+    await ctx.step("read", "running", `Following ${count(next.length, "listing")} from results pages`);
     found.push(...(await pool(next.map((url) => ({ url, title: "", price: 0, currency: c.currency })), READ_CONCURRENCY, readOne)).filter((f): f is Found => !!f));
   }
-  if (planned) await ctx.step("read", "done", `Read ${planned} pages; ${priced} listings show their price`);
+  if (planned) await ctx.step("read", "done", `Read ${count(planned, "page")}; ${priced} ${priced === 1 ? "listing shows its" : "listings show their"} price`);
 
   const fromPortal = (await portal).map((l) => ({ listing: l, extra: {}, score: 5 + (l.images.length ? 2 : 0) }) satisfies Found);
   const byUrl = new Map<string, Found>();

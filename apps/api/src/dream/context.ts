@@ -132,3 +132,6 @@ export function json(text: string): unknown {
     throw e;
   }
 }
+
+/** A count with its noun: "1 listing", "3 listings"; `many` for nouns that don't just take an s. */
+export const count = (n: number, one: string, many = `${one}s`): string => `${n} ${n === 1 ? one : many}`;

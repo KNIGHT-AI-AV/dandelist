@@ -1,7 +1,7 @@
 import type { Widget } from "@dandelist/catalogue/dream";
 import { z } from "zod";
 import { drop, fxRate, pageShowsPrice } from "../agent/tools";
-import { json, strictObject, type DreamCtx } from "./context";
+import { count, json, strictObject, type DreamCtx } from "./context";
 import { rateMoney } from "./keep";
 import { FEATURE_PATTERNS, featurePattern, readListing } from "./pages";
 import type { CarBuildState, CarChoiceState, CarCriteria, HomeCriteria } from "./types";
@@ -106,7 +106,7 @@ export async function homeBuilder(ctx: DreamCtx, id: string, c: HomeCriteria, re
   }
   await ctx.step("styles", "running", "Finding reference photos for each style");
   const photos = await Promise.all(styles.map(async (s) => (s.file ? await commonsFile(ctx, s.file) : null) ?? (await commonsPhoto(ctx, s.query, s.title))));
-  await ctx.step("styles", "done", `Found ${photos.filter(Boolean).length} reference photos on Wikimedia Commons`);
+  await ctx.step("styles", "done", `Found ${count(photos.filter(Boolean).length, "reference photo")} on Wikimedia Commons`);
 
   const feats = new Map<string, { id: string; label: string; on: boolean }>();
   for (const f of c.features) {
