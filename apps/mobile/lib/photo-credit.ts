@@ -22,6 +22,13 @@ export type PhotoCreditContent = (
 
 /** What the credit says first about a stand-in, the wish's broad form shown because the very thing was not found. */
 export const SIMILAR = "A similar one";
+/** The same, for a screen reader reading a whole card. */
+export const SIMILAR_SPOKEN = "the photo shows a similar one";
+
+/** Whether the photo a card shows (`shown`, its address) is a stand-in, by its own mark in the card's saved media. */
+export function isSimilarPhoto(media: { images: { url: string; similar?: boolean }[] } | null | undefined, shown: string | null | undefined): boolean {
+  return !!shown && !!media?.images.some((image) => image.url === shown && image.similar);
+}
 
 /** Prefer the displayed photo's attribution; a card-level credit is only a fallback for missing photo metadata. */
 export function photoCreditContent(image?: CreditedImage | null, fallback?: string): PhotoCreditContent | undefined {
