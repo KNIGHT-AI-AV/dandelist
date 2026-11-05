@@ -181,6 +181,12 @@ export function PagerView({ pages }: { pages: Record<PageId, ReactNode> }) {
   const pan = useMemo(
     () =>
       PanResponder.create({
+        // Each touch starts free (never claimed here); a row under the finger then holds it in its own onTouchStart,
+        // which runs after this capture step.
+        onStartShouldSetPanResponderCapture: () => {
+          grabber.free();
+          return false;
+        },
         onMoveShouldSetPanResponder: (_e, g) => ringTakes(g.dx, g.dy, grabber.held()),
         onPanResponderGrant: () => {
           base.current = grabber.grab();
@@ -261,7 +267,7 @@ export function PagerView({ pages }: { pages: Record<PageId, ReactNode> }) {
   return (
     // On the web a drag that starts selecting text ends the gesture, so the ring doesn't select (fields still do).
     // On the web the pages are the main landmark (axe 2026-11-01: no main region, so nothing to jump to past the bar).
-    <View ref={box} style={[StyleSheet.absoluteFill, Platform.OS === "web" ? ({ overflow: "hidden", touchAction: "pan-y", userSelect: "none" } as object) : { overflow: "hidden" }]} onTouchStartCapture={grabber.free} {...pan.panHandlers} {...(Platform.OS === "web" ? { role: "main" as const } : null)}>
+    <View ref={box} style={[StyleSheet.absoluteFill, Platform.OS === "web" ? ({ overflow: "hidden", touchAction: "pan-y", userSelect: "none" } as object) : { overflow: "hidden" }]} {...pan.panHandlers} {...(Platform.OS === "web" ? { role: "main" as const } : null)}>
       {layers.map((l) => {
         const front = shows(l.id);
         return (
