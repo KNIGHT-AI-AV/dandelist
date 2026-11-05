@@ -20,6 +20,17 @@ export type SwipeOutcome = "remove" | "page" | "home";
 /** Whether the pages have been still long enough for a card to take a sideways drag. */
 export const pagesStill = (movedAt: number, now: number): boolean => now - movedAt >= PAGE_QUIET_MS;
 
+/** A sideways move this long, and clearly more sideways than down, turns the pages. */
+export const RING_SLOP = 12;
+export const RING_SIDEWAYS = 1.4;
+
+/**
+ * Whether the ring of pages takes a drag (`dx`, `dy` in px). Never one that started on a row that scrolls sideways
+ * (`held`, components/rail.tsx): the drag scrolls the row (owner, 2026-11-05: "When I swipe options it swipes
+ * screens!").
+ */
+export const ringTakes = (dx: number, dy: number, held: boolean): boolean => !held && Math.abs(dx) > RING_SLOP && Math.abs(dx) > Math.abs(dy) * RING_SIDEWAYS;
+
 /**
  * Where a released card goes. `dx` and `vx` are the drag and its speed (px, px per ms), `removeAt` the share of the
  * width that is the card's line, `ms` how long the drag lasted, `pages` whether the card sits in the ring.
