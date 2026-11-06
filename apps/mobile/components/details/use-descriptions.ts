@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useAiConsent } from "../../lib/ai-consent";
 import { useAuth } from "../../lib/auth";
 import { unjudged } from "../../lib/comfort";
 import { useWishes, type Wish, type WishDetails } from "../../lib/wishes";
@@ -32,9 +33,11 @@ export function useDescriptions() {
   merge.current = mergeDetails;
   const waiting = useMemo(() => wishes.filter((w) => (!w.details.about || unjudged(w)) && !tried.current.has(triedKey(w))), [wishes, round]); // eslint-disable-line react-hooks/exhaustive-deps
   const key = waiting.map(triedKey).join(",");
+  // The sentences are written by the AI from each wish, so they wait for the yes to the AI card (components/ai-consent.tsx).
+  const consented = useAiConsent() === true;
 
   useEffect(() => {
-    if (auth !== "signedIn" || status !== "ready" || off.current || busy.current || !waiting.length) return;
+    if (auth !== "signedIn" || status !== "ready" || !consented || off.current || busy.current || !waiting.length) return;
     const batch = waiting.slice(0, BATCH);
     const timer = setTimeout(async () => {
       busy.current = true;
@@ -56,5 +59,5 @@ export function useDescriptions() {
     }, SETTLE_MS);
     return () => clearTimeout(timer);
     // A round that ends re-checks, in case wishes arrived while a call was out.
-  }, [key, auth, status, round, api]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [key, auth, status, round, api, consented]); // eslint-disable-line react-hooks/exhaustive-deps
 }

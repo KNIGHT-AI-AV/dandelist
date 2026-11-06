@@ -12,8 +12,11 @@ export type VoicePhase = "idle" | "listening" | "hearing";
  * Say your wish. Tap the microphone, say it the way you'd tell a friend, and it stops by itself when you pause; Muse
  * Voice Transcribe writes it down and the words land in the field to check before pricing. Typing stays one tap away.
  */
-/** `transcribe` sends the clip: the signed-in route (lib/agent transcribeWish) or, before sign-in, the guest one. */
-export function useVoiceWish({ transcribe, onHeard, onError }: { transcribe(wav: Uint8Array): Promise<string>; onHeard(text: string): void; onError(message: string | null): void }) {
+/**
+ * `transcribe` sends the clip: the signed-in route (lib/agent transcribeWish) or, before sign-in, the guest one. `gate`,
+ * when given, runs before listening starts (the welcome's AI consent, components/ai-consent.tsx).
+ */
+export function useVoiceWish({ transcribe, onHeard, onError, gate }: { transcribe(wav: Uint8Array): Promise<string>; onHeard(text: string): void; onError(message: string | null): void; gate?(go: () => void): void }) {
   const [phase, setPhase] = useState<VoicePhase>("idle");
   const recorder = useRecorder({
     onClip: async (wav) => {
@@ -40,11 +43,15 @@ export function useVoiceWish({ transcribe, onHeard, onError }: { transcribe(wav:
       haptic.select();
       return recorder.stop();
     }
-    haptic.soft();
-    onError(null);
-    setPhase("listening");
-    // When the microphone is refused, start() returns without listening and onError says why.
-    void recorder.start();
+    const listen = () => {
+      haptic.soft();
+      onError(null);
+      setPhase("listening");
+      // When the microphone is refused, start() returns without listening and onError says why.
+      void recorder.start();
+    };
+    if (gate) gate(listen);
+    else listen();
   };
   // Listening shows only once the microphone is really open, so a permission prompt never sits over a fake panel.
   const live = phase === "listening" && recorder.listening;

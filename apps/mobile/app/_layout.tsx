@@ -4,6 +4,7 @@ import { DarkTheme, DefaultTheme, Stack, ThemeProvider as NavigationTheme } from
 import { StatusBar } from "expo-status-bar";
 import { View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { AiConsentGate } from "../components/ai-consent";
 import { Reminders } from "../components/home/reminders";
 import { UpdatePrompt } from "../components/update-prompt";
 import { HelpHost } from "../components/help";
@@ -44,6 +45,8 @@ function Root() {
             <UpdatePrompt />
             {/* The help sheet the bar's help button and Settings open (components/help.tsx). */}
             <HelpHost />
+            {/* Signed in on a device that hasn't said yes to the AI card: the card, until they agree or sign out. */}
+            <AiConsentGate />
             {/* Navigation paints its own background between screens; without this it is React Navigation's light grey
                 (#F2F2F2), which Taste Engine found on the live site. */}
             <NavigationTheme value={{ ...(p.scheme === "dark" ? DarkTheme : DefaultTheme), colors: { ...(p.scheme === "dark" ? DarkTheme : DefaultTheme).colors, background: p.bg, card: p.bg, text: p.ink, border: p.hair, primary: p.accent } }}>
