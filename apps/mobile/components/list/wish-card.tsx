@@ -7,6 +7,7 @@ import { savedGlyph } from "../worth";
 import { useMoney } from "../../lib/currency";
 import { formatCents } from "../../lib/money";
 import { usePress } from "../../lib/motion";
+import { isSimilarPhoto, SIMILAR, SIMILAR_SPOKEN } from "../../lib/photo-credit";
 import { usePhotoLoad } from "../../lib/photo-load";
 import { layout, radius, space, type, usePalette } from "../../lib/theme";
 import type { Wish } from "../../lib/wishes";
@@ -18,7 +19,8 @@ import { Swap } from "./presence";
 
 /** What a screen reader says for a card, and for its lifted copy in the action sheet. */
 export function cardLabel(w: Wish): string {
-  return `${w.name}, ${priceWords(w, formatCents)}`;
+  const similar = isSimilarPhoto(w.details.agent?.media, w.details.agent?.imageUrl) ? `, ${SIMILAR_SPOKEN}` : "";
+  return `${w.name}, ${priceWords(w, formatCents)}${similar}`;
 }
 
 /**
@@ -47,6 +49,8 @@ export function WishFace({ w, still = false }: { w: Wish; still?: boolean }) {
         <Text style={[type.title2, { color: p.ink }]} numberOfLines={2}>
           {w.name}
         </Text>
+        {/* A stand-in photo (another colour of the model, say) says so under the name, as its credit does on the wish's page. */}
+        {isSimilarPhoto(w.details.agent?.media, uri) ? <Text style={[type.figure, { color: p.ink2 }]}>{SIMILAR}</Text> : null}
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: space[12] }}>
           <CardLine w={w} monthlyCents={monthly} />
           <View style={{ flexDirection: "row", alignItems: "baseline", gap: space[8] }}>
