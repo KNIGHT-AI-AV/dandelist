@@ -1,5 +1,5 @@
 {
-  "ios": { "build": 51, "url": "https://testflight.apple.com/join/tuh4Jxkw" },
-  "android": { "build": 26, "url": "https://github.com/KNIGHT-AI-AV/dandelist/releases/download/android-26/dandelist-android-26.apk" },
+  "ios": { "build": 52, "url": "https://testflight.apple.com/join/tuh4Jxkw" },
+  "android": { "build": 27, "url": "https://github.com/KNIGHT-AI-AV/dandelist/releases/download/android-27/dandelist-android-27.apk" },
   "web": { "version": "" }
 }
