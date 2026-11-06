@@ -1,5 +1,6 @@
 import { Hono, type MiddlewareHandler } from "hono";
 import { z } from "zod";
+import { CONSENT_REQUIRED, accepted, openBeforeConsent } from "./consent";
 import type { Db } from "./db";
 import type { Mailer } from "./mailer";
 import { oauthRoutes, type OAuthConfig } from "./oauth";
@@ -38,7 +39,11 @@ const emailBody = z.object({ email: z.string().trim().email().max(254) });
 const verifyBody = emailBody.extend({ code: z.string().regex(/^\d{6}$/) });
 const refreshBody = z.object({ refreshToken: z.string().min(20).max(200) });
 
-/** Accepts a valid access token whose session is still open, so signing out takes effect immediately. */
+/**
+ * Accepts a valid access token whose session is still open, so signing out takes effect immediately, and whose account
+ * has accepted how Dandelist uses AI (consent.ts). Before that, only the few paths that send nothing to AI go through:
+ * every other route, an agent key's calls and any work they would start get CONSENT_REQUIRED, older apps included.
+ */
 export function requireAuth(deps: Pick<AuthDeps, "db" | "jwtSecret" | "now">): MiddlewareHandler<{ Variables: AuthVars }> {
   return async (c, next) => {
     const header = c.req.header("Authorization") ?? "";
@@ -50,8 +55,12 @@ export function requireAuth(deps: Pick<AuthDeps, "db" | "jwtSecret" | "now">): M
       return c.json({ error: "Sign in again to continue." }, 401);
     }
     // An expired session is closed too, so nothing minted for it (an agent key's calls) outlives it.
-    const open = await deps.db.query("select 1 from sessions where id = $1 and user_id = $2 and revoked_at is null and expires_at > $3", [claims.sessionId, claims.userId, deps.now().toISOString()]);
+    const open = await deps.db.query<{ ai_consent_version: number | null }>(
+      "select u.ai_consent_version from sessions s join users u on u.id = s.user_id where s.id = $1 and s.user_id = $2 and s.revoked_at is null and s.expires_at > $3",
+      [claims.sessionId, claims.userId, deps.now().toISOString()],
+    );
     if (!open.rows.length) return c.json({ error: "Sign in again to continue." }, 401);
+    if (!accepted(open.rows[0]!.ai_consent_version) && !openBeforeConsent(c.req.method, c.req.path)) return c.json(CONSENT_REQUIRED, 403);
     c.set("userId", claims.userId);
     c.set("sessionId", claims.sessionId);
     await next();

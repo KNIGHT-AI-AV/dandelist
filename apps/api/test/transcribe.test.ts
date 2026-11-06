@@ -1,5 +1,6 @@
 import { PGlite } from "@electric-sql/pglite";
 import { beforeEach, describe, expect, it } from "vitest";
+import { accepted } from "./consent-helper";
 import { MAX_CLIP_BYTES, TRANSCRIBES_PER_USER_PER_DAY, cleanTranscript, clipProblem, readWav } from "../src/agent/transcribe";
 import { createApp } from "../src/app";
 import { migrate, type Db } from "../src/db";
@@ -98,7 +99,7 @@ beforeEach(async () => {
 async function signIn(email: string) {
   await app.request("/auth/email/start", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email }) });
   const res = await app.request("/auth/email/verify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, code: mail.at(-1)!.code }) });
-  return ((await res.json()) as { accessToken: string }).accessToken;
+  return accepted(app, ((await res.json()) as { accessToken: string }).accessToken);
 }
 
 const say = (token: string, body: Uint8Array, type = "audio/wav") => app.request("/agent/transcribe", { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": type }, body });

@@ -1,5 +1,6 @@
 import { PGlite } from "@electric-sql/pglite";
 import { beforeEach, describe, expect, it } from "vitest";
+import { accepted } from "./consent-helper";
 import { createApp } from "../src/app";
 import { migrate, type Db } from "../src/db";
 import { memoryMediaStore } from "../src/media-store";
@@ -62,6 +63,7 @@ async function signIn(email = "ada@example.com") {
   await call("POST", "/auth/email/start", null, { email });
   const res = await call("POST", "/auth/email/verify", null, { email, code: mail.at(-1)!.code });
   const body = (await res.json()) as { accessToken: string; user: { id: string } };
+  await accepted(app, body.accessToken);
   return { token: body.accessToken, id: body.user.id };
 }
 

@@ -4,10 +4,11 @@ import { DarkTheme, DefaultTheme, Stack, ThemeProvider as NavigationTheme } from
 import { StatusBar } from "expo-status-bar";
 import { View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import { AiConsentGate } from "../components/ai-consent";
+import { ConsentGate } from "../components/consent-gate";
 import { Reminders } from "../components/home/reminders";
 import { UpdatePrompt } from "../components/update-prompt";
 import { HelpHost } from "../components/help";
+import { AccountConsentProvider } from "../lib/account-consent";
 import { AnalyticsProvider } from "../lib/analytics";
 import { keepLogs } from "../lib/help";
 import { AuthProvider } from "../lib/auth";
@@ -35,6 +36,11 @@ function Root() {
   return (
     <SafeAreaProvider>
       <AuthProvider>
+        {/* The signed-in account's AI consent, read from the account at each sign-in (lib/account-consent.tsx). Until its
+            yes is saved, the gate shows only the consent and legal pages: nothing below it mounts, so nothing below it
+            can send anything (the owner, 2026-11-06). */}
+        <AccountConsentProvider>
+        <ConsentGate>
         <AnalyticsProvider>
         <CurrencyProvider>
           <WishProvider>
@@ -45,8 +51,6 @@ function Root() {
             <UpdatePrompt />
             {/* The help sheet the bar's help button and Settings open (components/help.tsx). */}
             <HelpHost />
-            {/* Signed in on a device that hasn't said yes to the AI card: the card, until they agree or sign out. */}
-            <AiConsentGate />
             {/* Navigation paints its own background between screens; without this it is React Navigation's light grey
                 (#F2F2F2), which Taste Engine found on the live site. */}
             <NavigationTheme value={{ ...(p.scheme === "dark" ? DarkTheme : DefaultTheme), colors: { ...(p.scheme === "dark" ? DarkTheme : DefaultTheme).colors, background: p.bg, card: p.bg, text: p.ink, border: p.hair, primary: p.accent } }}>
@@ -58,6 +62,8 @@ function Root() {
           </WishProvider>
         </CurrencyProvider>
         </AnalyticsProvider>
+        </ConsentGate>
+        </AccountConsentProvider>
       </AuthProvider>
     </SafeAreaProvider>
   );

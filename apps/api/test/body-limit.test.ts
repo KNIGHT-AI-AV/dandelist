@@ -1,5 +1,6 @@
 import { PGlite } from "@electric-sql/pglite";
 import { beforeEach, describe, expect, it } from "vitest";
+import { accepted } from "./consent-helper";
 import { MAX_CLIP_BYTES } from "../src/agent/transcribe";
 import { createApp, MAX_BODY_BYTES, TOO_BIG } from "../src/app";
 import { migrate, type Db } from "../src/db";
@@ -29,7 +30,7 @@ beforeEach(async () => {
 async function signIn(email: string) {
   await app.request("/auth/email/start", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email }) });
   const res = await app.request("/auth/email/verify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, code: mail.at(-1)!.code }) });
-  return ((await res.json()) as { accessToken: string }).accessToken;
+  return accepted(app, ((await res.json()) as { accessToken: string }).accessToken);
 }
 
 /** A wish whose details fill the 20,000-character limit, padded past `bytes` with one long name if asked. */

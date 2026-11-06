@@ -3,19 +3,16 @@ import { Platform, Text, View, useWindowDimensions, type TextInput } from "react
 import { haptic } from "../../lib/motion";
 import { placeAgain, restTop, rests, type Frame } from "../../lib/rest-top";
 import { fonts, layout, type, usePalette, useType } from "../../lib/theme";
-import { transcribeGuest } from "../../lib/welcome";
-import { useConsentGate } from "../ai-consent";
 import { KeyboardDock, KeyboardScroll, dockRoom } from "../inputs";
 import { ErrorLine, Eyebrow, PrimaryButton } from "../lux";
-import { ListeningPanel, MicButton, useVoiceWish } from "../voice/say-wish";
-import { FIELD_MIN, WISH_MAX, WishField } from "../wish-field";
+import { WishField } from "../wish-field";
 import { Chip, Rise } from "./kit";
 
 /**
  * The first wish (owner, 2026-10-28: "the next card is them using the actual AI part... phrased in a very enticing
- * and beautiful way"). Every way to add something is on this one screen: type it, say it (Muse Voice Transcribe, no
- * account needed), or tap an idea from the pool. Submitting starts the agent pricing it for real, and the person
- * goes straight on to this or that while it works.
+ * and beautiful way"): type it, or tap an idea from the pool. Since 2026-11-06 it is kept, not sent: AI prices it once
+ * they have an account that has accepted how Dandelist uses AI (the owner: "the first thing they do when they login to
+ * their account or make their account"), so saying it, which a model writes down, waits for the list too.
  */
 export function Ask({ ideas, initial, bottomInset, onSubmit }: { ideas: string[]; initial: string; bottomInset: number; onSubmit(text: string): void }) {
   const p = usePalette();
@@ -24,36 +21,22 @@ export function Ask({ ideas, initial, bottomInset, onSubmit }: { ideas: string[]
   const gutter = layout.gutter(width);
   const [text, setText] = useState(initial);
   const [error, setError] = useState<string | null>(null);
-  const [heard, setHeard] = useState(0);
   const [dock, setDock] = useState<number>(layout.control.primary);
   const field = useRef<TextInput>(null);
   // On a wide screen the words rest at the optical centre of the room above the button (lib/rest-top.ts), measured
-  // while the screen is untouched and kept once someone types, taps an idea or speaks, so nothing moves under them.
+  // while the screen is untouched and kept once someone types or taps an idea, so nothing moves under them.
   const [frame, setFrame] = useState<Frame | null>(null);
   const [block, setBlock] = useState(0);
-  // Nothing leaves before the yes to the AI card: the first wish, typed or said (App Store 5.1.2(i), Meta's 18+).
-  const consent = useConsentGate();
-  const voice = useVoiceWish({
-    gate: consent.gate,
-    transcribe: transcribeGuest,
-    onHeard: (words) => {
-      setText(words.slice(0, WISH_MAX));
-      setHeard((n) => n + 1);
-    },
-    onError: setError,
-  });
   const submit = () => {
     const wish = text.trim();
     if (wish.length < 2) return setError("Tell us one thing, in a few words.");
-    consent.gate(() => {
-      haptic.select();
-      onSubmit(wish);
-    });
+    haptic.select();
+    onSubmit(wish);
   };
-  const untouched = text === initial && !error && voice.phase === "idle";
+  const untouched = text === initial && !error;
   const below = dockRoom(dock, bottomInset);
   const top = rests(Platform.OS === "web", width) && frame && block ? restTop(frame.height, below, block) : 0;
-  const wishField = <WishField ref={field} value={text} onChangeText={setText} onSubmit={submit} editable placeholder="A week at Amanzoe with my wife in May" inset={voice.supported ? layout.control.icon + layout.stack.tight : 0} />;
+  const wishField = <WishField ref={field} value={text} onChangeText={setText} onSubmit={submit} editable placeholder="A week at Amanzoe with my wife in May" />;
 
   return (
     <View style={{ flex: 1 }}>
@@ -76,14 +59,11 @@ export function Ask({ ideas, initial, bottomInset, onSubmit }: { ideas: string[]
             <Text accessibilityRole="header" style={[t.title1, { color: p.ink }]}>
               What would you love to <Text style={{ fontFamily: fonts.displayItalic, color: p.accentText }}>have</Text>?
             </Text>
-            <Text style={[type.callout, { color: p.ink2, marginTop: layout.stack.tight }]}>Type it or say it.</Text>
+            <Text style={[type.callout, { color: p.ink2, marginTop: layout.stack.tight }]}>Type it in a few words.</Text>
           </Rise>
           <Rise delay={60}>
             <View>
-              {voice.phase !== "idle" ? <ListeningPanel voice={voice} height={FIELD_MIN + layout.stack.tight + 1} /> : heard ? <Rise key={heard}>{wishField}</Rise> : wishField}
-              <View style={{ position: "absolute", top: 0, right: 0 }}>
-                <MicButton voice={voice} />
-              </View>
+              {wishField}
             </View>
           </Rise>
           <Rise delay={120} style={{ gap: layout.stack.tight }}>
@@ -98,9 +78,8 @@ export function Ask({ ideas, initial, bottomInset, onSubmit }: { ideas: string[]
         </View>
       </KeyboardScroll>
       <KeyboardDock onHeight={setDock}>
-        <PrimaryButton label="Find the real price" disabled={voice.phase !== "idle"} onPress={submit} />
+        <PrimaryButton label="Continue" onPress={submit} />
       </KeyboardDock>
-      {consent.card}
     </View>
   );
 }

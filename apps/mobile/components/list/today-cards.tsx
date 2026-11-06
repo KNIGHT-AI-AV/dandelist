@@ -6,7 +6,6 @@ import { bindToSignIn, currentSignIn, useAuth } from "../../lib/auth";
 import { useDandy } from "../../lib/dandy";
 import { haptic, usePress } from "../../lib/motion";
 import { notifier } from "../../lib/notifications";
-import { useAiConsent } from "../../lib/ai-consent";
 import { answerPick, fetchTodayPick, hiddenDay, hideForDay, localDay, rememberPick, sameOwner, showsPick, usePickAnswers, wasPickAdded, wasPickSkipped, type PickOwner, type TodayPick } from "../../lib/picks";
 import { isFirstLaunch, updateReminders, useReminderState } from "../../lib/reminder-state";
 import { shouldAsk, type Permission } from "../../lib/reminders";
@@ -69,10 +68,8 @@ function useTodayPick() {
     return () => sub.remove();
   }, []);
 
-  // Today's pick is made by the AI from the list, so it waits for the yes to the AI card (components/ai-consent.tsx).
-  const consented = useAiConsent() === true;
   useEffect(() => {
-    if (!owner || status !== "ready" || !hasWish || !consented) return;
+    if (!owner || status !== "ready" || !hasWish) return;
     const me = owner;
     const key = `${me.account}:${day}`;
     const known = seen.get(key);
@@ -118,7 +115,7 @@ function useTodayPick() {
       clearTimeout(retry);
       done();
     };
-  }, [owner, auth.api, status, hasWish, day, consented]);
+  }, [owner, auth.api, status, hasWish, day]);
 
   const decide = (outcome: "added" | "skipped") => {
     if (!held || !pick) return;

@@ -7,6 +7,7 @@ import { MAX_CLIP_BYTES } from "./agent/transcribe";
 import { Alive } from "./alive";
 import { serverError } from "./analytics";
 import { authRoutes, requireAuth, type AuthVars } from "./auth";
+import { consentRoutes } from "./consent";
 import { dreamRoutes } from "./dream/routes";
 import { fxRoutes } from "./fx";
 import { guestRoutes } from "./guest";
@@ -98,6 +99,9 @@ export function createApp(deps: AppDeps) {
   // Agents: keys a person makes in Settings, and the MCP server those keys open, one account per key.
   app.route("/me/agent-keys", agentKeyRoutes(deps));
   app.route("/mcp", mcpRoutes({ ...deps, call: (path, init) => app.request(path, init) }));
+  // The account's acceptance of how Dandelist uses AI: open before it is given, unlike everything else (consent.ts).
+  app.use("/me/consent", requireAuth(deps));
+  app.route("/me/consent", consentRoutes(deps));
   app.route("/me", meRoutes(deps));
   // What someone saw when they asked for help, kept private for the team (help.ts).
   app.route("/help", helpRoutes(deps));

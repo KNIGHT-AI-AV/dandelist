@@ -5,6 +5,7 @@ import { checkPhoto } from "./agent/photos";
 import { publicFetch } from "./agent/tools";
 import { arrange, GROUPS, SORTS, type Arrangeable } from "./arrange";
 import { requireAuth, type AuthDeps, type AuthVars } from "./auth";
+import { CONSENT_REQUIRED, accepted } from "./consent";
 import type { Db } from "./db";
 import { NOTE_MAX } from "./notes";
 import { RateLimiter } from "./ratelimit";
@@ -47,6 +48,8 @@ interface KeyRow {
   session_id: string;
   token_hash: string;
   last_used_at: string | Date | null;
+  /** The account's accepted AI consent version (consent.ts), null before it accepts. */
+  ai_consent_version: number | null;
 }
 
 /** The person and session behind a key, or null for a missing, unknown, revoked or expired one. */
@@ -55,8 +58,9 @@ export async function agentFor(db: Db, pepper: string, header: string | undefine
   if (!key.startsWith(KEY_PREFIX) || key.length < 20 || key.length > 200) return null;
   const hash = hashAgentKey(pepper, key);
   const { rows } = await db.query<KeyRow>(
-    `select t.id, t.user_id, t.session_id, t.token_hash, t.last_used_at from agent_tokens t
+    `select t.id, t.user_id, t.session_id, t.token_hash, t.last_used_at, u.ai_consent_version from agent_tokens t
        join sessions s on s.id = t.session_id
+       join users u on u.id = t.user_id
       where t.token_hash = $1 and t.revoked_at is null and s.revoked_at is null and s.expires_at > $2`,
     [hash, now.toISOString()],
   );
@@ -332,6 +336,8 @@ export function mcpRoutes(deps: AppDeps & { call: Call }) {
     if (origin && !deps.webOrigins.includes(origin)) return c.json(rpcError(null, -32000, "This origin may not call Dandelist's MCP server."), 403);
     const key = await agentFor(db, deps.codePepper, c.req.header("Authorization"), deps.now());
     if (!key) return c.json(rpcError(null, -32001, "Use an agent key from Dandelist's Settings, sent as a Bearer token."), 401, { "WWW-Authenticate": 'Bearer realm="dandelist"' });
+    // An account that hasn't accepted how Dandelist uses AI gets nothing from its key, not even the tool list (consent.ts).
+    if (!accepted(key.ai_consent_version)) return c.json(rpcError(null, -32003, CONSENT_REQUIRED.error), 403);
     const last = key.last_used_at ? new Date(key.last_used_at).getTime() : 0;
     if (deps.now().getTime() - last > 60_000) await db.query("update agent_tokens set last_used_at = $2 where id = $1", [key.id, deps.now().toISOString()]);
 

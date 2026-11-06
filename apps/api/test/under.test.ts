@@ -1,6 +1,7 @@
 import { PGlite } from "@electric-sql/pglite";
 import { MetaApiError, type ResponsesResult } from "@dandelist/meta";
 import { beforeEach, describe, expect, it } from "vitest";
+import { accepted } from "./consent-helper";
 import { createApp } from "../src/app";
 import { migrate, type Db } from "../src/db";
 import { readEnv } from "../src/env";
@@ -388,7 +389,7 @@ describe("facts on Claude, under Meta", () => {
   const signIn = async () => {
     await call("POST", "/auth/email/start", null, { email: "ada@example.com" });
     const res = await call("POST", "/auth/email/verify", null, { email: "ada@example.com", code: mail.at(-1)!.code });
-    return ((await res.json()) as { accessToken: string }).accessToken;
+    return accepted(app, ((await res.json()) as { accessToken: string }).accessToken);
   };
   const metaSpent = () => db.query("insert into spend_ledger (user_id, model, kind, cost_usd, created_at) values (null, 'muse-spark-1.3', 'guest', 10, $1)", [clock.toISOString()]);
 
@@ -444,20 +445,6 @@ describe("facts on Claude, under Meta", () => {
     const res = await call("POST", "/me/facts", token, { persona: "heir" });
     expect(res.status).toBe(429);
     expect(claudeCalls).toHaveLength(0);
-  });
-
-  it("stops guests at their share of Claude's day and leaves the rest for people signed in", async () => {
-    const token = await signIn();
-    await call("POST", "/wishes", token, { name: "Porsche 911", kind: "buy", upfrontCents: 14_000_000 });
-    await metaSpent();
-    // Claude's day is $5; the guests' share of it is $3, and they have spent it.
-    await db.query("insert into spend_ledger (user_id, model, kind, cost_usd, created_at) values (null, 'claude-opus-5-5', 'guest', 3, $1)", [clock.toISOString()]);
-    const guest = await app.request("/guest/wish", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: "a Leica Q3" }) });
-    expect(guest.status).toBe(429);
-    expect(claudeCalls).toHaveLength(0);
-    const res = await call("POST", "/me/facts", token, { persona: "heir" });
-    expect(res.status).toBe(200);
-    expect(((await res.json()) as Json).facts.lines[0]).toBe("From Claude one.");
   });
 
   it("without a Claude key, behaves as it always has", async () => {

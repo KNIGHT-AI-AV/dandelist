@@ -1,5 +1,6 @@
 import { PGlite } from "@electric-sql/pglite";
 import { beforeEach, describe, expect, it } from "vitest";
+import { accepted } from "./consent-helper";
 import { createApp } from "../src/app";
 import { migrate, type Db } from "../src/db";
 import { UNSPLASH_IMAGE } from "./unsplash";
@@ -36,7 +37,7 @@ const call = (method: string, path: string, token: string, body?: unknown) =>
 async function signIn(email: string) {
   await app.request("/auth/email/start", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email }) });
   const res = await app.request("/auth/email/verify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, code: mail.at(-1)!.code }) });
-  return ((await res.json()) as { accessToken: string }).accessToken;
+  return accepted(app, ((await res.json()) as { accessToken: string }).accessToken);
 }
 
 const gym = { name: "Gym membership", kind: "do", upfrontCents: 5000, recurring: [{ amountCents: 4000, period: "month", label: "membership" }] };
