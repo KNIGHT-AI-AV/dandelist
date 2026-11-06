@@ -1,23 +1,32 @@
 import { Hono } from "hono";
+import { bodyLimit } from "hono/body-limit";
 import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
 import { agentRoutes, type AgentDeps } from "./agent/routes";
+import { MAX_CLIP_BYTES } from "./agent/transcribe";
 import { Alive } from "./alive";
 import { serverError } from "./analytics";
 import { authRoutes, requireAuth, type AuthVars } from "./auth";
 import { dreamRoutes } from "./dream/routes";
 import { fxRoutes } from "./fx";
 import { guestRoutes } from "./guest";
-import { dropHelpCopies, helpRoutes } from "./help";
+import { dropHelpCopies, HELP_MAX_BYTES, helpRoutes } from "./help";
 import { pairRoutes } from "./pairs";
 import { poolSource, typicalSource } from "./pool";
 import { previewRoutes } from "./preview";
 import { isStoredKey } from "./media-store";
 import { agentKeyRoutes, mcpRoutes } from "./mcp";
 import { adminRoutes } from "./admin";
-import { meRoutes } from "./me";
+import { MAX_AVATAR_BYTES, meRoutes } from "./me";
 import { pickRoutes } from "./picks";
 import { wishRoutes } from "./wishes";
+
+/**
+ * The most any request may send: the biggest upload a route takes (a help report's screen, a voice clip, a photo).
+ * Every other body is far smaller (a wish's details stay under 20,000 characters, a chat message under 16,000).
+ */
+export const MAX_BODY_BYTES = Math.max(HELP_MAX_BYTES, MAX_CLIP_BYTES, MAX_AVATAR_BYTES);
+export const TOO_BIG = "That's too much to send at once.";
 
 export interface AppDeps extends AgentDeps {
   webOrigins: string[];
@@ -33,6 +42,9 @@ export function createApp(deps: AppDeps) {
   const { db } = deps;
 
   app.use("*", cors({ origin: deps.webOrigins, allowHeaders: ["Authorization", "Content-Type"], allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE"] }));
+  // Before sign-in and before any route reads it: a body bigger than every upload is refused unread, so no one can fill
+  // the instance's memory with one request (2026-11-06 audit: most JSON routes had no limit). Routes keep their own.
+  app.use("*", bodyLimit({ maxSize: MAX_BODY_BYTES, onError: (c) => c.json({ error: TOO_BIG }, 413) }));
 
   // An error no route handled: logged as before, and sent to PostHog error tracking with where it happened.
   app.onError((err, c) => {
