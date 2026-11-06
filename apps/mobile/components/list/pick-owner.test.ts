@@ -175,6 +175,8 @@ beforeEach(async () => {
   h.hold.clear();
   h.store.clear();
   h.store.set("dandelist.refresh", "refresh-ada-1");
+  // This device said yes to the AI card (components/ai-consent.tsx), so today's pick may be asked for.
+  h.store.set("dandelist.ai-consent", "1");
 });
 afterEach(async () => {
   await act(async () => root?.unmount());

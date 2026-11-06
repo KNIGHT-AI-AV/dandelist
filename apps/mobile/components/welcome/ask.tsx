@@ -4,6 +4,7 @@ import { haptic } from "../../lib/motion";
 import { placeAgain, restTop, rests, type Frame } from "../../lib/rest-top";
 import { fonts, layout, type, usePalette, useType } from "../../lib/theme";
 import { transcribeGuest } from "../../lib/welcome";
+import { useConsentGate } from "../ai-consent";
 import { KeyboardDock, KeyboardScroll, dockRoom } from "../inputs";
 import { ErrorLine, Eyebrow, PrimaryButton } from "../lux";
 import { ListeningPanel, MicButton, useVoiceWish } from "../voice/say-wish";
@@ -30,7 +31,10 @@ export function Ask({ ideas, initial, bottomInset, onSubmit }: { ideas: string[]
   // while the screen is untouched and kept once someone types, taps an idea or speaks, so nothing moves under them.
   const [frame, setFrame] = useState<Frame | null>(null);
   const [block, setBlock] = useState(0);
+  // Nothing leaves before the yes to the AI card: the first wish, typed or said (App Store 5.1.2(i), Meta's 18+).
+  const consent = useConsentGate();
   const voice = useVoiceWish({
+    gate: consent.gate,
     transcribe: transcribeGuest,
     onHeard: (words) => {
       setText(words.slice(0, WISH_MAX));
@@ -41,8 +45,10 @@ export function Ask({ ideas, initial, bottomInset, onSubmit }: { ideas: string[]
   const submit = () => {
     const wish = text.trim();
     if (wish.length < 2) return setError("Tell us one thing, in a few words.");
-    haptic.select();
-    onSubmit(wish);
+    consent.gate(() => {
+      haptic.select();
+      onSubmit(wish);
+    });
   };
   const untouched = text === initial && !error && voice.phase === "idle";
   const below = dockRoom(dock, bottomInset);
@@ -94,6 +100,7 @@ export function Ask({ ideas, initial, bottomInset, onSubmit }: { ideas: string[]
       <KeyboardDock onHeight={setDock}>
         <PrimaryButton label="Find the real price" disabled={voice.phase !== "idle"} onPress={submit} />
       </KeyboardDock>
+      {consent.card}
     </View>
   );
 }
