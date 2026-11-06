@@ -84,6 +84,10 @@ writeFileSync(
     // The film page streams HLS (Pages answers no byte ranges, which Safari needs for an MP4): give the playlist and its
     // segments their media types. The segments are .m2ts, not .ts, because the app's typecheck reads every .ts file.
     "/film/hls/film.m3u8\n  Content-Type: application/vnd.apple.mpegurl\n" +
-    "/film/hls/film-*\n  Content-Type: video/mp2t\n",
+    "/film/hls/film-*\n  Content-Type: video/mp2t\n" +
+    // Only Dandelist's own pages may show it in a frame, so no other site can lay its sign-in or delete buttons under a
+    // decoy (both headers: browsers that ignore frame-ancestors read X-Frame-Options). The host is HTTPS only, so
+    // browsers are told to skip plain HTTP for a year; this host alone, not knightaiav.com's other names.
+    "/*\n  Content-Security-Policy: frame-ancestors 'self'\n  X-Frame-Options: SAMEORIGIN\n  Strict-Transport-Security: max-age=31536000\n",
 );
 run("npx -y wrangler@4.149.0 pages deploy dist --project-name dandelist --branch main --commit-dirty=true");
