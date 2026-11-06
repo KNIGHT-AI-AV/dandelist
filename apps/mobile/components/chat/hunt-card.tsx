@@ -337,10 +337,10 @@ export function HuntCard({ id: item, text, watched = true, onPhase, onShowOnList
           <Photo uri={shot?.imageUrl} glyph={glyphFor(worth.worth, worth.title, money.symbol)} />
         </View>
         <View style={{ padding: 20, gap: 12 }}>
-          {isSimilarPhoto(shot?.media, shot?.imageUrl) ? <Text style={[type.figure, { color: p.ink3 }]}>{SIMILAR}</Text> : null}
           <Text style={[type.title2, { color: p.ink }]} numberOfLines={2}>
             {worth.title}
           </Text>
+          {isSimilarPhoto(shot?.media, shot?.imageUrl) ? <Text style={[type.figure, { color: p.ink3 }]}>{SIMILAR}</Text> : null}
           {worth.worth === "money" ? <AmountPicker cents={amountCents} namedCents={named} onChange={(c) => keep({ ...(hunts.get(id) ?? h), amount: c })} /> : <PricelessPrice line={worth.line} />}
           {h.error ? <ErrorLine>{h.error}</ErrorLine> : null}
           {listedId ? <AddedLine onPress={() => onShowOnList?.(listedId)} /> : <PrimaryButton label="Add to my list" busy={saving} onPress={() => void saveWorth(worth)} />}
@@ -391,11 +391,11 @@ export function HuntCard({ id: item, text, watched = true, onPhase, onShowOnList
         </View>
       ) : null}
       <View style={{ padding: 20, gap: 12 }}>
-        {/* A stand-in photo (another colour of the model, say) says so, right under it. */}
-        {isSimilarPhoto(h.shot ? h.shot.media : option.media, photo) ? <Text style={[type.figure, { color: p.ink3 }]}>{SIMILAR}</Text> : null}
         <Text style={[type.title2, { color: p.ink }]} numberOfLines={2}>
           {draft?.title}
         </Text>
+        {/* A stand-in photo (another colour of the model, say) says so under the title, as the wish page's credit does. */}
+        {isSimilarPhoto(h.shot ? h.shot.media : option.media, photo) ? <Text style={[type.figure, { color: p.ink3 }]}>{SIMILAR}</Text> : null}
         {guessKept || listedId ? null : candidatePick ? (
           <CandidateRow pick={candidatePick} onConfirm={() => setGuessKept(true)} onPick={(name) => void start({ text: name })} />
         ) : guess ? (

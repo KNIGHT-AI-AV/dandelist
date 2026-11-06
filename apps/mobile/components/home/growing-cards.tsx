@@ -4,6 +4,7 @@ import { Animated, PanResponder, Platform, Pressable, Text, View, type Accessibi
 import { useMoney } from "../../lib/currency";
 import { noteDrag } from "../../lib/drag-guard";
 import { ease, haptic, native, spring, usePress, useReducedMotion } from "../../lib/motion";
+import { isSimilarPhoto, SIMILAR, SIMILAR_SPOKEN } from "../../lib/photo-credit";
 import { layout, space, type, usePalette } from "../../lib/theme";
 import type { Wish } from "../../lib/wishes";
 import { TIER_LABEL } from "../../lib/words";
@@ -21,6 +22,8 @@ const REMOVE_AT = 0.35;
 const NO_SELECT = Platform.OS === "web" ? ({ userSelect: "none" } as object) : null;
 /** The words over the photograph sit in this much of the card's foot. */
 const FOOT = 150;
+/** One more line in the foot, "A similar one" over a stand-in photo: its 18 pt line and the tight gap under it. */
+const SIMILAR_LINE = 26;
 
 export interface CardHandlers {
   onOpen(w: Wish, at?: Rect): void;
@@ -43,7 +46,7 @@ interface CardProps extends CardHandlers {
 /** What a screen reader says for a card. */
 export function useCardLabel() {
   const money = useMoney();
-  return (w: Wish) => `${w.name}, ${priceWords(w, money.format)}, ${TIER_LABEL[w.tier]}`;
+  return (w: Wish) => `${w.name}, ${priceWords(w, money.format)}, ${TIER_LABEL[w.tier]}${isSimilarPhoto(w.details.agent?.media, w.details.agent?.imageUrl) ? `, ${SIMILAR_SPOKEN}` : ""}`;
 }
 
 function Card({ w, index, g, scrollY, listTop, focus, width, fresh, onOpen, onQuick, onRemove }: CardProps) {
@@ -54,7 +57,9 @@ function Card({ w, index, g, scrollY, listTop, focus, width, fresh, onOpen, onQu
   const press = usePress(0.985);
   const tall = g.rest + g.grow;
   const pitch = g.rest + g.gap;
-  const foot = Math.min(FOOT, g.rest);
+  // A stand-in photo (another colour of the model, say) says so under the name, as its credit does on the wish's page.
+  const similar = isSimilarPhoto(w.details.agent?.media, w.details.agent?.imageUrl);
+  const foot = Math.min(FOOT + (similar ? SIMILAR_LINE : 0), g.rest);
 
   const ranges = useMemo(() => cardRanges(index, g, listTop, focus), [index, g, listTop, focus]);
   const open = useMemo(() => (reduced ? new Animated.Value(0) : scrollY.interpolate({ ...ranges.open, extrapolate: "clamp" })), [scrollY, ranges, reduced]);
@@ -179,6 +184,8 @@ function Card({ w, index, g, scrollY, listTop, focus, width, fresh, onOpen, onQu
                 <Text style={[type.title2, { color: p.ink }]} numberOfLines={2}>
                   {w.name}
                 </Text>
+                {/* Under the name, as the wish page's credit line says it, where the shade is dark enough to read. */}
+                {similar ? <Text style={[type.figure, { color: p.ink2 }]}>{SIMILAR}</Text> : null}
                 <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: space[12] }}>
                   <CardLine w={w} monthlyCents={monthly} />
                   <View style={{ alignItems: "flex-end" }}>

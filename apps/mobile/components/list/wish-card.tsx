@@ -46,11 +46,11 @@ export function WishFace({ w, still = false }: { w: Wish; still?: boolean }) {
       {still ? <StillPhoto uri={uri} glyph={glyph} /> : <Photo uri={uri} glyph={glyph} />}
       <Shade from={0.25} />
       <View style={{ position: "absolute", left: layout.cardPad, right: layout.cardPad, bottom: layout.cardPad, gap: layout.stack.tight }}>
-        {/* A stand-in photo (another colour of the model, say) says so, as its credit does on the wish's page. */}
-        {isSimilarPhoto(w.details.agent?.media, uri) ? <Text style={[type.figure, { color: p.ink2 }]}>{SIMILAR}</Text> : null}
         <Text style={[type.title2, { color: p.ink }]} numberOfLines={2}>
           {w.name}
         </Text>
+        {/* A stand-in photo (another colour of the model, say) says so under the name, as its credit does on the wish's page. */}
+        {isSimilarPhoto(w.details.agent?.media, uri) ? <Text style={[type.figure, { color: p.ink2 }]}>{SIMILAR}</Text> : null}
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: space[12] }}>
           <CardLine w={w} monthlyCents={monthly} />
           <View style={{ flexDirection: "row", alignItems: "baseline", gap: space[8] }}>
