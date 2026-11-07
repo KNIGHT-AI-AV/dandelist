@@ -45,36 +45,13 @@ const post = (app: ReturnType<typeof makeApp>, body: unknown, ip = "203.0.113.9"
   app.request("/preview", { method: "POST", headers: { "Content-Type": "application/json", "x-forwarded-for": ip }, body: JSON.stringify(body) });
 
 describe("pre-login preview", () => {
-  it.each([
-    ["global", "test", 9.95],
-    ["preview", "preview", 0.95],
-  ])("reserves the note writer against the %s allowance before calling Meta", async (_scope, kind, usd) => {
-    await db.query("insert into spend_ledger (user_id, model, kind, cost_usd, created_at) values (null, 'muse-spark-1.3', $1, $2, $3)", [kind, usd, clock.toISOString()]);
+  it("writes its note from the facts and never asks a model, even with a key (nothing reaches AI before sign-in)", async () => {
     const meta = vi.fn(async () => new Response(JSON.stringify({ id: "should-not-run", output: [] }), { status: 200 }));
-    const evs = await events(await post(makeApp(sellerPage("$1.00"), meta), { picks: ["leica-q3"], monthlyCents: 100_000 }));
+    const evs = await events(await post(makeApp(sellerPage("$1.00"), meta), { picks: ["porsche-911", "leica-q3"], monthlyCents: 300_000 }));
     expect(meta).not.toHaveBeenCalled();
-    expect(evs.some((e) => e.type === "result")).toBe(true);
-    expect(evs.some((e) => e.type === "note")).toBe(true);
-  });
-
-  it("computes the plan from the catalogue and the cost engine", () => {
-    const porsche = entry("porsche-911")!;
-    const leica = entry("leica-q3")!;
-    const f = planFacts([porsche, leica], 300_000, clock);
-    expect(f.everything_upfront).toBe("$142,850");
-    expect(f.largest.name).toBe("Porsche 911 Carrera");
-    expect(f.largest.share_percent).toBe(95);
-    // $142,850 at $3,000 a month is 48 months from Oct 2026.
-    expect(f.everything_by).toBe(new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric", timeZone: "UTC" }).format(reachBy(14_285_000, 300_000, clock)));
-    expect(fallbackNote(f)).toContain("95%");
-  });
-
-  it("calls running costs nobody recorded not recorded, and the fallback note never adds them (Codex R13)", () => {
-    const leica = { ...entry("leica-q3")!, recurring: [] };
-    const f = planFacts([leica], 300_000, clock);
-    expect(f.running_costs_per_month_once_owned).toBe(NOT_RECORDED);
-    expect(f.picks[0]!.running_per_month).toBe(NOT_RECORDED);
-    expect(fallbackNote(f)).not.toContain("a month to keep");
+    expect(evs.find((e) => e.type === "note").text.length).toBeGreaterThan(10);
+    expect(evs.find((e) => e.type === "result").largest.share).toBe(95);
+    expect((await db.query("select 1 from spend_ledger")).rows).toEqual([]);
   });
 
   it("streams real rows, a live check, a note and the result without a Meta key", async () => {
@@ -115,33 +92,6 @@ describe("pre-login preview", () => {
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({ error: "Check your picks and try again." });
     expect(webFetch).not.toHaveBeenCalled();
-  });
-
-  it("drops a model note that invents numbers", async () => {
-    const meta = (async () =>
-      new Response(JSON.stringify({ output: [{ type: "message", content: [{ type: "output_text", text: "You'll have it all in 3 years for $99." }] }], usage: { input_tokens: 10, output_tokens: 10 } }), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      })) as never;
-    const ev = await events(await post(makeApp(sellerPage("$7,350.00"), meta), { picks: ["leica-q3"], monthlyCents: 100_000 }));
-    expect(ev.find((e) => e.type === "note").text).not.toContain("$99");
-  });
-
-  it("keeps the percent sign when the model copies the largest share from its facts", async () => {
-    let submittedFacts: { largest: { share_percent: string | number } } | undefined;
-    const meta = (async (_url: unknown, init: RequestInit) => {
-      const request = JSON.parse(String(init.body));
-      submittedFacts = JSON.parse(request.input.slice("FACTS: ".length));
-      const text = `The Porsche 911 Carrera is the largest at ${submittedFacts!.largest.share_percent}.`;
-      return new Response(JSON.stringify({ output: [{ type: "message", content: [{ type: "output_text", text }] }], usage: { input_tokens: 10, output_tokens: 10 } }), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      });
-    }) as typeof fetch;
-    const ev = await events(await post(makeApp(sellerPage("$1.00"), meta), { picks: ["porsche-911", "leica-q3"], monthlyCents: 300_000 }));
-    expect(submittedFacts?.largest.share_percent).toBe("95%");
-    expect(ev.find((e) => e.type === "note").text).toBe("The Porsche 911 Carrera is the largest at 95%.");
-    expect(ev.find((e) => e.type === "result").largest.share).toBe(95);
   });
 
   it("accepts a known percentage in the number guard and rejects an invented percentage", () => {

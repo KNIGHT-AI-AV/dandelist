@@ -1,21 +1,18 @@
 import { entries as catalogue } from "@dandelist/catalogue";
 import { formatCents, recurringBreakdown, upfrontCashCents, type Item } from "@dandelist/cost";
-import { MetaClient } from "@dandelist/meta";
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { heartbeat } from "./sse";
 import { z } from "zod";
-import { unknownNumbers } from "./agent/agent";
 import { getPage, pageShowsPrice, publicFetch, type Fetcher } from "./agent/tools";
 import type { AgentDeps } from "./agent/routes";
 import { fromCatalogue, resolvePicks, type PoolItem } from "./pool";
-import { SpendLimitError, assertBudget, heldForScope, recordSpend, withBudgetScope } from "./spend";
 
 /**
  * The pre-login "your agent at work" step. Nothing here is scripted: each row is sent when the server has done that
  * piece of work, the one live seller check really fetches the seller's page, and every number comes from the
- * catalogue and the cost engine. Muse Spark writes the closing note, and the note is dropped for a fixed template if
- * it uses any number that isn't in the facts.
+ * catalogue and the cost engine. The closing note is a fixed template from the same facts: this runs before sign-in,
+ * and since 2026-11-06 nothing reaches AI before an account has accepted how Dandelist uses it (consent.ts).
  */
 
 export const PREVIEWS_PER_IP_PER_HOUR = 6;
@@ -89,8 +86,6 @@ export function fallbackNote(f: ReturnType<typeof planFacts>): string {
  */
 export const ipOf = (h: (name: string) => string | undefined) => (h("x-forwarded-for") ?? "").split(",").map((s) => s.trim()).filter(Boolean).pop() || "unknown";
 
-/** Preview notes are cheap, but they get their own daily ceiling so anonymous traffic can't eat the agent's budget. */
-export const PREVIEW_DAILY_USD = 1;
 const MAX_TRACKED_IPS = 5000;
 
 export function previewRoutes(deps: AgentDeps & { webFetch?: Fetcher; pool?: () => Promise<PoolItem[]> }) {
@@ -155,29 +150,9 @@ export function previewRoutes(deps: AgentDeps & { webFetch?: Fetcher; pool?: () 
         await send({ type: "row", id: "running", state: "done", text: labels.length ? `Added running costs: ${labels.slice(0, 3).join(", ")}.` : "No running costs recorded for these picks." });
         await send({ type: "row", id: "total", state: "done", text: `Added it all up: ${facts.everything_upfront}.` });
 
-        let note = fallbackNote(facts);
-        if (deps.meta) {
-          try {
-            // Give the note writer the unit to copy; the streamed result still uses the numeric share.
-            const noteFacts = { ...facts, largest: { ...facts.largest, share_percent: `${facts.largest.share_percent}%` } };
-            const client = new MetaClient({ ...deps.meta, onUsage: (usage, cost) => recordSpend(db, null, "preview", usage, cost, deps.now()) });
-            const res = await withBudgetScope("preview", async () => {
-              await assertBudget(db, deps.spendCaps ?? { dailyUsd: 10, totalUsd: 120 }, now);
-              const dayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).toISOString();
-              const spent = (await db.query<{ s: string | null }>("select coalesce(sum(cost_usd), 0) as s from spend_ledger where kind = 'preview' and created_at >= $1", [dayStart])).rows[0];
-              const usd = Number(spent?.s ?? 0);
-              if (usd >= PREVIEW_DAILY_USD || usd + heldForScope("preview") > PREVIEW_DAILY_USD) throw new SpendLimitError("daily");
-            }, () => client.responses({
-              instructions:
-                "You are Dandelist's agent. In two short sentences, under 40 words, say something useful about this wish list: what stands out, the largest share, and what it costs to keep each month if anything. Use only numbers that appear in FACTS, written exactly as given, including the % sign on percentages. No dates, no saving or budgeting advice, no financial advice, no hype, no questions.",
-              input: `FACTS: ${JSON.stringify(noteFacts)}`,
-            }));
-            const text = res.text.trim();
-            if (text && !unknownNumbers(text, noteFacts).length) note = text;
-          } catch (e) {
-            if (!(e instanceof SpendLimitError)) console.error("preview note failed", (e as Error).message);
-          }
-        }
+        // The written note, never a model's (2026-11-06): this runs before sign-in, and nothing reaches AI before an
+        // account has accepted how Dandelist uses it (consent.ts).
+        const note = fallbackNote(facts);
         await send({ type: "note", text: note });
 
         const items = picks.map(toItem);

@@ -11,7 +11,6 @@ import { Ask } from "../components/welcome/ask";
 import { VotePair, WhenStep } from "../components/welcome/choose";
 import { Comfort } from "../components/welcome/comfort";
 import { CodeSheet, RevealCard } from "../components/welcome/finale";
-import { MadeStep } from "../components/welcome/made";
 import { AgentTicker, LifePill, Segments } from "../components/welcome/kit";
 import { ThemeChooser } from "../components/welcome/theme";
 import { TitleSequence } from "../components/welcome/title";
@@ -19,17 +18,15 @@ import { useAuth, useSignInOptions, type ProviderId, type SignInOption } from ".
 import type { Step as AgentStep } from "../lib/agent";
 import { ease, native, spring, useReducedMotion } from "../lib/motion";
 import { faderIncome, needOf, poolEntry } from "../lib/comfort";
-import { ANSWERED_ROUNDS, chosen as chosenBy, groupsFor, pickPair, unseenCount, usablePairs, votingDone, type Vote, type WishPair } from "../lib/pairs";
+import { ANSWERED_ROUNDS, chosen as chosenBy, groupsFor, pickPair, unseenCount, votingDone, type Vote, type WishPair } from "../lib/pairs";
 import { thoughtOf } from "../lib/reveal";
 import { play, preloadSounds } from "../lib/sound";
 import { layout, type, usePalette, useTheme } from "../lib/theme";
 import { welcomeBack } from "../lib/back-target";
-import { cataloguePool, emptyWelcome, fetchPool, keepsHunt, listTotal, listed, loadWelcome, markTitleSeen, saveWelcome, seenTitle, settled, streamGuestWish, type FirstWish, type PoolItem, type WelcomeState } from "../lib/welcome";
+import { cataloguePool, emptyWelcome, fetchPool, listTotal, listed, loadWelcome, markTitleSeen, saveWelcome, seenTitle, type FirstWish, type PoolItem, type WelcomeState } from "../lib/welcome";
 import { startWelcome } from "../lib/welcome-start";
 import { welcomeSteps, type Fade } from "../lib/welcome-steps";
-import { guessCandidates, guessOthers } from "../lib/guess";
 import { useMoney } from "../lib/currency";
-import { amountSteps, startAmount } from "../lib/worth";
 import { MAIN } from "../lib/landmark";
 import { dollars } from "../components/odometer";
 import { Atmosphere } from "../components/atmosphere";
@@ -62,7 +59,7 @@ function WelcomeSocial() {
   );
 }
 
-type Step = { kind: "title" } | { kind: "ask" } | { kind: "made" } | { kind: "vote"; pair: [PoolItem, PoolItem] } | { kind: "when" } | { kind: "comfort" } | { kind: "agent" } | { kind: "reveal" } | { kind: "theme" };
+type Step = { kind: "title" } | { kind: "ask" } | { kind: "vote"; pair: [PoolItem, PoolItem] } | { kind: "when" } | { kind: "comfort" } | { kind: "agent" } | { kind: "reveal" } | { kind: "theme" };
 type Pricing = "idle" | "pricing" | "priced" | "failed";
 /** What Back puts back on a step: the list, the pairs shown and the counts as they were on it, before its own choice. */
 type Snap = { items: PoolItem[]; seen: Set<string>; answered: number; rounds: number; done: number };
@@ -70,8 +67,6 @@ type Snap = { items: PoolItem[]; seen: Set<string>; answered: number; rounds: nu
 /** Ask, three answered rounds, when, what it would take, the agent: the segments under the header. */
 const SEGMENTS = 2 + ANSWERED_ROUNDS + 2;
 const HERO = entry("porsche-911") as Entry;
-/** How long the "found it" line stays above the meter once the first wish is priced. */
-const FOUND_HOLD_MS = 4200;
 /** Step changes are slow crossfades (owner, 2026-10-29: "more cinematic and slower", "smoother and slower"). */
 const FADE_OUT_MS = 520;
 const FADE_IN_MS = 1100;
@@ -186,9 +181,8 @@ export default function Welcome() {
       fetchPool,
       onLocal: (seenBefore, saved) => {
         setShort(seenBefore);
-        // A first wish that was still being priced when they left is asked again rather than half-shown; one that
-        // landed (priced, money with its amount, or priceless) stays.
-        if (saved) setState({ ...saved, wish: settled(saved.wish) ? saved.wish : null });
+        // The first wish stays as it was kept, priced or not: it is priced after sign-in (lib/adopt.ts).
+        if (saved) setState(saved);
         steps.start({ kind: "title" });
       },
       onPool: setPool,
@@ -243,70 +237,6 @@ export default function Welcome() {
   };
 
   /**
-   * Starts the agent on the first wish; it keeps working while this or that goes on. `price` is the money or priceless
-   * card's "Price it": the words are hunted as an ordinary priced wish. The same stream brings this or that made from
-   * the wish (owner, 2026-10-30), asked for again only when it hasn't come yet.
-   */
-  const priceWish = (text: string, price = false) => {
-    run.current?.abort();
-    const ctrl = new AbortController();
-    run.current = ctrl;
-    continued.current = false;
-    setTrail([]);
-    setFound(false);
-    setPricing("pricing");
-    setLooking(true);
-    patch((s) => ({ ...s, wish: { text } }));
-    // Money or something priceless (owner, 2026-10-30): once its card has come, the error the server sends after it
-    // for older apps, and a stream that drops later, are not failures.
-    let worthy = false;
-    streamGuestWish(
-      text,
-      (e) => {
-        if (ctrl.signal.aborted) return;
-        // A draft can come twice (again when its questions land); a guess they already confirmed stays confirmed.
-        if (e.type === "draft") patchWish((w) => ({ ...w, title: e.title, kind: e.kind, ...(w.guess === null ? {} : { guess: guessOthers(e.draft) ?? undefined, pick: guessCandidates(e.draft) ?? undefined }) }));
-        else if (e.type === "step") setTrail((t) => [...t, e.step]);
-        else if (e.type === "worth") {
-          worthy = true;
-          if (e.worth === "money") {
-            // The slider starts at what the wish named, else a million of the shown currency.
-            const amountCents = startAmount(amountSteps(money.rate, money.unit, e.amountCents), e.amountCents);
-            patchWish((w) => ({ ...w, title: e.title, kind: e.kind, worth: "money", amountCents, ...(e.amountCents ? { namedCents: e.amountCents } : {}), failed: undefined }));
-          } else patchWish((w) => ({ ...w, title: e.title, kind: e.kind, worth: "priceless", line: e.line, failed: undefined }));
-          setPricing("priced");
-        } else if (e.type === "photo") patchWish((w) => ({ ...w, photo: { imageUrl: e.imageUrl, ...(e.media ? { media: e.media } : {}) } }));
-        else if (e.type === "pairs") {
-          // The next pair drawn comes from these; a pair already on screen stays.
-          const pairs = usablePairs(e.pairs);
-          if (pairs.length) made.current = pairs;
-        } else if (e.type === "priced") {
-          const { label, seller, url, upfrontCents, recurring, status, statusLabel, checkedAt, imageUrl, media, source } = e.option;
-          // The fast card lands first; a better one from the full research replaces it quietly, with no second "found".
-          const first = !latest.current.wish?.option;
-          patchWish((w) => ({ ...w, title: e.title, kind: e.kind, option: { label, seller, url, upfrontCents, recurring, status, statusLabel, checkedAt, imageUrl, media, source } }));
-          setPricing("priced");
-          if (first) {
-            setFound(true);
-            // Only this hunt's own "found" ends: a later hunt's line is not cut short by this timer.
-            setTimeout(() => run.current === ctrl && setFound(false), FOUND_HOLD_MS);
-          }
-        } else if (e.type === "error" && !worthy) {
-          patchWish((w) => ({ ...w, failed: e.message }));
-          setPricing("failed");
-        }
-      },
-      ctrl.signal,
-      price,
-      !made.current.length,
-    ).catch((err: Error) => {
-      if (ctrl.signal.aborted || worthy) return;
-      patchWish((w) => ({ ...w, failed: err instanceof TypeError ? "Couldn't reach Dandelist just now." : err.message }));
-      setPricing("failed");
-    }).finally(() => run.current === ctrl && setLooking(false));
-  };
-
-  /**
    * The next pair: one made from the first wish while there is one, "Neither" included. Before they arrive or once they
    * are used up, the pool's: a cover first, then pairs leaning toward what the first wish turned out to be.
    */
@@ -318,24 +248,23 @@ export default function Welcome() {
   };
 
   /**
-   * The first wish is sent from the `from` step. The same words as the wish already on the card keep its card, or the
-   * hunt still finding it (lib/welcome.ts keepsHunt), and the pairs made from it; anything else is hunted afresh, and a
-   * new wish brings its own pairs: the last wish's never stand in for them.
+   * The first wish is kept from the `from` step, to be priced once they have an account that has accepted how Dandelist
+   * uses AI (the owner, 2026-11-06; lib/adopt.ts prices it on the list). Nothing about it leaves the device before then,
+   * so this or that comes from the pool. The same words keep the wish as it is; new words replace it.
    */
   const startVoting = (from: Step, text: string) => {
     const leave = steps.leave(from);
     if (!leave) return;
-    const hunting = pricing === "pricing" && !!run.current && !run.current.signal.aborted;
-    if (!keepsHunt(latest.current.wish, text, hunting)) {
+    if (latest.current.wish?.text !== text) {
       made.current = [];
-      priceWish(text);
+      patch((s) => ({ ...s, wish: { text } }));
     }
     seen.current = new Set();
     rounds.current = 0;
     answered.current = 0;
     patch((s) => ({ ...s, items: [] }));
     setDone(1);
-    leave.to({ kind: "made" });
+    leave.to(nextVote(latest.current) ?? { kind: "when" });
   };
 
   /** A vote on the `at` pair; if they went Back before its price landed in the meter, it never happened. */
@@ -418,7 +347,7 @@ export default function Welcome() {
   // The fader step carries its own total in the faces, and needs the room the meter would take on a phone.
   const metered = step.kind === "vote" || step.kind === "when" || step.kind === "agent";
   const canGoBack = steps.canGoBack() && step.kind !== "title" && step.kind !== "theme";
-  const segmented = metered || step.kind === "ask" || step.kind === "made" || step.kind === "comfort";
+  const segmented = metered || step.kind === "ask" || step.kind === "comfort";
   const framed = step.kind !== "title" && step.kind !== "theme";
   const gutter = layout.gutter(width);
   const headerColumn = width >= 760 && step.kind === "vote" ? 932 : layout.column;
@@ -456,28 +385,6 @@ export default function Welcome() {
       break;
     case "ask":
       body = <Ask ideas={ideas} initial={state.wish?.text ?? ""} bottomInset={insets.bottom} onSubmit={(text) => startVoting(here, text)} />;
-      break;
-    case "made":
-      body = state.wish ? (
-        <MadeStep
-          wish={state.wish}
-          pricing={pricing}
-          looking={looking}
-          waited={continued.current}
-          line={thought?.text ?? ""}
-          onAmount={(amountCents) => patchWish((w) => ({ ...w, amountCents }))}
-          onPrice={() => steps.is(here) && state.wish && priceWish(state.wish.text, true)}
-          onContinue={() => {
-            const leave = steps.leave(here);
-            if (!leave) return;
-            continued.current = true;
-            leave.to(nextVote(latest.current) ?? { kind: "when" });
-          }}
-          onGuessConfirm={() => patchWish((w) => ({ ...w, guess: null, pick: null }))}
-          onGuessPick={(name) => steps.is(here) && priceWish(name)}
-          onGuessElse={() => steps.is(here) && goBack()}
-        />
-      ) : null;
       break;
     case "vote": {
       const [a, b] = step.pair;
@@ -572,7 +479,7 @@ export default function Welcome() {
       <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { opacity: chrome }]}>
         <Atmosphere />
       </Animated.View>
-      <Animated.View style={{ flex: 1, opacity: stage, borderRadius: sheet ? 24 : 0, overflow: sheet ? "hidden" : "visible", transform: [{ translateX: shift }, { scale: behind }], paddingTop: framed ? insets.top + layout.contentTop : 0, paddingBottom: metered ? insets.bottom + pillSpace : step.kind === "made" ? insets.bottom + layout.stack.base : 0 }}>
+      <Animated.View style={{ flex: 1, opacity: stage, borderRadius: sheet ? 24 : 0, overflow: sheet ? "hidden" : "visible", transform: [{ translateX: shift }, { scale: behind }], paddingTop: framed ? insets.top + layout.contentTop : 0, paddingBottom: metered ? insets.bottom + pillSpace : 0 }}>
         {body}
       </Animated.View>
 

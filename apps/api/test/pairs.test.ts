@@ -1,6 +1,7 @@
 import { PGlite } from "@electric-sql/pglite";
 import { entries as catalogue } from "@dandelist/catalogue";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { accepted } from "./consent-helper";
 
 // Shop hostnames resolve to a public documentation address, so no test touches real DNS.
 vi.mock("node:dns/promises", async (importOriginal) => ({ ...(await importOriginal<object>()), lookup: async () => [{ address: "93.184.215.14", family: 4 }] }));
@@ -320,126 +321,6 @@ describe("the pair rules", () => {
   });
 });
 
-describe("this or that from the first wish", () => {
-  it("ties every pair to a Rolls-Royce: comparable cars first, next door last, each with a real photo and a typical price", async () => {
-    await seedTypicals();
-    const evs = await events(await wish("I want a Rolls Royce", "203.0.113.40"));
-    const got = evs.find((e) => e.type === "pairs")!;
-    expect(got).toBeTruthy();
-    // The wish itself and the third pair next door fell away. The Cullinan's title lands on one section of a broader
-    // article and the Flying Spur's on a disambiguation page, so neither has a photo: the Ghost and the Spectre they
-    // were paired with make a pair of their own.
-    expect(got.pairs.map((p: Json) => [p.a.name, p.b.name])).toEqual([
-      ["Bentley Mulsanne", "Mercedes-Maybach S-Class"],
-      ["Rolls-Royce Ghost", "Rolls-Royce Spectre"],
-      ["Riva Aquarama", "Gulfstream G700"],
-    ]);
-    expect(got.pairs.map((p: Json) => p.adjacent)).toEqual([false, false, true]);
-    expect(got.pairs.map((p: Json) => p.why)).toEqual(["Which feels more like you", "", "Which feels more like you"]);
-    for (const side of sides(got.pairs.slice(0, 2))) expect(side).toMatchObject({ kind: "own", group: "things", category: "drive", media: { kind: "vehicle" } });
-    // Every side has a real photograph, with no tracking on its address.
-    for (const side of sides(got.pairs)) {
-      expect(side.media.images[0].url).toMatch(/^https:\/\/upload\.wikimedia\.org\//);
-      expect(side.media.images[0].url).not.toContain("utm_");
-    }
-    const card = (name: string) => sides(got.pairs).find((c) => c.name === name)!;
-    // A lead photo comes as Wikimedia's 1920 px rendering, credited like the pool's photos.
-    expect(card("Bentley Mulsanne")).toMatchObject({
-      id: "p:bentley-mulsanne",
-      status: "estimate",
-      seller: "Typical price",
-      url: "",
-      upfrontCents: 31_000_000,
-      note: "Typical price · new",
-      credit: "Photo: Vauxford, CC BY-SA 4.0",
-      checkedAt: clock.toISOString(),
-      media: { kind: "vehicle", images: [{ url: thumb("Bentley Mulsanne 2016.jpg", 1920), width: 1920, height: 1248, source: "commons.wikimedia.org", sourcePage: description("Bentley Mulsanne 2016.jpg") }] },
-    });
-    // The archive's typical price when it has the thing (a car, never the tour that shares its name), as the pool shows
-    // it; else the agent's own, to two figures.
-    expect(card("Rolls-Royce Ghost")).toMatchObject({ upfrontCents: 36_000_000, note: "Typical price · new MSRP, base to well-optioned" });
-    expect(card("Gulfstream G700")).toMatchObject({ upfrontCents: 7_800_000_000, note: "Typical price · new, typical delivered" });
-    expect(card("Mercedes-Maybach S-Class")).toMatchObject({ upfrontCents: 19_000_000, note: "Typical price · new" });
-    expect(card("Riva Aquarama")).toMatchObject({ upfrontCents: 120_000_000, note: "Typical price · pre-owned", credit: "Photo: Wikimedia Commons contributor, CC BY-SA 4.0" });
-    // One model call, at minimal effort and with no tools, from their own words.
-    expect(pairCalls()).toHaveLength(1);
-    expect(pairCalls()[0]).toMatchObject({ reasoning: { effort: PAIRS_EFFORT } });
-    expect(PAIRS_EFFORT).toBe("minimal");
-    expect(pairCalls()[0]!.tools).toBeUndefined();
-    expect(pairCalls()[0]!.input).toContain('WISH: "I want a Rolls Royce"');
-    // All the photos in two requests: where each article lands, then its file. No Wikidata call when every lead is a photo.
-    expect(fetched("en.wikipedia.org", "pageprops")).toBe(1);
-    expect(fetched("en.wikipedia.org", "imageinfo")).toBe(1);
-    expect(fetched("www.wikidata.org", "wbgetclaims")).toBe(0);
-    // Its spend is guest spend, under the guest allowance.
-    const spend = (await db.query<{ n: string }>("select count(*) as n from spend_ledger where user_id is null and kind = 'guest-pairs'")).rows[0]!;
-    expect(Number(spend.n)).toBe(1);
-  });
-
-  it("answers a camera with cameras, lets the pool's own cards stand for what it has, and shows a country's beach, not its flag", async () => {
-    await seedTypicals();
-    pairsAnswer = CAMERAS;
-    const evs = await events(await wish("a Leica Q3", "203.0.113.41"));
-    const got = evs.find((e) => e.type === "pairs")!;
-    expect(got.pairs.map((p: Json) => [p.a.name, p.b.name])).toEqual([
-      ["Leica M11", "Hasselblad X2D"],
-      ["Ricoh GR III", "Nikon Zf"],
-      ["Apple Vision Pro", "Rimowa Original Cabin"],
-      ["Seychelles", "Two weeks in Kyoto"],
-    ]);
-    for (const side of sides(got.pairs.slice(0, 2))) expect(side).toMatchObject({ kind: "buy", group: "things", category: "capture", media: { kind: "product" } });
-    const card = (name: string) => sides(got.pairs).find((c) => c.name === name)!;
-    expect(card("Leica M11")).toMatchObject({ upfrontCents: 919_500, note: "Typical price · US list price, new (2026)" });
-    // The pool's cards keep their own ids, prices and photos, so the pool never shows them twice.
-    for (const id of ["vision-pro", "rimowa-cabin", "kyoto-autumn"]) {
-      const e = catalogue.find((x) => x.id === id)!;
-      expect(card(e.name)).toMatchObject({ id, upfrontCents: e.upfrontCents, status: e.status, url: e.url });
-    }
-    // The Seychelles' article leads with its flag; the Wikidata item's own image, a beach, stands.
-    expect(card("Seychelles")).toMatchObject({ kind: "visit", group: "travel", note: "Typical price · 7 nights for two incl. economy flights", upfrontCents: 1_200_000, credit: "Photo: Ralf Roletschek, CC BY-SA 4.0" });
-    expect(card("Seychelles").media.images[0].url).toBe(thumb("La Digue asv2024-10 img56 Anse Patates.jpg", 1920));
-    expect(card("Seychelles").media.images[0].sourcePage).toBe(description("La Digue asv2024-10 img56 Anse Patates.jpg"));
-    expect(fetched("www.wikidata.org", "wbgetclaims")).toBe(1);
-    expect(fetched("en.wikipedia.org", "imageinfo")).toBe(2);
-    // The model was shown the places the pool already has curated photographs of.
-    expect(pairCalls()[0]!.input).toContain("PLACES WE HAVE PHOTOGRAPHED:");
-    expect(pairCalls()[0]!.input).toContain('"Two weeks in Kyoto"');
-    expect(sides(got.pairs).map((c) => c.name)).not.toContain("Leica Q3");
-  });
-
-  it("sends no pairs when the model fails or answers nonsense, and the wish is still priced", { timeout: 20_000 }, async () => {
-    const answers: [Json | string | number, string][] = [[500, "203.0.113.50"], ["not json at all", "203.0.113.51"], [{ pairs: [{ a: { title: "X" } }] }, "203.0.113.52"]];
-    for (const [answer, ip] of answers) {
-      pairsAnswer = answer;
-      const evs = await events(await wish("a peloton bike", ip));
-      expect(evs.some((e) => e.type === "pairs")).toBe(false);
-      expect(evs.some((e) => e.type === "priced")).toBe(true);
-      expect(evs.some((e) => e.type === "error")).toBe(false);
-    }
-  });
-
-  it("sends no pairs when no side has a photo", async () => {
-    pairsAnswer = { pairs: [pair(thing("Patek Philippe Nautilus", "thing", "Patek Philippe Nautilus", 140_000), thing("Bentley Flying Spur", "vehicle", "Bentley Flying Spur", 230_000))] };
-    const evs = await events(await wish("a Patek Philippe", "203.0.113.53"));
-    expect(evs.some((e) => e.type === "pairs")).toBe(false);
-    expect(pairCalls()).toHaveLength(1);
-  });
-
-  it("makes none unless the app asks, and never for a hunt again with changed answers", async () => {
-    await (await wish("I want a Rolls Royce", "203.0.113.60", {})).text();
-    const draft = { ...DRAFT, currency: "USD", questions: [] };
-    await (await wish("I want a Rolls Royce", "203.0.113.61", { pairs: true, draft, answers: [{ question: "package", answer: "Basics" }] })).text();
-    expect(pairCalls()).toHaveLength(0);
-  });
-
-  it("is refused with the rest once the guest allowance is spent", async () => {
-    await db.query("insert into spend_ledger (user_id, model, kind, cost_usd, created_at) values (null, 'muse-spark-1.3', 'guest', $2, $1)", [clock.toISOString(), (GUEST_DAILY_USD - 0.05).toFixed(2)]);
-    const evs = await events(await wish("I want a Rolls Royce", "203.0.113.62"));
-    expect(calls).toHaveLength(0);
-    expect(evs.some((e) => e.type === "pairs")).toBe(false);
-  });
-});
-
 describe("the preview with this-or-that cards from the wish", () => {
   it("adds them up with their own prices, beside the pool's picks and the wish", async () => {
     const res = await makeApp().request("/preview", {
@@ -467,7 +348,9 @@ describe("this or that for a signed-in person", () => {
   async function signIn(app: ReturnType<typeof createApp>, email = "ada@example.com") {
     await call(app, "POST", "/auth/email/start", null, { email });
     const res = await call(app, "POST", "/auth/email/verify", null, { email, code: mail.at(-1)!.code });
-    return (await res.json()) as { accessToken: string; user: { id: string } };
+    const body = (await res.json()) as { accessToken: string; user: { id: string } };
+    await accepted(app, body.accessToken);
+    return body;
   }
 
   it("needs a session", async () => {

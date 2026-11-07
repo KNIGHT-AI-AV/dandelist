@@ -12,7 +12,7 @@ const g = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean; IS_REACT_NATIVE_TE
 g.IS_REACT_ACT_ENVIRONMENT = true;
 g.IS_REACT_NATIVE_TEST_ENVIRONMENT = true;
 
-const h = vi.hoisted(() => ({ moves: [] as unknown[], today: null as TodayPick | null, consent: "1" as string | null, asked: 0 }));
+const h = vi.hoisted(() => ({ moves: [] as unknown[], today: null as TodayPick | null }));
 
 const passThrough = (name: string) => ({ children }: { children?: ReactNode }) => createElement(name, null, children);
 vi.mock("react-native", () => ({
@@ -37,10 +37,7 @@ vi.mock("../lux", () => ({
 vi.mock("../../lib/activity", () => ({ startTask: () => "task", endTask() {} }));
 vi.mock("../../lib/auth", () => {
   const api = async (path: string) => {
-    if (path === "/picks/today") {
-      h.asked++;
-      return new Response(JSON.stringify({ pick: h.today, pending: false }), { status: 200 });
-    }
+    if (path === "/picks/today") return new Response(JSON.stringify({ pick: h.today, pending: false }), { status: 200 });
     return new Response("{}", { status: 200 });
   };
   const auth = { status: "signedIn", api, user: { id: "user-1", email: "ada@example.com" } };
@@ -52,8 +49,7 @@ vi.mock("../../lib/motion", () => ({ haptic: { select() {}, success() {} }, useP
 vi.mock("../../lib/notifications", () => ({ notifier: { available: false } }));
 vi.mock("../../lib/reminder-state", () => ({ isFirstLaunch: () => false, updateReminders: async () => {}, useReminderState: () => ({ ask: null }) }));
 vi.mock("../../lib/reminders", () => ({ shouldAsk: () => false }));
-// The device's yes to the AI card (components/ai-consent.tsx) is the one thing kept here.
-vi.mock("../../lib/storage", () => ({ getSecret: async (key: string) => (key === "dandelist.ai-consent" ? h.consent : null), setSecret: async () => {} }));
+vi.mock("../../lib/storage", () => ({ getSecret: async () => null, setSecret: async () => {} }));
 vi.mock("../../lib/theme", () => ({
   layout: { cardPad: 20, control: { icon: 44 }, stack: { tight: 8, base: 16 } },
   radius: { lg: 24 },
@@ -94,8 +90,6 @@ const card = () => root!.root.find((n: ReactTestInstance) => is(n, "Pressable") 
 beforeEach(() => {
   h.moves = [];
   h.today = pick;
-  h.consent = "1";
-  h.asked = 0;
 });
 afterEach(async () => {
   await act(async () => root?.unmount());
@@ -150,24 +144,5 @@ describe("today's pick on the list", () => {
     expect(root!.root.findAllByType("Presence" as never)).toHaveLength(1);
     await act(async () => picks.pickSkipped("pick-1"));
     expect(root!.root.findAllByType("Presence" as never)).toHaveLength(0);
-  });
-
-  it("asks for nothing until the device has said yes to the AI card", async () => {
-    // A fresh list, picks store and consent, on a device with no yes yet.
-    vi.resetModules();
-    h.consent = null;
-    const { TodayCards: Fresh } = await import("./today-cards");
-    await act(async () => {
-      root = create(createElement(Fresh), { unstable_isConcurrent: true } as unknown as Parameters<typeof create>[1]);
-    });
-    await settle();
-    expect(h.asked).toBe(0);
-    expect(root!.root.findAll((n: ReactTestInstance) => is(n, "Pressable") && n.props.accessibilityRole === "button")).toEqual([]);
-    // The yes arrives (the card's button): the pick is asked for and shows.
-    const consent = await import("../../lib/ai-consent");
-    await act(async () => consent.giveAiConsent());
-    await settle();
-    expect(h.asked).toBe(1);
-    expect(card().props.accessibilityLabel).toBe("Today's pick: A week in Kyoto in April");
   });
 });

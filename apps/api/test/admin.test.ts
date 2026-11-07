@@ -1,5 +1,6 @@
 import { PGlite } from "@electric-sql/pglite";
 import { beforeEach, describe, expect, it } from "vitest";
+import { accepted } from "./consent-helper";
 import { ADMIN_DIGESTS, adminDigest, issueOf } from "../src/admin";
 import { createApp } from "../src/app";
 import { migrate, type Db } from "../src/db";
@@ -44,6 +45,7 @@ async function signIn(email: string) {
   const post = (path: string, body: unknown) => app.request(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
   await post("/auth/email/start", { email });
   const body = (await (await post("/auth/email/verify", { email, code: mail.at(-1)!.code })).json()) as { accessToken: string; user: { id: string } };
+  await accepted(app, body.accessToken);
   return { token: body.accessToken, id: body.user.id };
 }
 const spend = (userId: string | null, kind: string, usd: number, at: string, tokens = [1000, 200]) =>

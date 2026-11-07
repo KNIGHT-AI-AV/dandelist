@@ -77,6 +77,25 @@ export class SignInChanged extends Error {
   }
 }
 
+/**
+ * Told when the API refuses a request because the account hasn't accepted the current AI consent (a 403 with code
+ * consent_required, apps/api src/consent.ts), with the sign-in it was sent under. The consent gate listens
+ * (lib/account-consent.tsx), so a change of the words while the app is open brings the consent screen back.
+ */
+const refusals = new Set<(at: number) => void>();
+export function onConsentRequired(listener: (at: number) => void): () => void {
+  refusals.add(listener);
+  return () => void refusals.delete(listener);
+}
+function noteRefusal(res: Response, at: number) {
+  if (res.status !== 403 || !refusals.size) return;
+  void res
+    .clone()
+    .json()
+    .then((body: { code?: string }) => body?.code === "consent_required" && refusals.forEach((l) => l(at)))
+    .catch(() => undefined);
+}
+
 /** `api` bound to the sign-in `at`: each request, and its retry after a refresh, is refused once that sign-in moved on. */
 export function bindToSignIn(api: (path: string, init?: RequestInit) => Promise<Response>, at: number) {
   return (path: string, init: RequestInit = {}) => api(path, { ...init, [SIGN_IN]: at } as RequestInit);
@@ -352,6 +371,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       // The session ends only when the bearer it holds now is the one turned down; a late 401 for an older one leaves it.
       if (res.status === 401 && owner && session.current === owner && access.current === used) await clear();
+      noteRefusal(res, at ?? signIn.at);
       return res;
     },
     [refresh, clear],

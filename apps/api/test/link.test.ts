@@ -2,6 +2,7 @@ import { createHash, createHmac, randomBytes } from "node:crypto";
 import { PGlite } from "@electric-sql/pglite";
 import { SignJWT, exportJWK, generateKeyPair, type JWTPayload, type KeyLike } from "jose";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { accepted } from "./consent-helper";
 import { createApp } from "../src/app";
 import { migrate, type Db } from "../src/db";
 import { FACEBOOK_GRAPH_VERSION, type OAuthConfig } from "../src/oauth";
@@ -116,6 +117,7 @@ async function emailSignIn(email: string) {
   await send("POST", "/auth/email/start", { email });
   const res = await send("POST", "/auth/email/verify", { email, code: mail.at(-1)!.code });
   const body = (await res.json()) as { accessToken: string; user: { id: string } };
+  await accepted(app, body.accessToken);
   return { token: body.accessToken, id: body.user.id };
 }
 

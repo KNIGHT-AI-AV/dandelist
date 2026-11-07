@@ -7,7 +7,7 @@ vi.mock("node:dns/promises", async (importOriginal) => ({ ...(await importOrigin
 import { createApp } from "../src/app";
 import { imageResponse, jpegHeader } from "./images";
 import { migrate, type Db } from "../src/db";
-import { GUEST_DAILY_USD, GUEST_WISHES_PER_IP_PER_HOUR, NOT_FOUND, NOT_PRICED } from "../src/guest";
+import { GUEST_DAILY_USD, SIGN_IN_FIRST } from "../src/guest";
 import { forgetMoneyPhoto } from "../src/agent/worth";
 import { ARCHIVE_PREFIX, fromArchive } from "../src/pool";
 import { visionReply } from "./vision";
@@ -185,9 +185,9 @@ describe("the pool", () => {
       headers: { "Content-Type": "application/json", "Accept-Encoding": "gzip" },
       body: JSON.stringify({ text: "a camera" }),
     });
-    expect(response.status).toBe(503);
+    expect(response.status).toBe(401);
     expect(response.headers.get("content-encoding")).toBeNull();
-    expect(await response.json()).toEqual({ error: "The agent isn't set up on this server." });
+    expect(await response.json()).toEqual(SIGN_IN_FIRST);
     expect(metaCalls).toHaveLength(0);
   });
 
@@ -199,166 +199,54 @@ describe("the pool", () => {
   });
 });
 
-describe("pricing the first wish before sign-in", () => {
-  it("reserves guest voice against the same daily allowance before contacting Meta", async () => {
-    await db.query("insert into spend_ledger (user_id, model, kind, cost_usd, created_at) values (null, 'muse-spark-1.3', 'guest', $1, $2)", [GUEST_DAILY_USD - 0.05, clock.toISOString()]);
-    const wav = new Uint8Array(44 + 32_000);
-    const view = new DataView(wav.buffer);
-    const text = (at: number, value: string) => wav.set(new TextEncoder().encode(value), at);
-    text(0, "RIFF"); view.setUint32(4, wav.length - 8, true); text(8, "WAVE");
-    text(12, "fmt "); view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true);
-    view.setUint32(24, 16_000, true); view.setUint32(28, 32_000, true); view.setUint16(32, 2, true); view.setUint16(34, 16, true);
-    text(36, "data"); view.setUint32(40, 32_000, true);
-    const res = await makeApp().request("/guest/transcribe", { method: "POST", headers: { "Content-Type": "audio/wav" }, body: wav });
-    expect(res.status).toBe(429);
-    expect(metaCalls).toHaveLength(0);
-  });
-
-  it("streams what it is, the agent's trail, the fast card with its own photo, then the checked price", async () => {
-    const res = await makeApp().request("/guest/wish", { method: "POST", headers: { "Content-Type": "application/json", "Accept-Encoding": "gzip", "x-forwarded-for": "203.0.113.5" }, body: JSON.stringify({ text: "a peloton bike" }) });
-    expect(res.status).toBe(200);
-    expect(res.headers.get("content-type")).toContain("text/event-stream");
-    expect(res.headers.get("content-encoding")).toBeNull();
-    const evs = await events(res);
-    // The draft goes out as soon as it is read, then again with the questions and the answer the hunt assumed.
-    const drafts = evs.filter((e) => e.type === "draft");
-    expect(drafts[0]).toMatchObject({ title: "Peloton Bike+", kind: "buy" });
-    expect(drafts.at(-1)).toMatchObject({ questions: [{ id: "package", label: "Which package?", options: ["Basics", "Essentials"], picked: "Basics", answered: false }] });
-    expect(evs.some((e) => e.type === "step" && e.step.type === "note" && e.step.event?.kind === "thought")).toBe(true);
-    expect(evs.filter((e) => e.type === "step").every((e) => typeof e.step.line === "string" && e.step.line.length > 0)).toBe(true);
-    // The first card is the fast one: the seller's own page and its price, the moment it is priced; then the same card
-    // again with its own product photo once the checks pass it.
-    const cards = evs.filter((e) => e.type === "priced");
-    const fast = cards.filter((c) => c.provisional);
-    expect(fast[0]).toMatchObject({ provisional: true, title: "Peloton Bike+", option: { url: SHOP, upfrontCents: 249_500, status: "verified" }, questions: [{ id: "package", picked: "Basics" }] });
-    expect(fast[0].option.imageUrl).toBeUndefined();
-    expect(fast.at(-1)).toMatchObject({ option: { url: SHOP, upfrontCents: 249_500, imageUrl: "https://www.onepeloton.com/img/bike-plus.jpg" } });
-    expect(evs.indexOf(cards[0])).toBeGreaterThan(evs.findIndex((e) => e.type === "draft"));
-    // The research's card follows only when it differs, never marked provisional; no error after a card.
-    expect(cards.slice(0, fast.length).every((c) => c.provisional)).toBe(true);
-    expect(cards.slice(fast.length).every((c) => !c.provisional)).toBe(true);
-    const priced = cards.at(-1);
-    expect(priced.option).toMatchObject({ upfrontCents: 249_500, status: "verified" });
-    expect(evs.some((e) => e.type === "error")).toBe(false);
-    const spend = (await db.query<{ n: string }>("select count(*) as n from spend_ledger where user_id is null and kind = 'guest'")).rows[0]!;
-    expect(Number(spend.n)).toBeGreaterThan(0);
-  });
-
-  it("hunts again with a changed answer, without reading the wish again", async () => {
-    const draft = { title: "Peloton Bike+", kind: "buy", summary: "A Peloton Bike+ for home.", specifics: [], region: "US", currency: "USD", unknowns: [], questions: [{ id: "package", label: "Which package?", options: ["Basics", "Essentials"], picked: "Basics" }] };
-    const res = await makeApp().request("/guest/wish", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-forwarded-for": "203.0.113.8" },
-      body: JSON.stringify({ text: "a peloton bike", draft, answers: [{ question: "package", answer: "Essentials with the mat" }] }),
+describe("a guest's words before sign-in (closed 2026-11-06: AI waits for an account that has accepted)", () => {
+  // A real clip, so the old route's own checks would have passed: only the closure refuses it.
+  const wav = () => {
+    const samples = 16_000 * 2;
+    const b = new Uint8Array(44 + samples * 2);
+    const v = new DataView(b.buffer);
+    const text = (o: number, t: string) => [...t].forEach((ch, i) => v.setUint8(o + i, ch.charCodeAt(0)));
+    text(0, "RIFF"); v.setUint32(4, 36 + samples * 2, true); text(8, "WAVE"); text(12, "fmt "); v.setUint32(16, 16, true);
+    v.setUint16(20, 1, true); v.setUint16(22, 1, true); v.setUint32(24, 16_000, true); v.setUint32(28, 32_000, true);
+    v.setUint16(32, 2, true); v.setUint16(34, 16, true); text(36, "data"); v.setUint32(40, samples * 2, true);
+    for (let i = 0; i < samples; i++) v.setInt16(44 + i * 2, Math.round(8000 * Math.sin(i / 8)), true);
+    return b;
+  };
+  const web: string[] = [];
+  const watchedApp = () =>
+    createApp({
+      db,
+      mailer: { sendCode: async () => {} },
+      jwtSecret: "test-secret-that-is-at-least-32-chars-long",
+      codePepper: "test-pepper-16-chars",
+      now: () => clock,
+      webOrigins: [],
+      meta: { apiKey: "test", fetch: fakeMeta },
+      spendCaps: { dailyUsd: 10, totalUsd: 120 },
+      webFetch: (async (u: string | URL) => {
+        web.push(String(u));
+        return fakeWeb(u);
+      }) as unknown as typeof fetch,
     });
-    const evs = await events(res);
-    expect(metaCalls.some((c) => c.text?.format?.name === "wish_draft")).toBe(false);
-    expect(evs.find((e) => e.type === "draft")).toMatchObject({ questions: [{ id: "package", picked: "Essentials with the mat", answered: true }] });
-    expect(metaCalls.find((c) => String(c.instructions ?? "").startsWith("You find, fast"))!.input).toContain("Which package? Essentials with the mat");
-    expect(evs.find((e) => e.type === "priced")).toMatchObject({ questions: [{ id: "package", picked: "Essentials with the mat", answered: true }] });
-  });
 
-  it("caps each network address per hour, before any model call", async () => {
-    const app = makeApp();
-    const ask = () => app.request("/guest/wish", { method: "POST", headers: { "Content-Type": "application/json", "x-forwarded-for": "203.0.113.6" }, body: JSON.stringify({ text: "a peloton bike" }) });
-    for (let i = 0; i < GUEST_WISHES_PER_IP_PER_HOUR; i++) await (await ask()).text();
-    const calls = metaCalls.length;
-    expect((await ask()).status).toBe(429);
-    expect(metaCalls.length).toBe(calls);
-  });
-
-  it("stops at the guest share of the day's spend", async () => {
-    await db.query("insert into spend_ledger (user_id, model, kind, cost_usd, created_at) values (null, 'muse-spark-1.3', 'guest', $1, $2)", [GUEST_DAILY_USD + 0.5, clock.toISOString()]);
-    const res = await makeApp().request("/guest/wish", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: "a peloton bike" }) });
-    expect(res.status).toBe(429);
-    expect(metaCalls).toHaveLength(0);
-  });
-
-  it("reserves the next call against the guest allowance before calling Meta", async () => {
-    await db.query("insert into spend_ledger (user_id, model, kind, cost_usd, created_at) values (null, 'muse-spark-1.3', 'guest', $1, $2)", [GUEST_DAILY_USD - 0.05, clock.toISOString()]);
-    const res = await makeApp().request("/guest/wish", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: "a peloton bike" }) });
-    const evs = await events(res);
-    expect(metaCalls).toHaveLength(0);
-    expect(evs).toContainEqual(expect.objectContaining({ type: "error" }));
-  });
-
-  const ask = (text: string, ip: string) => makeApp().request("/guest/wish", { method: "POST", headers: { "Content-Type": "application/json", "x-forwarded-for": ip }, body: JSON.stringify({ text }) });
-  const hunted = () => metaCalls.some((c) => c.text?.format?.name === "price_options" || String(c.instructions ?? "").startsWith("You are Dandelist's price researcher"));
-
-  it("asks how much for money itself: no price hunt, the amount the wish names, and older apps end on the reason alone", async () => {
-    const evs = await events(await ask("a million dollars", "203.0.113.21"));
-    expect(evs.find((e) => e.type === "draft")).toMatchObject({ title: "A million dollars", draft: { worth: "money", amount: 1_000_000 } });
-    const at = evs.findIndex((e) => e.type === "worth");
-    expect(evs[at]).toEqual({ type: "worth", worth: "money", title: "A million dollars", kind: "buy", amountCents: 100_000_000 });
-    // An app from before the worth card ends on the reason, said once; an app that knows the card ignores it.
-    expect(evs.slice(at + 1).filter((e) => e.type === "error")).toEqual([{ type: "error", message: NOT_PRICED }]);
-    expect(evs.some((e) => e.type === "priced")).toBe(false);
-    expect(hunted()).toBe(false);
-    // Nothing passed for a money photo here (no archive photo, no candidates), so the card shows its own panel.
-    expect(evs.some((e) => e.type === "photo")).toBe(false);
-    // The wish was read at low effort, in the one call.
-    expect(metaCalls.filter((c) => c.text?.format?.name === "wish_draft")).toEqual([expect.objectContaining({ reasoning: { effort: "low" } })]);
-  });
-
-  it("gives money a checked photo when the archive holds gold bars", async () => {
-    await db.query(`insert into archive_entities (id, domain, category, subcategory, name, kind, price_model, tier) values ('gold-bars', 'Art & collectibles', 'Gold & coins', 'Gold bars', 'Gold bars', 'product', 'one-off', 1)`);
-    for (const [n, hero] of [[1, true], [2, false]] as const) {
-      await db.query(
-        `insert into archive_photos (entity_id, url, width, height, source, source_page, photographer, license, hero) values ('gold-bars', $1, 4000, 2667, 'commons', $2, 'A. Photographer', 'CC BY-SA 4.0', $3)`,
-        [`https://upload.wikimedia.org/gold-${n}.jpg`, `https://commons.wikimedia.org/wiki/File:Gold-${n}.jpg`, hero],
-      );
+  it("refuses a wish with sign in first, and nothing reaches a model, the web or the ledger", async () => {
+    web.length = 0;
+    for (const body of [{ text: "a Peloton Bike+" }, { text: "a Peloton Bike+", pairs: true }, { text: "a Peloton Bike+", price: true }]) {
+      const res = await watchedApp().request("/guest/wish", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      expect(res.status).toBe(401);
+      expect(await res.json()).toEqual(SIGN_IN_FIRST);
     }
-    const evs = await events(await ask("a million dollars", "203.0.113.22"));
-    const photo = evs.find((e) => e.type === "photo");
-    expect(photo).toMatchObject({ imageUrl: "https://upload.wikimedia.org/gold-1.jpg", media: { kind: "product", images: [{ url: "https://upload.wikimedia.org/gold-1.jpg", source: "commons.wikimedia.org" }] } });
-    expect(evs.indexOf(photo)).toBeGreaterThan(evs.findIndex((e) => e.type === "worth"));
+    expect(metaCalls).toEqual([]);
+    expect(web).toEqual([]);
+    expect((await db.query("select 1 from spend_ledger")).rows).toEqual([]);
   });
 
-  it("shows infinity and the model's own line for something priceless, with no price hunt", async () => {
-    const evs = await events(await ask("love", "203.0.113.23"));
-    expect(evs.find((e) => e.type === "worth")).toEqual({ type: "worth", worth: "priceless", title: "Love", kind: "do", line: "Free to give, impossible to buy." });
-    expect(evs.some((e) => e.type === "priced")).toBe(false);
-    expect(hunted()).toBe(false);
-    // It still gets a photo hunt of its own (owner, 2026-10-30: "own the moon" needs "a great image"); nothing passes
-    // here, so no photo is sent and the card keeps its glyph.
-    expect(metaCalls.some((c) => c.text?.format?.name === "photo_plan")).toBe(true);
-    expect(evs.some((e) => e.type === "photo")).toBe(false);
-  });
-
-  it("hunts a priceless or money wish as an ordinary one when the card's Price it asks", async () => {
-    const res = await makeApp().request("/guest/wish", { method: "POST", headers: { "Content-Type": "application/json", "x-forwarded-for": "203.0.113.26" }, body: JSON.stringify({ text: "love", price: true }) });
-    const evs = await events(res);
-    expect(evs.some((e) => e.type === "worth")).toBe(false);
-    expect(evs.find((e) => e.type === "draft")).toMatchObject({ title: "Love", draft: { worth: "priced" } });
-    expect(hunted()).toBe(true);
-    expect(evs.some((e) => e.type === "priced")).toBe(true);
-  });
-
-  it("ends a wish nothing checks in time with a labelled estimate from one search, never an empty card", async () => {
-    noOptions = true;
-    estimateFigure = true;
-    const evs = await events(await ask("a unicorn", "203.0.113.27"));
-    expect(evs.filter((e) => e.type === "error")).toEqual([]);
-    expect(evs.filter((e) => e.type === "priced").at(-1)).toMatchObject({
-      option: { upfrontCents: 9_500_000, status: "estimate", statusLabel: "Estimate: from search results for stables.example", url: "https://stables.example/unicorn" },
-    });
-  });
-
-  it("says only why it couldn't price a wish, so the app's own words about the list follow it once", async () => {
-    noOptions = true;
-    const none = await events(await ask("a unicorn", "203.0.113.24"));
-    expect(none.find((e) => e.type === "draft")).toMatchObject({ draft: { worth: "priced" } });
-    expect(none.filter((e) => e.type === "error")).toEqual([{ type: "error", message: NOT_FOUND }]);
-    expect(NOT_FOUND).toBe("Couldn't find a price for that just now.");
-    const broken = await events(await ask("gibberish", "203.0.113.25"));
-    expect(broken.filter((e) => e.type === "error")).toEqual([{ type: "error", message: NOT_PRICED }]);
-    expect(NOT_PRICED).toBe("Couldn't price that just now.");
-    expect(JSON.stringify([...none, ...broken])).not.toContain("stays on your list");
-  });
-
-  it("refuses an empty wish and a server without a key", async () => {
-    expect((await makeApp().request("/guest/wish", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: "" }) })).status).toBe(400);
-    expect((await makeApp(false).request("/guest/wish", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: "a bike" }) })).status).toBe(503);
+  it("refuses a recording the same way, unheard", async () => {
+    const res = await watchedApp().request("/guest/transcribe", { method: "POST", headers: { "Content-Type": "audio/wav" }, body: wav() });
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual(SIGN_IN_FIRST);
+    expect(metaCalls).toEqual([]);
+    expect((await db.query("select 1 from spend_ledger")).rows).toEqual([]);
   });
 });
 

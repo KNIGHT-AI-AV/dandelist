@@ -1,5 +1,6 @@
 import { PGlite } from "@electric-sql/pglite";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { accepted } from "./consent-helper";
 import { cleanThought, EXPLAIN_EFFORT, json, RESEARCH_EFFORT, fallbackExplanation, unknownNumbers } from "../src/agent/agent";
 import { assertPublicUrl, htmlToText, pageNamesItem, pageShowsPrice, privateIp, sellerOwnsHost, structuredPrices } from "../src/agent/tools";
 
@@ -199,7 +200,7 @@ const call = (method: string, path: string, token: string, body?: unknown) =>
 async function signIn(email: string) {
   await app.request("/auth/email/start", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email }) });
   const res = await app.request("/auth/email/verify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, code: mail.at(-1)!.code }) });
-  return ((await res.json()) as { accessToken: string }).accessToken;
+  return accepted(app, ((await res.json()) as { accessToken: string }).accessToken);
 }
 
 async function finished(token: string, id: string) {

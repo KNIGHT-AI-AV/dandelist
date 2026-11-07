@@ -294,33 +294,6 @@ async function readEvents<T>(path: string, body: unknown, onEvent: (e: T) => voi
   }
 }
 
-/**
- * The guest hunt's events. A draft may come twice (again when its questions land); a card may too: first the fast one
- * (`provisional`, about 10 to 15 s in), then the full research's when it found better, by 60 s.
- */
-export type GuestEvent =
-  | { type: "draft"; title: string; kind: WishKind; questions?: WishQuestion[]; draft?: Pick<Draft, "title" | "sure" | "others"> }
-  | { type: "step"; step: Step }
-  | { type: "priced"; title: string; kind: WishKind; option: PriceOption; explanation: string; questions?: WishQuestion[]; provisional?: boolean }
-  /**
-   * Money itself or something priceless: no hunt. The server follows it with an error event for apps that predate
-   * it; once this has come, that error is not a failure.
-   */
-  | ({ type: "worth" } & WorthCard)
-  /** A money wish's checked photo, when one is found in time. */
-  | { type: "photo"; imageUrl: string; media?: Media }
-  /** This or that made from the wish, when asked for: it can come before or after the card, or not at all. */
-  | { type: "pairs"; pairs: WishPair[] }
-  | { type: "error"; message: string };
-
-/**
- * Prices the first wish for real, before sign-in: what it is, the agent's live trail, then the best option. `price` is
- * a money or priceless card's "Price it": the words are hunted as an ordinary priced wish. `pairs` asks for this or
- * that made from the same words, on the same stream, while the wish is priced.
- */
-export const streamGuestWish = (text: string, onEvent: (e: GuestEvent) => void, signal?: AbortSignal, price = false, pairs = false) =>
-  readEvents<GuestEvent>("/guest/wish", { text, ...(price ? { price: true } : {}), ...(pairs ? { pairs: true } : {}) }, onEvent, signal);
-
 export type PreviewEvent =
   | { type: "row"; id: string; state: "running" | "done"; text: string }
   | { type: "note"; text: string }
@@ -363,15 +336,6 @@ export function streamPreview(s: WelcomeState, onEvent: (e: PreviewEvent) => voi
     onEvent,
     signal,
   );
-}
-
-/** Say the first wish before an account exists: the guest route, capped per network address. */
-export async function transcribeGuest(wav: Uint8Array): Promise<string> {
-  const res = await fetch(`${API_URL}/guest/transcribe`, { method: "POST", headers: { "Content-Type": "audio/wav" }, body: wav as unknown as BodyInit }).catch(() => null);
-  if (!res) throw new Error("Can't reach Dandelist. Check your connection.");
-  const body = (await res.json().catch(() => null)) as { text?: string; error?: string } | null;
-  if (!res.ok || !body?.text) throw new Error(body?.error ?? "Couldn't hear that. Try again, or type it.");
-  return body.text;
 }
 
 /** Log scale for the list meter: $1k is empty, $1M is full, so a camera and a car both register. */

@@ -1,5 +1,6 @@
 import { PGlite } from "@electric-sql/pglite";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { accepted } from "./consent-helper";
 
 // Image hosts resolve to a public documentation address, so no test touches real DNS.
 vi.mock("node:dns/promises", async (importOriginal) => ({ ...(await importOriginal<object>()), lookup: async () => [{ address: "93.184.215.14", family: 4 }] }));
@@ -122,6 +123,7 @@ async function signIn(email = "ada@example.com") {
   await call("POST", "/auth/email/start", null, { email });
   const res = await call("POST", "/auth/email/verify", null, { email, code: mail.at(-1)!.code });
   const body = (await res.json()) as { accessToken: string; refreshToken: string; user: { id: string } };
+  await accepted(app, body.accessToken);
   return { token: body.accessToken, refresh: body.refreshToken, id: body.user.id };
 }
 
