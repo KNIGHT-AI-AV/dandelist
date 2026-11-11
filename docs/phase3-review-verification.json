@@ -1,0 +1,27 @@
+{
+  "goDate": "2026-11-11",
+  "branch": "codex/dandelist-phase3-20261111",
+  "base": "92a94f0cc201251b7f9297e20504984ac981edff",
+  "reviewedHead": "62438478a056e7ca606b0181a89fcab2e7589e68",
+  "artifactCleanupCommit": "1511afaae1fbbc3f081b9ec742ec403080db46f1",
+  "gates": {
+    "corepack pnpm typecheck": "PASS, five configured workspaces",
+    "node apps/mobile/scripts/check-type.mjs": "PASS",
+    "corepack pnpm --filter @dandelist/api test": {"finalExit":0,"passed":832,"files":58,"maxWorkers":2,"durationSeconds":298.06,"fullRuns":2},
+    "corepack pnpm --filter @dandelist/mobile test": {"exit":0,"passed":843,"files":108,"maxWorkers":2,"durationSeconds":25.22,"fullRuns":1,"typeAndSpacingChecks":"PASS"},
+    "focused": {"artifactCleanup":8,"publicFeatureRead":3,"legalDisplayAndCopy":20,"consentAndPublicFeatures":13},
+    "git diff --check": "PASS"
+  },
+  "initialGateCorrections": ["Test-only React act callback return types corrected before full suites", "Initial full API run had 831 pass and 1 failure: exhaustive consent inventory lacked the newly authorized public GET. Added only GET /config/features to its open-method list and explicitly checked its response plus no model/web work. Runtime consent is unchanged. Final full API rerun passed."],
+  "featureRead": {"path":"GET /config/features","body":"{ chatContinuity: boolean }","authenticated":false,"databaseReads":false,"userData":false,"cacheSeconds":60},
+  "legalDisplay": {"enabledBy":"server true OR client draft true","refreshSeconds":60,"timeoutSeconds":5,"credentials":"omit","loadingOrFailure":"Current policy arrays and dates remain, unless the explicit client override is on"},
+  "copyReceipt": "docs/phase3-copy-receipt.json",
+  "copySha256": "94433adbfadb61322b2cebf39acb7170ef53b412d62ee3e61b265622e5d4dbb1",
+  "defaults": {"MODEL_HISTORY_ENABLED":false,"ENTITLEMENTS_ENABLED":false,"consentRuntimeChanged":false,"productionPreviewMounted":false},
+  "mainDiff": "No phase3/ files or binary evidence. Only small receipts retained in docs. Internal app preview remains development-only and default off.",
+  "releaseOrder": "Older installed apps cannot show the new sections. Release on stores and web before a separate explicit server-flag enablement GO.",
+  "notVerified": ["Owner sign-off on final legal wording", "Live deployment or feature endpoint; no production flag/config read or change", "Physical devices, real providers, StoreKit/Play and store/console acceptance", "Production migration/cleanup and multi-instance behavior"],
+  "spendUsd":0,
+  "nativeBuildSigningPackaging":false,
+  "gateLogs": "External handoff scratch/dandelist-phase3-merge-fixes"
+}

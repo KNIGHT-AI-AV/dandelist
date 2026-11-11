@@ -1,4 +1,5 @@
 import type { Widget } from "@dandelist/catalogue/dream";
+import { EntitlementPreview } from "../components/drafts/entitlement-preview";
 import { Redirect, useLocalSearchParams } from "expo-router";
 import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
@@ -391,6 +392,7 @@ export default function Lab() {
   // /lab?only=icons shows the icon bench alone, without the photographs and the 3D viewer; /lab?only=wait the waiting light.
   const { only } = useLocalSearchParams<{ only?: string }>();
   if (!__DEV__) return <Redirect href="/" />;
+  if (only === "entitlements") return <EntitlementPreview />;
   return (
     <ScrollView style={{ flex: 1, backgroundColor: p.bg }} contentContainerStyle={{ gap: 24, paddingVertical: 40, maxWidth: 520, width: "100%", alignSelf: "center" }}>
       {only === "icons" ? (

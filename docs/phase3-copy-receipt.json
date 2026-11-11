@@ -1,0 +1,18 @@
+{
+    "dateUtc":  "2026-11-11T06:13:28.4815798Z",
+    "site":  "https://aitextclean.com",
+    "taskSpace":  42,
+    "options":  "8 on, 2 off",
+    "cleanTextClicked":  true,
+    "literalCopyOutputClicked":  true,
+    "source":  "Windows system clipboard after Copy Output",
+    "normalization":  "CRLF to LF only",
+    "pasted":  "apps/mobile/lib/drafts/copy.json",
+    "sha256":  "94433adbfadb61322b2cebf39acb7170ef53b412d62ee3e61b265622e5d4dbb1",
+    "previousCopySha256":  "e1ad3228407be0d7ab5b0d8d374d3174398fd7e9fc2e06d79372c33335ab000e",
+    "changedStrings":  [
+                           "legal.privacyBody[0]",
+                           "legal.termsBody[0]"
+                       ],
+    "review":  "Removed conditional opening and capitalized the remaining sentences; all other strings unchanged"
+}
