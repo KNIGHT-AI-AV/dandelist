@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-11",
+  "service": "https://aitextclean.com",
+  "optionsOn": [
+    "Remove hidden characters",
+    "Convert non-breaking spaces",
+    "Normalize dashes",
+    "Normalize quotes",
+    "Convert ellipsis",
+    "Remove trailing whitespace",
+    "Remove asterisks (*)",
+    "Remove markdown headings"
+  ],
+  "optionsOff": [
+    "Convert lookalike characters",
+    "Normalize Unicode forms"
+  ],
+  "transfer": "Literal Copy Output, then Windows system clipboard, compared with cleaner output before use",
+  "normalizedCopySha256": "2bd5641857395149fb820edee2e9b44086d8afc42fe9fb3cfc50ecd9809f956b",
+  "normalizedPrSha256": "f6d62784d0b97e571460434faa291f2ddd7127968cccbc7fe0854874fc796229"
+}

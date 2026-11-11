@@ -1,9 +1,14 @@
 /**
  * Builds the web app against the live API and publishes it to Cloudflare Pages (project "dandelist",
  * served at https://dandelist.knightaiav.com). Needs a wrangler login with Pages access.
+ * --build-only prepares the same dist artifact and stops before the upload.
  */
 import { execFileSync, execSync } from "node:child_process";
 import { copyFileSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+
+const args = process.argv.slice(2);
+if (args.some((arg) => arg !== "--build-only")) throw new Error("Only --build-only is supported");
+const buildOnly = args.includes("--build-only");
 
 // The commit this bundle is built from. The app compares it with web.version in latest.json and offers a reload when
 // they differ (lib/update-core.ts). Edits not yet committed get the time on the end, so they read as new too.
@@ -90,4 +95,8 @@ writeFileSync(
     // browsers are told to skip plain HTTP for a year; this host alone, not knightaiav.com's other names.
     "/*\n  Content-Security-Policy: frame-ancestors 'self'\n  X-Frame-Options: SAMEORIGIN\n  Strict-Transport-Security: max-age=31536000\n",
 );
-run("npx -y wrangler@4.149.0 pages deploy dist --project-name dandelist --branch main --commit-dirty=true");
+if (buildOnly) {
+  console.log(`Web artifact prepared in apps/mobile/dist at ${env.EXPO_PUBLIC_WEB_VERSION}; no upload performed.`);
+} else {
+  run("npx -y wrangler@4.149.0 pages deploy dist --project-name dandelist --branch main --commit-dirty=true");
+}
