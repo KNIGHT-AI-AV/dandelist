@@ -21,7 +21,7 @@ import { personaSchema, voiceLine } from "./persona";
 import { moneyPhoto, photoMedia, pricelessPhoto } from "./worth";
 import { stoppable } from "../sse";
 import { notesFor, withNotes } from "../notes";
-import { claudeFor, claudeGuard, eitherReady, metaFirst, type ClaudeSetup } from "../under";
+import { claudeFor, claudeGuard, eitherReady, modelFor, type ClaudeSetup } from "../under";
 
 export const RUNS_PER_USER_PER_DAY = 40;
 /** Every judge shares one account, so it gets more runs; its share of the daily spend cap still bounds it. */
@@ -36,6 +36,8 @@ export const USER_DAILY_USD = 2;
 const CACHE_MS = 24 * 60 * 60 * 1000;
 
 export interface AgentDeps extends AuthDeps {
+  /** App-owned model history, off by default. */
+  modelHistory?: boolean;
   /** Missing when no Meta key is configured; the agent routes then answer 503. */
   meta?: { apiKey: string; baseUrl?: string; fetch?: typeof fetch };
   /** Claude under Meta, for calls Meta refuses once its spend is used up (under.ts). Missing: Meta only, as before. */
@@ -159,7 +161,7 @@ export function agentRoutes(deps: AgentDeps) {
     };
     return {
       // Meta first; Claude only once Meta's spend is used up. Pictures (Muse Image) stay Meta's.
-      responses: metaFirst((body) => withHold(db, guard, () => client.responses(body), userId, holdFor(body), stop), claudeFor(deps, userId, kind, { personUsd: USER_DAILY_USD, onCost, signal: stop, usd: holdFor })),
+      responses: modelFor(deps, userId, (body) => withHold(db, guard, () => client.responses(body), userId, holdFor(body), stop), claudeFor(deps, userId, kind, { personUsd: USER_DAILY_USD, onCost, signal: stop, usd: holdFor })),
       images: (op, body) => withHold(db, guard, () => client.images(op, body), userId),
     };
   };

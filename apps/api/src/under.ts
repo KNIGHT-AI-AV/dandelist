@@ -1,5 +1,6 @@
+import { legacyModelRouter, modelRouter, postgresHistory } from "./model-adapter";
 import { reservedFetch } from "./spend";
-import { ClaudeApiError, ClaudeClient, MetaApiError, TOKEN_PRICES, isClaudeResponseId, type ResponsesResult } from "@dandelist/meta";
+import { ClaudeApiError, ClaudeClient, MetaApiError, type ResponsesResult } from "@dandelist/meta";
 import type { Db } from "./db";
 import { stoppable } from "./sse";
 import {
@@ -65,31 +66,13 @@ export function handsDown(e: unknown, setup: ClaudeSetup): boolean {
 /** The guests' share of Claude's day: the same part of it their share of Meta's is of Meta's ($6 of $10 is $3 of $5). */
 export const guestShareUsd = (claudeDailyUsd: number, guestDailyUsd: number, metaDailyUsd: number) => (claudeDailyUsd * guestDailyUsd) / metaDailyUsd;
 
-/** A call Claude can answer: words on Muse Spark (never SAM or another of Meta's own models), and not a Meta conversation. */
-const forClaude = (body: Record<string, unknown>) => !body.previous_response_id && (body.model === undefined || (typeof body.model === "string" && body.model in TOKEN_PRICES));
-
 /**
  * Meta first, Claude under it: `meta` is the route's own call, guarded and held as it always was. When it refuses as
  * handsDown allows, `under` runs the same body on Claude. If Claude can't (its own cap is spent, or it fails), the caller
  * gets Meta's refusal, so the route answers as it does today. Without `under`, this is `meta` itself.
  */
 export function metaFirst(meta: Responder, under: Under | undefined): Responder {
-  if (!under) return meta;
-  return async (body) => {
-    if (isClaudeResponseId(body.previous_response_id)) return under.run(body);
-    if (!forClaude(body)) return meta(body);
-    try {
-      return await meta(body);
-    } catch (e) {
-      if (!handsDown(e, under.setup)) throw e;
-      try {
-        return await under.run(body);
-      } catch (claude) {
-        if (!(claude instanceof SpendLimitError)) console.warn("claude under meta failed", claude instanceof MetaApiError ? `${claude.status} ${claude.body.slice(0, 200)}` : claude instanceof Error ? claude.message : claude);
-        throw e;
-      }
-    }
-  };
+  return legacyModelRouter(meta,under?.run,e=>!!under&&handsDown(e,under.setup));
 }
 
 /**
@@ -110,6 +93,7 @@ export async function eitherReady(meta: () => Promise<void>, claude: (() => Prom
 }
 
 interface UnderDeps {
+  modelHistory?: boolean;
   db: Db;
   now: () => Date;
   judge?: { email: string };
@@ -220,4 +204,11 @@ export function claudeForGuests(deps: UnderDeps, kind: string, opts: { shareUsd:
   const guard = () => check();
   const client = clientFor(setup, (usage, cost) => recordSpend(deps.db, null, kind, usage, cost, deps.now()), opts.signal, check);
   return { setup, guard, run: (body) => withBudgetScope(deps.db, "guest", guard, () => client.responses(body), "claude", CLAUDE_HOLD_USD) };
+}
+
+/** The app-owned history lane is opt-in. Default Meta/legacy requests retain their original object and bytes. */
+export function modelFor(deps:UnderDeps,userId:string,meta:Responder,under:Under|undefined):Responder {
+  if(!deps.modelHistory)return metaFirst(meta,under);
+  return modelRouter({id:"meta",respond:meta},under?{id:"claude",respond:under.run,needsSchemaPrompt:true}:undefined,
+    postgresHistory(deps.db,userId),error=>!!under&&handsDown(error,under.setup));
 }

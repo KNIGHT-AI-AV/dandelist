@@ -13,7 +13,7 @@ import { forgetMemories, readMemories } from "./memory";
 import { PROVIDERS, listIdentities, type Provider } from "./oauth";
 import { RateLimiter } from "./ratelimit";
 import { SpendLimitError, assertBudget, assertUserBudget, recordSpend, userCapUsd, withHold } from "./spend";
-import { claudeFor, claudeGuard, eitherReady, metaFirst } from "./under";
+import { claudeFor, claudeGuard, eitherReady, modelFor } from "./under";
 
 /**
  * The person, for settings (owner's walkthrough, 2026-10-28):
@@ -296,7 +296,7 @@ export function meRoutes(deps: AgentDeps) {
 
     const client = new MetaClient({ ...deps.meta, fetch: reservedFetch(deps.meta.fetch ?? fetch), onUsage: (usage, cost) => recordSpend(db, userId, "facts", usage, cost, deps.now()) });
     // Meta first; Claude only once Meta's spend is used up (under.ts).
-    const responses = metaFirst((body) => withHold(db, guard, () => client.responses(body), userId), claudeFor(deps, userId, "facts", { personUsd: USER_DAILY_USD }));
+    const responses = modelFor(deps, userId, (body) => withHold(db, guard, () => client.responses(body), userId), claudeFor(deps, userId, "facts", { personUsd: USER_DAILY_USD }));
     let lines: string[];
     try {
       const res = await responses({

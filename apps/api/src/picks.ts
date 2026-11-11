@@ -15,7 +15,7 @@ import { readLife } from "./dream/life";
 import { notesFor } from "./notes";
 import { stoppable } from "./sse";
 import { HOLD_USD, SpendLimitError, assertBudget, assertUserBudget, recordSpend, userCapUsd, withHold } from "./spend";
-import { claudeFor, claudeGuard, eitherReady, metaFirst } from "./under";
+import { claudeFor, claudeGuard, eitherReady, modelFor } from "./under";
 
 /**
  * Today's pick (owner, 2026-10-29: "intelligent suggestions... Maybe we'll do something like daily item suggestions
@@ -403,7 +403,7 @@ export function pickRoutes(deps: AgentDeps) {
     // photo a fifth of a full call, and past the person's in-flight slots a call waits its turn (spend.ts). The stop
     // reaches the queue too, so no call starts once this pick has answered.
     // Meta first; Claude only once Meta's spend is used up (under.ts).
-    const meta: Meta = { responses: metaFirst((b) => withHold(db, guard, () => client.responses(b), userId, holdFor(b), stop.signal), claudeFor(deps, userId, "pick", { personUsd: USER_DAILY_USD, signal: stop.signal, usd: holdFor })) };
+    const meta: Meta = { responses: modelFor(deps, userId, (b) => withHold(db, guard, () => client.responses(b), userId, holdFor(b), stop.signal), claudeFor(deps, userId, "pick", { personUsd: USER_DAILY_USD, signal: stop.signal, usd: holdFor })) };
     try {
       const [life, notes, past] = await Promise.all([
         readLife(db, userId),

@@ -3,7 +3,7 @@ import { MetaClient } from "@dandelist/meta";
 import { voiceLine, type PersonaId } from "../agent/persona";
 import type { Db } from "../db";
 import { assertBudget, assertUserBudget, recordSpend, userCapUsd, withHold, type SpendCaps } from "../spend";
-import { claudeFor, metaFirst, type ClaudeSetup } from "../under";
+import { claudeFor, modelFor, type ClaudeSetup } from "../under";
 import { tidy } from "./agent";
 import { json, strictObject } from "./context";
 import { readLife } from "./life";
@@ -35,6 +35,7 @@ export interface SuggestMemory {
 }
 
 export interface SuggestDeps {
+  modelHistory?: boolean;
   db: Db;
   meta?: { apiKey: string; baseUrl?: string; fetch?: typeof fetch };
   /** Claude under Meta, once Meta's spend is used up (under.ts). */
@@ -153,7 +154,7 @@ async function ask(deps: SuggestDeps, userId: string, memory: SuggestMemory): Pr
   const client = new MetaClient({ ...deps.meta, fetch: reservedFetch(deps.meta.fetch ?? fetch), onUsage: (usage, cost) => recordSpend(db, userId, "suggest", usage, cost, deps.now()) });
   const voice = voiceLine(memory.persona);
   // Meta first; Claude only once Meta's spend is used up (under.ts).
-  const responses = metaFirst((body) => withHold(db, check, () => client.responses(body), userId), claudeFor({ ...deps, spendCaps: deps.caps }, userId, "suggest", { personUsd: deps.personUsd }));
+  const responses = modelFor(deps, userId, (body) => withHold(db, check, () => client.responses(body), userId), claudeFor({ ...deps, spendCaps: deps.caps }, userId, "suggest", { personUsd: deps.personUsd }));
   const res = await responses({
     instructions: [SUGGEST, voice, memory.notes].filter(Boolean).join("\n"),
     input: modelInput(memory, deps.now()),
