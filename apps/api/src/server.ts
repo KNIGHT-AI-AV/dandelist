@@ -62,7 +62,8 @@ process.once("SIGTERM", () => void closeAnalytics().finally(() => process.exit(0
 // Help reports' private copies: deletions and uploads that failed are retried, at start and every five minutes.
 const sweep = () => {
   void sweepHelp(deps).catch((e) => console.warn("help sweep failed", e instanceof Error ? e.message : e));
-  if(env.MODEL_HISTORY_ENABLED)void purgeExpiredModelHistory(db).catch(()=>console.warn("model history cleanup failed"));
+  // Turning generation off must not strand copies from an earlier enabled period.
+  void purgeExpiredModelHistory(db).catch(()=>console.warn("model history cleanup failed"));
 };
 sweep();
 setInterval(sweep, 5 * 60_000).unref();

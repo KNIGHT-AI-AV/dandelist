@@ -1,0 +1,27 @@
+{
+  "goDate": "2026-11-11",
+  "branch": "codex/dandelist-phase3-20261111",
+  "base": "92a94f0cc201251b7f9297e20504984ac981edff",
+  "retentionCommit": "810c83f116e800e08eef058527dc8476b68a6537",
+  "gates": {
+    "corepack pnpm typecheck": "PASS, five configured workspaces, final source",
+    "node apps/mobile/scripts/check-type.mjs": "PASS",
+    "corepack pnpm --filter @dandelist/api test": {"runs":1,"exit":0,"files":57,"passed":829,"failed":0,"maxWorkers":2,"durationSeconds":243.45},
+    "corepack pnpm --filter @dandelist/mobile test": {"runs":1,"exit":0,"files":107,"passed":831,"failed":0,"maxWorkers":2,"durationSeconds":21.15,"typeScale":"PASS","spacingScale":"PASS"},
+    "focused": {"retentionAndAdapter":13,"mobileDrafts":20,"newApiTests":7,"newMobileTests":20},
+    "browser": {"checks":17,"passed":17,"widths":[320,390,1440],"externalResources":0,"receipt":"phase3/browser-verification.json"},
+    "git diff --check": "PASS"
+  },
+  "copyReceipt": "phase3/cleaner-receipt.json",
+  "copySha256": "e1ad3228407be0d7ab5b0d8d374d3174398fd7e9fc2e06d79372c33335ab000e",
+  "history": {"proposedTemporaryCopyDays":30,"metaResponseIdLifetime":"Not specified in the public documentation checked; exact guarantee unverified","olderDreamResume":"Existing saved-transcript replay, no age cutoff on explicit History opens","caps":{"items":400,"serializedBytes":2000000},"cleanupAfterFlagOff":true},
+  "defaults": {"MODEL_HISTORY_ENABLED":false,"ENTITLEMENTS_ENABLED":false,"liveLegalWordingChanged":false,"consentGateChanged":false,"productionPaywallMounted":false},
+  "migrations": "033 only, additive session-owner FK and deletion cascade; disposable PGlite only",
+  "preview": "Local fixture client and sample Apple outcomes only; no live account, consent mutation, purchase SDK or provider/store transport",
+  "initialCheckCorrections": "Draft checks caught test harness assertions/Node URL and synthetic-host typing, token names for radius, and the standalone preview alias. Fixed before final successful gates. Captures were replaced after checking actual CSS viewport widths.",
+  "notVerified": ["Exact Meta response-ID retention guarantee or live model parity", "Physical iPhone/Android acceptance, Xcode and real StoreKit/Play trials, purchases, restores or reconciliation", "Live authoritative entitlement transport and production premium-work integration", "Production migration/cleanup operations and multi-instance load", "Online Apple OCSP/revocation and final price/terms or launch approval"],
+  "spendUsd":0,
+  "publication": "Local only; no push, PR, merge, deploy, production migration or store/config change",
+  "quietWindow": "No Gradle/Android build, app signing or packaging",
+  "logs": "C:/Users/Copper Mile/knight-reports/codex-handoff/scratch/dandelist-phase3/{retention-focused,retention-typecheck,ui-focused,typecheck,mobile-check-type,api-full,mobile-full}.log"
+}

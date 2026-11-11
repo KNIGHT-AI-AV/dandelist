@@ -5,13 +5,10 @@ import { LegalPage } from "../components/legal";
 import { Hairline } from "../components/lux";
 import { PhotoCredit } from "../components/photo-credit";
 import { ICON_LICENSE } from "../lib/icon-glyphs";
-import { PRIVACY, PRIVACY_UPDATED, TERMS, TERMS_UPDATED } from "../lib/legal";
+import { legalDocuments } from "../lib/drafts/legal";
 import { layout, type, usePalette, useType } from "../lib/theme";
 
-const DOCUMENTS = [
-  { id: "privacy", title: "Privacy", updated: PRIVACY_UPDATED, sections: PRIVACY },
-  { id: "terms", title: "Terms", updated: TERMS_UPDATED, sections: TERMS },
-];
+const DOCUMENTS = legalDocuments();
 
 /** Each catalogue item with its photos, one credit per photograph (its crops share it). */
 const CREDITS = entries

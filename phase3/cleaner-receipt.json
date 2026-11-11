@@ -1,0 +1,17 @@
+{
+    "dateUtc":  "2026-11-11T05:52:03.7597476Z",
+    "site":  "https://aitextclean.com",
+    "taskSpace":  40,
+    "options":  "8 on, 2 off",
+    "cleanTextClicked":  true,
+    "literalCopyOutputClicked":  true,
+    "source":  "Windows system clipboard after Copy Output",
+    "normalization":  "CRLF to LF only",
+    "draft":  "phase3/copy.draft.json",
+    "pasted":  "apps/mobile/lib/drafts/copy.json",
+    "sha256":  "e1ad3228407be0d7ab5b0d8d374d3174398fd7e9fc2e06d79372c33335ab000e",
+    "scope":  "All new privacy, terms, trial/paywall and fixture-preview strings",
+    "passes":  2,
+    "previousPassSha256":  "2b678e08753a5517e1994e78e31b03f9b5eb60bc5ebdd7b2b7f19ee55dc37d41",
+    "recleanReason":  "Clarified cleanup schedule without promising a completion deadline during failures"
+}
