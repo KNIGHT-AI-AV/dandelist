@@ -60,6 +60,51 @@ it("valid generated certificate chain and Apple transaction grant a linked intro
   expect(e.state).toBe("trialing");expect(e.platform).toBe("ios");expect(e.original_transaction_id).toBe("10000000000");
   expect(await service.linkAppleTransaction(a,certs.jws(transaction()))).toBe(false);
 });
+it("early verified SUBSCRIBED links an existing account and dedupes notification plus later receipt",async()=>{
+  const subscribed=notification("SUBSCRIBED",{}, {appAccountToken:a.toUpperCase()});
+  const results=await Promise.all([service.processAppleNotification(subscribed),service.processAppleNotification(subscribed)]);
+  expect(results.filter(Boolean)).toHaveLength(1);const first=await service.read(a);
+  expect(first.state).toBe("trialing");expect(first.original_transaction_id).toBe("10000000000");
+  await service.admitHunt(a,"early_first_hunt",fingerprint);
+  expect(await service.linkAppleTransaction(a,certs.jws(transaction()))).toBe(false);
+  const after=await service.read(a);expect(after).toMatchObject({state:first.state,expires_at:first.expires_at,trial_started_at:first.trial_started_at,trial_ends_at:first.trial_ends_at});
+  expect(await service.admitHunt(a,"early_first_hunt",fingerprint)).toBe("duplicate");
+  expect((await db.query("select * from entitlement_purchases")).rows).toHaveLength(1);
+  expect((await db.query("select * from entitlement_events")).rows).toHaveLength(2);
+});
+it.each([undefined,"not-a-user-id",randomUUID()])("rejects early SUBSCRIBED with a missing or unknown account token (%s)",async appAccountToken=>{
+  await expect(service.processAppleNotification(notification("SUBSCRIBED",{}, {appAccountToken}))).rejects.toThrow("Unlinked Apple purchase");
+  expect((await service.read(a)).state).toBe("none");
+  expect((await db.query("select * from entitlement_purchases")).rows).toHaveLength(0);
+  expect((await db.query("select * from entitlement_events")).rows).toHaveLength(0);
+});
+it("never rebinds a linked purchase to a different existing account named by a verified token",async()=>{
+  await service.linkAppleTransaction(a,certs.jws(transaction()));
+  await expect(service.processAppleNotification(notification("SUBSCRIBED",{}, {appAccountToken:b}))).rejects.toThrow("binding mismatch");
+  await expect(service.linkAppleTransaction(b,certs.jws(transaction({appAccountToken:b})))).rejects.toThrow("already linked");
+  expect((await db.query<{user_id:string}>("select user_id from entitlement_purchases")).rows.map(r=>r.user_id)).toEqual([a]);
+  expect((await service.read(b)).state).toBe("none");expect((await service.read(a)).state).toBe("trialing");
+});
+it("concurrent early notification and receipt linking preserve one purchase and immutable trial history",async()=>{
+  await service.startTrial(a,"web");const first=await service.read(a);
+  await Promise.all([service.processAppleNotification(notification("SUBSCRIBED")),service.linkAppleTransaction(a,certs.jws(transaction()))]);
+  expect(await service.linkAppleTransaction(a,certs.jws(transaction()))).toBe(false);
+  expect((await db.query("select * from entitlement_purchases")).rows).toHaveLength(1);
+  const after=await service.read(a);expect(after.trial_started_at).toEqual(first.trial_started_at);expect(after.trial_ends_at).toEqual(first.trial_ends_at);
+});
+it("an unverified nested transaction cannot link an early SUBSCRIBED purchase",async()=>{
+  const parts=certs.jws(transaction()).split('.');parts[1]=Buffer.from(JSON.stringify(transaction({appAccountToken:b}))).toString("base64url");
+  const bad=notification("SUBSCRIBED",{data:{bundleId:"com.knightaiav.dandelist",environment:"Sandbox",signedTransactionInfo:parts.join('.')}});
+  await expect(service.processAppleNotification(bad)).rejects.toThrow();
+  expect((await db.query("select * from entitlement_purchases")).rows).toHaveLength(0);
+  expect((await service.read(a)).state).toBe("none");expect((await service.read(b)).state).toBe("none");
+});
+it("racing early notifications for different account tokens cannot acquire two owners",async()=>{
+  const results=await Promise.allSettled([service.processAppleNotification(notification("SUBSCRIBED")),service.processAppleNotification(notification("SUBSCRIBED",{}, {appAccountToken:b}))]);
+  expect(results.filter(r=>r.status==="fulfilled"&&r.value)).toHaveLength(1);expect(results.filter(r=>r.status==="rejected")).toHaveLength(1);
+  const owners=(await db.query<{user_id:string}>("select user_id from entitlement_purchases")).rows;expect(owners).toHaveLength(1);
+  const owner=owners[0]!.user_id;expect([a,b]).toContain(owner);expect((await service.read(owner===a?b:a)).state).toBe("none");
+});
 it("rejects tampered payloads, wrong root chains, expired certificate dates and invalid algorithms",async()=>{
   const good=certs.jws(transaction());const parts=good.split('.');parts[1]=Buffer.from(JSON.stringify(transaction({productId:PRODUCTS.annual}))).toString("base64url");
   await expect(apple.transaction(parts.join('.'))).rejects.toThrow();

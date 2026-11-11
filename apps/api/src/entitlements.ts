@@ -31,11 +31,11 @@ export class EntitlementService {
     if(!/^[a-zA-Z0-9_-]{8,100}$/.test(requestId)||!/^[a-f0-9]{64}$/.test(requestFingerprint))throw new Error("Invalid hunt key");
     return (await this.db.query<{result:"admitted"|"duplicate"|"quota"|"expired"}>("select entitlement_admit_hunt($1,$2,$3) as result",[userId,requestId,requestFingerprint])).rows[0]!.result;
   }
-  private async apply(userId:string,event:string,p:Purchase){
+  private async apply(userId:string,event:string,p:Purchase,transactionEvent?:string){
     this.product(p.product);
     if(!Number.isFinite(p.expires.getTime())||!Number.isFinite(p.eventAt.getTime()))throw new Error("Invalid store timestamp");
     if(p.eventAt.getTime()>(await this.clock()).getTime()+5*60_000)throw new Error("Future store event");
-    return !!(await this.db.query<{applied:boolean}>("select entitlement_apply_event($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) as applied",[userId,p.platform,p.key,event,p.original,p.product,p.state,p.expires.toISOString(),p.eventAt.toISOString(),p.cancel??null,p.trialStart?.toISOString()??null,p.trialEnd?.toISOString()??null])).rows[0]?.applied;
+    return !!(await this.db.query<{applied:boolean}>("select entitlement_apply_event($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) as applied",[userId,p.platform,p.key,event,p.original,p.product,p.state,p.expires.toISOString(),p.eventAt.toISOString(),p.cancel??null,p.trialStart?.toISOString()??null,p.trialEnd?.toISOString()??null,transactionEvent??null])).rows[0]?.applied;
   }
   private applePurchase(tx:JWSTransactionDecodedPayload):Purchase {
     if(!tx.originalTransactionId||!tx.transactionId||!tx.expiresDate||!tx.signedDate||!tx.purchaseDate||tx.type!=="Auto-Renewable Subscription")throw new Error("Incomplete Apple subscription");
@@ -55,8 +55,14 @@ export class EntitlementService {
     if(!n.notificationUUID||!n.signedDate)throw new Error("Missing Apple notification identity");
     const p=this.applePurchase(tx);
     const linked=(await this.db.query<{user_id:string}>("select user_id from entitlement_purchases where platform='ios' and external_key=$1",[p.key])).rows[0];
-    if(!linked)throw new Error("Unlinked Apple purchase");
-    if(tx.appAccountToken?.toLowerCase()!==linked.user_id.toLowerCase())throw new Error("Apple account binding mismatch");
+    let userId=linked?.user_id;
+    if(!userId&&n.notificationType==="SUBSCRIBED"&&tx.appAccountToken&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(tx.appAccountToken)){
+      // Both JWS layers have already passed verification. Only an existing account
+      // named by the signed transaction may acquire an otherwise unlinked purchase.
+      userId=(await this.db.query<{id:string}>("select id from users where id=$1",[tx.appAccountToken])).rows[0]?.id;
+    }
+    if(!userId)throw new Error("Unlinked Apple purchase");
+    if(tx.appAccountToken?.toLowerCase()!==userId.toLowerCase())throw new Error("Apple account binding mismatch");
     p.eventAt=new Date(n.signedDate);p.cancel=renewal?renewal.autoRenewStatus===0:undefined;
     if(["REFUND","REVOKE"].includes(String(n.notificationType)))p.state="revoked";
     else if(["EXPIRED","GRACE_PERIOD_EXPIRED"].includes(String(n.notificationType)))p.state="expired";
@@ -64,7 +70,7 @@ export class EntitlementService {
     else if(n.notificationType==="DID_FAIL_TO_RENEW"){
       if(renewal?.gracePeriodExpiresDate){p.state="grace";p.expires=new Date(renewal.gracePeriodExpiresDate);}else p.state="expired";
     }else if(!["SUBSCRIBED","DID_RENEW","DID_CHANGE_RENEWAL_STATUS","DID_CHANGE_RENEWAL_PREF","OFFER_REDEEMED","REFUND_REVERSED"].includes(String(n.notificationType)))throw new Error("Unsupported Apple notification");
-    return this.apply(linked.user_id,n.notificationUUID,p);
+    return this.apply(userId,n.notificationUUID,p,n.notificationType==="SUBSCRIBED"?"transaction:"+tx.transactionId:undefined);
   }
   private async googlePurchase(userId:string,token:string,eventAt:Date):Promise<Purchase>{
     if(!this.opts.google||!this.opts.packageName)throw new Error("Play client unavailable");

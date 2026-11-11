@@ -75,7 +75,8 @@ begin
 end $$;
 
 create function entitlement_apply_event(p_user uuid,p_platform text,p_key text,p_event text,p_original text,p_product text,
-  p_state text,p_expires timestamptz,p_event_at timestamptz,p_cancel boolean,p_trial_start timestamptz,p_trial_end timestamptz) returns boolean language plpgsql as $$
+  p_state text,p_expires timestamptz,p_event_at timestamptz,p_cancel boolean,p_trial_start timestamptz,p_trial_end timestamptz,
+  p_transaction_event text default null) returns boolean language plpgsql as $$
 begin
   perform entitlement_refresh(p_user);
   if exists(select 1 from entitlement_purchases where platform=p_platform and external_key=p_key and user_id<>p_user)then raise exception 'Purchase already linked to another account';end if;
@@ -91,6 +92,12 @@ begin
   if exists(select 1 from entitlement_purchases where platform=p_platform and external_key=p_key and user_id<>p_user)then raise exception 'Purchase already linked to another account';end if;
   if p_state='trialing' and p_trial_start is not null and p_trial_end is not null then
     update entitlements set trial_started_at=coalesce(trial_started_at,p_trial_start),trial_ends_at=coalesce(trial_ends_at,p_trial_end),trial_platform=coalesce(trial_platform,p_platform)where user_id=p_user;
+  end if;
+  -- SUBSCRIBED may precede the app receipt. Record both event identities atomically,
+  -- so a later receipt is a no-op without suppressing distinct store notifications.
+  if p_transaction_event is not null then
+    insert into entitlement_events(platform,event_id,user_id)values(p_platform,p_transaction_event,p_user)on conflict do nothing;
+    if exists(select 1 from entitlement_events where platform=p_platform and event_id=p_transaction_event and user_id<>p_user)then raise exception 'Purchase already linked to another account';end if;
   end if;
   perform entitlement_refresh(p_user);return true;
 end $$;
