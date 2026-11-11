@@ -232,6 +232,7 @@ export function dreamRoutes(deps: DreamDeps) {
             userId,
           ),
         claudeFor(deps, userId, "dream", { personUsd: USER_DAILY_USD, signal }),
+        sessionId,
       );
       const meta: Meta = {
         responses: async (b) => {

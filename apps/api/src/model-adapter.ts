@@ -10,19 +10,24 @@ export interface Envelope { input:unknown[]; instructions?:unknown; tools?:unkno
 const PREFIX="app_";
 const MAX_HISTORY_BYTES=2_000_000;
 const MAX_ITEMS=400;
-const TTL_MS=60*60_000;
+/** App policy, not a Meta response-ID guarantee. Saved dream transcripts rebuild older conversations. */
+export const MODEL_HISTORY_TTL_MS=30*24*60*60_000;
 export class ModelHistoryError extends Error {}
-export function postgresHistory(db:Db,userId:string):HistoryStore {
+export async function purgeExpiredModelHistory(db:Db):Promise<void>{
+  await db.query("delete from model_turns where expires_at<=clock_timestamp()");
+}
+export function postgresHistory(db:Db,userId:string,sessionId?:string):HistoryStore {
   return {
     async load(id){
       if(!/^app_[0-9a-f-]{36}$/.test(id))throw new ModelHistoryError("Unknown conversation history");
-      const {rows}=await db.query<{envelope:Envelope}>("select envelope from model_turns where id=$1 and user_id=$2 and expires_at>clock_timestamp()",[id.slice(PREFIX.length),userId]);
+      const {rows}=await db.query<{envelope:Envelope}>("select envelope from model_turns where id=$1 and user_id=$2 and session_id is not distinct from $3::uuid and expires_at>clock_timestamp()",[id.slice(PREFIX.length),userId,sessionId??null]);
       if(!rows[0])throw new ModelHistoryError("Unknown conversation history");return rows[0].envelope;
     },
     async save(id,value){
       // Bounded retention; account deletion cascades immediately. Never put transcripts in logs.
-      await db.query("delete from model_turns where expires_at<=clock_timestamp()");
-      await db.query("insert into model_turns(id,user_id,envelope,expires_at)values($1,$2,$3::jsonb,clock_timestamp()+$4*interval '1 millisecond')",[id.slice(PREFIX.length),userId,JSON.stringify(value),TTL_MS]);
+      bounded(value);
+      await purgeExpiredModelHistory(db);
+      await db.query("insert into model_turns(id,user_id,envelope,expires_at,session_id)values($1,$2,$3::jsonb,clock_timestamp()+$4*interval '1 millisecond',$5)",[id.slice(PREFIX.length),userId,JSON.stringify(value),MODEL_HISTORY_TTL_MS,sessionId??null]);
     },
   };
 }

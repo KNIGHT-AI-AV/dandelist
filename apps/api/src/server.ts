@@ -4,6 +4,7 @@ import { createApp } from "./app";
 import { sweepHelp } from "./help";
 import { loadSeed } from "./archive/seed";
 import { migrate, openDb } from "./db";
+import { purgeExpiredModelHistory } from "./model-adapter";
 import { readEnv } from "./env";
 import { consoleMailer, resendMailer } from "./mailer";
 import { s3MediaStore } from "./media-store";
@@ -59,7 +60,10 @@ serve({ fetch: app.fetch, port: env.PORT }, (info) => console.log(`dandelist api
 process.once("SIGTERM", () => void closeAnalytics().finally(() => process.exit(0)));
 
 // Help reports' private copies: deletions and uploads that failed are retried, at start and every five minutes.
-const sweep = () => void sweepHelp(deps).catch((e) => console.warn("help sweep failed", e instanceof Error ? e.message : e));
+const sweep = () => {
+  void sweepHelp(deps).catch((e) => console.warn("help sweep failed", e instanceof Error ? e.message : e));
+  if(env.MODEL_HISTORY_ENABLED)void purgeExpiredModelHistory(db).catch(()=>console.warn("model history cleanup failed"));
+};
 sweep();
 setInterval(sweep, 5 * 60_000).unref();
 

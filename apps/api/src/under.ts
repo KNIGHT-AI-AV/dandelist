@@ -207,8 +207,8 @@ export function claudeForGuests(deps: UnderDeps, kind: string, opts: { shareUsd:
 }
 
 /** The app-owned history lane is opt-in. Default Meta/legacy requests retain their original object and bytes. */
-export function modelFor(deps:UnderDeps,userId:string,meta:Responder,under:Under|undefined):Responder {
+export function modelFor(deps:UnderDeps,userId:string,meta:Responder,under:Under|undefined,sessionId?:string):Responder {
   if(!deps.modelHistory)return metaFirst(meta,under);
   return modelRouter({id:"meta",respond:meta},under?{id:"claude",respond:under.run,needsSchemaPrompt:true}:undefined,
-    postgresHistory(deps.db,userId),error=>!!under&&handsDown(error,under.setup));
+    postgresHistory(deps.db,userId,sessionId),error=>!!under&&handsDown(error,under.setup));
 }
