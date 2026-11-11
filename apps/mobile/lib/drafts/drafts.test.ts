@@ -19,7 +19,7 @@ it("adds the matching limited-retention legal draft only alongside the history f
 });
 it("uses the literal cleaner clipboard artifact with a reproducible receipt",()=>{
   const file=readFileSync(new URL("./copy.json",import.meta.url));
-  const receipt=JSON.parse(readFileSync(new URL("../../../../phase3/cleaner-receipt.json",import.meta.url),"utf8"));
+  const receipt=JSON.parse(readFileSync(new URL("../../../../docs/phase3-copy-receipt.json",import.meta.url),"utf8"));
   expect(createHash("sha256").update(file).digest("hex")).toBe(receipt.sha256);expect(receipt.literalCopyOutputClicked).toBe(true);expect(receipt.source).toContain("Windows system clipboard");
   expect(copy.flow.pending).toBe("Pending");expect(copy.flow.iosBody).toContain("two-week");expect(copy.flow.trialBody).toContain("without a card");
 });
