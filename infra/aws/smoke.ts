@@ -1,11 +1,13 @@
 /**
- * Checks the live API end to end: health (which queries Postgres), sign-in as the judge account, and a wish
- * created, listed and removed. The judge code is read from Secrets Manager and never printed.
+ * Checks the live API end to end using an account that has already accepted AI consent.
+ * Consent is never accepted by this script. The judge code is read from Secrets Manager and never printed.
  * Usage: API_URL=https://... pnpm --filter @dandelist/infra-aws run smoke
- * AGENT=1 also asks the Meta agent to read one wish (about a cent).
+ * AGENT=1 also asks the Meta agent to read one wish (a paid call; separate spending authority required).
+ * Use smoke:public for credential-free, read-only release checks.
  */
 import { GetSecretValueCommand, SecretsManagerClient } from "@aws-sdk/client-secrets-manager";
 import { credentials, region } from "./creds";
+import { accountSmoke } from "./smoke-checks";
 
 const base = process.env.API_URL;
 if (!base) throw new Error("Set API_URL to the service URL");
@@ -35,14 +37,14 @@ const signIn = await call("POST", "/auth/email/verify", { email, code });
 check("judge sign-in verify", signIn.status === 200, String(signIn.status));
 const token = signIn.json?.accessToken as string;
 
-const created = await call("POST", "/wishes", { name: "Smoke test wish", kind: "buy", upfrontCents: 12345, recurring: [{ amountCents: 500, period: "month" }] }, token);
-check("create wish", created.status === 201, String(created.status));
-const id = created.json?.wish?.id as string;
-const list = await call("GET", "/wishes", undefined, token);
-check("list includes it", list.status === 200 && list.json?.wishes?.some((w: { id: string }) => w.id === id));
-check("delete wish", (await call("DELETE", `/wishes/${id}`, undefined, token)).status === 204);
-if (process.env.AGENT) {
-  const read = await call("POST", "/agent/interpret", { text: "a Peloton Bike+" }, token);
-  check("agent reads a wish", read.status === 200 && typeof read.json?.draft?.title === "string", `${read.status} ${read.json?.draft?.title ?? read.json?.error ?? ""}`);
+if (signIn.status === 200 && typeof token === "string" && token.length > 0) {
+  try {
+    for (const result of await accountSmoke((method, path, body) => call(method, path, body, token), process.env.AGENT === "1")) {
+      check(result.label, result.ok, result.detail);
+    }
+  } finally {
+    check("sign out", (await call("POST", "/auth/logout", {}, token)).status === 204);
+  }
+} else {
+  check("valid sign-in token", false);
 }
-check("sign out", (await call("POST", "/auth/logout", {}, token)).status === 204);

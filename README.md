@@ -15,14 +15,14 @@ Dandelist runs on iPhone, Android and the web from one codebase, with sign-in by
 - Demo film, 3 minutes: https://dandelist.knightaiav.com/film/
 - Web app, nothing to install: https://dandelist.knightaiav.com
 - iPhone: install TestFlight from the App Store, then open https://testflight.apple.com/join/tuh4Jxkw on the iPhone, tap Accept, then Install.
-- Android: on the phone, open https://github.com/KNIGHT-AI-AV/dandelist/releases/tag/android-25, download dandelist-android-25.apk and open it. Android asks once to allow installs from your browser.
+- Android: on your phone, open the [Android 29 release](https://github.com/KNIGHT-AI-AV/dandelist/releases/tag/android-29), download dandelist-android-29.apk and open it. Android asks once to allow installs from your browser.
 - API: https://api.dandelist.knightaiav.com
 
-Sign in with your email to see the whole app: a six-digit code arrives by email.
+Sign in, then review and accept how Dandelist uses AI before starting AI research. A six-digit email code is one way to sign in.
 
 ## What it does
 
-- **A first look before you sign in.** Pick a few things you'd say yes to, vote between pairs, set a monthly amount, and watch the agent price one of your picks live. You choose a theme before you make an account.
+- **A first look before you sign in.** Explore example wishes, compare pairs and set a monthly amount. Your first wish stays on your device until you sign in and accept how Dandelist uses AI.
 - **Real prices, checked.** For each wish the agent searches the web, opens the seller's page and checks that the price is printed there. A price it could not confirm on the seller's own site is labelled an estimate, with the page it came from and the date it was checked.
 - **What it costs to keep.** Running costs are itemised: property tax, insurance, upkeep, utilities, fuel, staff. Each line shows how it was worked out and links to the published rate it used, priced for where you live.
 - **A dream builder.** Describe a home, a car or a service in plain words. The agent opens the right tool in the chat: a home builder with real listings you swipe through, a car configurator priced from the maker, or a monthly quote for something like private security, priced from regional rates.

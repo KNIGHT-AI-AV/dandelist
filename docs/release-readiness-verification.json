@@ -1,0 +1,26 @@
+{
+  "date": "2026-11-11",
+  "base": "16c1039623d7a655daac08d34034dd666a519ab7",
+  "checks": {
+    "infrastructureTests": {
+      "passed": 12,
+      "failed": 0,
+      "transport": "injected offline fixtures"
+    },
+    "workspaceTypecheck": "PASS",
+    "mobileTypeGuard": "PASS",
+    "targetedInfrastructureTypecheck": "PASS",
+    "scriptSyntax": "PASS",
+    "unknownBuildArgument": "rejected before export",
+    "webBuildOnly": "PASS, development artifact only, no upload",
+    "publicApiSmoke": {
+      "passed": 4,
+      "failed": 0,
+      "method": "GET only, cookies omitted, redirects rejected"
+    }
+  },
+  "modelCalls": 0,
+  "authenticatedAccountSmokeRun": false,
+  "nativeStorePurchasesRun": false,
+  "physicalDevicesTested": false
+}
