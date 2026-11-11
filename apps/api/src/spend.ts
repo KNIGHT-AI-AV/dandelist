@@ -1,18 +1,10 @@
 import { aiGeneration } from "./analytics";
 import type { Usage } from "@dandelist/meta";
 import type { Db } from "./db";
+import { SpendLimitError, heldInPool, heldFor, heldForScope, collectPolicy, currentReservation, settle } from "./spend-reservations";
+export { SpendLimitError, HOLD_USD, CLAUDE_HOLD_USD, MAX_INFLIGHT_PER_USER, SLOT_WAIT_MS, HOLD_TTL_MS, hold, reserve, settle, withHold, withBudgetScope, heldInPool, heldFor, heldForScope, reservedFetch } from "./spend-reservations";
+export type { Pool, BudgetPolicy } from "./spend-reservations";
 
-export class SpendLimitError extends Error {
-  constructor(readonly scope: "daily" | "total" | "user") {
-    super(
-      scope === "daily"
-        ? "Today's AI budget is used up. Try again tomorrow."
-        : scope === "user"
-          ? "You've used today's research allowance. Try again tomorrow."
-          : "The AI budget for this event is used up.",
-    );
-  }
-}
 
 export interface SpendCaps {
   dailyUsd: number;
@@ -34,144 +26,7 @@ export const NOT_CLAUDE = `model not like '${CLAUDE_MODEL_PREFIX}%'`;
 /** The ledger rows Meta's caps count: neither an outside service's nor Claude's. */
 export const META_ONLY = `model not like '${TOOL_MODEL_PREFIX}%' and ${NOT_CLAUDE}`;
 
-/** Which caps a hold counts against: Meta's, or Claude's under it. */
-export type Pool = "meta" | "claude";
-
 const dayStart = (now: Date) => new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-
-/**
- * Spend held for model calls that have started but not yet reported their cost, Meta's and Claude's apart. A call holds
- * before it checks the caps and releases after its cost is in the ledger, so calls running at once can't all pass the
- * same check and overshoot (Dandy List Master's review, 2026-10-27: $10.03 against a $10 cap). Per process;
- * deliberately conservative, since a held call is briefly counted twice once its cost is recorded.
- */
-const held: Record<Pool, number> = { meta: 0, claude: 0 };
-const heldBy = new Map<string, { usd: number; calls: number }>();
-/** One person's holds in one pool: Meta's under their id, Claude's apart, so neither counts against the other. */
-const slot = (userId: string, pool: Pool) => (pool === "meta" ? userId : `${pool}:${userId}`);
-export const HOLD_USD = 0.1;
-/**
- * What one Claude call holds: Opus 5.5 in fast mode at $40 a million output tokens can spend about $0.64 on its 16k
- * of output, against Muse Spark's tenth of that. A photo check holds a fifth of it, as on Meta (under.ts).
- */
-export const CLAUDE_HOLD_USD = 0.6;
-/**
- * Calls one person may have in flight at once, so nobody can inflate the shared hold and lock others out. One hunt
- * reads the wish, asks its questions, researches and looks at photos side by side (two looks a photo, a few photos
- * at a time), and several wishes from one message hunt at once, so it's 8; past that a call waits its turn.
- */
-export const MAX_INFLIGHT_PER_USER = 8;
-/** How long a call waits for one of its person's slots before it gives up. */
-export const SLOT_WAIT_MS = 20_000;
-const waiting = new Map<string, (() => void)[]>();
-
-/**
- * Holds `usd` against the pool's caps, and `mineUsd` (`usd` unless given) against `userId`'s own, until the returned
- * release is called (safe twice). Claude's calls hold more of Claude's day than of the person's share (under.ts).
- */
-export function hold(usd = HOLD_USD, userId?: string, pool: Pool = "meta", mineUsd = usd): () => void {
-  const key = userId ? slot(userId, pool) : undefined;
-  if (key) {
-    const mine = heldBy.get(key) ?? { usd: 0, calls: 0 };
-    if (mine.calls >= MAX_INFLIGHT_PER_USER) throw new SpendLimitError("user");
-    heldBy.set(key, { usd: mine.usd + mineUsd, calls: mine.calls + 1 });
-  }
-  held[pool] += usd;
-  let done = false;
-  return () => {
-    if (done) return;
-    done = true;
-    held[pool] = Math.max(0, held[pool] - usd);
-    if (key) {
-      const mine = heldBy.get(key);
-      if (!mine) return;
-      if (mine.calls <= 1) heldBy.delete(key);
-      else heldBy.set(key, { usd: Math.max(0, mine.usd - mineUsd), calls: mine.calls - 1 });
-      waiting.get(key)?.shift()?.();
-    }
-  };
-}
-
-/** What a pool's calls hold in all right now, against that pool's caps. */
-export const heldInPool = (pool: Pool) => held[pool];
-
-/**
- * Holds `usd` for `userId` as soon as one of their call slots is free, waiting up to SLOT_WAIT_MS for one, so a busy
- * person's extra calls queue behind their own instead of failing (2026-10-29: two wishes hunted at once both ended in
- * an error at four slots). The check and the hold happen in the same turn, so no other call can take the slot between.
- * A wait whose caller has given up (`signal` aborted: a retake or a hunt past its deadline) leaves the queue at once and
- * never takes a slot, so nothing starts for an answer nobody will read (Codex's review of #72).
- */
-async function holdWhenFree(usd: number, userId: string, signal?: AbortSignal, pool: Pool = "meta", mineUsd = usd): Promise<() => void> {
-  const by = Date.now() + SLOT_WAIT_MS;
-  const key = slot(userId, pool);
-  for (;;) {
-    const free = (heldBy.get(key)?.calls ?? 0) < MAX_INFLIGHT_PER_USER;
-    if (signal?.aborted) {
-      // A slot freed for this call just as its caller gave up goes to the next call waiting, so that call doesn't sleep
-      // to its timeout beside a free slot (Codex's review of #73: release wakes A, A is aborted before it runs).
-      if (free) waiting.get(key)?.shift()?.();
-      signal.throwIfAborted();
-    }
-    if (free) return hold(usd, userId, pool, mineUsd);
-    const left = by - Date.now();
-    if (left <= 0) throw new SpendLimitError("user");
-    await new Promise<void>((resolve) => {
-      const queue = waiting.get(key) ?? [];
-      // Called once: by a release (already shifted off the queue), the time running out, or the caller giving up.
-      const done = () => {
-        clearTimeout(timer);
-        signal?.removeEventListener("abort", done);
-        const at = queue.indexOf(done);
-        if (at >= 0) queue.splice(at, 1);
-        if (!queue.length) waiting.delete(key);
-        resolve();
-      };
-      const timer = setTimeout(done, left);
-      signal?.addEventListener("abort", done, { once: true });
-      queue.push(done);
-      waiting.set(key, queue);
-    });
-  }
-}
-
-/** What `userId` has in flight right now, in one pool. */
-export const heldFor = (userId: string, pool: Pool = "meta") => heldBy.get(slot(userId, pool))?.usd ?? 0;
-
-/**
- * Runs one model call under a hold: hold (once one of the person's slots is free), check the caps with the hold
- * counted, call, then release. `usd` is the most the call can cost; HOLD_USD unless the call is known to be smaller.
- * Once `signal` aborts, a call that hasn't started never will. The hold is Meta's unless `pool` says Claude's, and
- * `mineUsd` (`usd` unless given) is what it holds against the person's own allowance.
- */
-export async function withHold<T>(check: () => Promise<void>, run: () => Promise<T>, userId?: string, usd = HOLD_USD, signal?: AbortSignal, pool: Pool = "meta", mineUsd = usd): Promise<T> {
-  const release = userId ? await holdWhenFree(usd, userId, signal, pool, mineUsd) : hold(usd, undefined, pool);
-  try {
-    await check();
-    signal?.throwIfAborted();
-    return await run();
-  } finally {
-    release();
-  }
-}
-
-const heldByScope = new Map<string, number>();
-const scoped = (scope: string, pool: Pool) => (pool === "meta" ? scope : `${pool}:${scope}`);
-/** Anonymous features share a budget scope, separate from individual signed-in users. Per process, like held. */
-export const heldForScope = (scope: string, pool: Pool = "meta") => heldByScope.get(scoped(scope, pool)) ?? 0;
-
-/** Reserve both the shared feature allowance and the pool's global allowance until the call's cost is recorded. */
-export async function withBudgetScope<T>(scope: string, check: () => Promise<void>, run: () => Promise<T>, pool: Pool = "meta", usd = HOLD_USD): Promise<T> {
-  const key = scoped(scope, pool);
-  heldByScope.set(key, heldForScope(scope, pool) + usd);
-  try {
-    return await withHold(check, run, undefined, usd, undefined, pool);
-  } finally {
-    const remaining = Math.max(0, heldForScope(scope, pool) - usd);
-    if (remaining < Number.EPSILON) heldByScope.delete(key);
-    else heldByScope.set(key, remaining);
-  }
-}
 
 /**
  * Judging week (owner, 2026-11-02: "Yes, $30 for Nov 4-8"): on these UTC days Meta's daily cap is $30, so judges
@@ -189,15 +44,17 @@ export function dailyCapUsd(caps: SpendCaps, now: Date): number {
 
 /** Refuses a Meta call when today's or the all-time spend has reached its cap, counting calls still in flight. */
 export async function assertBudget(db: Db, caps: SpendCaps, now: Date): Promise<void> {
+  collectPolicy(db,{pool:"meta",type:"global",since:dayStart(now).toISOString(),cap:dailyCapUsd(caps,now),total:caps.totalUsd});
+  const held = await heldInPool(db,"meta");
   const { rows } = await db.query<{ today: string | null; total: string | null }>(
     `select coalesce(sum(cost_usd) filter (where created_at >= $1), 0) as today, coalesce(sum(cost_usd), 0) as total from spend_ledger where ${META_ONLY}`,
     [dayStart(now).toISOString()],
   );
   const today = Number(rows[0]?.today ?? 0);
   const total = Number(rows[0]?.total ?? 0);
-  if (total >= caps.totalUsd || total + held.meta > caps.totalUsd) throw new SpendLimitError("total");
+  if (total >= caps.totalUsd || total + held > caps.totalUsd) throw new SpendLimitError("total");
   const daily = dailyCapUsd(caps, now);
-  if (today >= daily || today + held.meta > daily) throw new SpendLimitError("daily");
+  if (today >= daily || today + held > daily) throw new SpendLimitError("daily");
 }
 
 /**
@@ -205,38 +62,45 @@ export async function assertBudget(db: Db, caps: SpendCaps, now: Date): Promise<
  * `extraUsd` is spend not in the ledger yet: what a call about to resume has already spent (under.ts).
  */
 export async function assertClaudeBudget(db: Db, dailyUsd: number, now: Date, extraUsd = 0): Promise<void> {
+  collectPolicy(db,{pool:"claude",type:"global",since:dayStart(now).toISOString(),cap:dailyUsd,extra:extraUsd});
   const spent = (await spentToday(db, CLAUDE_MODEL_PREFIX, now)) + extraUsd;
-  if (spent >= dailyUsd || spent + held.claude > dailyUsd) throw new SpendLimitError("daily");
+  if (spent >= dailyUsd || spent + await heldInPool(db,"claude") > dailyUsd) throw new SpendLimitError("daily");
 }
 
 /** One person's Claude spend in any 24 hours against their share of Claude's cap, as assertUserBudget is for Meta's. */
 export async function assertUserClaudeBudget(db: Db, userId: string, capUsd: number, now: Date, extraUsd = 0): Promise<void> {
+  collectPolicy(db,{pool:"claude",type:"user",userId,since:new Date(now.getTime()-24*60*60*1000).toISOString(),cap:capUsd,exclusive:true,extra:extraUsd});
   const { rows } = await db.query<{ spent: string | null }>("select coalesce(sum(cost_usd), 0) as spent from spend_ledger where user_id = $1 and created_at > $2 and model like $3", [
     userId,
     new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString(),
     `${CLAUDE_MODEL_PREFIX}%`,
   ]);
   const spent = Number(rows[0]?.spent ?? 0) + extraUsd;
-  if (spent >= capUsd || spent + heldFor(userId, "claude") > capUsd) throw new SpendLimitError("user");
+  if (spent >= capUsd || spent + await heldFor(db,userId, "claude") > capUsd) throw new SpendLimitError("user");
 }
 
 export async function recordSpend(db: Db, userId: string | null, kind: string, usage: Usage, costUsd: number, now: Date): Promise<void> {
-  // Every model call is also an AI Observability generation in PostHog (analytics.ts).
-  aiGeneration(userId, kind, usage, costUsd);
+  const reservation = currentReservation(db);
+  if (reservation) {
+    if (await settle(db,reservation,userId,kind,usage,costUsd,now)) aiGeneration(userId,kind,usage,costUsd);
+    return;
+  }
   await db.query(
     "insert into spend_ledger (user_id, model, kind, input_tokens, output_tokens, searches, cost_usd, created_at) values ($1, $2, $3, $4, $5, $6, $7, $8)",
     [userId, usage.model, kind, usage.inputTokens, usage.outputTokens, usage.searches, costUsd.toFixed(6), now.toISOString()],
   );
+  aiGeneration(userId,kind,usage,costUsd);
 }
 
 /** One person can spend at most `capUsd` of AI calls in any 24 hours, so nobody can drain the shared budget. */
 export async function assertUserBudget(db: Db, userId: string, capUsd: number, now: Date): Promise<void> {
+  collectPolicy(db,{pool:"meta",type:"user",userId,since:new Date(now.getTime()-24*60*60*1000).toISOString(),cap:capUsd,exclusive:true});
   const { rows } = await db.query<{ spent: string | null }>(`select coalesce(sum(cost_usd), 0) as spent from spend_ledger where user_id = $1 and created_at > $2 and ${META_ONLY}`, [
     userId,
     new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString(),
   ]);
   const spent = Number(rows[0]?.spent ?? 0);
-  if (spent >= capUsd || spent + heldFor(userId) > capUsd) throw new SpendLimitError("user");
+  if (spent >= capUsd || spent + await heldFor(db,userId) > capUsd) throw new SpendLimitError("user");
 }
 
 /** The judge account's share of the service's daily cap; the rest stays for everyone else. */
@@ -278,4 +142,12 @@ export async function spentToday(db: Db, prefix: string, now: Date): Promise<num
 export async function callsToday(db: Db, model: string, now: Date): Promise<number> {
   const { rows } = await db.query<{ n: string | number }>("select count(*) as n from spend_ledger where model = $1 and created_at >= $2", [model, dayStart(now).toISOString()]);
   return Number(rows[0]?.n ?? 0);
+}
+
+/** Shared anonymous feature cap, with the same policy included in atomic reservation admission. */
+export async function assertScopeBudget(db:Db,scope:string,pool:"meta"|"claude",cap:number,now:Date,extra=0):Promise<void> {
+  collectPolicy(db,{pool,type:"scope",scope,since:dayStart(now).toISOString(),cap,extra});
+  const {rows}=await db.query<{spent:string}>(`select coalesce(sum(cost_usd),0) as spent from spend_ledger where user_id is null and kind like $1 and created_at >= $2 and ${pool==="meta"?META_ONLY:"model like 'claude-%'"}`,[scope+"%",dayStart(now).toISOString()]);
+  const spent=Number(rows[0]?.spent??0)+extra;
+  if(spent>=cap || spent+await heldForScope(db,scope,pool)>cap)throw new SpendLimitError("daily");
 }

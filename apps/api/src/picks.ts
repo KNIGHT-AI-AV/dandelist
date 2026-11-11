@@ -1,3 +1,4 @@
+import { reservedFetch } from "./spend";
 import { MetaApiError, MetaClient } from "@dandelist/meta";
 import { Hono } from "hono";
 import { z } from "zod";
@@ -397,12 +398,12 @@ export function pickRoutes(deps: AgentDeps) {
     }
 
     const stop = new AbortController();
-    const client = new MetaClient({ ...deps.meta, fetch: stoppable(deps.meta.fetch ?? fetch, stop.signal), onUsage: (usage, cost) => recordSpend(db, userId, "pick", usage, cost, deps.now()) });
+    const client = new MetaClient({ ...deps.meta, fetch: reservedFetch(stoppable(deps.meta.fetch ?? fetch, stop.signal)), onUsage: (usage, cost) => recordSpend(db, userId, "pick", usage, cost, deps.now()) });
     // Every call holds its own share of the caps while it runs, as the agent's do (agent/routes.ts): a look at one
     // photo a fifth of a full call, and past the person's in-flight slots a call waits its turn (spend.ts). The stop
     // reaches the queue too, so no call starts once this pick has answered.
     // Meta first; Claude only once Meta's spend is used up (under.ts).
-    const meta: Meta = { responses: metaFirst((b) => withHold(guard, () => client.responses(b), userId, holdFor(b), stop.signal), claudeFor(deps, userId, "pick", { personUsd: USER_DAILY_USD, signal: stop.signal, usd: holdFor })) };
+    const meta: Meta = { responses: metaFirst((b) => withHold(db, guard, () => client.responses(b), userId, holdFor(b), stop.signal), claudeFor(deps, userId, "pick", { personUsd: USER_DAILY_USD, signal: stop.signal, usd: holdFor })) };
     try {
       const [life, notes, past] = await Promise.all([
         readLife(db, userId),

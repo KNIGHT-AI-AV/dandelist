@@ -1,3 +1,4 @@
+import { reservedFetch } from "./spend";
 import { MetaApiError, MetaClient } from "@dandelist/meta";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
@@ -293,9 +294,9 @@ export function meRoutes(deps: AgentDeps) {
       })),
     };
 
-    const client = new MetaClient({ ...deps.meta, onUsage: (usage, cost) => recordSpend(db, userId, "facts", usage, cost, deps.now()) });
+    const client = new MetaClient({ ...deps.meta, fetch: reservedFetch(deps.meta.fetch ?? fetch), onUsage: (usage, cost) => recordSpend(db, userId, "facts", usage, cost, deps.now()) });
     // Meta first; Claude only once Meta's spend is used up (under.ts).
-    const responses = metaFirst((body) => withHold(guard, () => client.responses(body), userId), claudeFor(deps, userId, "facts", { personUsd: USER_DAILY_USD }));
+    const responses = metaFirst((body) => withHold(db, guard, () => client.responses(body), userId), claudeFor(deps, userId, "facts", { personUsd: USER_DAILY_USD }));
     let lines: string[];
     try {
       const res = await responses({

@@ -1,3 +1,4 @@
+import { reservedFetch } from "../spend";
 import type { DreamEvent } from "@dandelist/catalogue/dream";
 import { MetaApiError, MetaClient } from "@dandelist/meta";
 import { Hono, type Context } from "hono";
@@ -218,11 +219,11 @@ export function dreamRoutes(deps: DreamDeps) {
     const turnId = randomUUID().slice(0, 8);
 
     const ctxFor = (emit: DreamCtx["emit"], budget: TurnBudget, signal: AbortSignal): DreamCtx => {
-      const client = new MetaClient({ ...deps.meta!, fetch: stoppable(deps.meta!.fetch ?? fetch, signal), onUsage: (usage, cost) => recordSpend(db, userId, "dream", usage, cost, deps.now()) });
+      const client = new MetaClient({ ...deps.meta!, fetch: reservedFetch(stoppable(deps.meta!.fetch ?? fetch, signal)), onUsage: (usage, cost) => recordSpend(db, userId, "dream", usage, cost, deps.now()) });
       // Meta first; Claude only once Meta's spend is used up (under.ts).
       const responses = metaFirst(
         (b) =>
-          withHold(
+          withHold(db,
             async () => {
               await assertBudget(db, caps, deps.now());
               await assertUserBudget(db, userId, await userCapUsd(db, userId, USER_DAILY_USD, deps.judge, caps, deps.now()), deps.now());

@@ -1,3 +1,4 @@
+import { reservedFetch } from "../spend";
 import { createHash } from "node:crypto";
 import type { Alive } from "../alive";
 import { MetaApiError, MetaClient, TRANSCRIBE_MODEL } from "@dandelist/meta";
@@ -146,7 +147,7 @@ export function agentRoutes(deps: AgentDeps) {
     const cfg = deps.meta!;
     const client = new MetaClient({
       ...cfg,
-      ...(stop ? { fetch: stoppable(cfg.fetch ?? fetch, stop) } : {}),
+      fetch: reservedFetch(stop ? stoppable(cfg.fetch ?? fetch, stop) : cfg.fetch ?? fetch),
       onUsage: async (usage, cost) => {
         await recordSpend(db, userId, kind, usage, cost, deps.now());
         await onCost?.(cost);
@@ -158,8 +159,8 @@ export function agentRoutes(deps: AgentDeps) {
     };
     return {
       // Meta first; Claude only once Meta's spend is used up. Pictures (Muse Image) stay Meta's.
-      responses: metaFirst((body) => withHold(guard, () => client.responses(body), userId, holdFor(body), stop), claudeFor(deps, userId, kind, { personUsd: USER_DAILY_USD, onCost, signal: stop, usd: holdFor })),
-      images: (op, body) => withHold(guard, () => client.images(op, body), userId),
+      responses: metaFirst((body) => withHold(db, guard, () => client.responses(body), userId, holdFor(body), stop), claudeFor(deps, userId, kind, { personUsd: USER_DAILY_USD, onCost, signal: stop, usd: holdFor })),
+      images: (op, body) => withHold(db, guard, () => client.images(op, body), userId),
     };
   };
 
@@ -269,7 +270,7 @@ export function agentRoutes(deps: AgentDeps) {
         await assertUserBudget(db, userId, await userCapUsd(db, userId, USER_DAILY_USD, deps.judge, caps, deps.now()), deps.now());
       };
       const client = new MetaClient(deps.meta!);
-      const heard = await withHold(guard, () => client.transcribe(new Blob([bytes], { type: "audio/wav" }), { keywords: WISH_KEYWORDS }), userId);
+      const heard = await withHold(db, guard, () => client.transcribe(new Blob([bytes], { type: "audio/wav" }), { keywords: WISH_KEYWORDS }), userId);
       await recordToolSpend(db, userId, "transcribe", TRANSCRIBE_MODEL, heard.costUsd, deps.now());
       const text = cleanTranscript(heard.text);
       if (!text) return c.json({ error: "Didn't catch that. Try again a little closer." }, 422);

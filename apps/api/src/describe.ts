@@ -1,3 +1,4 @@
+import { reservedFetch } from "./spend";
 import { MetaApiError, MetaClient } from "@dandelist/meta";
 import { Hono, type MiddlewareHandler } from "hono";
 import { z } from "zod";
@@ -221,12 +222,12 @@ export function describeRoutes(deps: DescribeDeps) {
 
   /** A Meta client that checks the caps before the call, holds spend while it runs and records what it cost. */
   const metaFor = (userId: string, kind: "describe" | "search"): Meta => {
-    const client = new MetaClient({ ...deps.meta!, onUsage: (usage, cost) => recordSpend(db, userId, kind, usage, cost, deps.now()) });
+    const client = new MetaClient({ ...deps.meta!, fetch: reservedFetch(deps.meta!.fetch ?? fetch), onUsage: (usage, cost) => recordSpend(db, userId, kind, usage, cost, deps.now()) });
     const guard = async () => {
       await assertBudget(db, caps, deps.now());
       await assertUserBudget(db, userId, await userCapUsd(db, userId, USER_DAILY_USD, deps.judge, caps, deps.now()), deps.now());
     };
-    return { responses: metaFirst((body) => withHold(guard, () => client.responses(body), userId), claudeFor(deps, userId, kind, { personUsd: USER_DAILY_USD })) };
+    return { responses: metaFirst((body) => withHold(db, guard, () => client.responses(body), userId), claudeFor(deps, userId, kind, { personUsd: USER_DAILY_USD })) };
   };
 
   /** True when the person has made `limit` calls of this kind in the last 24 hours. */
