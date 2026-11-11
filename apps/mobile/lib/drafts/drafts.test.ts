@@ -15,6 +15,7 @@ it("defaults both drafts off and preserves current legal arrays, dates and wordi
 it("adds the matching limited-retention legal draft only alongside the history flag",()=>{
   const original=JSON.stringify({PRIVACY,TERMS});const [privacy,terms]=legalDocuments(true);
   expect(privacy?.sections.at(-1)?.body.join(" ")).toContain("30 days");expect(privacy?.sections.at(-1)?.body.join(" ")).toContain("Deleting a conversation");expect(terms?.sections.at(-1)?.body.join(" ")).toContain("rebuilds context");
+  expect(copy.legal.privacyBody[0]).toMatch(/^We keep temporary copies/);expect(copy.legal.termsBody[0]).toMatch(/^Temporary model context expires/);
   expect(JSON.stringify({PRIVACY,TERMS})).toBe(original);expect(legalDocuments(false)[0]?.sections).toBe(PRIVACY);
 });
 it("uses the literal cleaner clipboard artifact with a reproducible receipt",()=>{

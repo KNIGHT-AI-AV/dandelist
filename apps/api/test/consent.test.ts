@@ -178,10 +178,15 @@ describe("nothing reaches a model before the yes", () => {
 
   it("refuses every signed-in route the app has but the open ones: a new route can't slip past", async () => {
     const ada = await signIn("ada@example.com");
+    // The public deployment capability read is safe before consent; allow only this method,
+    // so any future write at the same path still has to pass the exhaustive guard below.
+    const features = await call("GET", "/config/features", ada.token);
+    expect(features.status).toBe(200);
+    expect(await features.json()).toEqual({ chatContinuity: false });
     // Routes anyone may call without signing in: health, public images, rates, sign-in itself, the guest pool and
     // closed guest routes, the preview, and MCP (its own key check, tested below).
     const PUBLIC = [/^\/healthz$/, /^\/internal\/hold$/, /^\/media\//, /^\/fx/, /^\/auth\//, /^\/guest\//, /^\/preview$/, /^\/mcp$/];
-    const OPEN = new Set(["GET /me", "DELETE /me", "GET /me/consent", "POST /me/consent", "POST /auth/logout"]);
+    const OPEN = new Set(["GET /me", "DELETE /me", "GET /me/consent", "POST /me/consent", "POST /auth/logout", "GET /config/features"]);
     const routes = [...new Map(app.routes.filter((r) => ["GET", "POST", "PUT", "PATCH", "DELETE"].includes(r.method)).map((r) => [`${r.method} ${r.path}`, r])).values()];
     const fill = (path: string) => path.replace(/:id\b/g, "00000000-0000-4000-8000-000000000000").replace(/:provider\b/g, "github").replace(/:key\b/g, "x");
     let checked = 0;
@@ -196,6 +201,7 @@ describe("nothing reaches a model before the yes", () => {
     }
     expect(checked).toBeGreaterThan(40);
     expect(models).toEqual([]);
+    expect(web).toEqual([]);
   });
 
   it("gives an agent key nothing for an account without the yes, not even the tool list", async () => {

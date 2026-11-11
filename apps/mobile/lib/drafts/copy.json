@@ -3,13 +3,13 @@
     "updated": "Last updated November 11, 2026",
     "privacyHeading": "Chat continuity",
     "privacyBody": [
-      "When chat continuity is on, we keep temporary copies of chat text and the information used to answer it on our server. This lets a conversation continue when a different AI service answers. Each copy expires 30 days after it is created. Continuing a conversation can create a new copy.",
+      "We keep temporary copies of chat text and the information used to answer it on our server. This lets a conversation continue when a different AI service answers. Each copy expires 30 days after it is created. Continuing a conversation can create a new copy.",
       "Expired copies cannot be used again. Automatic cleanup runs when our service starts and every five minutes while it is running. If the service is stopped, cleanup resumes when it restarts.",
       "Your saved conversations in History are separate from these temporary copies. They stay until you delete the conversation or your account. Deleting a conversation removes its linked temporary copies too. Deleting your account removes all of your saved conversations and temporary copies."
     ],
     "termsHeading": "Continuing a conversation",
     "termsBody": [
-      "When chat continuity is on, temporary model context expires after 30 days. You can still reopen an older saved conversation; the app rebuilds context from the recent part of its saved text. The AI may not recall every earlier detail.",
+      "Temporary model context expires after 30 days. You can still reopen an older saved conversation; the app rebuilds context from the recent part of its saved text. The AI may not recall every earlier detail.",
       "You can delete a saved conversation in History or delete your account in Settings. The privacy policy explains how saved conversations and temporary model context are removed."
     ]
   },

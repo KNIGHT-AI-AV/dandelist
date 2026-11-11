@@ -5,10 +5,8 @@ import { LegalPage } from "../components/legal";
 import { Hairline } from "../components/lux";
 import { PhotoCredit } from "../components/photo-credit";
 import { ICON_LICENSE } from "../lib/icon-glyphs";
-import { legalDocuments } from "../lib/drafts/legal";
+import { useLegalDocuments } from "../lib/legal-features";
 import { layout, type, usePalette, useType } from "../lib/theme";
-
-const DOCUMENTS = legalDocuments();
 
 /** Each catalogue item with its photos, one credit per photograph (its crops share it). */
 const CREDITS = entries
@@ -69,5 +67,6 @@ function IconCredits() {
  */
 export default function Legal() {
   const { section } = useLocalSearchParams<{ section?: string }>();
-  return <LegalPage eyebrow="Dandelist" title="Privacy & Terms" documents={DOCUMENTS} focus={typeof section === "string" ? section : undefined} after={<View style={{ gap: layout.stack.section }}><PhotoCredits /><IconCredits /></View>} />;
+  const documents = useLegalDocuments();
+  return <LegalPage eyebrow="Dandelist" title="Privacy & Terms" documents={documents} focus={typeof section === "string" ? section : undefined} after={<View style={{ gap: layout.stack.section }}><PhotoCredits /><IconCredits /></View>} />;
 }
