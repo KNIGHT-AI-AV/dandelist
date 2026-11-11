@@ -1,3 +1,4 @@
+import { reservedFetch } from "../spend";
 import type { DreamEvent } from "@dandelist/catalogue/dream";
 import { MetaApiError, MetaClient } from "@dandelist/meta";
 import { Hono, type Context } from "hono";
@@ -11,7 +12,7 @@ import { publicFetch } from "../agent/tools";
 import { requireAuth, type AuthVars } from "../auth";
 import { heartbeat, stoppable } from "../sse";
 import { assertBudget, assertUserBudget, recordSpend, SpendLimitError, userCapUsd, withHold } from "../spend";
-import { claudeFor, claudeGuard, eitherReady, metaFirst } from "../under";
+import { claudeFor, claudeGuard, eitherReady, modelFor } from "../under";
 import { MAX_TRANSCRIPT, deckWidget, runTurn } from "./agent";
 import { Jobs, mergeChat, type ChatCopy } from "./jobs";
 import { TurnBudget, TurnLimitError, type ApifyConfig, type DreamCtx } from "./context";
@@ -106,7 +107,7 @@ export function dreamRoutes(deps: DreamDeps) {
   const jobs = deps.jobs ?? new Jobs();
   const caps = deps.spendCaps ?? { dailyUsd: 10, totalUsd: 120 };
   const auth = requireAuth(deps);
-  const suggestions = new Suggestions({ db, meta: deps.meta, claude: deps.claude, caps, personUsd: USER_DAILY_USD, judge: deps.judge, now: deps.now });
+  const suggestions = new Suggestions({ db, modelHistory: deps.modelHistory, meta: deps.meta, claude: deps.claude, caps, personUsd: USER_DAILY_USD, judge: deps.judge, now: deps.now });
   app.use("/me/life", auth);
   app.use("/dream/*", auth);
 
@@ -218,11 +219,11 @@ export function dreamRoutes(deps: DreamDeps) {
     const turnId = randomUUID().slice(0, 8);
 
     const ctxFor = (emit: DreamCtx["emit"], budget: TurnBudget, signal: AbortSignal): DreamCtx => {
-      const client = new MetaClient({ ...deps.meta!, fetch: stoppable(deps.meta!.fetch ?? fetch, signal), onUsage: (usage, cost) => recordSpend(db, userId, "dream", usage, cost, deps.now()) });
+      const client = new MetaClient({ ...deps.meta!, fetch: reservedFetch(stoppable(deps.meta!.fetch ?? fetch, signal)), onUsage: (usage, cost) => recordSpend(db, userId, "dream", usage, cost, deps.now()) });
       // Meta first; Claude only once Meta's spend is used up (under.ts).
-      const responses = metaFirst(
+      const responses = modelFor(deps, userId,
         (b) =>
-          withHold(
+          withHold(db,
             async () => {
               await assertBudget(db, caps, deps.now());
               await assertUserBudget(db, userId, await userCapUsd(db, userId, USER_DAILY_USD, deps.judge, caps, deps.now()), deps.now());

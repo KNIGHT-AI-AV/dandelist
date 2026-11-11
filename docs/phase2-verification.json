@@ -1,0 +1,19 @@
+{
+  "goDate": "2026-11-11",
+  "branch": "codex/dandelist-phase2-20261111",
+  "base": "ffe8ae98312514a7f1843271c3e69b1e4f7e1521",
+  "gates": {
+    "corepack pnpm typecheck": "PASS, all five configured workspaces",
+    "node apps/mobile/scripts/check-type.mjs": "PASS",
+    "new Vitest tests --maxWorkers=2 --minWorkers=1": {"files":4,"passed":39,"failed":0},
+    "corepack pnpm test": {"runs":1,"exit":0,"api":805,"apiFiles":55,"mobile":811,"mobileFiles":105,"modelClient":40,"cost":14,"infrastructure":3,"total":1673},
+    "git diff --check": "PASS"
+  },
+  "newTests": {"sharedSpend":15,"modelAdapter":6,"entitlements":17,"storekitFixture":1},
+  "defaults": {"MODEL_HISTORY_ENABLED":false,"ENTITLEMENTS_ENABLED":false,"entitlementRoutesMounted":false,"paywallUiAdded":false,"accountConsentChanged":false},
+  "appleSmallBusiness": {"status":"unknown","where":"Ego task37: https://developer.apple.com/account/ redirected to Sign In - Apple","action":"Stopped; own task space closed; no sign-in or account change"},
+  "publicAppleRootSha256": {"G3":"63343ABFB89A6A03EBB57E9B3F5FA7BE7C4F5C756F3017B3A8C488C3653E9179","G2":"C2B9B042DD57830E7D117DAC55AC8AE19407D38E41D88F3215BC3A890444A050"},
+  "spendUsd":0,
+  "limits":["Only disposable PGlite databases; no production migration or real multi-session Postgres/App Runner load test","No real provider history calls","Offline Apple verification excludes online OCSP/revocation checks","Google Play API and Pub/Sub authentication are injected boundaries, tested with mocks only","StoreKit JSON checked; not run in Xcode","No authenticated store sandbox purchase/restore or live notification transport/reconciliation test","No products, keys, service accounts, agreements, permissions, purchases, deployments, pushes or PRs created"],
+  "logs":"C:/Users/Copper Mile/knight-reports/codex-handoff/scratch/dandelist-phase2/{typecheck,mobile-check-type,new-tests,full-tests}.log"
+}

@@ -176,10 +176,10 @@ describe("caps by model", () => {
   it("holds Claude's calls in flight against Claude's caps, never Meta's", async () => {
     let open!: () => void;
     const gate = new Promise<void>((r) => (open = r));
-    const running = withHold(async () => {}, () => gate, "user-z", HOLD_USD, undefined, "claude");
+    const running = withHold(db, async () => {}, () => gate, "user-z", HOLD_USD, undefined, "claude");
     await new Promise((r) => setTimeout(r, 0));
-    expect(heldFor("user-z")).toBe(0);
-    expect(heldFor("user-z", "claude")).toBeCloseTo(HOLD_USD, 12);
+    expect(await heldFor(db, "user-z")).toBe(0);
+    expect(await heldFor(db, "user-z", "claude")).toBeCloseTo(HOLD_USD, 12);
     await row("claude-opus-5-5", 5 - HOLD_USD / 2);
     await expect(assertClaudeBudget(db, 5, now)).rejects.toBeInstanceOf(SpendLimitError);
     await row("muse-spark-1.3", 10 - HOLD_USD / 2);
@@ -235,17 +235,17 @@ describe("Claude's holds", () => {
     const full = u.run({ input: "price it" });
     await new Promise((r) => setTimeout(r, 50));
     expect(CLAUDE_HOLD_USD).toBe(0.6);
-    expect(heldInPool("claude")).toBeCloseTo(CLAUDE_HOLD_USD, 12);
+    expect(await heldInPool(db, "claude")).toBeCloseTo(CLAUDE_HOLD_USD, 12);
     const look = u.run(photoCheck);
     await new Promise((r) => setTimeout(r, 50));
-    expect(heldInPool("claude")).toBeCloseTo(CLAUDE_HOLD_USD * 1.2, 12);
+    expect(await heldInPool(db, "claude")).toBeCloseTo(CLAUDE_HOLD_USD * 1.2, 12);
     // The person's own share counts what their calls hold on Meta: a tenth of a dollar, a fiftieth for a photo check.
-    expect(heldFor(userId, "claude")).toBeCloseTo(HOLD_USD * 1.2, 12);
+    expect(await heldFor(db, userId, "claude")).toBeCloseTo(HOLD_USD * 1.2, 12);
     claude.open();
     await Promise.all([full, look]);
-    expect(heldFor(userId, "claude")).toBe(0);
+    expect(await heldFor(db, userId, "claude")).toBe(0);
     // Back to nothing, give or take float dust (0.6 + 0.12 - 0.6 - 0.12).
-    expect(heldInPool("claude")).toBeCloseTo(0, 12);
+    expect(await heldInPool(db, "claude")).toBeCloseTo(0, 12);
   });
 
   it("let a person with five full calls in flight and nothing spent start another, while Claude's day counts each in full", async () => {
@@ -256,8 +256,8 @@ describe("Claude's holds", () => {
     await new Promise((r) => setTimeout(r, 100));
     // Six at $0.60 would be $3.60 against the person's $2 and the fourth would be refused; at $0.10 each, all six run.
     expect(claude.reached.n).toBe(6);
-    expect(heldFor(userId, "claude")).toBeCloseTo(6 * HOLD_USD, 12);
-    expect(heldInPool("claude")).toBeCloseTo(6 * CLAUDE_HOLD_USD, 12);
+    expect(await heldFor(db, userId, "claude")).toBeCloseTo(6 * HOLD_USD, 12);
+    expect(await heldInPool(db, "claude")).toBeCloseTo(6 * CLAUDE_HOLD_USD, 12);
     // Claude's day still sees the full holds: with $16.50 spent, six in flight ($3.60) leave no room for a seventh.
     await db.query("insert into spend_ledger (user_id, model, kind, cost_usd, created_at) values (null, 'claude-opus-5-5', 'guest', 16.5, $1)", [now.toISOString()]);
     await expect(assertClaudeBudget(db, 20, now)).rejects.toBeInstanceOf(SpendLimitError);

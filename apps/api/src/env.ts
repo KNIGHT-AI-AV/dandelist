@@ -19,6 +19,8 @@ const schema = z.object({
   MODEL_API_KEY: z.string().optional(),
   SPEND_DAILY_USD: z.coerce.number().positive().default(10),
   SPEND_TOTAL_USD: z.coerce.number().positive().default(120),
+  MODEL_HISTORY_ENABLED: flag,
+  ENTITLEMENTS_ENABLED: flag,
   // Claude under Meta (under.ts): a call goes to Claude only when Meta's spend is used up. Off without a key.
   ANTHROPIC_API_KEY: optional,
   CLAUDE_DAILY_USD: z.coerce.number().positive().default(5),

@@ -1,0 +1,22 @@
+{
+  "goDate": "2026-11-11",
+  "branch": "codex/dandelist-phase2-20261111",
+  "reviewedHead": "d68ea811e0e56911bf475f688362920f9a0c59a1",
+  "spendFixCommit": "3bb0113fafb8e50f22cd4ddffcf3a61e55fcb467",
+  "fixes": ["Bounded policy ledger windows and transactional per-pool lifetime totals", "Transient renewal retry bounded by the last confirmed lease", "Cancellable 50-500 ms slot backoff within 20 seconds", "Verified early Apple SUBSCRIBED linking with immutable ownership and atomic receipt dedupe"],
+  "gates": {
+    "corepack pnpm typecheck": "PASS, all five configured workspaces",
+    "node apps/mobile/scripts/check-type.mjs": "PASS",
+    "corepack pnpm --filter @dandelist/api test": {"runs":1,"exit":0,"files":56,"passed":822,"failed":0,"maxWorkers":2,"durationSeconds":465.55},
+    "git diff --check": "PASS"
+  },
+  "focusedTests": {"spend":19,"leaseAndBackoff":5,"entitlements":25,"total":49,"newTestsAddedSinceReview":17},
+  "defaults": {"MODEL_HISTORY_ENABLED":false,"ENTITLEMENTS_ENABLED":false,"entitlementRoutesMounted":false,"paywallUiAdded":false},
+  "unchangedSinceReview": ["apps/api/src/env.ts", "apps/api/src/auth.ts", "apps/api/src/consent.ts", "apps/api/src/app.ts"],
+  "migrations": "Edited 030 and 032 in place; only disposable PGlite databases, no production migration",
+  "spendUsd": 0,
+  "quietWindow": "No Gradle/Android build, app signing or packaging; API tests and typechecks only",
+  "onHold": ["Store sandbox products, keys and authenticated end-to-end tests", "Apple Small Business Program read-only account check; owner sign-in pending"],
+  "notVerified": ["Real PostgreSQL multi-session/App Runner load and production query plans", "Real model/provider behavior or paid usage", "Real store sandbox purchase/restore or notification transport/reconciliation", "Online Apple certificate revocation/OCSP", "Xcode execution"],
+  "logs": "C:/Users/Copper Mile/knight-reports/codex-handoff/scratch/dandelist-phase2-fixes/{spend-focused,spend-typecheck,spend-mobile-check-type,apple-focused,typecheck,mobile-check-type,api-full}.log"
+}

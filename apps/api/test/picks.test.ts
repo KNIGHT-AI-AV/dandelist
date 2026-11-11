@@ -55,7 +55,7 @@ const fakeMeta = (async (_url: string, init: RequestInit) => {
   const body = JSON.parse(String(init.body)) as Json;
   calls.push(body);
   const format = body.text?.format?.name;
-  if (watch) held.push({ format: format ?? "text", usd: heldFor(watch) });
+  if (watch) held.push({ format: format ?? "text", usd: await heldFor(db, watch) });
   if (format === "daily_pick") {
     const next = answers.shift() ?? RIVA;
     // The live API often writes a sentence before the JSON when it has searched (2026-10-29).
@@ -271,7 +271,7 @@ describe("today's pick", () => {
     }
     for (const h of held.filter((x) => x.format === "daily_pick" || x.format === "photo_plan")) expect(h.usd).toBeGreaterThanOrEqual(HOLD_USD);
     // Everything is released once the pick is made.
-    expect(heldFor(id)).toBe(0);
+    expect(await heldFor(db, id)).toBe(0);
     expect(holdFor({ text: { format: { name: "photo_check" } } })).toBeCloseTo(HOLD_USD / 5);
     expect(holdFor({ text: { format: { name: "daily_pick" } } })).toBe(HOLD_USD);
   });
