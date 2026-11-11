@@ -47,7 +47,7 @@ export async function assertBudget(db: Db, caps: SpendCaps, now: Date): Promise<
   collectPolicy(db,{pool:"meta",type:"global",since:dayStart(now).toISOString(),cap:dailyCapUsd(caps,now),total:caps.totalUsd});
   const held = await heldInPool(db,"meta");
   const { rows } = await db.query<{ today: string | null; total: string | null }>(
-    `select coalesce(sum(cost_usd) filter (where created_at >= $1), 0) as today, coalesce(sum(cost_usd), 0) as total from spend_ledger where ${META_ONLY}`,
+    `select coalesce(sum(cost_usd), 0) as today, (select usd from spend_pool_totals where pool='meta') as total from spend_ledger where created_at >= $1 and ${META_ONLY}`,
     [dayStart(now).toISOString()],
   );
   const today = Number(rows[0]?.today ?? 0);

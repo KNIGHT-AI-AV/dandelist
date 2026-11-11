@@ -9,6 +9,9 @@ export const CLAUDE_HOLD_USD = .6;
 export const MAX_INFLIGHT_PER_USER = 8;
 export const SLOT_WAIT_MS = 20_000;
 export const HOLD_TTL_MS = 10 * 60_000;
+const RENEW_INTERVAL_MS = HOLD_TTL_MS / 3;
+const RENEW_RETRY_MS = 15_000;
+const LEASE_MARGIN_MS = 30_000;
 export class SpendLimitError extends Error {
   constructor(readonly scope: "daily" | "total" | "user") {
     super(scope === "daily" ? "Today's AI budget is used up. Try again tomorrow." : scope === "user" ? "You've used today's research allowance. Try again tomorrow." : "The AI budget for this event is used up.");
@@ -57,23 +60,50 @@ export async function withHold<T>(db:Db,check:()=>Promise<void>,run:()=>Promise<
   await capture.run({db,policies},check);
   const by=Date.now()+(opts.waitMs??SLOT_WAIT_MS);
   let reservation:Reservation;
+  let leaseUntil=0,backoff=50,attempt=0;
   for(;;){
     signal?.throwIfAborted();
+    if(attempt++>0&&Date.now()>=by)throw new SpendLimitError("user");
+    // Query start is a conservative lower bound for the database's lease deadline.
+    const started=Date.now();
     const r=await reserve(db,{usd,mineUsd,userId,pool,scope:opts.scope,policies});
-    if(r!=="slots"){reservation=r;break;}
+    if(r!=="slots"){reservation=r;leaseUntil=started+HOLD_TTL_MS;break;}
     const left=by-Date.now();if(left<=0)throw new SpendLimitError("user");
     // Database polling sees releases from any instance; no process-local queues or budget state.
-    await delay(Math.min(left,50),signal);
+    const jittered=Math.min(500,backoff*(.9+Math.random()*.2));
+    await delay(Math.min(left,jittered),signal);
+    backoff=Math.min(500,backoff*2);
   }
   const lease=new AbortController();
   const requestSignal=signal?AbortSignal.any([signal,lease.signal]):lease.signal;
   let renewing:Promise<unknown>|undefined;
-  const timer=setInterval(()=>{renewing=db.query<{ok:boolean}>("select spend_renew($1,$2) as ok",[reservation.id,HOLD_TTL_MS]).then(r=>{if(!r.rows[0]?.ok)lease.abort(new Error("Reservation lease lost"));}).catch(()=>{lease.abort(new Error("Reservation lease lost"));});},HOLD_TTL_MS/3);
-  timer.unref();
+  let timer:ReturnType<typeof setTimeout>|undefined,deadline:ReturnType<typeof setTimeout>|undefined,stopped=false;
+  const lost=()=>lease.abort(new Error("Reservation lease lost"));
+  const watchDeadline=()=>{
+    clearTimeout(deadline);
+    deadline=setTimeout(lost,Math.max(0,leaseUntil-Date.now()-LEASE_MARGIN_MS));deadline.unref();
+  };
+  const schedule=(ms:number)=>{
+    if(stopped||lease.signal.aborted)return;
+    timer=setTimeout(()=>{
+      const started=Date.now();
+      renewing=db.query<{ok:boolean}>("select spend_renew($1,$2) as ok",[reservation.id,HOLD_TTL_MS]).then(r=>{
+        if(stopped)return;
+        if(!r.rows[0]?.ok){lost();return;}
+        leaseUntil=started+HOLD_TTL_MS;watchDeadline();schedule(RENEW_INTERVAL_MS);
+      }).catch(()=>{
+        // A transport/DB error says nothing about ownership. Retry within the last
+        // confirmed lease, while the independent watchdog also covers a hung query.
+        if(Date.now()>=leaseUntil-LEASE_MARGIN_MS)lost();
+        else schedule(Math.min(RENEW_RETRY_MS,leaseUntil-Date.now()-LEASE_MARGIN_MS));
+      });
+    },ms);timer.unref();
+  };
+  watchDeadline();schedule(RENEW_INTERVAL_MS);
   try{
     signal?.throwIfAborted();
     return await active.run({db,id:reservation.id,signal:requestSignal},async()=>{const value=await run();requestSignal.throwIfAborted();return value;});
-  }finally{clearInterval(timer);await renewing;await reservation.release();}
+  }finally{stopped=true;clearTimeout(timer);clearTimeout(deadline);await renewing;await reservation.release();}
 }
 export async function withBudgetScope<T>(db:Db,scope:string,check:()=>Promise<void>,run:()=>Promise<T>,pool:Pool="meta",usd=HOLD_USD):Promise<T> {return withHold(db,check,run,undefined,usd,undefined,pool,usd,{scope});}
 export async function settle(db:Db,id:string,userId:string|null,kind:string,usage:Usage,costUsd:number,now:Date):Promise<boolean> {

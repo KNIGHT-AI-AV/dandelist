@@ -1,4 +1,5 @@
 import { PGlite } from "@electric-sql/pglite";
+import { readFile } from "node:fs/promises";
 import { beforeAll, beforeEach, afterAll, describe, expect, it } from "vitest";
 import { migrate, type Db } from "../src/db";
 import { SpendLimitError, assertBudget, assertClaudeBudget, assertScopeBudget, assertUserBudget, heldFor, heldForScope, heldInPool, hold, reserve, settle, recordSpend, withBudgetScope, withHold } from "../src/spend";
@@ -23,10 +24,41 @@ describe("shared atomic spend reservations",()=>{
     await db.exec("truncate spend_ledger");await spend(9.95);
     await expect(withHold(db,()=>assertBudget(db,{dailyUsd:100,totalUsd:10},now),async()=>"bad")).rejects.toMatchObject({scope:"total"});
   });
+  it("bounds the daily window with older ledger rows while lifetime admissions stay atomic",async()=>{
+    await db.query("insert into spend_ledger(model,kind,cost_usd,created_at) select 'muse-spark-1.3','old',.0095,'2025-01-01'::timestamptz from generate_series(1,1000)");
+    await spend(.2);
+    const attempts=await Promise.allSettled(Array.from({length:20},()=>reserve(db,{usd:.1,policies:[policy(1)]})));
+    // 9.5 historical + .2 today + .3 held = 10 lifetime, despite .8 daily headroom.
+    expect(attempts.filter(r=>r.status==="fulfilled")).toHaveLength(3);
+    expect(attempts.filter(r=>r.status==="rejected").every(r=>(r as PromiseRejectedResult).reason.scope==="total")).toBe(true);
+    expect(await heldInPool(db,"meta")).toBe(.3);
+    await expect(assertBudget(db,{dailyUsd:.5,totalUsd:10},now)).resolves.toBeUndefined();
+  });
+  it("uses inclusive daily and exclusive rolling boundaries independently of old rows",async()=>{
+    const id=(await db.query<{id:string}>("insert into users(email)values('boundary@example.invalid')returning id")).rows[0]!.id;
+    await db.query("insert into spend_ledger(user_id,model,kind,cost_usd,created_at)values($1,'muse-spark-1.3','guest:test',.5,'2026-10-27T00:00:00Z'),($1,'muse-spark-1.3','guest:test',9,'2025-01-01')",[id]);
+    const rolling={...policy(.1),type:"user" as const,userId:id,exclusive:true};
+    const r=await admitted({userId:id,policies:[rolling]});await r.release();
+    await expect(reserve(db,{usd:.1,policies:[policy(.5)]})).rejects.toMatchObject({scope:"daily"});
+    await db.query("update spend_ledger set user_id=null");
+    const scoped={...policy(.1),type:"scope" as const,scope:"guest",exclusive:true};
+    const guest=await admitted({scope:"guest",policies:[scoped]});await guest.release();
+    await expect(reserve(db,{scope:"guest",policies:[{...scoped,exclusive:false}]})).rejects.toMatchObject({scope:"daily"});
+  });
+  it("keeps running totals correct for ledger inserts, corrections, deletes and truncation",async()=>{
+    const totals=async()=>Object.fromEntries((await db.query<{pool:string;usd:string}>("select pool,usd from spend_pool_totals")).rows.map(r=>[r.pool,Number(r.usd)]));
+    await spend(.2);await db.exec("insert into spend_ledger(model,kind,cost_usd)values('claude-test','test',.3),('apify:test','test',100)");
+    expect(await totals()).toEqual({meta:.2,claude:.3});
+    await db.exec("update spend_ledger set model='claude-corrected',cost_usd=.4 where model='muse-spark-1.3'");
+    expect(await totals()).toEqual({meta:0,claude:.7});
+    await db.exec("delete from spend_ledger where model='claude-test'");expect(await totals()).toEqual({meta:0,claude:.4});
+    await db.exec("truncate spend_ledger");expect(await totals()).toEqual({meta:0,claude:0});
+  });
   it("settles atomically and idempotently under duplicate delivery",async()=>{
     const r=await admitted();const results=await Promise.all(Array.from({length:10},()=>settle(db,r.id,null,"test",usage,.04,now)));
     expect(results.filter(Boolean)).toHaveLength(1);expect(await heldInPool(db,"meta")).toBe(0);
     expect((await db.query<{n:number}>("select count(*)::int as n from spend_ledger")).rows[0]?.n).toBe(1);
+    expect(Number((await db.query<{usd:string}>("select usd from spend_pool_totals where pool='meta'")).rows[0]?.usd)).toBe(.04);
     await expect(settle(db,r.id,null,"test",usage,.05,now)).rejects.toThrow("Conflicting");await r.release();await r.release();
   });
   it("never exposes a settlement-to-ledger gap",async()=>{
@@ -85,4 +117,21 @@ describe("shared atomic spend reservations",()=>{
     await settle(db,r.id,id,"test",usage,.02,now);
     expect((await db.query<{user_id:null}>("select user_id from spend_ledger")).rows[0]?.user_id).toBe(null);
   });
+});
+
+it("migration 030 bootstraps lifetime totals from an existing provider-separated ledger",async()=>{
+  const lite=new PGlite();const db:Db={query:(s,p)=>lite.query(s,p) as never,exec:s=>lite.exec(s)};
+  try{
+    await db.exec(await readFile(new URL("../sql/001_init.sql",import.meta.url),"utf8"));
+    await db.exec("insert into spend_ledger(model,kind,cost_usd,created_at) values('muse-spark-1.3','old',9.9,'2025-01-01'),('claude-test','old',100,'2025-01-01'),('apify:test','old',900,'2025-01-01')");
+    await db.exec(await readFile(new URL("../sql/030_shared_spend.sql",import.meta.url),"utf8"));
+    const p={pool:"meta" as const,type:"global" as const,since:"2026-10-27T00:00:00Z",cap:.1,total:10};
+    const r=await reserve(db,{usd:.1,policies:[p]});expect(r).not.toBe("slots");
+    await expect(reserve(db,{usd:.1,policies:[p]})).rejects.toMatchObject({scope:"total"});
+    expect((await db.query<{pool:string;usd:string}>("select pool,usd from spend_pool_totals order by pool")).rows).toEqual([{pool:"claude",usd:"100.000000"},{pool:"meta",usd:"9.900000"}]);
+    // Check the existing timestamp index can support the bounded admission sum.
+    await db.exec("set enable_seqscan=off");
+    const plan=await db.query("explain select sum(cost_usd) from spend_ledger where created_at >= '2026-10-27' and model not like 'claude-%' and model not like 'apify:%'");
+    expect(JSON.stringify(plan.rows)).toContain("spend_ledger_created");expect(JSON.stringify(plan.rows)).toContain("Index Cond:");
+  }finally{await lite.close();}
 });
