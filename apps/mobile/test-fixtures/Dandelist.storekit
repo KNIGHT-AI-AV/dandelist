@@ -1,0 +1,38 @@
+{
+  "identifier": "38146DE2-969C-4F0F-9338-36E8585784B0",
+  "nonRenewingSubscriptions": [],
+  "products": [],
+  "settings": {
+    "_failTransactionsEnabled": false,
+    "_locale": "en_US",
+    "_storefront": "USA",
+    "_storeKitErrors": [],
+    "_timeRate": 0
+  },
+  "subscriptionGroups": [
+    {
+      "id": "425438F5-6D41-4E28-BBC9-C73747DD8045",
+      "localizations": [],
+      "name": "Internal Premium Fixture",
+      "subscriptions": [
+        {
+          "adHocOffers": [], "codeOffers": [], "displayPrice": "9.99", "familyShareable": false, "groupNumber": 1,
+          "internalID": "0A304AA5-C519-49B0-BE03-89A59AC35DDE",
+          "introductoryOffer": { "internalID": "742BD713-18A7-4781-B4F7-436BAADBDCC0", "paymentMode": "free", "subscriptionPeriod": "P2W" },
+          "localizations": [{ "description": "Internal test fixture only", "displayName": "Fixture Monthly", "locale": "en_US" }],
+          "productID": "com.knightaiav.dandelist.premium.monthly", "recurringSubscriptionPeriod": "P1M",
+          "referenceName": "Fixture Monthly", "subscriptionGroupID": "425438F5-6D41-4E28-BBC9-C73747DD8045", "type": "RecurringSubscription"
+        },
+        {
+          "adHocOffers": [], "codeOffers": [], "displayPrice": "79.99", "familyShareable": false, "groupNumber": 1,
+          "internalID": "1C912F66-3857-4601-A5EC-810F08E301E7",
+          "introductoryOffer": { "internalID": "C109B6E9-456A-4F12-9EA7-863757B7FC16", "paymentMode": "free", "subscriptionPeriod": "P2W" },
+          "localizations": [{ "description": "Internal test fixture only", "displayName": "Fixture Annual", "locale": "en_US" }],
+          "productID": "com.knightaiav.dandelist.premium.annual", "recurringSubscriptionPeriod": "P1Y",
+          "referenceName": "Fixture Annual", "subscriptionGroupID": "425438F5-6D41-4E28-BBC9-C73747DD8045", "type": "RecurringSubscription"
+        }
+      ]
+    }
+  ],
+  "version": { "major": 3, "minor": 0 }
+}
