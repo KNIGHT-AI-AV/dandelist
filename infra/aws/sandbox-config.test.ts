@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { ACCOUNT, SANDBOX, requireMoneyGate, sandboxArn, sandboxDatabaseUrl, sandboxSource } from "./sandbox-config";
+process.env.DANDELIST_SANDBOX_AWS_ACCOUNT_ID="111111111111";
+const { ACCOUNT, SANDBOX, requireMoneyGate, sandboxArn, sandboxDatabaseUrl, sandboxSource }=await import("./sandbox-config");
 const now = Date.parse("2026-11-12T05:00:00Z");
-const gate = () => ({ account: ACCOUNT, step0Complete: true, verifiedAt: new Date(now).toISOString(), activate: { remainingUsd: "1000", expires: "2028-10-31", eligibleServices: ["AWS App Runner", "Amazon Relational Database Service", "AWS Secrets Manager", "CodeBuild"] }, budget: { recipientVerification: "Verified", alerts: [{ type: "ACTUAL", thresholdUsd: "1.00" }, { type: "FORECASTED", thresholdUsd: "5.00" }] } });
+const gate = () => ({ account: ACCOUNT, step0Complete: true, verifiedAt: new Date(now).toISOString(), activate: { remainingUsd: "2500", expires: "2099-01-01", eligibleServices: ["AWS App Runner", "Amazon Relational Database Service", "AWS Secrets Manager", "CodeBuild"] }, budget: { recipientVerification: "Verified", alerts: [{ type: "ACTUAL", thresholdUsd: "1.00" }, { type: "FORECASTED", thresholdUsd: "5.00" }] } });
 test("requires fresh observed credit coverage and verified net-cost notifications", () => {
   assert.doesNotThrow(() => requireMoneyGate(gate(), now));
   for (const mutate of [(g:any)=>g.account="other",(g:any)=>g.step0Complete=false,(g:any)=>g.verifiedAt="invalid",(g:any)=>g.verifiedAt=new Date(now-25*3600_000).toISOString(),(g:any)=>g.budget.recipientVerification="Pending",(g:any)=>g.activate.remainingUsd="NaN",(g:any)=>g.activate.remainingUsd="0",(g:any)=>g.activate.expires="2026-11-01",(g:any)=>g.activate.eligibleServices.pop(),(g:any)=>g.budget.alerts.pop()]) {
@@ -18,7 +19,7 @@ test("expired funding must not prevent shutdown or status inspection",()=>{
 test("never accepts production, another account, another region or arbitrary service for pause/status mutations", () => {
   const arn=`arn:aws:apprunner:us-east-1:${ACCOUNT}:service/${SANDBOX.service}/${"a".repeat(32)}`;
   assert.equal(sandboxArn(arn),arn);
-  for(const bad of [arn.replace(SANDBOX.service,"dandelist-api"),arn.replace(ACCOUNT,"111111111111"),arn.replace("us-east-1","us-west-2"),arn+"/other"])assert.throws(()=>sandboxArn(bad));
+  for(const bad of [arn.replace(SANDBOX.service,"dandelist-api"),arn.replace(ACCOUNT,"222222222222"),arn.replace("us-east-1","us-west-2"),arn+"/other"])assert.throws(()=>sandboxArn(bad));
 });
 const image=`${ACCOUNT}.dkr.ecr.us-east-1.amazonaws.com/dandelist-api@sha256:${"b".repeat(64)}`;
 const refs=Object.fromEntries(Object.entries(SANDBOX.secrets).slice(0,3).map(([k,v])=>[k,`arn:aws:secretsmanager:us-east-1:${ACCOUNT}:secret:${v}-ABC123`]));

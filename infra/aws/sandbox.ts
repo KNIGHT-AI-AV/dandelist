@@ -33,6 +33,7 @@ const tags=[{Key:"project",Value:"dandelist"},{Key:"environment",Value:"sandbox"
 
 async function run() {
   const {credentials,region}=await import("./creds");
+  if(!/^\d{12}$/.test(ACCOUNT))throw new Error("Explicit sandbox AWS account selection required");
   if(region!==REGION)throw new Error("Wrong region");
   if((await new STSClient({credentials,region}).send(new GetCallerIdentityCommand({}))).Account!==ACCOUNT)throw new Error("Wrong account");
   const sm=new SecretsManagerClient({credentials,region}),ar=new AppRunnerClient({credentials,region});

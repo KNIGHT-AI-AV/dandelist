@@ -1,5 +1,6 @@
 import type { SourceConfiguration } from "@aws-sdk/client-apprunner";
-export const ACCOUNT = "481609031197";
+// Account selection stays in the operator's private environment, not the public repository.
+export const ACCOUNT = process.env.DANDELIST_SANDBOX_AWS_ACCOUNT_ID ?? "";
 export const REGION = "us-east-1";
 export const SANDBOX = {
   service: "dandelist-api-sandbox", database: "dandelist_sandbox", user: "dandelist_sandbox_app",
@@ -14,7 +15,7 @@ export function requireMoneyGate(receipt: any, now = Date.now(), operation: "dat
   if (operation === "pause" || operation === "status") return;
   const expiry = Date.parse(`${receipt?.activate?.expires}T23:59:59Z`);
   const captured = Date.parse(receipt?.verifiedAt ?? "");
-  if (receipt?.account !== ACCOUNT || receipt?.step0Complete !== true || receipt?.budget?.recipientVerification !== "Verified" ||
+  if (!/^\d{12}$/.test(ACCOUNT) || receipt?.account !== ACCOUNT || receipt?.step0Complete !== true || receipt?.budget?.recipientVerification !== "Verified" ||
       !Number.isFinite(captured) || now - captured > 24 * 3600_000 || captured > now + 60_000 ||
       !Number.isFinite(expiry) || expiry <= now || Number(receipt?.activate?.remainingUsd) < 25 || !Number.isFinite(Number(receipt?.activate?.remainingUsd))) throw new Error("Sandbox funding gate required");
   for (const service of ["AWS App Runner", "Amazon Relational Database Service", "AWS Secrets Manager", "CodeBuild"]) {

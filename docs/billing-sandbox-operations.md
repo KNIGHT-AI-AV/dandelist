@@ -4,7 +4,7 @@ This sandbox is separate from the production API. Funding controls and configura
 
 ## Resources
 
-- Account481609031197, us-east-1. App Runner `dandelist-api-sandbox`, URL `https://gbaabdmypt.us-east-1.awsapprunner.com`.
+- Region us-east-1. App Runner `dandelist-api-sandbox`; its test-only URL is configured in the billing-internal profile. Select the expected account through `DANDELIST_SANDBOX_AWS_ACCOUNT_ID` in the operator's environment; verify it against the private funding receipt and actual STS identity. No account number or detailed funding/resource receipt belongs in this public source repository.
 - Database `dandelist_sandbox` inside the existing `dandelist-db` instance; runtime login `dandelist_sandbox_app`. Existing RDS administrator retains database ownership; the application uses only the distinct new login. No production role membership or ACL was changed.
 - Secrets Manager `dandelist/sandbox/database-url`, `jwt-secret`, `code-pepper`. Values are generated/consumed internally, never placed in a receipt or source file. Google identity will use `dandelist/sandbox/play-key` after its separate setup succeeds.
 - Instance role `dandelist-apprunner-sandbox` trusts only App Runner tasks and can read only `dandelist/sandbox/*`. It has no media-bucket or production-secret permission. Existing ECR pull role is reused for read-only image access. New inline deploy-user permission passes only this new role; existing policies are unmodified.
