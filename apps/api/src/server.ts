@@ -8,6 +8,8 @@ import { purgeExpiredModelHistory } from "./model-adapter";
 import { readEnv } from "./env";
 import { consoleMailer, resendMailer } from "./mailer";
 import { s3MediaStore } from "./media-store";
+import { EntitlementService } from "./entitlements";
+import { AppleVerifier, Environment } from "./billing/apple";
 
 const env = readEnv();
 const db = await openDb(env.DATABASE_URL);
@@ -53,6 +55,10 @@ const deps: Parameters<typeof createApp>[0] = {
     facebook: env.FACEBOOK_APP_ID && env.FACEBOOK_APP_SECRET ? { appId: env.FACEBOOK_APP_ID, appSecret: env.FACEBOOK_APP_SECRET } : undefined,
   },
 };
+if (env.BILLING_SANDBOX_ENABLED) {
+  const apple = new AppleVerifier({ bundleId: "com.knightaiav.dandelist", environment: Environment.SANDBOX });
+  deps.billing = { enabled: true, apple: true, google: false, service: new EntitlementService(db, { enabled: true, apple }) };
+}
 const app = createApp(deps);
 
 serve({ fetch: app.fetch, port: env.PORT }, (info) => console.log(`dandelist api listening on ${info.port}`));
