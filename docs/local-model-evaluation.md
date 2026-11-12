@@ -47,7 +47,9 @@ The initial workstation probe uses the already installed llama.cpp 0.8.0-dev bui
 
 Meta's [official model documentation](https://dev.meta.ai/docs/muse-glimmer/get-the-model) identifies the 17GB Q4_K_M artifact. Its [published repository](https://huggingface.co/meta-models/Muse-Glimmer-30B-GGUF/tree/main) lists Apache2.0. The installed file's SHA256 matches the publisher's LFS object: `4cc57c0f51040a226e5a72cc47b7613f7772950e460a665f7083de89f183f60e`, 16,756,683,904bytes. This checks that specific artifact; it is not a complete distribution/compliance review.
 
-Qwen's [upstream model card](https://huggingface.co/Qwen/Qwen3.6-35B-A3B) also lists Apache2.0. The existing quantization is published by [Unsloth](https://huggingface.co/unsloth/Qwen3.6-35B-A3B-GGUF). Verify its checksum independently before evaluation. Being loadable on a desktop does not show it fits a supported phone.
+Qwen's [upstream model card](https://huggingface.co/Qwen/Qwen3.6-35B-A3B) also lists Apache2.0. The existing quantization is published by [Unsloth](https://huggingface.co/unsloth/Qwen3.6-35B-A3B-GGUF). Its installed SHA256 matches the publisher's LFS object: `071ee2a008ec51372f990d8efbea92ec9dd0137974110ef68fbfde429c8c6dd4`, 19,500,506,080bytes. Recheck provenance before a new evaluation. Being loadable on a desktop does not show it fits a supported phone.
+
+The [measured text results](local-text-results-2026-11-12.md) and adjacent JSON preserve the corrected five-case comparison, full 97-case Qwen text matrix, failure IDs, startup/runtime/weight provenance and exact code CI. Qwen passed85/97 automated fixtures but invented seller prices in an expired-source case; it must not be promoted for research. No production switch was made.
 
 ## Promotion gates
 
