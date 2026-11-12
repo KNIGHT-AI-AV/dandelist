@@ -5,6 +5,7 @@ import { STORE_PRODUCTS, type StoreBridge, type StoreProduct, type StorePurchase
 export async function nativeStore(platform: "ios" | "android"): Promise<StoreBridge> {
   const sdk = await import("expo-iap");
   const listeners: { remove(): void }[] = [];
+  const appleGroups = new Map<string, string>();
   const normalize = (purchase: Purchase): StorePurchase => {
     if (purchase.storeId !== (platform === "ios" ? "apple" : "play")) throw new Error("Unsupported purchase store");
     return { id: purchase.id, productId: purchase.productId, platform, state: purchase.purchaseState, token: purchase.purchaseToken ?? null, native: purchase };
@@ -26,10 +27,21 @@ export async function nativeStore(platform: "ios" | "android"): Promise<StoreBri
       if (!await sdk.initConnection()) throw new Error("Store connection unavailable");
     },
     async products() {
+      // A failed/partial refresh must not leave an old eligibility mapping usable.
+      appleGroups.clear();
       const list = await sdk.fetchProducts({ skus: Object.values(STORE_PRODUCTS), type: "subs" });
-      return (list ?? []).filter((p): p is ProductSubscription => p.type === "subs").map(product);
+      const subscriptions = (list ?? []).filter((p): p is ProductSubscription => p.type === "subs");
+      if (platform === "ios") for (const p of subscriptions) {
+        const groupId = p.platform === "ios" ? p.subscriptionGroupIdIOS?.trim() : undefined;
+        if (groupId && Object.values<string>(STORE_PRODUCTS).includes(p.id)) appleGroups.set(p.id, groupId);
+      }
+      return subscriptions.map(product);
     },
-    async eligibleForTrial(productId) { return platform === "ios" && await sdk.isEligibleForIntroOfferIOS(productId); },
+    async eligibleForTrial(productId) {
+      const groupId = appleGroups.get(productId);
+      // Expo IAP6.3/StoreKit expects a subscription GROUP, never a product SKU.
+      return platform === "ios" && !!groupId && await sdk.isEligibleForIntroOfferIOS(groupId);
+    },
     async buy(productId, userId, accountHash, offerToken) {
       await sdk.requestPurchase({ type: "subs", request: platform === "ios"
         ? { apple: { sku: productId, appAccountToken: userId, andDangerouslyFinishTransactionAutomatically: false } }
@@ -40,6 +52,6 @@ export async function nativeStore(platform: "ios" | "android"): Promise<StoreBri
       return (await sdk.getAvailablePurchases({ onlyIncludeActiveItemsIOS: true, alsoPublishToEventListenerIOS: false, includeSuspendedAndroid: false })).map(normalize);
     },
     async finish(purchase) { await sdk.finishTransaction({ purchase: purchase.native as Purchase, isConsumable: false }); },
-    async close() { for (const listener of listeners.splice(0)) listener.remove(); await sdk.endConnection(); },
+    async close() { appleGroups.clear(); for (const listener of listeners.splice(0)) listener.remove(); await sdk.endConnection(); },
   };
 }
