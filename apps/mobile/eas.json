@@ -10,7 +10,7 @@
       "credentialsSource": "remote",
       "android": { "buildType": "app-bundle" },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://api.dandelist.knightaiav.com",
+        "EXPO_PUBLIC_API_URL": "https://gbaabdmypt.us-east-1.awsapprunner.com",
         "EXPO_PUBLIC_BILLING_SANDBOX": "1"
       }
     },

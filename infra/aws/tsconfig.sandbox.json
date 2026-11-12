@@ -1,0 +1,4 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "include": ["sandbox.ts", "sandbox-config.ts", "sandbox-config.test.ts"]
+}

@@ -4,8 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --import tsx --test help-args.test.ts smoke-checks.test.ts",
+    "test": "node --import tsx --test help-args.test.ts smoke-checks.test.ts sandbox-config.test.ts",
     "whoami": "tsx whoami.ts",
+    "sandbox:check": "tsc -p tsconfig.sandbox.json",
+    "typecheck": "tsc -p tsconfig.sandbox.json",
+    "sandbox": "tsx sandbox.ts",
     "provision": "tsx up.ts",
     "migrate": "tsx migrate.ts",
     "deploy": "tsx deploy.ts",
