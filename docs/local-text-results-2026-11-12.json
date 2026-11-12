@@ -1,0 +1,1425 @@
+{
+  "version": 1,
+  "codeCommit": "f7b681a627ef9d239036df2228589a7973782326",
+  "manifestByteSha256": "3530d5aac01672223252d8c93ab48e6264e1a7f035e8115cc3362255e68a794a",
+  "sourceFiles": {
+    "apps/api/src/local-model.ts": "b129287a83c357d8ae998177089fa6222a3a6eae62e4babfa88f53b63b1b1111",
+    "apps/api/scripts/local-eval.ts": "9924f02ab91724d1ec9a37d901055782ca14508e56e60ac9af37684f6eee67df"
+  },
+  "device": "Single Windows RTX3090 24GiB workstation; not a phone or browser",
+  "promotionReady": false,
+  "providerCashUsd": 0,
+  "electricityCostMeasured": false,
+  "notMeasured": [
+    "current Meta/AWS baseline",
+    "live source/tool verification",
+    "vision/speech/segmentation/image generation",
+    "first-token latency",
+    "peak RAM/VRAM",
+    "battery/thermals",
+    "real mobile/browser runtime",
+    "blinded usefulness",
+    "production hosting cost"
+  ],
+  "glimmerProbe": {
+    "model": "local:glimmer-30b-q4-eval",
+    "mode": "local-text-recording",
+    "manifest": "3d0f641450a83eb07474b949fca3d3c2aafb122d49c0e1e11dedfd2ba3fa5014",
+    "capturedAt": "2026-11-12T03:03:36.130Z",
+    "cases": 5,
+    "responses": 4,
+    "fixturePasses": 3,
+    "productLatencyPasses": 3,
+    "networkAttempts": 5,
+    "cloudCalls": 0,
+    "externalToolsExecuted": 0,
+    "promotionReady": false,
+    "provenance": {
+      "rawFile": "brain-glimmer-r2-results.json",
+      "rawSha256": "ea975b7d72fdf80f54c6bed0ba2f69ef7dfdc18e02d944e7c98fa2c280733b0c",
+      "receiptFile": "brain-glimmer-r2-receipt.json",
+      "receiptSha256": "721945bb95fd91ad817fbcffe06659654450c25394320651f059f7e374592349",
+      "weight": "Muse-Glimmer-30B-KQuant-17GB-Q4_K_M.gguf",
+      "weightSha256": "4cc57c0f51040a226e5a72cc47b7613f7772950e460a665f7083de89f183f60e",
+      "weightBytes": 16756683904,
+      "runtime": "llama.cpp 0.8.0-dev build12096 7071ba378",
+      "gpuBefore": "NVIDIA GeForce RTX 3090, 24576 MiB, 4155 MiB, 13 %",
+      "gpuReady": "NVIDIA GeForce RTX 3090, 24576 MiB, 19749 MiB, 25 %",
+      "startToHealthMs": 39139.7541,
+      "contextTokens": 8192,
+      "parallel": 1,
+      "vision": false,
+      "speculativeDecoding": false,
+      "electricityMeasured": false
+    },
+    "byKind": {
+      "worth": {
+        "cases": 1,
+        "responses": 1,
+        "fixturePasses": 0,
+        "productLatencyPasses": 0,
+        "p50Ms": 17673.8884,
+        "p95Ms": 17673.8884
+      },
+      "interpret": {
+        "cases": 1,
+        "responses": 1,
+        "fixturePasses": 1,
+        "productLatencyPasses": 1,
+        "p50Ms": 8361.8337,
+        "p95Ms": 8361.8337
+      },
+      "questions": {
+        "cases": 1,
+        "responses": 0,
+        "fixturePasses": 0,
+        "productLatencyPasses": 0,
+        "p50Ms": 30004.0578,
+        "p95Ms": 30004.0578
+      },
+      "research": {
+        "cases": 1,
+        "responses": 1,
+        "fixturePasses": 1,
+        "productLatencyPasses": 1,
+        "p50Ms": 16268.995200000005,
+        "p95Ms": 16268.995200000005
+      },
+      "dream-chat": {
+        "cases": 1,
+        "responses": 1,
+        "fixturePasses": 1,
+        "productLatencyPasses": 1,
+        "p50Ms": 9394.394400000005,
+        "p95Ms": 9394.394400000005
+      }
+    },
+    "records": [
+      {
+        "id": "worth-01",
+        "kind": "worth",
+        "promptHash": "f84eb51af0805b60ecbe990b7c96886519cca8f8dfc3bb387747597c034ab7c1",
+        "responseReceived": true,
+        "latencyMs": 17673.8884,
+        "fixturePass": false,
+        "meetsProductLatencyTarget": false,
+        "failedChecks": [
+          "latency-budget"
+        ]
+      },
+      {
+        "id": "interpret-01",
+        "kind": "interpret",
+        "promptHash": "4fa571644f813ba985512f3bdf3dc8d6b2aee7f6d825e0d25648166eca09f057",
+        "responseReceived": true,
+        "latencyMs": 8361.8337,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "questions-01",
+        "kind": "questions",
+        "promptHash": "125ef1d13ff376cbde7a2b1128d408da39f61948414444dbed002643dbcf33cf",
+        "responseReceived": false,
+        "latencyMs": 30004.0578,
+        "fixturePass": false,
+        "meetsProductLatencyTarget": false,
+        "failedChecks": [
+          "response-received",
+          "latency-budget",
+          "parse-or-contract-error"
+        ]
+      },
+      {
+        "id": "research-01",
+        "kind": "research",
+        "promptHash": "f0fe61cea08ec6ca57469e61add940385d3bf89245c881c21c1ac9c89024ffc1",
+        "responseReceived": true,
+        "latencyMs": 16268.995200000005,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "dream-chat-01",
+        "kind": "dream-chat",
+        "promptHash": "403041669b3793d511e35641714268abf19b22b056d955052142453a61e7898d",
+        "responseReceived": true,
+        "latencyMs": 9394.394400000005,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      }
+    ]
+  },
+  "qwenProbe": {
+    "model": "local:qwen36-35b-a3b-iq4-eval",
+    "mode": "local-text-recording",
+    "manifest": "3d0f641450a83eb07474b949fca3d3c2aafb122d49c0e1e11dedfd2ba3fa5014",
+    "capturedAt": "2026-11-12T02:58:31.453Z",
+    "cases": 5,
+    "responses": 5,
+    "fixturePasses": 5,
+    "productLatencyPasses": 5,
+    "networkAttempts": 5,
+    "cloudCalls": 0,
+    "externalToolsExecuted": 0,
+    "promotionReady": false,
+    "provenance": {
+      "rawFile": "brain-qwen-r1-results.json",
+      "rawSha256": "74606b138ac6ede92337ab2c95695e2af8a43c3f6ef4bc032b4b8205c97119c5",
+      "receiptFile": "brain-qwen-r1-receipt.json",
+      "receiptSha256": "b46a05c58074f4229cf4890abcda6d6f491aef7068ef5f8eda6ad3836027247a",
+      "weight": "Qwen3.6-35B-A3B-UD-IQ4_NL_XL.gguf",
+      "weightSha256": "071ee2a008ec51372f990d8efbea92ec9dd0137974110ef68fbfde429c8c6dd4",
+      "weightBytes": 19500506080,
+      "runtime": "llama.cpp 0.8.0-dev build12096 7071ba378",
+      "gpuBefore": "NVIDIA GeForce RTX 3090, 24576 MiB, 2756 MiB, 15 %",
+      "gpuReady": "NVIDIA GeForce RTX 3090, 24576 MiB, 21252 MiB, 5 %",
+      "startToHealthMs": 48257.554000000004,
+      "contextTokens": 8192,
+      "parallel": 1,
+      "vision": false,
+      "speculativeDecoding": false,
+      "electricityMeasured": false
+    },
+    "byKind": {
+      "worth": {
+        "cases": 1,
+        "responses": 1,
+        "fixturePasses": 1,
+        "productLatencyPasses": 1,
+        "p50Ms": 5041.821599999999,
+        "p95Ms": 5041.821599999999
+      },
+      "interpret": {
+        "cases": 1,
+        "responses": 1,
+        "fixturePasses": 1,
+        "productLatencyPasses": 1,
+        "p50Ms": 4040.4840999999997,
+        "p95Ms": 4040.4840999999997
+      },
+      "questions": {
+        "cases": 1,
+        "responses": 1,
+        "fixturePasses": 1,
+        "productLatencyPasses": 1,
+        "p50Ms": 7151.876199999999,
+        "p95Ms": 7151.876199999999
+      },
+      "research": {
+        "cases": 1,
+        "responses": 1,
+        "fixturePasses": 1,
+        "productLatencyPasses": 1,
+        "p50Ms": 4901.077400000002,
+        "p95Ms": 4901.077400000002
+      },
+      "dream-chat": {
+        "cases": 1,
+        "responses": 1,
+        "fixturePasses": 1,
+        "productLatencyPasses": 1,
+        "p50Ms": 2991.701399999998,
+        "p95Ms": 2991.701399999998
+      }
+    },
+    "records": [
+      {
+        "id": "worth-01",
+        "kind": "worth",
+        "promptHash": "f84eb51af0805b60ecbe990b7c96886519cca8f8dfc3bb387747597c034ab7c1",
+        "responseReceived": true,
+        "latencyMs": 5041.821599999999,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "interpret-01",
+        "kind": "interpret",
+        "promptHash": "4fa571644f813ba985512f3bdf3dc8d6b2aee7f6d825e0d25648166eca09f057",
+        "responseReceived": true,
+        "latencyMs": 4040.4840999999997,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "questions-01",
+        "kind": "questions",
+        "promptHash": "125ef1d13ff376cbde7a2b1128d408da39f61948414444dbed002643dbcf33cf",
+        "responseReceived": true,
+        "latencyMs": 7151.876199999999,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "research-01",
+        "kind": "research",
+        "promptHash": "f0fe61cea08ec6ca57469e61add940385d3bf89245c881c21c1ac9c89024ffc1",
+        "responseReceived": true,
+        "latencyMs": 4901.077400000002,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "dream-chat-01",
+        "kind": "dream-chat",
+        "promptHash": "403041669b3793d511e35641714268abf19b22b056d955052142453a61e7898d",
+        "responseReceived": true,
+        "latencyMs": 2991.701399999998,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      }
+    ]
+  },
+  "qwenTextMatrix": {
+    "model": "local:qwen36-35b-a3b-iq4-eval",
+    "mode": "local-frozen-text-matrix",
+    "manifest": "3d0f641450a83eb07474b949fca3d3c2aafb122d49c0e1e11dedfd2ba3fa5014",
+    "capturedAt": "2026-11-12T03:13:28.076Z",
+    "cases": 97,
+    "responses": 97,
+    "fixturePasses": 85,
+    "productLatencyPasses": 95,
+    "networkAttempts": 97,
+    "cloudCalls": 0,
+    "externalToolsExecuted": 0,
+    "promotionReady": false,
+    "provenance": {
+      "rawFile": "brain-qwen-full-results.json",
+      "rawSha256": "58512c1ffb5b7034ba26eea6a8a466e771b30d93237d4b84dc35fa2ff51562be",
+      "receiptFile": "brain-qwen-full-receipt.json",
+      "receiptSha256": "86f8c56139b32b46ec7c5b74ca93df66819cac714727510b2109957e2754c042",
+      "weight": "Qwen3.6-35B-A3B-UD-IQ4_NL_XL.gguf",
+      "weightSha256": "071ee2a008ec51372f990d8efbea92ec9dd0137974110ef68fbfde429c8c6dd4",
+      "weightBytes": 19500506080,
+      "runtime": "llama.cpp 0.8.0-dev build12096 7071ba378",
+      "gpuBefore": "NVIDIA GeForce RTX 3090, 24576 MiB, 3465 MiB, 1 %",
+      "gpuReady": "NVIDIA GeForce RTX 3090, 24576 MiB, 21650 MiB, 2 %",
+      "startToHealthMs": 46117.8812,
+      "contextTokens": 8192,
+      "parallel": 1,
+      "vision": false,
+      "speculativeDecoding": false,
+      "electricityMeasured": false
+    },
+    "byKind": {
+      "dream-chat": {
+        "cases": 12,
+        "responses": 12,
+        "fixturePasses": 11,
+        "productLatencyPasses": 12,
+        "p50Ms": 2456.4510000000005,
+        "p95Ms": 5812.247600000002
+      },
+      "estimate": {
+        "cases": 10,
+        "responses": 10,
+        "fixturePasses": 10,
+        "productLatencyPasses": 10,
+        "p50Ms": 3399.4170000000013,
+        "p95Ms": 3608.8036999999968
+      },
+      "interpret": {
+        "cases": 10,
+        "responses": 10,
+        "fixturePasses": 10,
+        "productLatencyPasses": 9,
+        "p50Ms": 4984.123800000001,
+        "p95Ms": 11499.712499999994
+      },
+      "pairs": {
+        "cases": 10,
+        "responses": 10,
+        "fixturePasses": 5,
+        "productLatencyPasses": 9,
+        "p50Ms": 7486.699699999997,
+        "p95Ms": 10750.77800000002
+      },
+      "questions": {
+        "cases": 10,
+        "responses": 10,
+        "fixturePasses": 7,
+        "productLatencyPasses": 10,
+        "p50Ms": 5678.580400000006,
+        "p95Ms": 7233.479500000016
+      },
+      "quick-find": {
+        "cases": 10,
+        "responses": 10,
+        "fixturePasses": 9,
+        "productLatencyPasses": 10,
+        "p50Ms": 2502.0288999999757,
+        "p95Ms": 2771.1255000000237
+      },
+      "research": {
+        "cases": 15,
+        "responses": 15,
+        "fixturePasses": 13,
+        "productLatencyPasses": 15,
+        "p50Ms": 4564.853700000036,
+        "p95Ms": 6702.722100000014
+      },
+      "suggest": {
+        "cases": 10,
+        "responses": 10,
+        "fixturePasses": 10,
+        "productLatencyPasses": 10,
+        "p50Ms": 3615.1387000000104,
+        "p95Ms": 4218.778900000034
+      },
+      "worth": {
+        "cases": 10,
+        "responses": 10,
+        "fixturePasses": 10,
+        "productLatencyPasses": 10,
+        "p50Ms": 4256.867800000007,
+        "p95Ms": 5802.68809999997
+      }
+    },
+    "records": [
+      {
+        "id": "dream-chat-01",
+        "kind": "dream-chat",
+        "promptHash": "403041669b3793d511e35641714268abf19b22b056d955052142453a61e7898d",
+        "responseReceived": true,
+        "latencyMs": 2456.4510000000005,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "dream-chat-02",
+        "kind": "dream-chat",
+        "promptHash": "84b8c459672191ae6ebb854dc3400c5ccb85ef74f7fc0ba62e10e2c0573ae735",
+        "responseReceived": true,
+        "latencyMs": 1260.6197000000002,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "dream-chat-03",
+        "kind": "dream-chat",
+        "promptHash": "d13ee2cfa8d6632e0b9f19a355eaf44f0e56bdbc32f805aad1cb535a1c3f1d79",
+        "responseReceived": true,
+        "latencyMs": 2686.4205,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "dream-chat-04",
+        "kind": "dream-chat",
+        "promptHash": "2c85ba13fe5a1cede599d777209635a3579a7843d0c1305713d3d05d8c637e52",
+        "responseReceived": true,
+        "latencyMs": 2034.903699999999,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "dream-chat-05",
+        "kind": "dream-chat",
+        "promptHash": "05bea739159b347282dfda3d9f459405e3460f62c92464766e41c42f6db70bdb",
+        "responseReceived": true,
+        "latencyMs": 4774.699499999999,
+        "fixturePass": false,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": [
+          "required-tool:ask_region"
+        ]
+      },
+      {
+        "id": "dream-chat-06",
+        "kind": "dream-chat",
+        "promptHash": "e970f264ba55617b146b780e7317a0b819ded6b00ce6bb7ec9ad03cf5aa812d3",
+        "responseReceived": true,
+        "latencyMs": 4247.607399999997,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "dream-chat-07",
+        "kind": "dream-chat",
+        "promptHash": "a61e5a760630dfc58ba8ed60ab5ff9af15e66c35790f3feeb1f81b8e60142765",
+        "responseReceived": true,
+        "latencyMs": 2102.4863000000005,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "dream-chat-08",
+        "kind": "dream-chat",
+        "promptHash": "caa218e6ccb2261c0bb3698461ef2b491a49126a2c684d42c442d1e0e9bb1aaa",
+        "responseReceived": true,
+        "latencyMs": 1964.2597000000023,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "dream-chat-09",
+        "kind": "dream-chat",
+        "promptHash": "9a83745bfe92545a1baf4c6069e8c1fa57a3318b6d5e96f3a63eb41519fbbb2f",
+        "responseReceived": true,
+        "latencyMs": 3364.3848000000035,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "dream-chat-10",
+        "kind": "dream-chat",
+        "promptHash": "353ca1168c8ebc752789beb9c3b8fa980bff46613459709a2126426606a96e5c",
+        "responseReceived": true,
+        "latencyMs": 2182.1659,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "dream-chat-11",
+        "kind": "dream-chat",
+        "promptHash": "a46b2806a79ac7b0f18fd1f135dd96944172609f23346ed970d2897dc347a7c0",
+        "responseReceived": true,
+        "latencyMs": 3606.8591000000015,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "dream-chat-12",
+        "kind": "dream-chat",
+        "promptHash": "0a0f14450fe9cc2ba56d454ae9bfe6552dd08fb709aace1fb13bf1d26a27547d",
+        "responseReceived": true,
+        "latencyMs": 5812.247600000002,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "estimate-01",
+        "kind": "estimate",
+        "promptHash": "0dbc38404b98af2487fbf7163c93fdcbefe66b4e1b88a9c2e2097415a49a8e60",
+        "responseReceived": true,
+        "latencyMs": 3608.8036999999968,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "estimate-02",
+        "kind": "estimate",
+        "promptHash": "1fb83c14757cda5cc95f15a288fac7e3cdea68d1bcbb9ceaa7ce3646a77228a9",
+        "responseReceived": true,
+        "latencyMs": 3399.4170000000013,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "estimate-03",
+        "kind": "estimate",
+        "promptHash": "f2c164d5d01b9b02a8cfe2b8942f98c3070f09a2169995c7be55ae0dcef58aee",
+        "responseReceived": true,
+        "latencyMs": 2093.1280000000042,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "estimate-04",
+        "kind": "estimate",
+        "promptHash": "60027a9bd023c49d38933f1b1742e0faa9ece83b64a75fe9f42e89473d727d85",
+        "responseReceived": true,
+        "latencyMs": 1940.5103999999992,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "estimate-05",
+        "kind": "estimate",
+        "promptHash": "a8e344b842e0197431741e882f1390a1ab43f36b5ed4214c2fc24bebb4ced933",
+        "responseReceived": true,
+        "latencyMs": 2894.6708,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "estimate-06",
+        "kind": "estimate",
+        "promptHash": "2d1bb9fe7e1d45220e0ebbc84e3c76633fd14518d68b06c35711f401aa6192e9",
+        "responseReceived": true,
+        "latencyMs": 3090.2237999999998,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "estimate-07",
+        "kind": "estimate",
+        "promptHash": "ca42492a28a246fe0984131c54a52ce20071df2452bd646ee767af4f2e83e1c2",
+        "responseReceived": true,
+        "latencyMs": 3411.7914999999994,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "estimate-08",
+        "kind": "estimate",
+        "promptHash": "a71885ec6f7915f289161a3c616b1d60f90dd2413cf7f3f33b8c4b9b81120d6a",
+        "responseReceived": true,
+        "latencyMs": 3480.2045999999973,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "estimate-09",
+        "kind": "estimate",
+        "promptHash": "6e5a9c6a482bf11e4b7b31542abd2725c09ba2345f0d15af1684e41dc72188f6",
+        "responseReceived": true,
+        "latencyMs": 3546.188699999999,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "estimate-10",
+        "kind": "estimate",
+        "promptHash": "83cb8211479bebf3e34fcf102eadecfce3ecf3fd747fce2828d4414005f34d5a",
+        "responseReceived": true,
+        "latencyMs": 3516.696100000001,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "interpret-01",
+        "kind": "interpret",
+        "promptHash": "4fa571644f813ba985512f3bdf3dc8d6b2aee7f6d825e0d25648166eca09f057",
+        "responseReceived": true,
+        "latencyMs": 6296.109199999992,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "interpret-02",
+        "kind": "interpret",
+        "promptHash": "effdd517a4e7d451ab157ae9d86960693dea8bdcee9637846f47eb935947a53f",
+        "responseReceived": true,
+        "latencyMs": 4079.8266000000003,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "interpret-03",
+        "kind": "interpret",
+        "promptHash": "dc6abc4e42938d26637612150ee0d6e3abcb53e178298e82d1b25920f271dfe4",
+        "responseReceived": true,
+        "latencyMs": 4984.123800000001,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "interpret-04",
+        "kind": "interpret",
+        "promptHash": "994b15e7b3424ff06ff7b6acfaa84e19ac5d23a279ac2bd2ad829876be756373",
+        "responseReceived": true,
+        "latencyMs": 3999.8685000000114,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "interpret-05",
+        "kind": "interpret",
+        "promptHash": "9ab4289879708042dd2e252ef0fe1b622a3b0cd2a169ef623e8ffdacd6fd57b4",
+        "responseReceived": true,
+        "latencyMs": 3531.570200000002,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "interpret-06",
+        "kind": "interpret",
+        "promptHash": "30e59dba5fb3e01ba46e62b36fc259e27b269ecbdae9522fa1b8b87020063796",
+        "responseReceived": true,
+        "latencyMs": 5598.748300000007,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "interpret-07",
+        "kind": "interpret",
+        "promptHash": "474526dda5bae5aa38842c037854230a90b37ddd2769d43b49882a40ddc9cad2",
+        "responseReceived": true,
+        "latencyMs": 3214.2878999999957,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "interpret-08",
+        "kind": "interpret",
+        "promptHash": "de7622129242da60f9ec34bef3ecf15a25696ef2a6a07ef62cbac89cd86688dd",
+        "responseReceived": true,
+        "latencyMs": 7561.212899999999,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "interpret-09",
+        "kind": "interpret",
+        "promptHash": "91f50c5737cd76e7d8980cb60d612618a516bc1b8328f9724b85a93c91ea8f8c",
+        "responseReceived": true,
+        "latencyMs": 11499.712499999994,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": false,
+        "failedChecks": []
+      },
+      {
+        "id": "interpret-10",
+        "kind": "interpret",
+        "promptHash": "fd3376fbadd7b4620733c4134fefa2bdd6e93c882d5874f7bfec51d52b1e1d53",
+        "responseReceived": true,
+        "latencyMs": 6652.937000000005,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "pairs-01",
+        "kind": "pairs",
+        "promptHash": "80c0b05750b85c3ce144f22c4acfe610f0562133b512d6c4e2f5a34161ec3652",
+        "responseReceived": true,
+        "latencyMs": 10750.77800000002,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": false,
+        "failedChecks": []
+      },
+      {
+        "id": "pairs-02",
+        "kind": "pairs",
+        "promptHash": "2adb03d648a5413cb30c8e41522c2159f22a7a70a3546b72eaf192e04cba522e",
+        "responseReceived": true,
+        "latencyMs": 7605.097299999994,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "pairs-03",
+        "kind": "pairs",
+        "promptHash": "5ec1150b06b5c9b814b87fc5b19dc7a345d3ad857371f08cbb6ea52b21bc0de4",
+        "responseReceived": true,
+        "latencyMs": 7054.335099999997,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "pairs-04",
+        "kind": "pairs",
+        "promptHash": "0e4cf09dd91585b7a35645e249fcaab7590ba5fb47c67b46baa2dd96ab7fae62",
+        "responseReceived": true,
+        "latencyMs": 7109.441400000011,
+        "fixturePass": false,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": [
+          "six-usable-distinct-pairs"
+        ]
+      },
+      {
+        "id": "pairs-05",
+        "kind": "pairs",
+        "promptHash": "2c10a723f52e3d9543c3bad8ef8f161868480a43a1f64edc731097ea55c5c821",
+        "responseReceived": true,
+        "latencyMs": 4337.558299999975,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "pairs-06",
+        "kind": "pairs",
+        "promptHash": "d35da32243349ac48eec2b92c6a192174f7c8e23d1286ff96ded74195c58543a",
+        "responseReceived": true,
+        "latencyMs": 7563.655599999998,
+        "fixturePass": false,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": [
+          "six-usable-distinct-pairs"
+        ]
+      },
+      {
+        "id": "pairs-07",
+        "kind": "pairs",
+        "promptHash": "99bcdc66ca507a856e63b107e00eaa6baf02cf4b2f751c21e09ec9b0411336d2",
+        "responseReceived": true,
+        "latencyMs": 7178.480099999986,
+        "fixturePass": false,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": [
+          "six-usable-distinct-pairs"
+        ]
+      },
+      {
+        "id": "pairs-08",
+        "kind": "pairs",
+        "promptHash": "32124266020c7b78f9dcbd86f04b2e85312849ac203d1e2ad2608f6339b79558",
+        "responseReceived": true,
+        "latencyMs": 7586.559000000008,
+        "fixturePass": false,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": [
+          "six-usable-distinct-pairs",
+          "pair-caps"
+        ]
+      },
+      {
+        "id": "pairs-09",
+        "kind": "pairs",
+        "promptHash": "273940884d9c21e3e8b560540425cabef0ea0812e10c37a1bf04da5f83da4bb9",
+        "responseReceived": true,
+        "latencyMs": 7486.699699999997,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "pairs-10",
+        "kind": "pairs",
+        "promptHash": "4c266135d14728cfb038d97c454f9a994204f22cd795b526ebd4b0982225ecbd",
+        "responseReceived": true,
+        "latencyMs": 8544.79250000001,
+        "fixturePass": false,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": [
+          "six-usable-distinct-pairs"
+        ]
+      },
+      {
+        "id": "questions-01",
+        "kind": "questions",
+        "promptHash": "125ef1d13ff376cbde7a2b1128d408da39f61948414444dbed002643dbcf33cf",
+        "responseReceived": true,
+        "latencyMs": 5678.580400000006,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "questions-02",
+        "kind": "questions",
+        "promptHash": "efb6de4d4d73316c85e09013aaf2d45f560c2e3cf1c91a16629d1c8570f0dfe8",
+        "responseReceived": true,
+        "latencyMs": 4124.226799999975,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "questions-03",
+        "kind": "questions",
+        "promptHash": "32509ab2e4e5fdcbd31089a3f371a8318fe22fc15ac105c5f638f66b4d828558",
+        "responseReceived": true,
+        "latencyMs": 4376.008000000002,
+        "fixturePass": false,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": [
+          "app-zod-schema-and-caps",
+          "questions-unchanged-by-app-tidier"
+        ]
+      },
+      {
+        "id": "questions-04",
+        "kind": "questions",
+        "promptHash": "d9d116a642112872450781c8a0d0b7fa6f2590fc182ad2f6fa1cd7546adb46ec",
+        "responseReceived": true,
+        "latencyMs": 4227.115900000004,
+        "fixturePass": false,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": [
+          "question-copy-caps"
+        ]
+      },
+      {
+        "id": "questions-05",
+        "kind": "questions",
+        "promptHash": "f777e25139bd3fe40519a6ea12c8444a973542c7985bd931bea7851509f144d7",
+        "responseReceived": true,
+        "latencyMs": 6258.488300000026,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "questions-06",
+        "kind": "questions",
+        "promptHash": "d456f19b4359c9895850f035d495e465381786e28900a8f563151de8496ba977",
+        "responseReceived": true,
+        "latencyMs": 7158.846499999985,
+        "fixturePass": false,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": [
+          "expect:questions:lengthMax"
+        ]
+      },
+      {
+        "id": "questions-07",
+        "kind": "questions",
+        "promptHash": "ca688cfeb710f0834be2cfdd0a0966ffa464271af3b1b2724d5934f6fb565a77",
+        "responseReceived": true,
+        "latencyMs": 5859.882800000021,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "questions-08",
+        "kind": "questions",
+        "promptHash": "09cef4e891d7c50233019a99e8944f651fc6536bc7d3873c4ac81879ddb1c0bd",
+        "responseReceived": true,
+        "latencyMs": 7233.479500000016,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "questions-09",
+        "kind": "questions",
+        "promptHash": "a79cfdb0bcc7cf2416ab4c23e008c7a4a69438f519a7b7b8bb8a25dd0b81aee2",
+        "responseReceived": true,
+        "latencyMs": 6836.143000000011,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "questions-10",
+        "kind": "questions",
+        "promptHash": "0af01fa23b5b8e5cba3211858a8be8702065a149fb4ed8b80963a25bc1fe08e5",
+        "responseReceived": true,
+        "latencyMs": 2980.460700000025,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "quick-find-01",
+        "kind": "quick-find",
+        "promptHash": "9b63d2090da9c3b8d20753ca08cffac477d035216953da91fd9b7cd2fd9466c8",
+        "responseReceived": true,
+        "latencyMs": 2771.1255000000237,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "quick-find-02",
+        "kind": "quick-find",
+        "promptHash": "690295b30dd430b799e20f42eb728cdeedbf3b297ba77ad03eea77d92672d530",
+        "responseReceived": true,
+        "latencyMs": 2650.4180999999808,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "quick-find-03",
+        "kind": "quick-find",
+        "promptHash": "c96a191795a60a58816df3e8b0c06f38b2b3cb419043ef81445f9c7efb2d0b88",
+        "responseReceived": true,
+        "latencyMs": 2603.5634999999893,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "quick-find-04",
+        "kind": "quick-find",
+        "promptHash": "0dd45ab0b7d0775136601d993387194af84a34548a6730df8a158937a01d3484",
+        "responseReceived": true,
+        "latencyMs": 2502.0288999999757,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "quick-find-05",
+        "kind": "quick-find",
+        "promptHash": "315fbfbeb867b96c33bf7953ba94ee76c2e44f2712b3bf4fb2b9835f5a5a2a84",
+        "responseReceived": true,
+        "latencyMs": 2490.242499999993,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "quick-find-06",
+        "kind": "quick-find",
+        "promptHash": "2792a5d52b56e46d530ac7e87629d3552a4bc7f793c8599c268dafd4a5a2f035",
+        "responseReceived": true,
+        "latencyMs": 2472.6129000000074,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "quick-find-07",
+        "kind": "quick-find",
+        "promptHash": "de153f22b977ab53714282f69978c36052bf976a6f05482b4d40ab7de63037e8",
+        "responseReceived": true,
+        "latencyMs": 2568.6023000000278,
+        "fixturePass": false,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": [
+          "line-format",
+          "currency:0",
+          "evidence-price:0"
+        ]
+      },
+      {
+        "id": "quick-find-08",
+        "kind": "quick-find",
+        "promptHash": "dbbb2a64bcbd626ba111a95d8a5c02f0c4438e3bd0c0c36f7b412101e8b4c44a",
+        "responseReceived": true,
+        "latencyMs": 2533.6534999999567,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "quick-find-09",
+        "kind": "quick-find",
+        "promptHash": "372fa51992ce9c05c7055557298ce5dffd83e66e474d0294a39f03eb580f8f95",
+        "responseReceived": true,
+        "latencyMs": 2350.360400000005,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "quick-find-10",
+        "kind": "quick-find",
+        "promptHash": "54c895965c7d9785db04b4af7abb93217f79317b6749351bb2080d80d76531a0",
+        "responseReceived": true,
+        "latencyMs": 2366.3980999999912,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "research-01",
+        "kind": "research",
+        "promptHash": "f0fe61cea08ec6ca57469e61add940385d3bf89245c881c21c1ac9c89024ffc1",
+        "responseReceived": true,
+        "latencyMs": 4049.355300000054,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "research-02",
+        "kind": "research",
+        "promptHash": "717c57be41c7f165407a4c63710e658ae93422c6b3d17a321f4bc71117092f02",
+        "responseReceived": true,
+        "latencyMs": 4062.1155000000144,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "research-03",
+        "kind": "research",
+        "promptHash": "9e030c5c65303fb8a3cece2c97a4ff1d53a1a06ae67ca1357a6fb76592487934",
+        "responseReceived": true,
+        "latencyMs": 4077.4384999999893,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "research-04",
+        "kind": "research",
+        "promptHash": "bec9217597df9192df3c0e05bfd7c5cdb00e9227df15236730e499ac6e1d7a11",
+        "responseReceived": true,
+        "latencyMs": 4673.533200000005,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "research-05",
+        "kind": "research",
+        "promptHash": "f2dcfaf05b8254e8c8f16bf40a3d2c67317f81091a9be0a62c9f948278e8d71c",
+        "responseReceived": true,
+        "latencyMs": 6049.831000000006,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "research-06",
+        "kind": "research",
+        "promptHash": "2c9f41ab3424dfd8c44dee7a32415ad6b93d46c137919a4aa83a9580d0bccf18",
+        "responseReceived": true,
+        "latencyMs": 5410.454199999978,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "research-07",
+        "kind": "research",
+        "promptHash": "1c3ae66de3572d50ed64c697b6efa61784c2c8c961e0b4abde5833f99e99cf66",
+        "responseReceived": true,
+        "latencyMs": 4564.853700000036,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "research-08",
+        "kind": "research",
+        "promptHash": "a20c66195de5896ae1a53408eb8aa631b34527dfd4ec06f19cd8f969d6230c54",
+        "responseReceived": true,
+        "latencyMs": 6587.189599999983,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "research-09",
+        "kind": "research",
+        "promptHash": "4bcfa4045adbcb0447ae8b85a84b98b259b3f23d9e6ea174af4f25769a548b50",
+        "responseReceived": true,
+        "latencyMs": 6133.020200000028,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "research-10",
+        "kind": "research",
+        "promptHash": "8dd83a2bad7da0ab67e34dc75b42693e41252343e3e569fd8b7754667da28449",
+        "responseReceived": true,
+        "latencyMs": 6702.722100000014,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "research-11",
+        "kind": "research",
+        "promptHash": "db2488ec9cea65b0713e4e0deb3e5f2d8a18674bbbbacca7ef812cc6d15f70f7",
+        "responseReceived": true,
+        "latencyMs": 3268.6445999999996,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "research-12",
+        "kind": "research",
+        "promptHash": "b836bc20b6f15e4350f3474eaae464323aa1206b89e35499779ca41623ac5b0a",
+        "responseReceived": true,
+        "latencyMs": 4908.885699999984,
+        "fixturePass": false,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": [
+          "price-option-count",
+          "price-band:0",
+          "source-url:0",
+          "evidence-backed:0",
+          "price-band:1",
+          "source-url:1",
+          "evidence-backed:1",
+          "price-band:2",
+          "source-url:2",
+          "evidence-backed:2",
+          "expect:options:eq"
+        ]
+      },
+      {
+        "id": "research-13",
+        "kind": "research",
+        "promptHash": "b7898fe17ad376bd48722b5202573d13751a09060670bef10d8c5af27f5532da",
+        "responseReceived": true,
+        "latencyMs": 3408.8842000000295,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "research-14",
+        "kind": "research",
+        "promptHash": "6c15941ac57a1f697221ea91fb136253ed919b834928d7251fb251d8b1389047",
+        "responseReceived": true,
+        "latencyMs": 4065.473799999978,
+        "fixturePass": false,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": [
+          "price-option-count",
+          "source-url:0",
+          "evidence-backed:0",
+          "expect:options:eq"
+        ]
+      },
+      {
+        "id": "research-15",
+        "kind": "research",
+        "promptHash": "74a72805c01f75436862c0d4ad6458ec63f9cbca3f206742106ff8dbc0faf98b",
+        "responseReceived": true,
+        "latencyMs": 2949.138099999982,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "suggest-01",
+        "kind": "suggest",
+        "promptHash": "63648343856923e7c233aaccba895c31c6749a6bf6cfe80ab5aed5b7f4998257",
+        "responseReceived": true,
+        "latencyMs": 3624.784500000009,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "suggest-02",
+        "kind": "suggest",
+        "promptHash": "e670ca74c299ef1deca59e82f7b3381d3fb69356b770a0ae5f7c5320d7c1a371",
+        "responseReceived": true,
+        "latencyMs": 3755.525800000003,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "suggest-03",
+        "kind": "suggest",
+        "promptHash": "19a4e849863f370ef6373f25dc0bc76c83c670739ae1f519a56a2d988ccecb3c",
+        "responseReceived": true,
+        "latencyMs": 3381.4687000000267,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "suggest-04",
+        "kind": "suggest",
+        "promptHash": "1664aac22b2c18f8c0039121b7f0e7a147f88b166329d2afb8613e1cb5a7a887",
+        "responseReceived": true,
+        "latencyMs": 3444.675499999954,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "suggest-05",
+        "kind": "suggest",
+        "promptHash": "5a23ba76e8bfd117e7ad3630b773171fc9a6bfeab8c7275fbbcf12d1aeef13e9",
+        "responseReceived": true,
+        "latencyMs": 3383.8213000000105,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "suggest-06",
+        "kind": "suggest",
+        "promptHash": "128e404c99c7b5221c3cdc6dc530798f185999e4bd399eaf45ed3d41fcfec3a5",
+        "responseReceived": true,
+        "latencyMs": 3432.0368000000017,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "suggest-07",
+        "kind": "suggest",
+        "promptHash": "a653e8e23af72ce06c646d595b2e29862ed43ce862f449794879093b88f664c4",
+        "responseReceived": true,
+        "latencyMs": 3837.7883000000147,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "suggest-08",
+        "kind": "suggest",
+        "promptHash": "55e4f24a93961c1f3fca3ab8af7128a3ff002a8c6b092b43835fe8bfc22834b4",
+        "responseReceived": true,
+        "latencyMs": 4218.778900000034,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "suggest-09",
+        "kind": "suggest",
+        "promptHash": "c7f380a161ff593de6899ca232d5e40b592106725b5e50c5ae362b62a79ea4b5",
+        "responseReceived": true,
+        "latencyMs": 4132.449699999997,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "suggest-10",
+        "kind": "suggest",
+        "promptHash": "f5d77edcca59c3e7293ed2b71bd3c113f917448a304f2802d29490e854646e18",
+        "responseReceived": true,
+        "latencyMs": 3615.1387000000104,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "worth-01",
+        "kind": "worth",
+        "promptHash": "f84eb51af0805b60ecbe990b7c96886519cca8f8dfc3bb387747597c034ab7c1",
+        "responseReceived": true,
+        "latencyMs": 4256.867800000007,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "worth-02",
+        "kind": "worth",
+        "promptHash": "ee5f0fdcdc1331821c7adc0f42a78a266bc480623efb0970644a03c943da780d",
+        "responseReceived": true,
+        "latencyMs": 4585.798899999994,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "worth-03",
+        "kind": "worth",
+        "promptHash": "a622642ea198cd6f3d3e0c934ace679ccfc6324b501933b605d943ecd89419db",
+        "responseReceived": true,
+        "latencyMs": 4205.813300000038,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "worth-04",
+        "kind": "worth",
+        "promptHash": "8778e9c5c4955bbae37f0ed218907bfed0ca8bcbf845e7bdbab3b0a35f78b9d4",
+        "responseReceived": true,
+        "latencyMs": 4563.214099999983,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "worth-05",
+        "kind": "worth",
+        "promptHash": "d4408c6b775cf6be1bbfe071c9da6e5d830d99943b7d1c316540e1c00aa70b8a",
+        "responseReceived": true,
+        "latencyMs": 3864.318099999975,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "worth-06",
+        "kind": "worth",
+        "promptHash": "570a729b5cd7de5769309f7078e4ce6c3e81fd64f7cb0358462297c8741af003",
+        "responseReceived": true,
+        "latencyMs": 3644.556199999992,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "worth-07",
+        "kind": "worth",
+        "promptHash": "2b664231980c3ef794fd07c0b14dd31bddd9c08eb92e7e4c6a10a9f3bae72c12",
+        "responseReceived": true,
+        "latencyMs": 5135.685600000026,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "worth-08",
+        "kind": "worth",
+        "promptHash": "94da95bfc460b0e024f51cc061a4bbebd9c1e62ba8ff2eacdac9df536e12ba3b",
+        "responseReceived": true,
+        "latencyMs": 5279.65419999999,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "worth-09",
+        "kind": "worth",
+        "promptHash": "682ebb9d6b9498e2eb66a7db48d79fbe6ff86b9d2de0b653a3aefd93cf7a6121",
+        "responseReceived": true,
+        "latencyMs": 5802.68809999997,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      },
+      {
+        "id": "worth-10",
+        "kind": "worth",
+        "promptHash": "a059d9ab63cc6397d55e8e48c99f8a68bb6df72369e210499515e894c2b38f57",
+        "responseReceived": true,
+        "latencyMs": 4200.669300000009,
+        "fixturePass": true,
+        "meetsProductLatencyTarget": true,
+        "failedChecks": []
+      }
+    ]
+  },
+  "validation": {
+    "ciRun": 43145462927,
+    "ciUrl": "https://github.com/KNIGHT-AI-AV/dandelist/actions/runs/43145462927",
+    "codeCommit": "f7b681a627ef9d239036df2228589a7973782326",
+    "conclusion": "success",
+    "apiTests": 880,
+    "mobileTests": 843,
+    "costTests": 14,
+    "metaTests": 40,
+    "workspaceTypes": "pass"
+  },
+  "decision": "No production switch; do not promote Qwen for research",
+  "hardStop": {
+    "caseId": "research-12",
+    "reason": "Invented three manufacturer prices and source/evidence claims despite the only supplied offer being explicitly expired and unusable; required zero options"
+  },
+  "matrixDriverSha256": "4678f42bb7a2b8b145a694229c86196fdb6480cebd4d880d73951af5e062c26b",
+  "batchJournalSha256": "5f25dfd7bc2f4f11097ba7543fdb9327d4f6bd5cfe98cf5d2bcf4c4167f69cfc",
+  "originalRunnerReplay": {
+    "sha256": "3c7239810de89c5da7e28e2bf3012a57bb9c24d333ffe6eef73e9069285e3866",
+    "cases": 97,
+    "fixturePasses": 85,
+    "allRequestHashesAndGradesAgree": true
+  }
+}
