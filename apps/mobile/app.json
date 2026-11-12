@@ -34,6 +34,7 @@
       "expo-router",
       ["expo-secure-store", { "faceIDPermission": false }],
       "expo-apple-authentication",
+      ["expo-iap", { "android": { "store": "play" } }],
       "expo-web-browser",
       [
         "expo-image-picker",

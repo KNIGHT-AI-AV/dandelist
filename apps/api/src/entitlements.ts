@@ -3,6 +3,7 @@ import type { Db } from "./db";
 import type { JWSTransactionDecodedPayload } from "@apple/app-store-server-library";
 import { AppleVerifier } from "./billing/apple";
 import type { GooglePlayClient,GooglePushAuthenticator,GoogleRTDN } from "./billing/google";
+import { googlePhaseIsTrial } from "./billing/google";
 
 export const PRODUCTS={monthly:"com.knightaiav.dandelist.premium.monthly",annual:"com.knightaiav.dandelist.premium.annual"}as const;
 export const PROVISIONAL_PRICES={monthlyUsdCents:999,annualUsdCents:7999,trialDays:14,paidHunts:20,trialHunts:10}as const;
@@ -13,7 +14,7 @@ export interface EntitlementOptions {enabled?:boolean;apple?:AppleVerifier;googl
 const hash=(s:string)=>createHash("sha256").update(s).digest("hex");
 export const googleAccountId=(userId:string)=>hash(userId);
 const allowedProducts=new Set<string>(Object.values(PRODUCTS));
-/** No routes or app UI use this module. All mutations require the explicit, default-off service flag. */
+/** Used only by explicitly mounted transports. All mutations require the default-off service flag. */
 export class EntitlementService {
   constructor(private db:Db,private opts:EntitlementOptions={}){}
   private enabled(){if(!this.opts.enabled)throw new Error("Entitlement feature disabled");}
@@ -78,8 +79,13 @@ export class EntitlementService {
     if(g.externalAccountIdentifiers?.obfuscatedExternalAccountId!==googleAccountId(userId))throw new Error("Play account binding mismatch");
     if(g.linkedPurchaseToken){const old=(await this.db.query<{user_id:string}>("select user_id from entitlement_purchases where platform='android' and external_key=$1",[hash(g.linkedPurchaseToken)])).rows[0];if(old&&old.user_id!==userId)throw new Error("Linked Play purchase belongs to another account");}
     if(g.lineItems.length!==1||!g.latestOrderId)throw new Error("Unsupported Play subscription shape");
-    const line=g.lineItems[0]!;const state:EntitlementState=g.subscriptionState==="SUBSCRIPTION_STATE_ACTIVE"||g.subscriptionState==="SUBSCRIPTION_STATE_CANCELED"?"active":g.subscriptionState==="SUBSCRIPTION_STATE_IN_GRACE_PERIOD"?"grace":g.subscriptionState==="SUBSCRIPTION_STATE_EXPIRED"?"expired":g.subscriptionState==="SUBSCRIPTION_STATE_ON_HOLD"||g.subscriptionState==="SUBSCRIPTION_STATE_PAUSED"?"revoked":"none";
-    return {platform:"android",key:hash(token),original:g.latestOrderId.split('..')[0]!,product:this.product(line.productId),state,expires:new Date(line.expiryTime),eventAt,cancel:line.autoRenewingPlan?.autoRenewEnabled===false};
+    const line=g.lineItems[0]!;
+    const running=g.subscriptionState==="SUBSCRIPTION_STATE_ACTIVE"||g.subscriptionState==="SUBSCRIPTION_STATE_CANCELED";
+    const trial=running&&googlePhaseIsTrial(line);
+    const state:EntitlementState=running?(trial?"trialing":"active"):g.subscriptionState==="SUBSCRIPTION_STATE_IN_GRACE_PERIOD"?"grace":g.subscriptionState==="SUBSCRIPTION_STATE_EXPIRED"?"expired":g.subscriptionState==="SUBSCRIPTION_STATE_ON_HOLD"||g.subscriptionState==="SUBSCRIPTION_STATE_PAUSED"?"revoked":"none";
+    const expires=new Date(line.expiryTime),trialStart=trial?new Date(g.startTime??""):undefined;
+    if(trialStart&&(!Number.isFinite(trialStart.getTime())||trialStart>=expires||trialStart.getTime()>eventAt.getTime()+5*60_000))throw new Error("Invalid Play trial dates");
+    return {platform:"android",key:hash(token),original:g.latestOrderId.split('..')[0]!,product:this.product(line.productId),state,expires,eventAt,cancel:line.autoRenewingPlan?.autoRenewEnabled===false,...(trial?{trialStart,trialEnd:expires}:{})};
   }
   async linkGooglePurchase(userId:string,token:string){
     this.enabled();const p=await this.googlePurchase(userId,token,await this.clock());

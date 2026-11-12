@@ -20,7 +20,7 @@ beforeAll(async()=>{
 });
 beforeEach(async()=>{
   await db.exec("truncate entitlements,entitlement_purchases,entitlement_events,entitlement_hunts");instant=Date.now();getSubscription.mockClear();push.mockClear();
-  google={subscriptionState:"SUBSCRIPTION_STATE_ACTIVE",latestOrderId:"GPA.FIXTURE.1234..0",externalAccountIdentifiers:{obfuscatedExternalAccountId:googleAccountId(a)},lineItems:[{productId:PRODUCTS.monthly,expiryTime:new Date(instant+30*86400000).toISOString(),autoRenewingPlan:{autoRenewEnabled:true}}]};
+  google={subscriptionState:"SUBSCRIPTION_STATE_ACTIVE",latestOrderId:"GPA.FIXTURE.1234..0",externalAccountIdentifiers:{obfuscatedExternalAccountId:googleAccountId(a)},lineItems:[{productId:PRODUCTS.monthly,expiryTime:new Date(instant+30*86400000).toISOString(),autoRenewingPlan:{autoRenewEnabled:true},offerPhase:{basePrice:{}}}]};
   service=new EntitlementService(db,{enabled:true,apple,google:{getSubscription},googlePush:{verify:push},packageName:"com.knightaiav.dandelist"});
 });
 afterAll(async()=>{await lite.close();});
@@ -150,6 +150,29 @@ it("Play reads current Developer API status and binds the token hash to one acco
   expect(await service.linkGooglePurchase(a,token)).toBe(true);expect(getSubscription).toHaveBeenCalledWith("com.knightaiav.dandelist",token);expect((await service.read(a)).state).toBe("active");
   await expect(service.linkGooglePurchase(b,token)).rejects.toThrow("binding");
   const rows=await db.query("select external_key from entitlement_purchases");expect(JSON.stringify(rows)).not.toContain(token);
+});
+it.each(["SUBSCRIPTION_STATE_ACTIVE","SUBSCRIPTION_STATE_CANCELED"])("Play free trials receive ten hunts, including canceled-but-unexpired trials: %s",async state=>{
+  google.subscriptionState=state;google.startTime=new Date(instant-1000).toISOString();
+  google.lineItems[0]!.offerPhase={freeTrial:{}};google.lineItems[0]!.expiryTime=new Date(instant+14*86400000).toISOString();
+  await service.linkGooglePurchase(a,token);const e=await service.read(a);expect(e.state).toBe("trialing");
+  expect(new Date(e.trial_started_at!).getTime()).toBe(instant-1000);expect(new Date(e.trial_ends_at!).getTime()).toBe(instant+14*86400000);
+  const results=await Promise.all(Array.from({length:12},(_,i)=>service.admitHunt(a,"play_trial_"+String(i).padStart(8,'0'),fingerprint)));
+  expect(results.filter(x=>x==="admitted")).toHaveLength(10);expect(results.filter(x=>x==="quota")).toHaveLength(2);
+  expect(await service.linkGooglePurchase(a,token)).toBe(false);
+});
+it("Play paid renewal leaves trial history intact and moves to the twenty-hunt monthly allowance",async()=>{
+  google.startTime=new Date(instant-1000).toISOString();google.lineItems[0]!.offerPhase={freeTrial:{}};await service.linkGooglePurchase(a,token);
+  await service.admitHunt(a,"play_trial_first",fingerprint);const trial=await service.read(a);
+  google.lineItems[0]!.offerPhase={basePrice:{}};google.lineItems[0]!.expiryTime=new Date(instant+60*86400000).toISOString();google.latestOrderId="GPA.FIXTURE.1234..1";
+  await service.linkGooglePurchase(a,token);const paid=await service.read(a);expect(paid.state).toBe("active");expect(paid.trial_started_at).toEqual(trial.trial_started_at);expect(paid.trial_ends_at).toEqual(trial.trial_ends_at);
+  const results=await Promise.all(Array.from({length:22},(_,i)=>service.admitHunt(a,"play_paid_"+String(i).padStart(8,'0'),fingerprint)));
+  expect(results.filter(x=>x==="admitted")).toHaveLength(20);expect(results.filter(x=>x==="quota")).toHaveLength(2);
+});
+it("missing Play phase or invalid free-trial dates never grant paid entitlement",async()=>{
+  google.lineItems[0]!.offerPhase=undefined;await expect(service.linkGooglePurchase(a,token)).rejects.toThrow("phase");
+  google.lineItems[0]!.offerPhase={freeTrial:{}};await expect(service.linkGooglePurchase(a,token)).rejects.toThrow("trial dates");
+  google.startTime=new Date(instant+60*86400000).toISOString();await expect(service.linkGooglePurchase(a,token)).rejects.toThrow("trial dates");
+  expect((await service.read(a)).state).toBe("none");
 });
 it("Google RTDN authenticates before API access and does not trust the notification type to grant",async()=>{
   await service.linkGooglePurchase(a,token);getSubscription.mockClear();

@@ -21,6 +21,7 @@ import { adminRoutes } from "./admin";
 import { MAX_AVATAR_BYTES, meRoutes } from "./me";
 import { pickRoutes } from "./picks";
 import { wishRoutes } from "./wishes";
+import { billingRoutes, type BillingRoutesOptions } from "./billing/routes";
 
 /**
  * The most any request may send: the biggest upload a route takes (a help report's screen, a voice clip, a photo).
@@ -33,6 +34,7 @@ export interface AppDeps extends AgentDeps {
   webOrigins: string[];
   /** The digest of each address that may read /admin (admin.ts adminDigest); its ADMIN_DIGESTS when missing. */
   admins?: ReadonlySet<string>;
+  billing?: BillingRoutesOptions;
 }
 
 export function createApp(deps: AppDeps) {
@@ -108,6 +110,8 @@ export function createApp(deps: AppDeps) {
   // The account's acceptance of how Dandelist uses AI: open before it is given, unlike everything else (consent.ts).
   app.use("/me/consent", requireAuth(deps));
   app.route("/me/consent", consentRoutes(deps));
+  // Separate, explicitly configured transport; absent from ordinary deployments by default.
+  if (deps.billing) app.route("/me/billing", billingRoutes(deps, deps.billing));
   app.route("/me", meRoutes(deps));
   // What someone saw when they asked for help, kept private for the team (help.ts).
   app.route("/help", helpRoutes(deps));

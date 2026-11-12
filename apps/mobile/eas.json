@@ -4,6 +4,16 @@
     "appVersionSource": "remote"
   },
   "build": {
+    "billing-internal": {
+      "distribution": "store",
+      "autoIncrement": true,
+      "credentialsSource": "remote",
+      "android": { "buildType": "app-bundle" },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://api.dandelist.knightaiav.com",
+        "EXPO_PUBLIC_BILLING_SANDBOX": "1"
+      }
+    },
     "production": {
       "distribution": "store",
       "autoIncrement": true,

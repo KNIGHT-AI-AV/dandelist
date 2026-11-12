@@ -1,0 +1,18 @@
+{
+  "title": "Store testing",
+  "load": "Load store products",
+  "restore": "Restore purchases",
+  "trial": "Start Apple trial",
+  "subscribe": "Subscribe",
+  "unavailable": "Store testing is unavailable in this build.",
+  "consent": "Sign in and accept the account notice to continue.",
+  "service": "Store verification is unavailable. Your purchase can be restored when the service is available.",
+  "empty": "No store products are available yet.",
+  "pending": "Pending",
+  "verifying": "Verifying purchase",
+  "complete": "Purchase verified",
+  "cancelled": "Purchase cancelled",
+  "retry": "Try restoring your purchase.",
+  "idle": "No purchase was restored.",
+  "close": "Close"
+}
