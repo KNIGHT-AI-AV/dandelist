@@ -24,6 +24,12 @@ it("does not expose bearer tokens, receipt tokens or Google error bodies", async
   const client = new PlaySubscriptionClient(async () => "private-bearer", async () => new Response("private-token-and-provider-detail", { status: 403 }));
   await expect(client.getSubscription("com.knightaiav.dandelist", "private-token")).rejects.toThrow(/^Play verification unavailable$/);
 });
+it("the sandbox deployment refuses real purchases and accepts Google's test-purchase marker", async () => {
+  const request = vi.fn().mockResolvedValueOnce(Response.json(fixture)).mockResolvedValueOnce(Response.json({ ...fixture, testPurchase: {} }));
+  const client = new PlaySubscriptionClient(async () => "fixture", request, { sandboxOnly: true });
+  await expect(client.getSubscription("com.knightaiav.dandelist", "fixture-token")).rejects.toThrow("test purchase required");
+  expect(await client.getSubscription("com.knightaiav.dandelist", "fixture-token")).toMatchObject(fixture);
+});
 it.each([undefined, {}, { freeTrial: null }, { madeUp: {} }, { freeTrial: {}, basePrice: {} }, { prorationPeriod: {} }])("unknown or ambiguous current Play offer phase fails closed: %j", async offerPhase => {
   const client = new PlaySubscriptionClient(async () => "fixture", async () => Response.json({ ...fixture, lineItems: [{ ...fixture.lineItems[0], offerPhase }] }));
   await expect(client.getSubscription("com.knightaiav.dandelist", "fixture-token")).rejects.toThrow(/phase/);

@@ -23,6 +23,8 @@ const schema = z.object({
   ENTITLEMENTS_ENABLED: flag,
   // Local development verifier only; production refuses this separate opt-in.
   BILLING_SANDBOX_ENABLED: flag,
+  // Secrets Manager supplies this only to the isolated sandbox service.
+  PLAY_SERVICE_ACCOUNT_JSON: optional,
   // Claude under Meta (under.ts): a call goes to Claude only when Meta's spend is used up. Off without a key.
   ANTHROPIC_API_KEY: optional,
   CLAUDE_DAILY_USD: z.coerce.number().positive().default(5),

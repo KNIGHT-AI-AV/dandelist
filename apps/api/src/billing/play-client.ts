@@ -2,7 +2,7 @@ import { googlePhaseIsTrial, type GooglePlayClient, type GoogleSubscription } fr
 
 /** A read-only Play API client. Credential refresh is supplied by the deployment's existing identity provider. */
 export class PlaySubscriptionClient implements GooglePlayClient {
-  constructor(private accessToken: () => Promise<string>, private request: typeof fetch = fetch) {}
+  constructor(private accessToken: () => Promise<string>, private request: typeof fetch = fetch, private options: { sandboxOnly?: boolean } = {}) {}
   async getSubscription(packageName: string, purchaseToken: string): Promise<GoogleSubscription> {
     if (packageName !== "com.knightaiav.dandelist" || !purchaseToken || purchaseToken.length > 16_000) throw new Error("Invalid Play purchase request");
     const bearer = await this.accessToken();
@@ -13,7 +13,8 @@ export class PlaySubscriptionClient implements GooglePlayClient {
     if (!response.ok) throw new Error("Play verification unavailable");
     const text = await response.text();
     if (text.length > 200_000) throw new Error("Play response too large");
-    const data = JSON.parse(text) as GoogleSubscription & { lineItems?: { latestSuccessfulOrderId?: string }[] };
+    const data = JSON.parse(text) as GoogleSubscription & { testPurchase?: unknown; lineItems?: { latestSuccessfulOrderId?: string }[] };
+    if (this.options.sandboxOnly && (!data.testPurchase || typeof data.testPurchase !== "object" || Array.isArray(data.testPurchase))) throw new Error("Play test purchase required");
     const states = new Set(["SUBSCRIPTION_STATE_ACTIVE", "SUBSCRIPTION_STATE_CANCELED", "SUBSCRIPTION_STATE_IN_GRACE_PERIOD", "SUBSCRIPTION_STATE_EXPIRED", "SUBSCRIPTION_STATE_ON_HOLD", "SUBSCRIPTION_STATE_PAUSED"]);
     if (!states.has(data.subscriptionState) || !Array.isArray(data.lineItems) || data.lineItems.length !== 1) throw new Error("Play subscription is not ready");
     const line = data.lineItems[0]!;
