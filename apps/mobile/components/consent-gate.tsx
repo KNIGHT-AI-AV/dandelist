@@ -24,6 +24,7 @@ export const APP_ROUTES = [
   "plan",
   "theme",
   "lab",
+  "store-test",
   "admin",
 ] as const;
 

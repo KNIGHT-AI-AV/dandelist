@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-11",
+  "source": "https://aitextclean.com/",
+  "settings": "Established project profile: eight options on, two off",
+  "method": "Literal Copy Output, Windows system clipboard, comparison against cleaned output before use",
+  "output": "apps/mobile/lib/billing/copy.json",
+  "sha256": "421f8495beb22500679eb76c757b90dcc8627795a9155819e7a3a7b12c8e3cd1",
+  "scope": "Internal store testing screen labels and status messages"
+}

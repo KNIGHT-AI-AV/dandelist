@@ -21,6 +21,8 @@ const schema = z.object({
   SPEND_TOTAL_USD: z.coerce.number().positive().default(120),
   MODEL_HISTORY_ENABLED: flag,
   ENTITLEMENTS_ENABLED: flag,
+  // Local development verifier only; production refuses this separate opt-in.
+  BILLING_SANDBOX_ENABLED: flag,
   // Claude under Meta (under.ts): a call goes to Claude only when Meta's spend is used up. Off without a key.
   ANTHROPIC_API_KEY: optional,
   CLAUDE_DAILY_USD: z.coerce.number().positive().default(5),
@@ -62,6 +64,9 @@ export type Env = z.infer<typeof schema> & { PUBLIC_API_URL: string };
 export function readEnv(source: Record<string, string | undefined> = process.env): Env {
   const env = schema.parse(source);
   const production = env.NODE_ENV === "production";
+  if (production && env.BILLING_SANDBOX_ENABLED) {
+    throw new Error("Billing sandbox transport is development-only");
+  }
   if (production && !env.RESEND_API_KEY) {
     throw new Error("RESEND_API_KEY is required in production; sign-in codes would never arrive");
   }
