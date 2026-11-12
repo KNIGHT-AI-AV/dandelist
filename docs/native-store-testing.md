@@ -18,6 +18,8 @@ Purchase dispatch does not grant access. Pending transactions wait. Purchased tr
 
 The access response describes entitlement state only. It is not quota admission for a new hunt. Existing source still needs production premium-work admission, authenticated notification transport and reconciliation, and real store/device acceptance before enablement.
 
+Play access uses the current `offerPhase` reported by the Developer API, including free-trial proration. A current free trial remains `trialing` with the ten-hunt trial allowance even after cancellation while unexpired. A later paid phase becomes `active` with the twenty-hunt monthly allowance, preserving trial history. Missing/ambiguous phase data or invalid trial dates reject verification. The original offer ID cannot establish the current phase because it can remain after renewal. Reference: [SubscriptionPurchaseV2](https://developers.google.com/android-publisher/api-ref/rest/v3/purchases.subscriptionsv2).
+
 ## Acceptance still required
 
 1. Final Android bundle package/version, merged billing permission and signature verified; native iOS build verified with the existing minimum OS.

@@ -1,6 +1,7 @@
 import { expect, it, vi } from "vitest";
 import { PlaySubscriptionClient } from "../src/billing/play-client";
-const fixture = { subscriptionState: "SUBSCRIPTION_STATE_ACTIVE", latestOrderId: "GPA.FIXTURE", lineItems: [{ productId: "com.knightaiav.dandelist.premium.monthly", expiryTime: "2027-01-01T00:00:00Z" }] };
+import { googlePhaseIsTrial } from "../src/billing/google";
+const fixture = { subscriptionState: "SUBSCRIPTION_STATE_ACTIVE", latestOrderId: "GPA.FIXTURE", lineItems: [{ productId: "com.knightaiav.dandelist.premium.monthly", expiryTime: "2027-01-01T00:00:00Z", offerPhase: { basePrice: {} } }] };
 it("uses only the fixed read-only Play endpoint, encodes the token and bounds the request", async () => {
   const request = vi.fn(async () => new Response(JSON.stringify(fixture)));
   const client = new PlaySubscriptionClient(async () => "fixture-bearer", request as typeof fetch);
@@ -22,4 +23,14 @@ it("rejects other applications before obtaining credentials", async () => {
 it("does not expose bearer tokens, receipt tokens or Google error bodies", async () => {
   const client = new PlaySubscriptionClient(async () => "private-bearer", async () => new Response("private-token-and-provider-detail", { status: 403 }));
   await expect(client.getSubscription("com.knightaiav.dandelist", "private-token")).rejects.toThrow(/^Play verification unavailable$/);
+});
+it.each([undefined, {}, { freeTrial: null }, { madeUp: {} }, { freeTrial: {}, basePrice: {} }, { prorationPeriod: {} }])("unknown or ambiguous current Play offer phase fails closed: %j", async offerPhase => {
+  const client = new PlaySubscriptionClient(async () => "fixture", async () => Response.json({ ...fixture, lineItems: [{ ...fixture.lineItems[0], offerPhase }] }));
+  await expect(client.getSubscription("com.knightaiav.dandelist", "fixture-token")).rejects.toThrow(/phase/);
+});
+it("distinguishes free-trial proration from introductory or base pricing", () => {
+  const line = fixture.lineItems[0]!;
+  expect(googlePhaseIsTrial({ ...line, offerPhase: { prorationPeriod: { originalOfferPhaseType: "FREE_TRIAL" } } })).toBe(true);
+  expect(googlePhaseIsTrial({ ...line, offerPhase: { introductoryPrice: {} } })).toBe(false);
+  expect(googlePhaseIsTrial(line)).toBe(false);
 });

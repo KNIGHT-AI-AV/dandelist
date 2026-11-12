@@ -1,4 +1,4 @@
-import type { GooglePlayClient, GoogleSubscription } from "./google";
+import { googlePhaseIsTrial, type GooglePlayClient, type GoogleSubscription } from "./google";
 
 /** A read-only Play API client. Credential refresh is supplied by the deployment's existing identity provider. */
 export class PlaySubscriptionClient implements GooglePlayClient {
@@ -19,6 +19,7 @@ export class PlaySubscriptionClient implements GooglePlayClient {
     const line = data.lineItems[0]!;
     const latestOrderId = data.latestOrderId ?? line.latestSuccessfulOrderId;
     if (!latestOrderId || !line.productId || !Number.isFinite(Date.parse(line.expiryTime))) throw new Error("Invalid Play subscription response");
+    if (["SUBSCRIPTION_STATE_ACTIVE", "SUBSCRIPTION_STATE_CANCELED"].includes(data.subscriptionState)) googlePhaseIsTrial(line);
     return { ...data, latestOrderId };
   }
 }

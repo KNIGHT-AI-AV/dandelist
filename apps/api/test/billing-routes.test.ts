@@ -41,7 +41,7 @@ function transaction(userId: string, patch: Record<string, unknown> = {}) {
   return certs.jws({ transactionId: "fixture-transaction", originalTransactionId: "fixture-original", bundleId: "com.knightaiav.dandelist", productId: PRODUCTS.monthly, subscriptionGroupIdentifier: "fixture-premium", purchaseDate: instant - 1000, originalPurchaseDate: instant - 1000, expiresDate: instant + 14 * 86400000, quantity: 1, type: "Auto-Renewable Subscription", inAppOwnershipType: "PURCHASED", signedDate: instant, environment: "Sandbox", appAccountToken: userId, offerType: 1, offerDiscountType: "FREE_TRIAL", ...patch });
 }
 function play(userId: string) {
-  google = { subscriptionState: "SUBSCRIPTION_STATE_ACTIVE", latestOrderId: "GPA.FIXTURE.0001", externalAccountIdentifiers: { obfuscatedExternalAccountId: googleAccountId(userId) }, lineItems: [{ productId: PRODUCTS.monthly, expiryTime: new Date(Date.now() + 30 * 86400000).toISOString(), autoRenewingPlan: { autoRenewEnabled: true } }] };
+  google = { subscriptionState: "SUBSCRIPTION_STATE_ACTIVE", latestOrderId: "GPA.FIXTURE.0001", externalAccountIdentifiers: { obfuscatedExternalAccountId: googleAccountId(userId) }, lineItems: [{ productId: PRODUCTS.monthly, expiryTime: new Date(Date.now() + 30 * 86400000).toISOString(), autoRenewingPlan: { autoRenewEnabled: true }, offerPhase: { basePrice: {} } }] };
 }
 it("ordinary deployments have no billing routes", async () => {
   app = createApp(deps()); expect((await call("GET", "/me/billing/")).status).toBe(404);
