@@ -1,6 +1,6 @@
-import { createHash, createHmac, randomBytes } from "node:crypto";
+import { createHash, createHmac, randomBytes, hkdfSync } from "node:crypto";
 import { PGlite } from "@electric-sql/pglite";
-import { SignJWT, exportJWK, generateKeyPair, type JWTPayload, type KeyLike } from "jose";
+import { SignJWT, EncryptJWT, exportJWK, generateKeyPair, type JWTPayload, type KeyLike } from "jose";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { accepted } from "./consent-helper";
 import { createApp } from "../src/app";
@@ -32,6 +32,7 @@ let nextGoogle: JWTPayload;
 /** What the fake Facebook says about the person: an id, a name, and an email only when they confirmed one. */
 let nextFacebook: Record<string, unknown>;
 let lastChallenge: string;
+let beforeFacebookProfile: (() => Promise<void>) | undefined;
 
 const nowS = () => Math.floor(clock.getTime() / 1000);
 const b64sha = (s: string) => createHash("sha256").update(s).digest("base64url");
@@ -64,6 +65,7 @@ const fakeFetch = (async (input: string | URL | Request, init?: RequestInit) => 
     const proof = createHmac("sha256", FB_SECRET).update(FB_TOKEN).digest("hex");
     if (q.get("access_token") !== FB_TOKEN || q.get("appsecret_proof") !== proof) return json({ error: { message: "Invalid appsecret_proof provided in the API argument", code: 100 } }, 400);
     expect(q.get("fields")).toBe("id,name,email");
+    await beforeFacebookProfile?.();
     return json(nextFacebook);
   }
   return new Response("not found", { status: 404 });
@@ -101,6 +103,7 @@ beforeEach(async () => {
   nextGoogle = {};
   nextFacebook = {};
   lastChallenge = "";
+  beforeFacebookProfile = undefined;
   app = makeApp(fullConfig());
 });
 
@@ -170,15 +173,97 @@ async function linkGoogle(token: string, who: JWTPayload) {
 
 const redeemLink = (ticket: string, verifier: string, token?: string) => send("POST", "/auth/link/redeem", { ticket, verifier }, token);
 
+/** Valid artifacts issued by an older server, under this test's synthetic key only. */
+async function legacySeal(payload: Record<string, unknown>, kind: "state" | "link") {
+  const key = new Uint8Array(hkdfSync("sha256", "test-secret-that-is-at-least-32-chars-long", new Uint8Array(0), `dandelist oauth ${kind} v1`, 32));
+  return new EncryptJWT(payload).setProtectedHeader({ alg: "dir", enc: "A256GCM" }).setIssuer("dandelist-api")
+    .setAudience(`dandelist-oauth-${kind}`).setIssuedAt(nowS()).setExpirationTime(nowS() + 600).encrypt(key);
+}
+
+describe("Facebook returning-only policy", () => {
+  it("rejects a new Facebook callback with verified email before any account/identity/ticket/session write", async () => {
+    const result = await signInWith("facebook", { id: "new-fb", email: "new@example.com" });
+    expect(landing(result.res)).toMatchObject({ ticket: null, error: "failed" });
+    for (const table of ["users", "user_identities", "oauth_tickets", "sessions"]) expect((await db.query(`select count(*)::int as n from ${table}`)).rows).toEqual([{ n: 0 }]);
+  });
+
+  it.each(["email-only", "google", "another-facebook"])("never attaches Facebook by email match to %s", async kind => {
+    const ada = await emailSignIn("ada@example.com");
+    if (kind !== "email-only") await db.query("insert into user_identities(provider,subject,user_id)values($1,'old-subject',$2)", [kind === "google" ? "google" : "facebook", ada.id]);
+    const before = (await db.query("select * from user_identities")).rows;
+    const result = await signInWith("facebook", { id: "unlinked-fb", email: "ADA@example.com" });
+    expect(landing(result.res)).toMatchObject({ ticket: null, error: "failed" });
+    expect((await db.query("select * from user_identities")).rows).toEqual(before);
+    expect((await db.query("select count(*)::int as n from users")).rows).toEqual([{ n: 1 }]);
+    expect((await send("GET", "/me", undefined, ada.token)).status).toBe(200);
+  });
+
+  it("rejects direct Facebook link starts and old sealed link-start URLs without calling the provider", async () => {
+    const ada = await emailSignIn("ada@example.com"), verifier = newVerifier(), challenge = b64sha(verifier);
+    expect((await send("POST", "/auth/link/facebook", { redirect: WEB, challenge, existingOnly: false }, ada.token)).status).toBe(403);
+    const sealed = await legacySeal({ p: "facebook", u: ada.id, r: WEB, c: challenge }, "link");
+    expect((await app.request(`/auth/oauth/facebook/start?link=${encodeURIComponent(sealed)}`)).status).toBe(403);
+    expect(calls).toHaveLength(0); expect((await db.query("select * from user_identities")).rows).toHaveLength(0);
+  });
+
+  it("rejects an already in-flight Facebook linking callback from an older client before provider exchange", async () => {
+    const ada = await emailSignIn("ada@example.com"), nonce = randomBytes(24).toString("base64url");
+    const state = await legacySeal({ p: "facebook", u: ada.id, r: WEB, c: b64sha(newVerifier()), n: nonce, v: newVerifier() }, "state");
+    const result = await callback("facebook", { state, code: "good-code", existingOnly: "false" }, `dl_oauth=${nonce}`);
+    expect(landing(result)).toMatchObject({ ticket: null, error: "failed" }); expect(calls).toHaveLength(0);
+    expect((await db.query("select * from user_identities")).rows).toHaveLength(0);
+  });
+
+  it("rejects an old Facebook link ticket at both redemption endpoints without attaching an identity", async () => {
+    const ada = await emailSignIn("ada@example.com"), verifier = newVerifier(), ticket = randomBytes(32).toString("base64url");
+    await db.query("insert into oauth_tickets(ticket_hash,user_id,expires_at,client_challenge,link)values($1,$2,$3,$4,$5::jsonb)",
+      [createHash("sha256").update(ticket).digest("hex"), ada.id, new Date(clock.getTime() + 60000), b64sha(verifier), JSON.stringify({ provider: "facebook", subject: "new-link", email: null, name: null })]);
+    expect((await redeemLink(ticket, verifier, ada.token)).status).toBe(400);
+    expect((await send("POST", "/auth/oauth/redeem", { ticket, verifier })).status).toBe(400);
+    expect((await db.query("select * from user_identities")).rows).toHaveLength(0);
+  });
+
+  it("does not recreate an identity unlinked while the Facebook callback was in flight", async () => {
+    const ada = await emailSignIn("ada@example.com");
+    await db.query("insert into user_identities(provider,subject,user_id)values('facebook','removed',$1)", [ada.id]);
+    beforeFacebookProfile = async () => { await db.query("delete from user_identities where provider='facebook' and subject='removed'"); };
+    expect(landing((await signInWith("facebook", { id: "removed", email: "ada@example.com" })).res)).toMatchObject({ ticket: null, error: "failed" });
+    expect((await db.query("select * from user_identities")).rows).toHaveLength(0);
+  });
+
+  it.each(["before-find", "before-consume"])("rechecks the exact Facebook subject after unlink %s without issuing a session", async when => {
+    const ada = await emailSignIn("ada@example.com");
+    await db.query("insert into user_identities(provider,subject,user_id)values('facebook','first',$1),('facebook','other',$1)", [ada.id]);
+    const result = await signInWith("facebook", { id: "first", email: "changed@example.com" });
+    const base = db.query.bind(db), remove = () => base("delete from user_identities where provider='facebook' and subject='first'");
+    if (when === "before-find") await remove();
+    else db.query = async (sql, values) => { if (sql.startsWith("update oauth_tickets t set consumed_at")) await remove(); return base(sql, values) as never; };
+    const redeemed = await send("POST", "/auth/oauth/redeem", { ticket: landing(result.res).ticket, verifier: result.verifier });
+    expect(redeemed.status).toBe(400);
+    expect((await base("select count(*)::int as n from sessions")).rows).toEqual([{ n: 1 }]);
+    expect((await base("select subject from user_identities")).rows).toEqual([{ subject: "other" }]);
+  });
+
+  it("reports the same public existing-only capability without account or email lookup", async () => {
+    const first = await (await app.request("/auth/providers?email=unknown@example.com&existingOnly=false")).json();
+    const ada = await emailSignIn("ada@example.com");
+    const second = await (await app.request("/auth/providers?email=ada@example.com&returning=true")).json();
+    expect(first).toEqual(second); expect((first as Json).providers).toContainEqual({ id: "facebook", web: true, native: true, existingOnly: true });
+    expect((await send("GET", "/me", undefined, ada.token)).status).toBe(200);
+  });
+});
+
 describe("Facebook sign-in", () => {
   it("is offered only when both the app id and the secret are set", async () => {
-    expect(((await (await app.request("/auth/providers")).json()) as Json).providers).toContainEqual({ id: "facebook", web: true, native: true });
+    expect(((await (await app.request("/auth/providers")).json()) as Json).providers).toContainEqual({ id: "facebook", web: true, native: true, existingOnly: true });
     app = makeApp({ ...fullConfig(), facebook: { appId: FB_APP, appSecret: "" } });
     expect(((await (await app.request("/auth/providers")).json()) as Json).providers.map((p: Json) => p.id)).not.toContain("facebook");
     expect((await app.request(`/auth/oauth/facebook/start?redirect=${encodeURIComponent(WEB)}&challenge=${b64sha(newVerifier())}`)).status).toBe(404);
   });
 
-  it(`runs Facebook's code flow on Graph ${FACEBOOK_GRAPH_VERSION}, with appsecret_proof, and signs in with a confirmed email`, async () => {
+  it(`runs Facebook's code flow on Graph ${FACEBOOK_GRAPH_VERSION}, with appsecret_proof, and signs in to an existing linked account`, async () => {
+    const ada = await emailSignIn("ada@example.com");
+    await db.query("insert into user_identities(provider,subject,user_id,email,name)values('facebook','10229',$1,'ada@example.com','Ada Lovelace')", [ada.id]);
     const { res, verifier, s } = await signInWith("facebook", { id: "10229", name: "Ada Lovelace", email: "Ada@Example.com" });
     expect(s.to.origin + s.to.pathname).toBe(`https://www.facebook.com/${FACEBOOK_GRAPH_VERSION}/dialog/oauth`);
     expect(Object.fromEntries([...s.to.searchParams].filter(([k]) => k !== "state"))).toEqual({
@@ -198,20 +283,15 @@ describe("Facebook sign-in", () => {
     expect(calls.filter((c) => c.startsWith(GRAPH))).toHaveLength(2);
   });
 
-  it("can't create an account without an email, but a linked Facebook signs straight in", async () => {
-    expect(landing((await signInWith("facebook", { id: "777", name: "Phone Person" })).res).error).toBe("no_email");
+  it("refuses new Facebook users without an email, but an existing linked identity needs no email", async () => {
+    expect(landing((await signInWith("facebook", { id: "777", name: "Phone Person" })).res).error).toBe("failed");
     expect((await db.query("select count(*)::int as n from users")).rows[0]).toEqual({ n: 0 });
-
     const ada = await emailSignIn("ada@example.com");
-    const l = await startLink(ada.token, "facebook");
-    const s = await openStart(l.path);
-    nextFacebook = { id: "777", name: "Phone Person" };
-    const back = landing(await callback("facebook", { code: "good-code", state: s.state }, s.cookie));
-    expect(back.intent).toBe("link");
-    expect((await redeemLink(back.ticket!, l.verifier, ada.token)).status).toBe(200);
-
-    const again = landing((await signInWith("facebook", { id: "777", name: "Phone Person" })).res);
-    expect(again.error).toBeNull();
+    await db.query("insert into user_identities(provider,subject,user_id)values('facebook','777',$1)", [ada.id]);
+    const again = await signInWith("facebook", { id: "777", name: "Phone Person" });
+    expect(landing(again.res).error).toBeNull();
+    const result = await send("POST", "/auth/oauth/redeem", { ticket: landing(again.res).ticket, verifier: again.verifier });
+    expect(result.status).toBe(200); expect(((await result.json()) as Json).user.id).toBe(ada.id);
   });
 
   it("sends a cancelled dialog back as cancelled, and a bad code or proof as failed", async () => {
@@ -290,7 +370,7 @@ describe("linking", () => {
     const parts = l.link.split(".");
     parts[3] = (parts[3]![0] === "A" ? "B" : "A") + parts[3]!.slice(1);
     expect((await app.request(`/auth/oauth/google/start?link=${parts.join(".")}`)).status).toBe(400);
-    expect((await app.request(`/auth/oauth/facebook/start?link=${l.link}`)).status).toBe(400);
+    expect((await app.request(`/auth/oauth/facebook/start?link=${l.link}`)).status).toBe(403);
     clock = new Date(clock.getTime() + 11 * 60 * 1000);
     expect((await app.request(l.path)).status).toBe(400);
   });

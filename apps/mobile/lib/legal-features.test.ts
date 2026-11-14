@@ -2,7 +2,7 @@ import { createElement } from "react";
 import { act,create,type ReactTestRenderer } from "react-test-renderer";
 import { afterEach,beforeEach,expect,it,vi } from "vitest";
 import type { LegalDocument } from "../components/legal";
-import { PRIVACY,PRIVACY_UPDATED,TERMS,TERMS_UPDATED } from "./legal";
+import { PRIVACY,PRIVACY_UPDATED,TERMS,TERMS_UPDATED,CHAT_CONTINUITY_PRIVACY } from "./legal";
 import copy from "./drafts/copy.json";
 
 (globalThis as {IS_REACT_ACT_ENVIRONMENT?:boolean}).IS_REACT_ACT_ENVIRONMENT=true;
@@ -29,7 +29,7 @@ const today=()=>{
   expect(h.documents?.[0]?.updated).toBe(PRIVACY_UPDATED);expect(h.documents?.[1]?.updated).toBe(TERMS_UPDATED);
 };
 const continuity=()=>{
-  expect(h.documents?.[0]?.sections).toContainEqual({id:"chat-continuity",heading:copy.legal.privacyHeading,body:copy.legal.privacyBody});
+  expect(h.documents?.[0]?.sections).toContainEqual({id:"chat-continuity",heading:copy.legal.privacyHeading,body:[CHAT_CONTINUITY_PRIVACY,...copy.legal.privacyBody.slice(1)]});
   expect(h.documents?.[1]?.sections).toContainEqual({id:"chat-continuity-terms",heading:copy.legal.termsHeading,body:copy.legal.termsBody});
   expect(JSON.stringify(root?.toJSON())).toContain(copy.legal.privacyHeading);
   expect(h.documents?.[0]?.sections.slice(0,PRIVACY.length)).toEqual(PRIVACY);
@@ -63,4 +63,14 @@ it("ignores a reply arriving after the legal page unmounts",async()=>{
   let complete!:(response:Response)=>void;request.mockImplementationOnce(()=>new Promise<Response>(resolve=>{complete=resolve;}));
   await mount();const documents=h.documents;await act(async()=>root?.unmount());root=undefined;
   await act(async()=>complete(Response.json({chatContinuity:true})));expect(h.documents).toBe(documents);
+});
+it.each([false,true])("renders the direct-Claude pilot disclosure with history=%s and keeps Facebook login separate",async history=>{
+  h.clientHistory=history;await mount();
+  const visible=JSON.stringify(root?.toJSON());
+  expect(visible).toContain("Claude Haiku 5.5");expect(visible).toContain("real photos it checks");
+  expect(visible).toContain("no Meta AI fallback");expect(visible).toContain("cutouts are unavailable");
+  expect(visible).toContain("Facebook sign-in is only for accounts already linked");
+  expect(visible).not.toContain("When Meta can't take more");expect(visible).not.toContain("recording goes to Meta");
+  expect(visible).not.toContain("when a different AI service answers");
+  expect(h.documents?.[0]?.updated).toBe(PRIVACY_UPDATED);
 });

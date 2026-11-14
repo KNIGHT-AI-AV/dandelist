@@ -452,6 +452,8 @@ export function oauthRoutes(deps: OAuthRouteDeps, issueSession: (userId: string)
   async function accountFor(p: Provider, profile: Profile): Promise<string> {
     const known = await ownerOf(p, profile.subject);
     if (known) return known;
+    // Facebook is returning-only: never provision or attach by matching its email.
+    if (p === "facebook") throw new OAuthFailure("failed");
     if (!profile.email || !profile.emailVerified) throw new OAuthFailure("no_email");
     const email = normalizeEmail(profile.email);
     await db.query("insert into users (email) values ($1) on conflict (email) do nothing", [email]);
@@ -465,7 +467,8 @@ export function oauthRoutes(deps: OAuthRouteDeps, issueSession: (userId: string)
   }
 
   /** Adds an identity to `userId`. "taken" when it already belongs to another account; linking it again is fine. */
-  async function attach(userId: string, link: LinkIdentityRow): Promise<"linked" | "taken"> {
+  async function attach(userId: string, link: LinkIdentityRow): Promise<"linked" | "taken" | "disabled"> {
+    if (link.provider === "facebook") return "disabled";
     await db.query("insert into user_identities (provider, subject, user_id, email, name) values ($1, $2, $3, $4, $5) on conflict (provider, subject) do nothing", [
       link.provider,
       link.subject,
@@ -478,7 +481,7 @@ export function oauthRoutes(deps: OAuthRouteDeps, issueSession: (userId: string)
 
   const takenMessage = (p: Provider) => `That ${PROVIDER_NAMES[p]} account is already linked to another Dandelist account. Sign in with it there and unlink it first.`;
 
-  async function issueTicket(userId: string, challenge: string, link?: LinkIdentityRow): Promise<string> {
+  async function issueTicket(userId: string, challenge: string, link?: LinkIdentityRow, facebookSubject?: string): Promise<string> {
     const ticket = randomToken(32);
     const nowMs = deps.now().getTime();
     await db.query("delete from oauth_tickets where expires_at < $1", [new Date(nowMs - 60 * 60 * 1000).toISOString()]);
@@ -487,7 +490,7 @@ export function oauthRoutes(deps: OAuthRouteDeps, issueSession: (userId: string)
       userId,
       new Date(nowMs + TICKET_TTL_MS).toISOString(),
       challenge,
-      link ? JSON.stringify(link) : null,
+      link ? JSON.stringify(link) : facebookSubject !== undefined ? JSON.stringify({ kind: "facebook_signin", subject: facebookSubject }) : null,
     ]);
     return ticket;
   }
@@ -514,7 +517,7 @@ export function oauthRoutes(deps: OAuthRouteDeps, issueSession: (userId: string)
   };
 
   app.get("/providers", (c) => {
-    const providers = PROVIDERS.map((id) => ({ id, web: webEnabled[id], native: id === "apple" ? !!appleBundleId : webEnabled[id] })).filter((p) => p.web || p.native);
+    const providers = PROVIDERS.map((id) => ({ id, web: webEnabled[id], native: id === "apple" ? !!appleBundleId : webEnabled[id], ...(id === "facebook" ? { existingOnly: true } : {}) })).filter((p) => p.web || p.native);
     c.header("Cache-Control", "public, max-age=300");
     return c.json({ providers });
   });
@@ -526,6 +529,7 @@ export function oauthRoutes(deps: OAuthRouteDeps, issueSession: (userId: string)
     // A link carries everything (whose account, where to return, the app's challenge), sealed by
     // POST /auth/link/<provider>; a sign-in takes the address and the challenge from the query.
     const rawLink = c.req.query("link");
+    if (p === "facebook" && rawLink) return c.json({ error: "That sign-in option isn't available." }, 403);
     const link = rawLink ? await linkCodec.open(rawLink, deps.now()) : null;
     if (rawLink && (!link || link.p !== p)) return c.text("This link has expired or isn't valid. Go back to Dandelist and try again.", 400);
     const redirect = link?.r ?? c.req.query("redirect") ?? "";
@@ -561,9 +565,16 @@ export function oauthRoutes(deps: OAuthRouteDeps, issueSession: (userId: string)
     if (!callbacksPerIp.take(ip(c), deps.now().getTime())) return bounce("failed");
     if (params.error) return bounce(params.error === "access_denied" || params.error === "user_cancelled_authorize" ? "cancelled" : "failed");
     if (!webEnabled[p]) return bounce("failed");
+    // Old sealed link URLs cannot create a new Facebook association, including callbacks already in flight.
+    if (p === "facebook" && s.u) return bounce("failed");
 
     try {
       const profile = await finish(p, params, s);
+      if (p === "facebook") {
+        const existing = await ownerOf(p, profile.subject);
+        if (!existing) return bounce("failed");
+        return back(`ticket=${await issueTicket(existing, s.c, undefined, profile.subject)}`);
+      }
       if (s.u) {
         // A link needs no email: the account is already known. It must never take an identity from someone else.
         const owner = await ownerOf(p, profile.subject);
@@ -583,6 +594,12 @@ export function oauthRoutes(deps: OAuthRouteDeps, issueSession: (userId: string)
   app.get("/oauth/:provider/callback", callback);
   app.post("/oauth/:provider/callback", callback);
 
+  // Reuse the existing ticket JSON for a discriminated sign-in binding, without a schema change. Normal link
+  // tickets never qualify. Recheck the exact Facebook subject on consumption so unlink/deletion races fail shut.
+  const signInTicket = `(t.link is null or (t.link->>'kind' = 'facebook_signin' and exists (
+    select 1 from user_identities i where i.provider = 'facebook' and i.subject = t.link->>'subject' and i.user_id = t.user_id
+  )))`;
+
   app.post("/oauth/redeem", async (c) => {
     noStore(c);
     const parsed = redeemBody.safeParse(await c.req.json().catch(() => null));
@@ -592,7 +609,7 @@ export function oauthRoutes(deps: OAuthRouteDeps, issueSession: (userId: string)
     const expired = () => c.json({ error: "That sign-in has expired. Try again." }, 400);
     // Link tickets never sign anyone in; only /auth/link/redeem takes them.
     const found = await db.query<{ id: string; client_challenge: string }>(
-      "select id, client_challenge from oauth_tickets where ticket_hash = $1 and consumed_at is null and expires_at > $2 and link is null",
+      `select t.id, t.client_challenge from oauth_tickets t where t.ticket_hash = $1 and t.consumed_at is null and t.expires_at > $2 and ${signInTicket}`,
       [sha256hex(parsed.data.ticket), nowIso],
     );
     const ticket = found.rows[0];
@@ -600,7 +617,7 @@ export function oauthRoutes(deps: OAuthRouteDeps, issueSession: (userId: string)
     // unspent, so an app that caught the redirect can't use it up before the real app does.
     if (!ticket || !verifierMatches(parsed.data.verifier, ticket.client_challenge)) return expired();
     const { rows } = await db.query<{ user_id: string }>(
-      "update oauth_tickets set consumed_at = $2 where id = $1 and consumed_at is null returning user_id",
+      `update oauth_tickets t set consumed_at = $2 where t.id = $1 and t.consumed_at is null and t.expires_at > $2 and ${signInTicket} returning t.user_id`,
       [ticket.id, nowIso],
     );
     if (!rows[0]) return expired();
@@ -655,7 +672,7 @@ export function oauthRoutes(deps: OAuthRouteDeps, issueSession: (userId: string)
     const userId = c.get("userId");
     const nowIso = deps.now().toISOString();
     const found = await db.query<{ id: string; client_challenge: string; user_id: string }>(
-      "select id, client_challenge, user_id from oauth_tickets where ticket_hash = $1 and consumed_at is null and expires_at > $2 and link is not null",
+      "select id, client_challenge, user_id from oauth_tickets where ticket_hash = $1 and consumed_at is null and expires_at > $2 and link is not null and link->>'provider' in ('google','github','apple')",
       [sha256hex(parsed.data.ticket), nowIso],
     );
     const ticket = found.rows[0];
@@ -663,7 +680,9 @@ export function oauthRoutes(deps: OAuthRouteDeps, issueSession: (userId: string)
     const { rows } = await db.query<{ link: unknown }>("update oauth_tickets set consumed_at = $2 where id = $1 and consumed_at is null returning link", [ticket.id, nowIso]);
     if (!rows[0]) return expired();
     const link = (typeof rows[0].link === "string" ? JSON.parse(rows[0].link) : rows[0].link) as LinkIdentityRow;
-    if ((await attach(userId, link)) === "taken") return c.json({ error: takenMessage(link.provider) }, 409);
+    const outcome = await attach(userId, link);
+    if (outcome === "disabled") return expired();
+    if (outcome === "taken") return c.json({ error: takenMessage(link.provider) }, 409);
     return c.json({ identities: await listIdentities(db, userId) });
   });
 
@@ -693,6 +712,7 @@ export function oauthRoutes(deps: OAuthRouteDeps, issueSession: (userId: string)
   app.post("/link/:provider", auth, async (c) => {
     noStore(c);
     const p = c.req.param("provider") as Provider;
+    if (p === "facebook") return c.json({ error: "That sign-in option isn't available." }, 403);
     if (!PROVIDERS.includes(p) || !webEnabled[p]) return c.json({ error: "That sign-in option isn't available." }, 404);
     const parsed = linkStartBody.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: "That request is incomplete. Update Dandelist and try again." }, 400);

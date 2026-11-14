@@ -7,18 +7,19 @@ import type { LegalSection } from "../components/legal";
  * https://dandelist.knightaiav.com/legal?section=deletion
  */
 
-export const PRIVACY_UPDATED = "Last updated November 6, 2026";
+export const PRIVACY_UPDATED = "Last updated November 14, 2026";
 export const PRIVACY: LegalSection[] = [
   {
     heading: "What Dandelist is",
     body: [
-      "Dandelist is a free, open-source app from Knight AI+AV. You list the things you want, an AI agent looks up their real prices, and the app shows what they cost and what it takes to keep them.",
+      "Dandelist is a free, open-source app from Knight AI+AV. You list the things you want, an AI agent can read pages to help check prices, and the app shows costs and estimates for keeping them.",
     ],
   },
   {
     heading: "What we collect",
     body: [
       "Your email address, so you can sign in. If you sign in with Apple, Google, GitHub or Facebook, we receive your email address and, when the service shares it, your name. From Facebook we ask only for your public profile and your email address.",
+      "Facebook sign-in is only for accounts already linked to it. New Facebook sign-ups and links are unavailable. You can use email or another available sign-in option.",
       "If you add them in Settings, a display name, a profile photo and where you would like to live. You can change or remove each of them at any time.",
       "The wishes you add: what you describe, the prices and sources the agent found, and the choices you make, such as your monthly amount, your timeline and your theme.",
       "Before you create an account, your picks and your first wish are kept on your device, not in an account. To preview your list, the app sends your picks to our server, which adds them up without AI. Nothing you add goes to an AI service until you have an account and have agreed to how Dandelist uses AI; your first wish is priced after that. We don't store your picks; they join an account only when you save your list to one.",
@@ -28,19 +29,18 @@ export const PRIVACY: LegalSection[] = [
   {
     heading: "How the agent uses your words",
     body: [
-      "To price a wish, we send what you typed, and the answers you give to its questions, to Meta's Model API, which runs the Muse Spark model. The agent then searches the web and reads sellers' pages to check prices.",
-      "When Meta can't take more of the app's requests, such as once the app's Meta allowance for the day is used up, the same words may go to Anthropic's Claude API instead, which does the same work. Recordings are only ever written down by Meta.",
-      "If you say a wish instead of typing it, the recording goes to Meta's Model API to be written down. We don't store the recording.",
+      "To help price a wish, we send what you type, your answers and relevant saved wishes, chat context and memory to Anthropic's Claude API, using Claude Haiku 5.5. Page content the agent reads and real photos it checks may also be sent to Claude.",
+      "This pilot has no Meta AI fallback. Live web search, voice input, image generation, upscaling and cutouts are unavailable. The agent can still read pages to check prices.",
       "When you ask for facts about your list in Settings, we send your wishes and the place you would like to live, so the agent can write them.",
       "In the chat, your Dandy keeps a few short lines about you for next time, such as who your gifts are for or what you love, read from what you tell it. It is told to leave out your health, beliefs, income, debts and contact details, and lines that look like an address, a phone number, an email or a money figure are dropped. You can see and remove each line in Settings, and they are deleted with your account.",
-      "We don't send your email address or name to Meta or Anthropic. We use Meta's standard models, not the modes that let Meta train on your data, and Anthropic doesn't train its models on what its API is sent.",
-      "The first time you sign in, we ask you to agree to this and to confirm that you are 18 or older. Nothing goes to Meta or Anthropic before you do. We keep your answer, and when you gave it, with your account, so you are asked once and not on every device.",
+      "Anything you include in messages, photos or page content may be sent to Claude. Anthropic's default policy is not to train models on API inputs or outputs.",
+      "The first time you sign in, we ask you to agree to this and to confirm that you are 18 or older. No AI request is sent before you agree. We keep your answer, and when you gave it, with your account, so you are asked once and not on every device.",
     ],
   },
   {
     heading: "What we don't do",
     body: [
-      "We don't sell your data, show ads, or share your wishes with anyone. We don't connect to your bank or ask for financial details. We don't post anything to Facebook or any other account you sign in with.",
+      "We don't sell your data or show ads. We don't connect to your bank or ask for financial details. We don't post anything to Facebook or any other account you sign in with.",
     ],
   },
   {
@@ -109,3 +109,6 @@ export const TERMS: LegalSection[] = [
     body: ["We may update these terms and will change the date above when we do. Questions: build@knightaiav.com."],
   },
 ];
+
+/** Current wording for the existing optional history section; retention and feature gates are unchanged. */
+export const CHAT_CONTINUITY_PRIVACY = "We keep temporary copies of chat text and the information used to answer it on our server. This lets the app continue a conversation using saved context. Each copy expires 30 days after it is created. Continuing a conversation can create a new copy.";

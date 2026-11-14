@@ -64,7 +64,7 @@ export function LinkedAccounts({
   return (
     <>
       <Card>
-        {PROVIDER_ORDER.map((id, i) => {
+        {PROVIDER_ORDER.filter(id => id !== "facebook" || identities === null || identities.some(x => x.provider === "facebook")).map((id, i) => {
           const linked = (identities ?? []).filter((x) => x.provider === id);
           const option = options?.find((o) => o.id === id) ?? null;
           const who = linked.map((x) => x.email ?? x.name).filter(Boolean)[0];

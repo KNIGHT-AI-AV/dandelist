@@ -13,10 +13,11 @@ import { layout, space, type, usePalette, useType } from "../lib/theme";
 /** The page's words, the same as the privacy policy's (lib/legal.ts): who gets what, and the age. */
 export const CONSENT = {
   eyebrow: "Before you start",
-  title: "Dandelist works with Meta's AI",
+  title: "Dandelist works with Anthropic's Claude",
   lines: [
-    "To price what you want, it sends what you type or say, and your answers, to Meta's AI. When Meta is busy, Anthropic's Claude does the same work.",
-    "Neither gets your name or email, and neither trains on what you send.",
+    "After you agree, Dandelist sends your typed wishes, answers and relevant saved context to Anthropic's Claude API. Photos it checks and page content it reads may also be sent.",
+    "This pilot has no Meta AI fallback. Voice input, image generation and live web search are unavailable.",
+    "Anthropic's default policy is not to train models on API inputs or outputs.",
   ],
   age: "You need to be 18 or older to use it.",
   agree: "I'm 18 or older and I agree",

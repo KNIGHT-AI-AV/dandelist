@@ -4,7 +4,7 @@ import { useState } from "react";
 import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { providerName, type ProviderId, type SignInOption } from "../lib/auth";
 import { radius, type, usePalette } from "../lib/theme";
-import { Eyebrow, Glass, Hairline } from "./lux";
+import { Eyebrow, Glass, Hairline, QuietButton } from "./lux";
 
 /**
  * Google, GitHub, Facebook and Apple sign-in buttons for the sign-in screen and the welcome save sheet, set in the lux
@@ -42,7 +42,7 @@ export function ProviderMark({ id, size = 32 }: { id: ProviderId; size?: number 
 function FacebookButton({ busy, disabled, onPress }: { busy: boolean; disabled: boolean; onPress(): void }) {
   const p = usePalette();
   const [focused, setFocused] = useState(false);
-  const label = "Continue with Facebook";
+  const label = "Sign in with linked Facebook";
   const inactive = disabled || busy;
   return (
     <Pressable
@@ -132,20 +132,26 @@ function AppleSheetButton({ busy, disabled, onPress }: { busy: boolean; disabled
 }
 
 /** The provider buttons, then a quiet "or" rule above the email form. Renders nothing when no provider is on. */
-export function SignInOptions({ options, pending, disabled, onChoose }: { options: SignInOption[]; pending: ProviderId | null; disabled: boolean; onChoose(option: SignInOption): void }) {
+export function SignInOptions({ options, pending, disabled, onChoose, allowReturningFacebook = false }: { options: SignInOption[]; pending: ProviderId | null; disabled: boolean; onChoose(option: SignInOption): void; allowReturningFacebook?: boolean }) {
   const p = usePalette();
-  if (!options.length) return null;
+  const [showFacebook, setShowFacebook] = useState(false);
+  const newAccountOptions = options.filter(o => o.id !== "facebook");
+  const facebook = allowReturningFacebook ? options.find(o => o.id === "facebook") : undefined;
+  if (!newAccountOptions.length && !facebook) return null;
   return (
     <View style={{ gap: 12 }}>
-      {options.map((o) =>
+      {newAccountOptions.map((o) =>
         o.native && o.id === "apple" ? (
           <AppleSheetButton key={o.id} busy={pending === o.id} disabled={disabled || (pending !== null && pending !== o.id)} onPress={() => onChoose(o)} />
-        ) : o.id === "facebook" ? (
-          <FacebookButton key={o.id} busy={pending === o.id} disabled={disabled || (pending !== null && pending !== o.id)} onPress={() => onChoose(o)} />
         ) : (
           <ProviderButton key={o.id} id={o.id} busy={pending === o.id} disabled={disabled || (pending !== null && pending !== o.id)} onPress={() => onChoose(o)} />
         ),
       )}
+      {facebook ? showFacebook ? (
+        <FacebookButton busy={pending === "facebook"} disabled={disabled || (pending !== null && pending !== "facebook")} onPress={() => onChoose(facebook)} />
+      ) : (
+        <QuietButton label="Already linked with Facebook?" onPress={() => { if (!disabled && pending === null) setShowFacebook(true); }} />
+      ) : null}
       <View style={{ flexDirection: "row", alignItems: "center", gap: 16, marginTop: 8 }} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
         <Hairline style={{ flex: 1 }} />
         <Eyebrow color={p.ink3}>or</Eyebrow>

@@ -157,7 +157,7 @@ export default function SignIn() {
               </Rise>
               {options ? (
                 <Rise {...enter(3)}>
-                  <SignInOptions options={options} pending={provider} disabled={busy} onChoose={continueWith} />
+                  <SignInOptions options={options} pending={provider} disabled={busy} onChoose={continueWith} allowReturningFacebook />
                 </Rise>
               ) : null}
               <Rise {...enter(4)}>
