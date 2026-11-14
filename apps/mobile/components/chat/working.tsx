@@ -136,17 +136,21 @@ export function StreamText({ text, fresh, style }: { text: string; fresh: boolea
   const [shown, setShown] = useState(fresh ? 0 : total);
   useEffect(() => {
     if (!fresh || reduced) return setShown(total);
-    // About a second and a half for a long line, quicker for a short one, never a crawl.
-    const per = Math.max(12, Math.min(38, 1500 / Math.max(1, total)));
-    let i = 0;
-    const timer = setInterval(() => {
-      i += 2;
-      setShown(Math.min(i, total));
-      if (i >= total) clearInterval(timer);
-    }, per * 2);
-    return () => clearInterval(timer);
-  }, [fresh, reduced, total]);
-  const done = shown >= total;
+    // Long replies finish within 1.5 s; short ones stay quicker. Elapsed time catches up after a delayed frame.
+    const duration = Math.min(1500, Math.ceil(total / 2) * 76);
+    const started = Date.now();
+    let timer: ReturnType<typeof setTimeout>;
+    const reveal = () => {
+      const elapsed = Math.max(0, Date.now() - started);
+      const next = Math.min(total, Math.ceil((total * elapsed) / duration / 2) * 2);
+      setShown(next);
+      if (next < total) timer = setTimeout(reveal, Math.min(32, duration - elapsed));
+    };
+    setShown(0);
+    timer = setTimeout(reveal, Math.min(32, duration));
+    return () => clearTimeout(timer);
+  }, [text, fresh, reduced, total]);
+  const done = !fresh || reduced || shown >= total;
   return (
     <Text style={style} accessibilityLabel={text}>
       {done ? text : parts.slice(0, shown).join("")}
