@@ -131,10 +131,11 @@ export function WorkLog({ steps, live }: { steps: StepLine[]; live: boolean }) {
  */
 export function StreamText({ text, fresh, style }: { text: string; fresh: boolean; style?: StyleProp<TextStyle> }) {
   const reduced = useReducedMotion();
-  const parts = useMemo(() => text.split(/(\s+)/), [text]);
+  const parts = useMemo(() => (text ? text.split(/(\s+)/) : []), [text]);
   const total = parts.length;
   const [shown, setShown] = useState(fresh ? 0 : total);
   useEffect(() => {
+    if (!total) return setShown(0);
     if (!fresh || reduced) return setShown(total);
     // Long replies finish within 1.5 s; short ones stay quicker. Elapsed time catches up after a delayed frame.
     const duration = Math.min(1500, Math.ceil(total / 2) * 76);

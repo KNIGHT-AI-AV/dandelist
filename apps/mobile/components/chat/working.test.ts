@@ -37,6 +37,31 @@ afterEach(async () => {
 });
 
 describe("received reply reveal", () => {
+  it("leaves an empty reply empty without scheduling animation", async () => {
+    await render("");
+    expect(visible()).toBe("");
+    expect(allText(outer())).toBe("");
+    expect(outer().props.accessibilityLabel).toBe("");
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("cancels a running reveal when emptied and can reveal the next reply", async () => {
+    await render(reply(200));
+    await advance(100);
+    expect(vi.getTimerCount()).toBe(1);
+    await render("");
+    expect(visible()).toBe("");
+    expect(allText(outer())).toBe("");
+    expect(vi.getTimerCount()).toBe(0);
+    await advance(5000);
+    expect(vi.getTimerCount()).toBe(0);
+    const next = reply(500);
+    await render(next);
+    await advance(1500);
+    expect(visible()).toBe(next);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it.each([200, 500])("fully reveals %i words within 1.5 seconds, retaining every word and the accessible label", async (words) => {
     const text = reply(words);
     await render(text);
