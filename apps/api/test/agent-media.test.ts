@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { accepted } from "./consent-helper";
 import type { Meta, PriceOption, Step } from "../src/agent/agent";
 import { findMakerPages, huntMedia, upscaleImage } from "../src/agent/hunt";
-import { createApp } from "../src/app";
+import { createApp } from "./fixture-app";
 import { migrate, type Db } from "../src/db";
 import { memoryMediaStore } from "../src/media-store";
 import { imageResponse, jpegHeader, productJpeg, webpHeader } from "./images";
@@ -216,7 +216,7 @@ describe("shopping search in the agent", () => {
 
     // New tools leave notes with a structured event, so the app's existing ledger draws them as they are.
     expect(new Set(run.steps.map((s: Step) => s.type))).toEqual(new Set(["open", "check", "price", "explain", "note"]));
-    expect(eventsOf(run.steps)).toEqual(expect.arrayContaining(["shop", "imagework", "photos"]));
+    expect(eventsOf(run.steps)).toEqual(expect.arrayContaining(["shop", "photos"]));
     // Real photographs only (owner, 2026-10-29): the agent no longer looks for 3D models.
     expect(eventsOf(run.steps).some((k) => k === "search3d" || k === "model3d")).toBe(false);
     expect(run.steps.find((s: Step) => s.type === "note" && s.event?.kind === "shop")).toMatchObject({ text: "Searched shops for Leica Q3: 2 offers", event: { kind: "shop", query: "Leica Q3", offers: 2 } });
@@ -224,7 +224,7 @@ describe("shopping search in the agent", () => {
 
     const ledger = await db.query<{ model: string; cost_usd: string }>("select model, cost_usd from spend_ledger where kind <> 'interpret' order by id");
     expect(ledger.rows.find((r) => r.model === "apify:damilo~google-shopping-apify")?.cost_usd).toBe("0.007000");
-    expect(ledger.rows.filter((r) => r.model === "sam-3.1").map((r) => r.cost_usd)).toEqual(["0.002500"]);
+    expect(ledger.rows.filter((r) => r.model === "sam-3.1").map((r) => r.cost_usd)).toEqual([]);
     expect(run.costUsd).toBeGreaterThan(0.0095);
     // The tools the model was offered, and the date it was told
     const first = metaCalls.find((c) => (c.tools ?? []).some((t: { name?: string }) => t.name === "shopping_search"))!;
@@ -250,7 +250,7 @@ describe("shopping search in the agent", () => {
 });
 
 describe("media hunting in the agent", () => {
-  it("gives each option real photos best first and a SAM cutout, looks for no 3D model, and serves the cutout", async () => {
+  it("gives each option real photos best first and never calls segmentation even with legacy flags enabled", async () => {
     const t = await signIn("ada@example.com");
     const run = await runWish(t);
     const leica = run.result.options[0] as PriceOption;
@@ -264,19 +264,11 @@ describe("media hunting in the agent", () => {
     expect(media.images[2]!.credit).toBe("Adorama");
     expect(leica.imageUrl).toBe("https://leica-camera.com/img/q3-top.webp");
     expect(media.model3d).toBeUndefined();
-    expect(media.cutout).toMatchObject({ width: 1001, height: 763, from: "https://leica-camera.com/img/q3-front.jpg", model: "sam-3.1" });
-    // One cutout serves every option that shares the photo; nothing generated, since a real photo passed 2000 px.
-    expect(metaCalls.filter((c) => c.model === "sam-3.1")).toHaveLength(1);
+    expect(media.cutout).toBeUndefined();
+    expect(metaCalls.filter((c) => c.model === "sam-3.1")).toHaveLength(0);
     expect(metaCalls.some((c) => String(c.url).includes("/images/"))).toBe(false);
-    expect((run.result.options[1] as PriceOption).media!.cutout!.url).toBe(media.cutout!.url);
-    // With no Commons photos to choose from and no 3D models, there is nothing for a pick call to choose.
+    expect((run.result.options[1] as PriceOption).media!.cutout).toBeUndefined();
     expect(metaCalls.some((c) => c.text?.format?.name === "media_pick")).toBe(false);
-
-    const key = media.cutout!.url.split("/media/")[1]!;
-    const served = await app.request(`/media/${key}`);
-    expect(served.status).toBe(200);
-    expect(served.headers.get("content-type")).toBe("image/png");
-    expect(served.headers.get("x-content-type-options")).toBe("nosniff");
     expect((await app.request("/media/../../etc/passwd")).status).toBe(404);
     expect((await app.request(`/media/${"0".repeat(64)}.png`)).status).toBe(404);
 

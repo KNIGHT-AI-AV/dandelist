@@ -1,5 +1,6 @@
+import { inferenceFor, inferenceReady, inferenceAvailable, INFERENCE_UNAVAILABLE, VOICE_UNAVAILABLE, type InferenceSetup } from "./inference";
 import { reservedFetch } from "./spend";
-import { MetaApiError, MetaClient } from "@dandelist/meta";
+import { MetaApiError } from "@dandelist/meta";
 import { Hono } from "hono";
 import { z } from "zod";
 import type { Meta } from "./agent/agent";
@@ -15,7 +16,6 @@ import { readLife } from "./dream/life";
 import { notesFor } from "./notes";
 import { stoppable } from "./sse";
 import { HOLD_USD, SpendLimitError, assertBudget, assertUserBudget, recordSpend, userCapUsd, withHold } from "./spend";
-import { claudeFor, claudeGuard, eitherReady, modelFor } from "./under";
 
 /**
  * Today's pick (owner, 2026-10-29: "intelligent suggestions... Maybe we'll do something like daily item suggestions
@@ -373,7 +373,7 @@ export function pickRoutes(deps: AgentDeps) {
     const now = deps.now();
     const mine = await rowFor(userId, day);
     if (mine && settled(mine, now.getTime())) return c.json(answer(mine, now.getTime()));
-    if (!deps.meta) return c.json({ pick: null });
+    if (!inferenceAvailable(deps)) return c.json({ pick: null });
     const wishes = (await db.query<{ name: string; kind: string }>("select name, kind from wishes where user_id = $1 order by created_at desc limit $2", [userId, WISHES_READ])).rows;
     if (!wishes.length) return c.json({ pick: null });
 
@@ -384,13 +384,12 @@ export function pickRoutes(deps: AgentDeps) {
     }
     const close = (status: "failed" | "none") => db.query("update daily_picks set status = $2, updated_at = $3 where id = $1", [id, status, deps.now().toISOString()]);
     const guard = async () => {
-      await assertBudget(db, caps, deps.now());
-      await assertUserBudget(db, userId, await userCapUsd(db, userId, USER_DAILY_USD, deps.judge, caps, deps.now()), deps.now());
+      await inferenceReady(deps, userId, USER_DAILY_USD);
     };
 
     // Over the person's allowance, or the service's: no pick today, and no more tries today.
     try {
-      await eitherReady(guard, claudeGuard(deps, userId, USER_DAILY_USD));
+      await guard();
     } catch (e) {
       await close(e instanceof SpendLimitError ? "none" : "failed");
       if (e instanceof SpendLimitError) return c.json({ pick: null });
@@ -398,12 +397,7 @@ export function pickRoutes(deps: AgentDeps) {
     }
 
     const stop = new AbortController();
-    const client = new MetaClient({ ...deps.meta, fetch: reservedFetch(stoppable(deps.meta.fetch ?? fetch, stop.signal)), onUsage: (usage, cost) => recordSpend(db, userId, "pick", usage, cost, deps.now()) });
-    // Every call holds its own share of the caps while it runs, as the agent's do (agent/routes.ts): a look at one
-    // photo a fifth of a full call, and past the person's in-flight slots a call waits its turn (spend.ts). The stop
-    // reaches the queue too, so no call starts once this pick has answered.
-    // Meta first; Claude only once Meta's spend is used up (under.ts).
-    const meta: Meta = { responses: modelFor(deps, userId, (b) => withHold(db, guard, () => client.responses(b), userId, holdFor(b), stop.signal), claudeFor(deps, userId, "pick", { personUsd: USER_DAILY_USD, signal: stop.signal, usd: holdFor })) };
+    const meta: Meta = inferenceFor(deps, userId, "pick", { personUsd: USER_DAILY_USD, signal: stop.signal });
     try {
       const [life, notes, past] = await Promise.all([
         readLife(db, userId),

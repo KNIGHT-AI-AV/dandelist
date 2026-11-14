@@ -11,6 +11,16 @@ export interface SpendCaps {
   totalUsd: number;
 }
 
+/** The selected direct-Claude route: the same SQL mutex/holds, with daily/lifetime and per-run admission. */
+export async function collectInferencePolicy(db: Db, dailyUsd: number, totalUsd: number, now: Date, scope?: string, runUsd?: number, calls?: number): Promise<void> {
+  collectPolicy(db, { pool: "claude", type: "global", since: dayStart(now).toISOString(), cap: dailyUsd, total: totalUsd });
+  if (scope) collectPolicy(db, { pool: "claude", type: "run", since: new Date(0).toISOString(), scope, cap: runUsd!, calls });
+  const { rows } = await db.query<{ today: string; total: string }>("select coalesce(sum(cost_usd),0) as today,(select usd from spend_pool_totals where pool='claude') as total from spend_ledger where model like 'claude-%' and created_at >= $1", [dayStart(now).toISOString()]);
+  const held = await heldInPool(db, "claude");
+  if (Number(rows[0]?.total ?? 0) + held >= totalUsd) throw new SpendLimitError("total");
+  if (Number(rows[0]?.today ?? 0) + held >= dailyUsd) throw new SpendLimitError("daily");
+}
+
 /**
  * Outside services (Apify's free monthly credit) share the ledger under a "<provider>:" model name. They have their
  * own daily cap, so they stay out of the Meta caps below.

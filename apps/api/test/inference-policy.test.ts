@@ -24,14 +24,14 @@ describe("no-Meta candidate admission boundary (no provider invocation)", () => 
       body: { model: "claude-haiku-5-5", max_output_tokens: 1024, max_tool_calls: 4 } });
   });
 
-  it("admits an explicitly funded Bedrock profile without using direct Anthropic or Meta", async () => {
+  it("refuses a competing Bedrock route even with a funding assertion", async () => {
     const p = policy();
     p.provider = p.funding.provider = "aws-bedrock";
     p.billingAccountId = p.funding.billingAccountId = "111111111111";
     p.modelId = "us.amazon.nova-2-lite-v1:0"; p.funding.modelIds = [p.modelId];
     const send = vi.fn(async d => d.endpoint);
-    await expect(createNoMetaDispatcher(p, send, reserve, () => now)(request())).resolves.toBe("https://bedrock-runtime.us-east-1.amazonaws.com");
-    expect(send).toHaveBeenCalledOnce();
+    expect(() => createNoMetaDispatcher(p, send, reserve, () => now)).toThrow("allowlist");
+    expect(send).not.toHaveBeenCalled();
   });
 
   it.each([undefined, {}, { ...policy(), provider: "meta" }, { ...policy(), fallback: "meta" }])("rejects absent/legacy/implicit funding configuration before dispatch", p => {

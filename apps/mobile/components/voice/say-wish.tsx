@@ -1,54 +1,18 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { Animated, Pressable, Text, View } from "react-native";
-import { ease, haptic, native, spring, step, useReducedMotion, usePress } from "../../lib/motion";
+import { ease, native, spring, step, useReducedMotion, usePress } from "../../lib/motion";
 import { layout, type, usePalette } from "../../lib/theme";
 import { AgentDot, Eyebrow, Glass, Icon } from "../lux";
 import { BARS } from "./recorder-types";
-import { useRecorder } from "./use-recorder";
 
 export type VoicePhase = "idle" | "listening" | "hearing";
 
 /**
- * Say your wish. Tap the microphone, say it the way you'd tell a friend, and it stops by itself when you pause; Muse
- * Voice Transcribe writes it down and the words land in the field to check before pricing. Typing stays one tap away.
+ * Voice is unavailable during the no-Meta cutover. Typed wishes stay available; no clip is dispatched.
  */
-/** `transcribe` sends the clip: the signed-in route (lib/agent transcribeWish) or, before sign-in, the guest one. */
-export function useVoiceWish({ transcribe, onHeard, onError }: { transcribe(wav: Uint8Array): Promise<string>; onHeard(text: string): void; onError(message: string | null): void }) {
-  const [phase, setPhase] = useState<VoicePhase>("idle");
-  const recorder = useRecorder({
-    onClip: async (wav) => {
-      setPhase("hearing");
-      try {
-        const text = await transcribe(wav);
-        haptic.success();
-        onHeard(text);
-      } catch (e) {
-        haptic.error();
-        onError((e as Error).message);
-      } finally {
-        setPhase("idle");
-      }
-    },
-    onError: (message) => {
-      setPhase("idle");
-      onError(message);
-    },
-  });
-  const toggle = () => {
-    if (phase === "hearing") return;
-    if (recorder.listening) {
-      haptic.select();
-      return recorder.stop();
-    }
-    haptic.soft();
-    onError(null);
-    setPhase("listening");
-    // When the microphone is refused, start() returns without listening and onError says why.
-    void recorder.start();
-  };
-  // Listening shows only once the microphone is really open, so a permission prompt never sits over a fake panel.
-  const live = phase === "listening" && recorder.listening;
-  return { supported: recorder.supported, phase: live ? "listening" : phase === "hearing" ? "hearing" : "idle", levels: recorder.levels, elapsedMs: recorder.elapsedMs, toggle, cancel: recorder.cancel } as const;
+export function useVoiceWish({ onError }: { transcribe(wav: Uint8Array): Promise<string>; onHeard(text: string): void; onError(message: string | null): void }) {
+  return { supported: false as boolean, phase: "idle" as VoicePhase, levels: [] as number[], elapsedMs: 0,
+    toggle: () => onError("Voice input is unavailable. Type your wish instead."), cancel: () => {} };
 }
 export type VoiceWish = ReturnType<typeof useVoiceWish>;
 

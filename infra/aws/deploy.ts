@@ -6,8 +6,6 @@
  */
 import { execFileSync } from "node:child_process";
 import { randomInt } from "node:crypto";
-import { readFileSync } from "node:fs";
-import { homedir } from "node:os";
 import {
   AppRunnerClient,
   CreateServiceCommand,
@@ -23,7 +21,13 @@ import { CreateRepositoryCommand, DescribeRepositoriesCommand, ECRClient } from 
 import { DescribeDBInstancesCommand, RDSClient } from "@aws-sdk/client-rds";
 import { CreateSecretCommand, DescribeSecretCommand, GetRandomPasswordCommand, GetSecretValueCommand, SecretsManagerClient } from "@aws-sdk/client-secrets-manager";
 import { GetCallerIdentityCommand, STSClient } from "@aws-sdk/client-sts";
-import { credentials, region } from "./creds";
+import { readNoMetaPolicy } from "../../apps/api/src/inference-policy";
+
+// Fail before any cloud request, resource creation, secret handling or build.
+if (process.env.DANDELIST_INFERENCE_KEY_ORG_VERIFIED !== "1") throw new Error("A reviewed key-organization binding is required");
+const fundingPolicy = readNoMetaPolicy(JSON.parse(process.env.DANDELIST_INFERENCE_FUNDING_POLICY ?? "null"), Date.now());
+if (fundingPolicy.provider !== "anthropic-api" || fundingPolicy.modelId !== "claude-haiku-5-5" || fundingPolicy.limits.callUsd > 0.05 || fundingPolicy.limits.dailyUsd > 1 || fundingPolicy.limits.totalUsd > 10) throw new Error("Only the approved direct-Haiku pilot is admitted");
+const { credentials, region } = await import("./creds");
 
 const REPO = "dandelist-api";
 const PROJECT = "dandelist-api-image";
@@ -79,13 +83,7 @@ const secrets: Record<string, string> = {
   CODE_PEPPER: await secret("dandelist/api/code-pepper", () => random(32)),
   JUDGE_CODE: await secret("dandelist/api/judge-code", async () => String(randomInt(100000, 1000000))),
   RESEND_API_KEY: await secret("dandelist/api/resend-key", async () => vault("accounting/resend-api-key")),
-  MODEL_API_KEY: await secret("dandelist/api/model-key", async () => vault("accounting/meta-model-api")),
-  // Apify's free plan (hard-capped at its monthly credit, so no cash); the token file never leaves this machine.
-  APIFY_TOKEN: await secret("dandelist/api/apify-token", async () => {
-    const line = readFileSync(`${homedir()}/.knight-secrets/apify.env`, "utf8").split(/\r?\n/).find((l) => l.startsWith("APIFY_TOKEN="));
-    if (!line) throw new Error("APIFY_TOKEN not found in ~/.knight-secrets/apify.env");
-    return line.slice("APIFY_TOKEN=".length).trim();
-  }),
+
 };
 
 // Social sign-in. The owner creates each provider's OAuth client and stores its secret under these names; until a
@@ -99,10 +97,10 @@ for (const [key, name] of [
   if (arn) secrets[key] = arn;
 }
 
-// Claude under Meta (apps/api/src/under.ts): stored by the owner under this name, read only. Without it Claude stays off.
+// Dedicated Dandelist key: release operator verifies its workspace/org and secure binding before use.
 const claudeKey = await existingSecret("dandelist/api/anthropic-key");
 if (claudeKey) secrets.ANTHROPIC_API_KEY = claudeKey;
-console.log(`claude under meta: ${claudeKey ? "on" : "off"}`);
+if (!claudeKey) throw new Error("Provision the approved Anthropic key before release");
 
 const existing = (await ar.send(new ListServicesCommand({}))).ServiceSummaryList?.find((s) => s.ServiceName === SERVICE);
 
@@ -130,7 +128,6 @@ try {
   repoUri = (await ecr.send(new CreateRepositoryCommand({ repositoryName: REPO, imageScanningConfiguration: { scanOnPush: true }, tags: TAGS }))).repository!.repositoryUri!;
   console.log(`created image repository ${REPO}`);
 }
-
 // Build project: public source, so CodeBuild needs no GitHub credentials.
 const project: CreateProjectCommandInput = {
   name: PROJECT,
@@ -187,15 +184,15 @@ const source: SourceConfiguration = {
         WEB_ORIGINS: "https://dandelist.knightaiav.com,https://dandelist.pages.dev,https://dandelist.com,https://www.dandelist.com,http://localhost:8081",
         SPEND_DAILY_USD: "10",
         SPEND_TOTAL_USD: "120",
-        // Claude's own daily cap, apart from Meta's; it only spends once Meta's is used up.
-        CLAUDE_DAILY_USD: "5",
+        // Actual inference caps come only from the reviewed funding policy below.
         PUBLIC_API_URL: "https://api.dandelist.knightaiav.com",
         // Product and place photos found by the agent are stored here and served at /media/<sha256>.
         MEDIA_BUCKET: `dandelist-media-${ACCOUNT}`,
-        MEDIA_CUTOUTS: "1",
-        MEDIA_GENERATE: "1",
-        MEDIA_UPSCALE: "1",
-        APIFY_DAILY_USD: "0.15",
+        MEDIA_CUTOUTS: "0",
+        MEDIA_GENERATE: "0",
+        MEDIA_UPSCALE: "0",
+        INFERENCE_FUNDING_POLICY: JSON.stringify(fundingPolicy),
+        INFERENCE_KEY_ORG_VERIFIED: process.env.DANDELIST_INFERENCE_KEY_ORG_VERIFIED ?? "0",
         ...signInIds,
       },
       RuntimeEnvironmentSecrets: secrets,

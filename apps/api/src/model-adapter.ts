@@ -63,7 +63,7 @@ function forProvider(adapter:ModelAdapter,body:ModelRequest):ModelRequest {
 export function modelRouter(primary:ModelAdapter,fallback:ModelAdapter|undefined,store:HistoryStore,canFallback:(e:unknown)=>boolean):Responder {
   return async(body)=>{
     // Images/segmentation have provider-specific capability contracts, not a text conversation.
-    if(body.model!==undefined && !(typeof body.model==="string"&&body.model in TOKEN_PRICES))return primary.respond(body);
+    if(body.model!==undefined && body.model!=="claude-haiku-5-5" && !(typeof body.model==="string"&&body.model in TOKEN_PRICES))return primary.respond(body);
     const previous=body.previous_response_id===undefined?undefined:await store.load(String(body.previous_response_id));
     const next=inputItems(body.input);validateToolOutputs(previous?.input??[],next);
     const envelope:Envelope={input:[...(previous?.input??[]),...next],

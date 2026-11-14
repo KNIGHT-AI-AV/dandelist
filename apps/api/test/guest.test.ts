@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Shop hostnames resolve to a public documentation address, so no test touches real DNS.
 vi.mock("node:dns/promises", async (importOriginal) => ({ ...(await importOriginal<object>()), lookup: async () => [{ address: "93.184.215.14", family: 4 }] }));
-import { createApp } from "../src/app";
+import { createApp } from "./fixture-app";
 import { imageResponse, jpegHeader } from "./images";
 import { migrate, type Db } from "../src/db";
 import { GUEST_DAILY_USD, SIGN_IN_FIRST } from "../src/guest";

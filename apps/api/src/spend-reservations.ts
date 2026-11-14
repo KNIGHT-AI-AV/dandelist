@@ -17,7 +17,7 @@ export class SpendLimitError extends Error {
     super(scope === "daily" ? "Today's AI budget is used up. Try again tomorrow." : scope === "user" ? "You've used today's research allowance. Try again tomorrow." : "The AI budget for this event is used up.");
   }
 }
-export interface BudgetPolicy { pool: Pool; type: "global" | "user" | "scope"; since: string; cap: number; total?: number; userId?: string; scope?: string; exclusive?: boolean; extra?: number }
+export interface BudgetPolicy { pool: Pool; type: "global" | "user" | "scope" | "run"; since: string; cap: number; total?: number; userId?: string; scope?: string; exclusive?: boolean; extra?: number; calls?: number }
 interface Capture { db: Db; policies: BudgetPolicy[] }
 interface Active { db: Db; id: string; signal: AbortSignal }
 const capture = new AsyncLocalStorage<Capture>();

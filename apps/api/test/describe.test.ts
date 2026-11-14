@@ -1,7 +1,7 @@
 import { PGlite } from "@electric-sql/pglite";
 import { beforeEach, describe, expect, it } from "vitest";
 import { accepted } from "./consent-helper";
-import { createApp } from "../src/app";
+import { createApp } from "./fixture-app";
 import { migrate, type Db } from "../src/db";
 import { DESCRIBES_PER_USER_PER_DAY, SEARCHES_PER_USER_PER_DAY, clampShare, tidyAbout, tidyComfort, tidyTags } from "../src/describe";
 import { writeLife } from "../src/dream/life";
@@ -174,7 +174,7 @@ describe("POST /wishes/describe", () => {
     expect((await app.request("/wishes/describe", { method: "POST", body: JSON.stringify({ ids: [id] }) })).status).toBe(401);
 
     for (let i = 0; i < DESCRIBES_PER_USER_PER_DAY; i++) {
-      await db.query("insert into spend_ledger (user_id, model, kind, cost_usd, created_at) select user_id, 'muse-spark-1.3', 'describe', 0, $1 from wishes limit 1", [clock.toISOString()]);
+      await db.query("insert into spend_ledger (user_id, model, kind, cost_usd, created_at) select user_id, 'claude-haiku-5-5', 'describe', 0, $1 from wishes limit 1", [clock.toISOString()]);
     }
     expect((await call("POST", "/wishes/describe", ada, { ids: [id] })).status).toBe(429);
     expect(metaCalls).toHaveLength(0);
@@ -186,7 +186,7 @@ describe("POST /wishes/describe", () => {
   it("stops at the spend caps and when the model is busy", async () => {
     const ada = await signIn("ada@example.com");
     const id = await addWish(ada, "Gym membership", "do");
-    await db.query("insert into spend_ledger (user_id, model, kind, cost_usd, created_at) values (null, 'muse-spark-1.3', 'dream', 1, $1)", [clock.toISOString()]);
+    await db.query("insert into spend_ledger (user_id, model, kind, cost_usd, created_at) values (null, 'claude-haiku-5-5', 'dream', 1, $1)", [clock.toISOString()]);
     app = makeApp({ dailyUsd: 1 });
     const capped = await call("POST", "/wishes/describe", ada, { ids: [id] });
     expect(capped.status).toBe(429);
@@ -374,7 +374,7 @@ describe("POST /wishes/search", () => {
     expect((await call("POST", "/wishes/search", ada, { q: "fitness" })).status).toBe(502);
 
     for (let i = 0; i < SEARCHES_PER_USER_PER_DAY; i++) {
-      await db.query("insert into spend_ledger (user_id, model, kind, cost_usd, created_at) select user_id, 'muse-spark-1.3', 'search', 0, $1 from wishes limit 1", [clock.toISOString()]);
+      await db.query("insert into spend_ledger (user_id, model, kind, cost_usd, created_at) select user_id, 'claude-haiku-5-5', 'search', 0, $1 from wishes limit 1", [clock.toISOString()]);
     }
     metaCalls = [];
     expect((await call("POST", "/wishes/search", ada, { q: "fitness" })).status).toBe(429);

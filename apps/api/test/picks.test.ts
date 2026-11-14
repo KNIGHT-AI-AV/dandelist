@@ -5,7 +5,7 @@ import { accepted } from "./consent-helper";
 // Image hosts resolve to a public documentation address, so no test touches real DNS.
 vi.mock("node:dns/promises", async (importOriginal) => ({ ...(await importOriginal<object>()), lookup: async () => [{ address: "93.184.215.14", family: 4 }] }));
 import { USER_DAILY_USD } from "../src/agent/routes";
-import { createApp } from "../src/app";
+import { createApp } from "./fixture-app";
 import { migrate, type Db } from "../src/db";
 import { NOTES_HEADING } from "../src/notes";
 import { PICK_RETRY_MS, PICK_TRIES_PER_DAY, PickRejected, checkPick, dayOk, holdFor, sameThing } from "../src/picks";
@@ -55,7 +55,7 @@ const fakeMeta = (async (_url: string, init: RequestInit) => {
   const body = JSON.parse(String(init.body)) as Json;
   calls.push(body);
   const format = body.text?.format?.name;
-  if (watch) held.push({ format: format ?? "text", usd: await heldFor(db, watch) });
+  if (watch) held.push({ format: format ?? "text", usd: await heldFor(db, watch, "claude") });
   if (format === "daily_pick") {
     const next = answers.shift() ?? RIVA;
     // The live API often writes a sentence before the JSON when it has searched (2026-10-29).
@@ -231,7 +231,7 @@ describe("today's pick", () => {
 
     // Muse Spark at low effort, one web search, JSON out; the notes are framed as data in its instructions.
     const [ask] = pickCalls();
-    expect(ask).toMatchObject({ model: "muse-spark-1.3", reasoning: { effort: "low" }, tools: [{ type: "web_search" }], max_tool_calls: 1, text: { format: { type: "json_schema", name: "daily_pick", strict: true } } });
+    expect(ask).toMatchObject({ model: "claude-haiku-5-5", reasoning: { effort: "low" }, tools: [{ type: "web_search" }], max_tool_calls: 1, text: { format: { type: "json_schema", name: "daily_pick", strict: true } } });
     expect(ask!.instructions).toContain(NOTES_HEADING);
     expect(ask!.instructions).toContain('"Riva boat: Summers on the lake with my brother."');
     expect(ask!.input).toContain('THEIR WISHES (newest first): [{"title":"Riva boat","kind":"a thing to buy"},{"title":"Leica Q3","kind":"a thing to buy"}]');
@@ -271,7 +271,7 @@ describe("today's pick", () => {
     }
     for (const h of held.filter((x) => x.format === "daily_pick" || x.format === "photo_plan")) expect(h.usd).toBeGreaterThanOrEqual(HOLD_USD);
     // Everything is released once the pick is made.
-    expect(await heldFor(db, id)).toBe(0);
+    expect(await heldFor(db, id, "claude")).toBe(0);
     expect(holdFor({ text: { format: { name: "photo_check" } } })).toBeCloseTo(HOLD_USD / 5);
     expect(holdFor({ text: { format: { name: "daily_pick" } } })).toBe(HOLD_USD);
   });
@@ -405,7 +405,7 @@ describe("today's pick", () => {
   it("is simply not there on a day the allowance is used up", async () => {
     const ada = await signIn();
     await addWish(ada.token, "Riva boat");
-    await db.query("insert into spend_ledger (user_id, model, kind, cost_usd, created_at) values ($1, 'muse-spark-1.3', 'research', $2, $3)", [ada.id, USER_DAILY_USD, clock.toISOString()]);
+    await db.query("insert into spend_ledger (user_id, model, kind, cost_usd, created_at) values ($1, 'claude-haiku-5-5', 'research', $2, $3)", [ada.id, USER_DAILY_USD, clock.toISOString()]);
     expect((await today(ada.token)).body).toEqual({ pick: null });
     expect(calls).toEqual([]);
     expect((await db.query("select status from daily_picks where user_id = $1", [ada.id])).rows).toEqual([{ status: "none" }]);

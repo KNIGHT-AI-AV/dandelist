@@ -6,7 +6,7 @@ import { assertPublicUrl, htmlToText, pageNamesItem, pageShowsPrice, privateIp, 
 
 // Shop hostnames resolve to a public documentation address, so no test touches real DNS.
 vi.mock("node:dns/promises", async (importOriginal) => ({ ...(await importOriginal<object>()), lookup: async () => [{ address: "93.184.215.14", family: 4 }] }));
-import { createApp } from "../src/app";
+import { createApp } from "./fixture-app";
 import { forgetMoneyPhoto } from "../src/agent/worth";
 import { migrate, type Db } from "../src/db";
 import { visionReply } from "./vision";
@@ -384,7 +384,7 @@ describe("wish agent", () => {
 
   it("stops at the spend cap and says so", async () => {
     const t = await signIn("ada@example.com");
-    await db.query("insert into spend_ledger (model, kind, cost_usd, created_at) values ('muse-spark-1.3', 'test', 120, $1)", [clock.toISOString()]);
+    await db.query("insert into spend_ledger (model, kind, cost_usd, created_at) values ('claude-haiku-5-5', 'test', 120, $1)", [clock.toISOString()]);
     const res = await call("POST", "/agent/interpret", t, { text: "a peloton bike plus" });
     expect(res.status).toBe(429);
     expect(((await res.json()) as { error: string }).error).toMatch(/budget/);
@@ -393,7 +393,7 @@ describe("wish agent", () => {
   it("stops one person at their own daily allowance", async () => {
     const t = await signIn("ada@example.com");
     const { rows } = await db.query<{ id: string }>("select id from users where email = 'ada@example.com'");
-    await db.query("insert into spend_ledger (user_id, model, kind, cost_usd, created_at) values ($1, 'muse-spark-1.3', 'research', 2, $2)", [rows[0]!.id, clock.toISOString()]);
+    await db.query("insert into spend_ledger (user_id, model, kind, cost_usd, created_at) values ($1, 'claude-haiku-5-5', 'research', 2, $2)", [rows[0]!.id, clock.toISOString()]);
     const res = await call("POST", "/agent/interpret", t, { text: "a peloton bike plus" });
     expect(res.status).toBe(429);
     expect(((await res.json()) as { error: string }).error).toMatch(/allowance/);

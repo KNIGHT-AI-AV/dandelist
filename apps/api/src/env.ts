@@ -16,6 +16,7 @@ const schema = z.object({
   MAIL_FROM: z.string().default("Dandelist <signin@knightaiav.com>"),
   JUDGE_EMAIL: z.string().email().optional(),
   JUDGE_CODE: z.string().regex(/^\d{6}$/).optional(),
+  // Legacy settings are accepted but ignored by the server; they never enable a transport.
   MODEL_API_KEY: z.string().optional(),
   SPEND_DAILY_USD: z.coerce.number().positive().default(10),
   SPEND_TOTAL_USD: z.coerce.number().positive().default(120),
@@ -23,11 +24,13 @@ const schema = z.object({
   ENTITLEMENTS_ENABLED: flag,
   // Local development verifier only; production refuses this separate opt-in.
   BILLING_SANDBOX_ENABLED: flag,
-  // Claude under Meta (under.ts): a call goes to Claude only when Meta's spend is used up. Off without a key.
+  // Direct Haiku is unavailable without both a current funding policy and verified dedicated-key binding.
   ANTHROPIC_API_KEY: optional,
+  INFERENCE_FUNDING_POLICY: optional,
+  INFERENCE_KEY_ORG_VERIFIED: flag,
   CLAUDE_DAILY_USD: z.coerce.number().positive().default(5),
   CLAUDE_SPEED: z.enum(["fast", "standard"]).default("fast"),
-  // Also hand Claude the calls Meta's service fails (a 5xx after its retry). Off unless set.
+  // Legacy compatibility parsing only. No service-error or budget fallback exists in the runtime.
   CLAUDE_ON_META_ERRORS: flag,
   // Google Shopping through Apify's free plan ($5 of credit a month). The daily cap keeps cash spend at $0.
   APIFY_TOKEN: z.string().optional(),

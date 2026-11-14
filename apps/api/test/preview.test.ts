@@ -1,7 +1,7 @@
 import { PGlite } from "@electric-sql/pglite";
 import { entry, firstPick, pairs } from "@dandelist/catalogue";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createApp } from "../src/app";
+import { createApp } from "./fixture-app";
 import { migrate, type Db } from "../src/db";
 import { NOT_RECORDED, PREVIEWS_PER_IP_PER_HOUR, fallbackNote, ipOf, planFacts, reachBy } from "../src/preview";
 import { unknownNumbers } from "../src/agent/agent";

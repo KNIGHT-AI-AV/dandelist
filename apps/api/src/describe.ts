@@ -1,5 +1,6 @@
+import { inferenceFor, inferenceReady, inferenceAvailable, INFERENCE_UNAVAILABLE, VOICE_UNAVAILABLE, type InferenceSetup } from "./inference";
 import { reservedFetch } from "./spend";
-import { MetaApiError, MetaClient } from "@dandelist/meta";
+import { MetaApiError } from "@dandelist/meta";
 import { Hono, type MiddlewareHandler } from "hono";
 import { z } from "zod";
 import type { Meta } from "./agent/agent";
@@ -7,7 +8,6 @@ import { USER_DAILY_USD } from "./agent/routes";
 import type { AuthDeps, AuthVars } from "./auth";
 import { readLife } from "./dream/life";
 import { SpendLimitError, assertBudget, assertUserBudget, recordSpend, userCapUsd, withHold, type SpendCaps } from "./spend";
-import { claudeFor, modelFor, type ClaudeSetup } from "./under";
 
 /**
  * Search by meaning over a person's own wishes (owner, recording 03: "travel" should find trips, "car" a G-Wagon,
@@ -76,10 +76,7 @@ export interface Comfort {
 
 export interface DescribeDeps extends AuthDeps {
   modelHistory?: boolean;
-  /** Missing when no Meta key is configured; both routes then answer 503. */
-  meta?: { apiKey: string; baseUrl?: string; fetch?: typeof fetch };
-  /** Claude under Meta, for calls Meta refuses once its spend is used up (under.ts). Missing: Meta only. */
-  claude?: ClaudeSetup;
+  inference?: InferenceSetup;
   spendCaps?: SpendCaps;
 }
 
@@ -152,7 +149,7 @@ const parseJson = (text: string): unknown => {
 /** One sentence, plain punctuation (no long dashes), a sensible length. */
 export function tidyAbout(raw: string): string {
   return raw
-    .replace(/\s*[—–]\s*/g, ", ")
+    .replace(/\s*[\u2014\u2013]\s*/g, ", ")
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 240);
@@ -221,15 +218,7 @@ export function describeRoutes(deps: DescribeDeps) {
   const { db } = deps;
   const caps = deps.spendCaps ?? { dailyUsd: 10, totalUsd: 120 };
 
-  /** A Meta client that checks the caps before the call, holds spend while it runs and records what it cost. */
-  const metaFor = (userId: string, kind: "describe" | "search"): Meta => {
-    const client = new MetaClient({ ...deps.meta!, fetch: reservedFetch(deps.meta!.fetch ?? fetch), onUsage: (usage, cost) => recordSpend(db, userId, kind, usage, cost, deps.now()) });
-    const guard = async () => {
-      await assertBudget(db, caps, deps.now());
-      await assertUserBudget(db, userId, await userCapUsd(db, userId, USER_DAILY_USD, deps.judge, caps, deps.now()), deps.now());
-    };
-    return { responses: modelFor(deps, userId, (body) => withHold(db, guard, () => client.responses(body), userId), claudeFor(deps, userId, kind, { personUsd: USER_DAILY_USD })) };
-  };
+  const metaFor = (userId: string, kind: "describe" | "search"): Meta => inferenceFor(deps, userId, kind, { personUsd: USER_DAILY_USD });
 
   /** True when the person has made `limit` calls of this kind in the last 24 hours. */
   const overDaily = async (userId: string, kind: string, limit: number) => {
@@ -242,7 +231,7 @@ export function describeRoutes(deps: DescribeDeps) {
   };
 
   const ready: MiddlewareHandler<{ Variables: AuthVars }> = async (c, next) => {
-    if (!deps.meta) return c.json({ error: "Search by meaning isn't set up on this server." }, 503);
+    if (!inferenceAvailable(deps)) return c.json({ error: INFERENCE_UNAVAILABLE }, 503);
     await next();
   };
   app.use("/describe", ready);

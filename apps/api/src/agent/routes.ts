@@ -1,7 +1,8 @@
+import { inferenceFor, inferenceReady, inferenceAvailable, INFERENCE_UNAVAILABLE, VOICE_UNAVAILABLE, type InferenceSetup } from "../inference";
 import { reservedFetch } from "../spend";
 import { createHash } from "node:crypto";
 import type { Alive } from "../alive";
-import { MetaApiError, MetaClient, TRANSCRIBE_MODEL } from "@dandelist/meta";
+import { MetaApiError, TRANSCRIBE_MODEL } from "@dandelist/meta";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { z } from "zod";
@@ -21,7 +22,6 @@ import { personaSchema, voiceLine } from "./persona";
 import { moneyPhoto, photoMedia, pricelessPhoto } from "./worth";
 import { stoppable } from "../sse";
 import { notesFor, withNotes } from "../notes";
-import { claudeFor, claudeGuard, eitherReady, modelFor, type ClaudeSetup } from "../under";
 
 export const RUNS_PER_USER_PER_DAY = 40;
 /** Every judge shares one account, so it gets more runs; its share of the daily spend cap still bounds it. */
@@ -38,10 +38,7 @@ const CACHE_MS = 24 * 60 * 60 * 1000;
 export interface AgentDeps extends AuthDeps {
   /** App-owned model history, off by default. */
   modelHistory?: boolean;
-  /** Missing when no Meta key is configured; the agent routes then answer 503. */
-  meta?: { apiKey: string; baseUrl?: string; fetch?: typeof fetch };
-  /** Claude under Meta, for calls Meta refuses once its spend is used up (under.ts). Missing: Meta only, as before. */
-  claude?: ClaudeSetup;
+  inference?: InferenceSetup;
   spendCaps?: SpendCaps;
   /** Used for pages, images, exchange rates, Commons and Sketchfab; tests replace it. */
   webFetch?: Fetcher;
@@ -144,27 +141,9 @@ export function agentRoutes(deps: AgentDeps) {
    */
   const holdFor = (body: Record<string, unknown>) => ((body.text as { format?: { name?: string } } | undefined)?.format?.name === PHOTO_CHECK ? HOLD_USD / 5 : HOLD_USD);
 
-  /** A Meta client that checks the spend caps before each call and records what each call cost. */
-  const metaFor = (userId: string, kind: string, onCost?: (usd: number) => Promise<void>, stop?: AbortSignal): Meta => {
-    const cfg = deps.meta!;
-    const client = new MetaClient({
-      ...cfg,
-      fetch: reservedFetch(stop ? stoppable(cfg.fetch ?? fetch, stop) : cfg.fetch ?? fetch),
-      onUsage: async (usage, cost) => {
-        await recordSpend(db, userId, kind, usage, cost, deps.now());
-        await onCost?.(cost);
-      },
-    });
-    const guard = async () => {
-      await assertBudget(db, caps, deps.now());
-      await assertUserBudget(db, userId, await userCapUsd(db, userId, USER_DAILY_USD, deps.judge, caps, deps.now()), deps.now());
-    };
-    return {
-      // Meta first; Claude only once Meta's spend is used up. Pictures (Muse Image) stay Meta's.
-      responses: modelFor(deps, userId, (body) => withHold(db, guard, () => client.responses(body), userId, holdFor(body), stop), claudeFor(deps, userId, kind, { personUsd: USER_DAILY_USD, onCost, signal: stop, usd: holdFor })),
-      images: (op, body) => withHold(db, guard, () => client.images(op, body), userId),
-    };
-  };
+  /** One funded Haiku route, shared by research, interpretation and photo checks. */
+  const metaFor = (userId: string, kind: string, onCost?: (usd: number) => Promise<void>, stop?: AbortSignal): Meta =>
+    inferenceFor(deps, userId, kind, { personUsd: USER_DAILY_USD, signal: stop, onCost });
 
   /** One shopping search, refused before it starts when it could push today's Apify spend past the cap. */
   const shoppingFor = (userId: string, region: string, currency: string, onCost: (usd: number) => Promise<void>) => {
@@ -186,15 +165,16 @@ export function agentRoutes(deps: AgentDeps) {
     if (!m) return undefined;
     return {
       store: m.store,
-      cutouts: m.cutouts,
-      generate: m.generate,
-      upscale: m.upscale,
-      allow: async (what) => (await callsToday(db, what === "cutout" ? SAM_MODEL : IMAGE_MODEL, deps.now())) < (what === "cutout" ? m.cutoutsPerDay : m.imagesPerDay),
+      cutouts: false,
+      generate: false,
+      upscale: false,
+      allow: async () => false,
     };
   };
 
   app.use("*", async (c, next) => {
-    if (!deps.meta) return c.json({ error: "The AI helper isn't set up on this server." }, 503);
+    // Saved research remains readable while inference is off; voice has its own unconditional refusal below.
+    if (c.req.method === "POST" && !c.req.path.endsWith("/transcribe") && !inferenceAvailable(deps)) return c.json({ error: INFERENCE_UNAVAILABLE }, 503);
     await next();
   });
 
@@ -255,34 +235,7 @@ export function agentRoutes(deps: AgentDeps) {
 
   // Say your wish: a short WAV in, the words out. Same caps as every Meta call, plus a per-person daily count.
   // The size cap is enforced while the body streams in, so an oversized upload never sits in memory.
-  app.post("/transcribe", bodyLimit({ maxSize: MAX_CLIP_BYTES, onError: (c) => c.json({ error: "Keep it under a minute." }, 413) }), async (c) => {
-    if (!(c.req.header("content-type") ?? "").startsWith("audio/wav")) return c.json({ error: "Send the recording as a WAV file." }, 415);
-    const bytes = new Uint8Array(await c.req.arrayBuffer());
-    const problem = clipProblem(readWav(bytes));
-    if (problem) return c.json({ error: problem }, 400);
-    const userId = c.get("userId");
-    const said = await db.query<{ n: string | number }>("select count(*) as n from spend_ledger where user_id = $1 and kind = 'transcribe' and created_at > $2", [
-      userId,
-      new Date(deps.now().getTime() - CACHE_MS).toISOString(),
-    ]);
-    if (Number(said.rows[0]?.n ?? 0) >= TRANSCRIBES_PER_USER_PER_DAY) return c.json({ error: "That's today's voice wishes. Type it instead." }, 429);
-    try {
-      const guard = async () => {
-        await assertBudget(db, caps, deps.now());
-        await assertUserBudget(db, userId, await userCapUsd(db, userId, USER_DAILY_USD, deps.judge, caps, deps.now()), deps.now());
-      };
-      const client = new MetaClient(deps.meta!);
-      const heard = await withHold(db, guard, () => client.transcribe(new Blob([bytes], { type: "audio/wav" }), { keywords: WISH_KEYWORDS }), userId);
-      await recordToolSpend(db, userId, "transcribe", TRANSCRIBE_MODEL, heard.costUsd, deps.now());
-      const text = cleanTranscript(heard.text);
-      if (!text) return c.json({ error: "Didn't catch that. Try again a little closer." }, 422);
-      return c.json({ text });
-    } catch (e) {
-      if (e instanceof SpendLimitError) return c.json({ error: e.message }, 429);
-      if (e instanceof MetaApiError && e.status === 429) return c.json({ error: "The AI is busy right now. Try again in a minute." }, 429);
-      return c.json({ error: "Couldn't hear that just now. Try again, or type it." }, 502);
-    }
-  });
+  app.post("/transcribe", bodyLimit({ maxSize: MAX_CLIP_BYTES, onError: (c) => c.json({ error: "Keep it under a minute." }, 413) }), (c) => c.json({ error: VOICE_UNAVAILABLE }, 503));
 
   /**
    * POST /agent/runs {text} or {draft, answers?}, then poll GET /agent/runs/:id (the chat and the add-a-wish screen).
@@ -318,10 +271,7 @@ export function agentRoutes(deps: AgentDeps) {
     if (cached.rows[0]) return c.json({ run: { ...toRun(cached.rows[0]), cached: true } });
 
     try {
-      await eitherReady(async () => {
-        await assertBudget(db, caps, now);
-        await assertUserBudget(db, userId, await userCapUsd(db, userId, USER_DAILY_USD, deps.judge, caps, now), now);
-      }, claudeGuard(deps, userId, USER_DAILY_USD));
+      await inferenceReady(deps, userId, USER_DAILY_USD);
     } catch (e) {
       return c.json({ error: friendly(e) }, 429);
     }

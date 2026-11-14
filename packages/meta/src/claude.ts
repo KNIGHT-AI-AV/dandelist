@@ -11,34 +11,14 @@ import type {
 import { MetaApiError, type Citation, type FunctionCall, type ResponsesResult } from "./client";
 import { claudeCostUsd, type Usage } from "./pricing";
 
-/**
- * Claude as a working agent under Meta. The owner's note, in his words:
- * (i cant afford credits on Meta and claude gifted me credits but i want to use meta for all!)
- *
- * So Meta's Muse Spark answers first, always; this client answers only a call the API hands down to it when Meta
- * refuses (apps/api/src/under.ts). It has MetaClient.responses' shape: it takes the OpenAI-Responses-style body the
- * routes send, asks Claude Opus 5.5 at low effort in fast mode through the Messages API, and maps the reply back into
- * a ResponsesResult, so the routes read either the same way.
- *
- * - `instructions` become the system prompt; `input` (words, message items, pictures, function calls and their
- *   outputs) becomes messages with tool_use and tool_result blocks.
- * - Function tools become Claude tools; Meta's built-in `web_search` becomes `web_search_20260209`, capped by
- *   `max_tool_calls`. `text.format` json_schema becomes `output_config.format`; beside the web search, whose citations
- *   structured outputs refuse, the schema is asked for in words instead and the JSON read out of the answer.
- * - Pictures Claude can't read (not JPEG, PNG, GIF or WebP, or over about 3.7 MB) throw ClaudeImageError unsent.
- * - `previous_response_id` is a conversation this client kept in memory under the id it returned, while it can go on
- *   (the request offered tools, or the reply stopped for a tool or a pause) and within a byte budget. Claude reads the
- *   whole history every time, and Opus 5.5 checks that its earlier thinking was made with the same system prompt,
- *   tools and messages, so a conversation is only ever appended to: the first request's system prompt and tools stay,
- *   changed instructions arrive as a system message, and a follow-up that sends no tools keeps them with tool_choice
- *   none.
- * - Thinking can't be switched off on Opus 5.5 and a forced tool_choice is refused, so neither is sent. Meta's
- *   reasoning effort and `include` have no counterpart and are dropped; the effort is always low.
- * - A server-side search loop that pauses (`pause_turn`) is resumed by sending the paused turn back unchanged, at most
- *   four times, and only while `mayResume` agrees (the API checks Claude's caps there, with what the call has spent).
+/** Messages adapter for app-owned text, vision and function-tool conversations.
+ * The application selects standard Haiku 5.5 explicitly, with no retries/resumes and no fallback.
+ * Legacy Opus defaults/history helpers remain for archived compatibility consumers and unit fixtures;
+ * application routes never choose them. Input/output normalize to ResponsesResult while the app owns history.
  */
 
 export const CLAUDE_MODEL = "claude-opus-5-5";
+export const HAIKU_MODEL = "claude-haiku-5-5";
 export const CLAUDE_FAST_BETA = "fast-mode-2026-02-01";
 /** Lets a request whose tool set grew drop the earlier thinking instead of failing (see responses). */
 const BINDING_BETA = "thinking-binding-controls-2026-08-01";
@@ -135,6 +115,10 @@ const sharedHistory = new ClaudeHistory();
 
 export interface ClaudeClientOptions {
   apiKey: string;
+  model?: typeof CLAUDE_MODEL | typeof HAIKU_MODEL;
+  maxTokens?: number;
+  maxResumes?: number;
+  maxSearchUses?: number;
   baseUrl?: string;
   fetch?: typeof fetch;
   /** Called once per responses() call (also when it fails partway), so the API records spend first. */
@@ -310,11 +294,11 @@ function inputMessages(input: unknown): { messages: BetaMessageParam[]; extra: s
 }
 
 /** Meta's tools as Claude's: function tools as they are, the built-in web search as Claude's. Others aren't offered. */
-function claudeTools(tools: unknown, maxUses: number | undefined): BetaToolUnion[] {
+function claudeTools(tools: unknown, maxUses: number | undefined, basicSearch = false): BetaToolUnion[] {
   const out: BetaToolUnion[] = [];
   for (const t of Array.isArray(tools) ? (tools as Json[]) : []) {
     if (t.type === "web_search" || t.type === "web_search_preview") {
-      out.push({ type: "web_search_20260209", name: "web_search", ...(maxUses ? { max_uses: maxUses } : {}) });
+      out.push({ type: basicSearch ? "web_search_20250305" : "web_search_20260209", name: "web_search", ...(maxUses ? { max_uses: maxUses } : {}) });
     } else if (t.type === "function" && typeof t.name === "string") {
       const parameters = (t.parameters ?? { type: "object", properties: {} }) as Json;
       out.push({
@@ -340,25 +324,33 @@ export class ClaudeClient {
   private readonly sdk: Anthropic;
   private readonly history: ClaudeHistory;
   private readonly fast: boolean;
+  private readonly model: typeof CLAUDE_MODEL | typeof HAIKU_MODEL;
 
   constructor(private readonly opts: ClaudeClientOptions) {
     if (!opts.apiKey) throw new Error("ClaudeClient needs an API key");
+    if (opts.model !== undefined && opts.model !== CLAUDE_MODEL && opts.model !== HAIKU_MODEL) throw new Error("Unknown Claude model");
+    for (const [name, value, min, max] of [["maxTokens", opts.maxTokens, 1, CLAUDE_MAX_TOKENS], ["maxResumes", opts.maxResumes, 0, MAX_RESUMES], ["maxSearchUses", opts.maxSearchUses, 1, 8]] as const) {
+      if (value !== undefined && (!Number.isInteger(value) || value < min || value > max)) throw new Error(`Invalid ${name}`);
+    }
     // The address and the key are always the ones given, never ones read from the environment.
     this.sdk = new Anthropic({ apiKey: opts.apiKey, authToken: null, baseURL: opts.baseUrl ?? "https://api.anthropic.com", maxRetries: opts.maxRetries ?? 1, ...(opts.fetch ? { fetch: opts.fetch } : {}) });
     this.history = opts.history ?? sharedHistory;
-    this.fast = opts.fast ?? true;
+    this.model = opts.model ?? CLAUDE_MODEL;
+    this.fast = this.model === HAIKU_MODEL ? false : opts.fast ?? true;
   }
 
-  /** The Responses API's shape on Claude's Messages API. `body.model` is ignored: it is always Opus 5.5. */
+  /** The Responses API's shape on Claude's Messages API. `body.model` is ignored: the constructor fixes the approved model. */
   async responses(body: Json): Promise<ResponsesResult> {
+    if (body.max_output_tokens !== undefined && (!Number.isInteger(body.max_output_tokens) || Number(body.max_output_tokens) < 1)) throw new Error("Invalid output bound");
     const previous = body.previous_response_id;
     const prior = previous === undefined || previous === null ? undefined : this.history.get(String(previous));
     if (previous != null && !prior) throw new ClaudeApiError(400, '{"error":{"message":"referenced response not found or expired"}}');
 
     const instructions = typeof body.instructions === "string" && body.instructions.trim() ? body.instructions : undefined;
     const { messages: added, extra } = inputMessages(body.input);
-    const maxUses = Number.isInteger(body.max_tool_calls) && Number(body.max_tool_calls) > 0 ? Number(body.max_tool_calls) : undefined;
-    const asked = claudeTools(body.tools, maxUses);
+    const requestedUses = Number.isInteger(body.max_tool_calls) && Number(body.max_tool_calls) > 0 ? Number(body.max_tool_calls) : undefined;
+    const maxUses = this.opts.maxSearchUses === undefined ? requestedUses : Math.min(requestedUses ?? this.opts.maxSearchUses, this.opts.maxSearchUses);
+    const asked = claudeTools(body.tools, maxUses, this.model === HAIKU_MODEL);
     // Append only: the first system prompt and tools stay, and a tool the conversation lacks goes at the end.
     const fresh = prior ? asked.filter((t) => !prior.tools.some((p) => toolName(p) === toolName(t))) : asked;
     const tools = [...(prior?.tools ?? []), ...fresh];
@@ -392,8 +384,8 @@ export class ClaudeClient {
     const drops = !!conversation.drops;
     const betas = [...(this.fast ? [CLAUDE_FAST_BETA] : []), ...(drops ? [BINDING_BETA] : [])];
     const params: MessageCreateParamsNonStreaming = {
-      model: CLAUDE_MODEL,
-      max_tokens: CLAUDE_MAX_TOKENS,
+      model: this.model,
+      max_tokens: Math.min(this.opts.maxTokens ?? CLAUDE_MAX_TOKENS, typeof body.max_output_tokens === "number" ? body.max_output_tokens : CLAUDE_MAX_TOKENS),
       ...(conversation.system ? { system: conversation.system } : {}),
       messages: conversation.messages,
       ...(tools.length ? { tools } : {}),
@@ -404,7 +396,7 @@ export class ClaudeClient {
       ...(tools.length || prior ? { cache_control: { type: "ephemeral" as const } } : {}),
       ...(this.fast ? { speed: "fast" as const } : {}),
       // Only once the tool set grew: the earlier thinking no longer matches it, so it is dropped rather than refused.
-      ...(drops ? { thinking: { type: "adaptive" as const, block_binding: { prefix_mismatch_behavior: "drop_block" as const } } } : {}),
+      ...(this.model === HAIKU_MODEL ? { thinking: { type: "disabled" as const } } : drops ? { thinking: { type: "adaptive" as const, block_binding: { prefix_mismatch_behavior: "drop_block" as const } } } : {}),
       ...(betas.length ? { betas } : {}),
     };
 
@@ -413,9 +405,16 @@ export class ClaudeClient {
     try {
       for (let resumes = 0; ; resumes++) {
         const reply = await this.sdk.beta.messages.create({ ...params, messages: sent });
+        if (this.model === HAIKU_MODEL) {
+          if (reply.model !== HAIKU_MODEL) throw new Error("Unexpected billed model");
+          const u = reply.usage;
+          for (const n of [u.input_tokens, u.output_tokens, u.cache_read_input_tokens ?? 0, u.cache_creation_input_tokens ?? 0, u.server_tool_use?.web_search_requests ?? 0]) {
+            if (!Number.isSafeInteger(n) || n < 0) throw new Error("Invalid provider usage");
+          }
+        }
         replies.push(reply);
         sent = [...sent, { role: "assistant", content: reply.content as unknown as BetaContentBlockParam[] }];
-        if (reply.stop_reason !== "pause_turn" || resumes >= MAX_RESUMES) break;
+        if (reply.stop_reason !== "pause_turn" || resumes >= (this.opts.maxResumes ?? MAX_RESUMES)) break;
         if (this.opts.mayResume && !(await this.opts.mayResume(this.tally(replies).costUsd))) break;
       }
     } catch (e) {
@@ -447,7 +446,7 @@ export class ClaudeClient {
       this.history.set(id, { ...conversation, messages: sent, bytes });
     }
     const { usage, costUsd } = await this.report(replies);
-    return { id, ...read(replies, json, id, format?.schema), usage, costUsd };
+    return { id, ...read(replies, json, id, format?.schema, this.model), usage, costUsd };
   }
 
   /** Adds up what the replies used, prices them, and reports it once. */
@@ -459,12 +458,12 @@ export class ClaudeClient {
 
   /** What the replies used, each priced at the speed it ran. */
   private tally(replies: BetaMessage[]): { usage: Usage; costUsd: number } {
-    const usage: Usage = { model: CLAUDE_MODEL, inputTokens: 0, cachedInputTokens: 0, cacheWriteTokens: 0, outputTokens: 0, searches: 0 };
+    const usage: Usage = { model: this.model, inputTokens: 0, cachedInputTokens: 0, cacheWriteTokens: 0, outputTokens: 0, searches: 0 };
     let costUsd = 0;
     for (const reply of replies) {
       const u = reply.usage;
       const one: Usage = {
-        model: CLAUDE_MODEL,
+        model: this.model,
         inputTokens: (u.input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0),
         cachedInputTokens: u.cache_read_input_tokens ?? 0,
         cacheWriteTokens: u.cache_creation_input_tokens ?? 0,
@@ -488,7 +487,7 @@ export class ClaudeClient {
  * run as written when none parses, for the route to judge). `raw.output` carries the searches as Responses
  * `web_search_call` items with their results, so the readers of Meta's payloads (dream/context.ts) read Claude's too.
  */
-function read(replies: BetaMessage[], json: "format" | "words" | false, id: string, schema?: unknown): Omit<ResponsesResult, "id" | "usage" | "costUsd"> {
+function read(replies: BetaMessage[], json: "format" | "words" | false, id: string, schema?: unknown, model = CLAUDE_MODEL): Omit<ResponsesResult, "id" | "usage" | "costUsd"> {
   const runs: string[] = [];
   const citations: Citation[] = [];
   const cited = new Set<string>();
@@ -550,6 +549,6 @@ function read(replies: BetaMessage[], json: "format" | "words" | false, id: stri
     const last = runs.at(-1) ?? "";
     text = json === "words" ? (jsonIn(last, schema) ?? jsonIn(text, schema) ?? last) : last;
   }
-  const raw = { id, model: CLAUDE_MODEL, output: functionCalls.length ? output : output.filter((o) => o.type !== "function_call"), claude: replies };
+  const raw = { id, model, output: functionCalls.length ? output : output.filter((o) => o.type !== "function_call"), claude: replies };
   return { text, citations, functionCalls, searchQueries, raw };
 }

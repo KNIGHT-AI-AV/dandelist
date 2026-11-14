@@ -1,6 +1,7 @@
+import { inferenceFor, inferenceReady, inferenceAvailable, INFERENCE_UNAVAILABLE, VOICE_UNAVAILABLE, type InferenceSetup } from "../inference";
 import { reservedFetch } from "../spend";
 import type { DreamEvent } from "@dandelist/catalogue/dream";
-import { MetaApiError, MetaClient } from "@dandelist/meta";
+import { MetaApiError } from "@dandelist/meta";
 import { Hono, type Context } from "hono";
 import { streamSSE, type SSEStreamingApi } from "hono/streaming";
 import { randomUUID } from "node:crypto";
@@ -12,7 +13,6 @@ import { publicFetch } from "../agent/tools";
 import { requireAuth, type AuthVars } from "../auth";
 import { heartbeat, stoppable } from "../sse";
 import { assertBudget, assertUserBudget, recordSpend, SpendLimitError, userCapUsd, withHold } from "../spend";
-import { claudeFor, claudeGuard, eitherReady, modelFor } from "../under";
 import { MAX_TRANSCRIPT, deckWidget, runTurn } from "./agent";
 import { Jobs, mergeChat, type ChatCopy } from "./jobs";
 import { TurnBudget, TurnLimitError, type ApifyConfig, type DreamCtx } from "./context";
@@ -107,7 +107,7 @@ export function dreamRoutes(deps: DreamDeps) {
   const jobs = deps.jobs ?? new Jobs();
   const caps = deps.spendCaps ?? { dailyUsd: 10, totalUsd: 120 };
   const auth = requireAuth(deps);
-  const suggestions = new Suggestions({ db, modelHistory: deps.modelHistory, meta: deps.meta, claude: deps.claude, caps, personUsd: USER_DAILY_USD, judge: deps.judge, now: deps.now });
+  const suggestions = new Suggestions({ db, modelHistory: deps.modelHistory, inference: deps.inference, caps, personUsd: USER_DAILY_USD, judge: deps.judge, now: deps.now });
   app.use("/me/life", auth);
   app.use("/dream/*", auth);
 
@@ -167,7 +167,7 @@ export function dreamRoutes(deps: DreamDeps) {
   });
 
   app.post("/dream/turn", async (c) => {
-    if (!deps.meta) return c.json({ error: "Chat isn't available on this server yet." }, 503);
+    if (!inferenceAvailable(deps)) return c.json({ error: INFERENCE_UNAVAILABLE }, 503);
     const body = turnBody.safeParse(await c.req.json().catch(() => null));
     if (!body.success) return c.json({ error: "That message couldn't be read. Try again." }, 400);
     const userId = c.get("userId");
@@ -179,10 +179,7 @@ export function dreamRoutes(deps: DreamDeps) {
     await admitted?.catch(() => undefined);
     const now = deps.now();
     try {
-      await eitherReady(async () => {
-        await assertBudget(db, caps, now);
-        await assertUserBudget(db, userId, await userCapUsd(db, userId, USER_DAILY_USD, deps.judge, caps, now), now);
-      }, claudeGuard(deps, userId, USER_DAILY_USD));
+      await inferenceReady(deps, userId, USER_DAILY_USD);
     } catch (e) {
       return c.json({ error: friendly(e) }, 429);
     }
@@ -219,21 +216,7 @@ export function dreamRoutes(deps: DreamDeps) {
     const turnId = randomUUID().slice(0, 8);
 
     const ctxFor = (emit: DreamCtx["emit"], budget: TurnBudget, signal: AbortSignal): DreamCtx => {
-      const client = new MetaClient({ ...deps.meta!, fetch: reservedFetch(stoppable(deps.meta!.fetch ?? fetch, signal)), onUsage: (usage, cost) => recordSpend(db, userId, "dream", usage, cost, deps.now()) });
-      // Meta first; Claude only once Meta's spend is used up (under.ts).
-      const responses = modelFor(deps, userId,
-        (b) =>
-          withHold(db,
-            async () => {
-              await assertBudget(db, caps, deps.now());
-              await assertUserBudget(db, userId, await userCapUsd(db, userId, USER_DAILY_USD, deps.judge, caps, deps.now()), deps.now());
-            },
-            () => client.responses(b),
-            userId,
-          ),
-        claudeFor(deps, userId, "dream", { personUsd: USER_DAILY_USD, signal }),
-        sessionId,
-      );
+      const { responses } = inferenceFor(deps, userId, "dream", { personUsd: USER_DAILY_USD, signal, sessionId });
       const meta: Meta = {
         responses: async (b) => {
           budget.meta();

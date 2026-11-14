@@ -1,5 +1,6 @@
+import { inferenceFor, inferenceReady, inferenceAvailable, INFERENCE_UNAVAILABLE, VOICE_UNAVAILABLE, type InferenceSetup } from "./inference";
 import { reservedFetch } from "./spend";
-import { MetaApiError, MetaClient } from "@dandelist/meta";
+import { MetaApiError } from "@dandelist/meta";
 import { Hono } from "hono";
 import { z } from "zod";
 import type { Meta } from "./agent/agent";
@@ -17,7 +18,6 @@ import { sameThing } from "./picks";
 import type { PoolGroup, PoolItem, TypicalEntity } from "./pool";
 import { stoppable } from "./sse";
 import { HOLD_USD, SpendLimitError, assertBudget, assertUserBudget, recordSpend, userCapUsd, withHold } from "./spend";
-import { claudeFor, claudeGuard, eitherReady, modelFor } from "./under";
 
 /**
  * This or that, made from what the person asked for (owner, 2026-10-30: "it has nothing to do with their initial
@@ -463,25 +463,22 @@ export function pairRoutes(deps: AgentDeps & { pool: () => Promise<PoolItem[]>; 
   app.post("/", async (c) => {
     const body = pairsBody.safeParse(await c.req.json().catch(() => ({})));
     if (!body.success) return c.json({ error: "Tell us what you want in a few words." }, 400);
-    if (!deps.meta) return c.json({ pairs: [] });
+    if (!inferenceAvailable(deps)) return c.json({ pairs: [] });
     const userId = c.get("userId");
     const wishes = (await db.query<{ name: string; kind: string }>("select name, kind from wishes where user_id = $1 order by created_at desc limit 40", [userId])).rows;
     if (!wishes.length && !body.data.text) return c.json({ pairs: [] });
     if (!allowed(userId, deps.now())) return c.json({ error: "That's a lot for one hour. Try again soon." }, 429);
     const guard = async () => {
-      await assertBudget(db, caps, deps.now());
-      await assertUserBudget(db, userId, await userCapUsd(db, userId, USER_DAILY_USD, deps.judge, caps, deps.now()), deps.now());
+      await inferenceReady(deps, userId, USER_DAILY_USD);
     };
     try {
-      await eitherReady(guard, claudeGuard(deps, userId, USER_DAILY_USD));
+      await guard();
     } catch (e) {
       if (e instanceof SpendLimitError) return c.json({ pairs: [] });
       throw e;
     }
     const stop = new AbortController();
-    const client = new MetaClient({ ...deps.meta, fetch: reservedFetch(stoppable(deps.meta.fetch ?? fetch, stop.signal)), onUsage: (usage, cost) => recordSpend(db, userId, "pairs", usage, cost, deps.now()) });
-    // Meta first; Claude only once Meta's spend is used up (under.ts).
-    const meta: Meta = { responses: modelFor(deps, userId, (b) => withHold(db, guard, () => client.responses(b), userId, HOLD_USD, stop.signal), claudeFor(deps, userId, "pairs", { personUsd: USER_DAILY_USD, signal: stop.signal })) };
+    const meta: Meta = inferenceFor(deps, userId, "pairs", { personUsd: USER_DAILY_USD, signal: stop.signal });
     try {
       const notes = await notesFor(db, userId);
       const pairs = await makePairs(meta, { wish: body.data.text, wishes, notes }, { pool: deps.pool, typicals: deps.typicals ?? (async () => []), archive, api: deps.webFetch ?? publicFetch, now: deps.now, by: Date.now() + PAIRS_MS });

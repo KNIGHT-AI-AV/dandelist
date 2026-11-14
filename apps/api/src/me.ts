@@ -1,5 +1,6 @@
+import { inferenceFor, inferenceReady, inferenceAvailable, INFERENCE_UNAVAILABLE, VOICE_UNAVAILABLE, type InferenceSetup } from "./inference";
 import { reservedFetch } from "./spend";
-import { MetaApiError, MetaClient } from "@dandelist/meta";
+import { MetaApiError } from "@dandelist/meta";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { z } from "zod";
@@ -13,7 +14,6 @@ import { forgetMemories, readMemories } from "./memory";
 import { PROVIDERS, listIdentities, type Provider } from "./oauth";
 import { RateLimiter } from "./ratelimit";
 import { SpendLimitError, assertBudget, assertUserBudget, recordSpend, userCapUsd, withHold } from "./spend";
-import { claudeFor, claudeGuard, eitherReady, modelFor } from "./under";
 
 /**
  * The person, for settings (owner's walkthrough, 2026-10-28):
@@ -246,7 +246,7 @@ export function meRoutes(deps: AgentDeps) {
   app.get("/facts", async (c) => c.json({ facts: await storedFacts(c.get("userId")) }));
 
   app.post("/facts", async (c) => {
-    if (!deps.meta) return c.json({ error: "New facts aren't available right now." }, 503);
+    if (!inferenceAvailable(deps)) return c.json({ error: INFERENCE_UNAVAILABLE }, 503);
     const { persona } = factsBody.parse(await c.req.json().catch(() => ({})));
     const userId = c.get("userId");
     const now = deps.now();
@@ -256,11 +256,10 @@ export function meRoutes(deps: AgentDeps) {
     ]);
     if (Number(used.rows[0]?.n ?? 0) >= FACTS_PER_USER_PER_DAY) return c.json({ error: "That's today's new facts. More tomorrow." }, 429);
     const guard = async () => {
-      await assertBudget(db, caps, deps.now());
-      await assertUserBudget(db, userId, await userCapUsd(db, userId, USER_DAILY_USD, deps.judge, caps, deps.now()), deps.now());
+      await inferenceReady(deps, userId, USER_DAILY_USD);
     };
     try {
-      await eitherReady(guard, claudeGuard(deps, userId, USER_DAILY_USD));
+      await guard();
     } catch (e) {
       if (e instanceof SpendLimitError) return c.json({ error: "That's all for today. Try again tomorrow." }, 429);
       throw e;
@@ -294,9 +293,7 @@ export function meRoutes(deps: AgentDeps) {
       })),
     };
 
-    const client = new MetaClient({ ...deps.meta, fetch: reservedFetch(deps.meta.fetch ?? fetch), onUsage: (usage, cost) => recordSpend(db, userId, "facts", usage, cost, deps.now()) });
-    // Meta first; Claude only once Meta's spend is used up (under.ts).
-    const responses = modelFor(deps, userId, (body) => withHold(db, guard, () => client.responses(body), userId), claudeFor(deps, userId, "facts", { personUsd: USER_DAILY_USD }));
+    const { responses } = inferenceFor(deps, userId, "facts", { personUsd: USER_DAILY_USD });
     let lines: string[];
     try {
       const res = await responses({

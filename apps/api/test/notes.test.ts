@@ -5,7 +5,7 @@ import { accepted } from "./consent-helper";
 // Any host resolves to a public documentation address, so no test touches real DNS.
 vi.mock("node:dns/promises", async (importOriginal) => ({ ...(await importOriginal<object>()), lookup: async () => [{ address: "93.184.215.14", family: 4 }] }));
 import type { Meta } from "../src/agent/agent";
-import { createApp } from "../src/app";
+import { createApp } from "./fixture-app";
 import { migrate, type Db } from "../src/db";
 import { DIGEST_LINE, DIGEST_NOTES, NOTES_HEADING, NOTE_MAX, cleanNote, digestLine, notesBlock, plansForPerson, readNotes, withNotes } from "../src/notes";
 

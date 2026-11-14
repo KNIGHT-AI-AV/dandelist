@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { PGlite } from "@electric-sql/pglite";
 import { beforeEach, describe, expect, it } from "vitest";
 import { accepted } from "./consent-helper";
-import { createApp } from "../src/app";
+import { createApp } from "./fixture-app";
 import { migrate, type Db } from "../src/db";
 import { inCharacter } from "../src/dream/agent";
 import { clip, previewOf, titleOf } from "../src/dream/history";
@@ -230,7 +230,7 @@ describe("the Dandy speaks as itself", () => {
 
   it("explains a spend cap without naming the machinery", async () => {
     const t = await signIn("ada@example.com");
-    await db.query("insert into spend_ledger (user_id, model, kind, cost_usd, created_at) values ($1, 'muse-spark-1.3', 'dream', 2, $2)", [await userId("ada@example.com"), clock.toISOString()]);
+    await db.query("insert into spend_ledger (user_id, model, kind, cost_usd, created_at) values ($1, 'claude-haiku-5-5', 'dream', 2, $2)", [await userId("ada@example.com"), clock.toISOString()]);
     const res = await call("POST", "/dream/turn", t, { action: { type: "message", text: "hi" } });
     expect(res.status).toBe(429);
     const error = ((await res.json()) as Ev).error as string;
@@ -314,7 +314,7 @@ describe("suggestions", () => {
 
     // Over the person's allowance: no call is made at all.
     const id = await userId("ada@example.com");
-    await db.query("insert into spend_ledger (user_id, model, kind, cost_usd, created_at) values ($1, 'muse-spark-1.3', 'dream', 2, $2)", [id, clock.toISOString()]);
+    await db.query("insert into spend_ledger (user_id, model, kind, cost_usd, created_at) values ($1, 'claude-haiku-5-5', 'dream', 2, $2)", [id, clock.toISOString()]);
     clock = new Date(clock.getTime() + SUGGEST_CACHE_MS);
     const before = suggestCalls().length;
     expect((await suggest(t, "old-money")).source).toBe("fallback");

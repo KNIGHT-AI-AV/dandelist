@@ -2,7 +2,7 @@ import { PGlite } from "@electric-sql/pglite";
 import { MetaApiError, type ResponsesResult } from "@dandelist/meta";
 import { beforeEach, describe, expect, it } from "vitest";
 import { accepted } from "./consent-helper";
-import { createApp } from "../src/app";
+import { createApp } from "./fixture-app";
 import { migrate, type Db } from "../src/db";
 import { readEnv } from "../src/env";
 import { PHOTO_CHECK } from "../src/agent/photos";
@@ -339,123 +339,7 @@ describe("Claude's resumes", () => {
   });
 });
 
-// ---------------------------------------------------------------- end to end: the facts route on Claude
-
-const metaReply = () =>
-  Response.json({ id: "resp_1", output: [{ type: "message", content: [{ type: "output_text", text: JSON.stringify({ facts: ["From Meta one.", "From Meta two.", "From Meta three."] }) }] }], usage: { input_tokens: 900, output_tokens: 80 } });
-let metaCalls: Json[];
-const fakeMeta = (async (_url: string, init: RequestInit) => {
-  metaCalls.push(JSON.parse(String(init.body)));
-  return metaReply();
-}) as unknown as typeof fetch;
-
-let claudeCalls: Json[];
-const fakeClaude = (async (_url: string, init: RequestInit) => {
-  claudeCalls.push(JSON.parse(String(init.body)));
-  return new Response(
-    JSON.stringify({
-      id: "msg_1",
-      type: "message",
-      role: "assistant",
-      model: "claude-opus-5-5",
-      content: [{ type: "text", text: JSON.stringify({ facts: ["From Claude one.", "From Claude two.", "From Claude three."] }) }],
-      stop_reason: "end_turn",
-      stop_sequence: null,
-      usage: { input_tokens: 1000, output_tokens: 100, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
-    }),
-    { status: 200, headers: { "content-type": "application/json" } },
-  );
-}) as unknown as typeof fetch;
-
-describe("facts on Claude, under Meta", () => {
-  let mail: { to: string; code: string }[];
-  let clock: Date;
-  let app: ReturnType<typeof createApp>;
-  const makeApp = (claude: { dailyUsd: number } | null) =>
-    createApp({
-      db,
-      mailer: { sendCode: async (to: string, code: string) => void mail.push({ to, code }) },
-      jwtSecret: "test-secret-that-is-at-least-32-chars-long",
-      codePepper: "test-pepper-16-chars",
-      now: () => clock,
-      webOrigins: [],
-      meta: { apiKey: "test", fetch: fakeMeta },
-      ...(claude ? { claude: { apiKey: "claude-test", dailyUsd: claude.dailyUsd, fetch: fakeClaude, maxRetries: 0 } } : {}),
-      spendCaps: { dailyUsd: 10, totalUsd: 120 },
-      oauth: { apiUrl: "https://api.test", production: false },
-    } as Parameters<typeof createApp>[0]);
-  const call = (method: string, path: string, token: string | null, body?: unknown) =>
-    app.request(path, { method, headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(body === undefined ? {} : { "Content-Type": "application/json" }) }, body: body === undefined ? undefined : JSON.stringify(body) });
-  const signIn = async () => {
-    await call("POST", "/auth/email/start", null, { email: "ada@example.com" });
-    const res = await call("POST", "/auth/email/verify", null, { email: "ada@example.com", code: mail.at(-1)!.code });
-    return accepted(app, ((await res.json()) as { accessToken: string }).accessToken);
-  };
-  const metaSpent = () => db.query("insert into spend_ledger (user_id, model, kind, cost_usd, created_at) values (null, 'muse-spark-1.3', 'guest', 10, $1)", [clock.toISOString()]);
-
-  beforeEach(async () => {
-    mail = [];
-    metaCalls = [];
-    claudeCalls = [];
-    clock = new Date("2026-11-02T12:00:00Z");
-    app = makeApp({ dailyUsd: 5 });
-  });
-
-  it("asks Meta while Meta has room, and never Claude", async () => {
-    const token = await signIn();
-    await call("POST", "/wishes", token, { name: "Porsche 911", kind: "buy", upfrontCents: 14_000_000 });
-    const res = await call("POST", "/me/facts", token, { persona: "heir" });
-    expect(res.status).toBe(200);
-    expect(((await res.json()) as Json).facts.lines[0]).toBe("From Meta one.");
-    expect(metaCalls).toHaveLength(1);
-    expect(claudeCalls).toHaveLength(0);
-  });
-
-  it("answers on Claude once Meta's day is spent, and records it under Claude's model", async () => {
-    const token = await signIn();
-    await call("POST", "/wishes", token, { name: "Porsche 911", kind: "buy", upfrontCents: 14_000_000 });
-    await metaSpent();
-    const res = await call("POST", "/me/facts", token, { persona: "heir" });
-    expect(res.status).toBe(200);
-    expect(((await res.json()) as Json).facts.lines[0]).toBe("From Claude one.");
-    expect(metaCalls).toHaveLength(0);
-    expect(claudeCalls).toHaveLength(1);
-    expect(claudeCalls[0]).toMatchObject({ model: "claude-opus-5-5", speed: "fast", output_config: { effort: "low", format: { type: "json_schema" } } });
-    const rows = (await db.query<{ model: string; kind: string }>("select model, kind from spend_ledger where kind = 'facts'")).rows;
-    expect(rows).toEqual([{ model: "claude-opus-5-5", kind: "facts" }]);
-  });
-
-  it("gives today's answer when Claude's own day is spent too", async () => {
-    const token = await signIn();
-    await call("POST", "/wishes", token, { name: "Porsche 911", kind: "buy", upfrontCents: 14_000_000 });
-    await metaSpent();
-    await db.query("insert into spend_ledger (user_id, model, kind, cost_usd, created_at) values (null, 'claude-opus-5-5', 'guest', 5, $1)", [clock.toISOString()]);
-    const res = await call("POST", "/me/facts", token, { persona: "heir" });
-    expect(res.status).toBe(429);
-    expect(claudeCalls).toHaveLength(0);
-  });
-
-  it("keeps a person over their own Meta allowance off Claude, even once Meta's whole day is spent", async () => {
-    const token = await signIn();
-    const id = (await db.query<{ id: string }>("select id from users where email = 'ada@example.com'")).rows[0]!.id;
-    await call("POST", "/wishes", token, { name: "Porsche 911", kind: "buy", upfrontCents: 14_000_000 });
-    // The route's own guards run in their real order: Meta's day first (spent), then the person's own $2 (spent too).
-    await db.query("insert into spend_ledger (user_id, model, kind, cost_usd, created_at) values ($1, 'muse-spark-1.3', 'research', 2.5, $2)", [id, clock.toISOString()]);
-    await metaSpent();
-    const res = await call("POST", "/me/facts", token, { persona: "heir" });
-    expect(res.status).toBe(429);
-    expect(claudeCalls).toHaveLength(0);
-  });
-
-  it("without a Claude key, behaves as it always has", async () => {
-    app = makeApp(null);
-    const token = await signIn();
-    await call("POST", "/wishes", token, { name: "Porsche 911", kind: "buy", upfrontCents: 14_000_000 });
-    await metaSpent();
-    expect((await call("POST", "/me/facts", token, { persona: "heir" })).status).toBe(429);
-    expect(claudeCalls).toHaveLength(0);
-  });
-});
+// Obsolete Meta-first route acceptance is replaced by inference-routes.test.ts (real direct-Haiku app routes).
 
 describe("env", () => {
   const base = { DATABASE_URL: "postgres://x", JWT_SECRET: "x".repeat(32), CODE_PEPPER: "y".repeat(16) };

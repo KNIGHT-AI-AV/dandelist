@@ -2,7 +2,7 @@ import { PGlite } from "@electric-sql/pglite";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 // Hostnames resolve to a public documentation address, so nothing here touches real DNS.
 vi.mock("node:dns/promises", async (importOriginal) => ({ ...(await importOriginal<object>()), lookup: async () => [{ address: "93.184.215.14", family: 4 }] }));
-import { createApp } from "../src/app";
+import { createApp } from "./fixture-app";
 import { AI_CONSENT_VERSION, CONSENT_REQUIRED } from "../src/consent";
 import { migrate, type Db } from "../src/db";
 
@@ -182,7 +182,7 @@ describe("nothing reaches a model before the yes", () => {
     // so any future write at the same path still has to pass the exhaustive guard below.
     const features = await call("GET", "/config/features", ada.token);
     expect(features.status).toBe(200);
-    expect(await features.json()).toEqual({ chatContinuity: false });
+    expect(await features.json()).toEqual({ chatContinuity: false, voiceWishes: false, generatedImages: false, webSearch: false });
     // Routes anyone may call without signing in: health, public images, rates, sign-in itself, the guest pool and
     // closed guest routes, the preview, and MCP (its own key check, tested below).
     const PUBLIC = [/^\/healthz$/, /^\/internal\/hold$/, /^\/media\//, /^\/fx/, /^\/auth\//, /^\/guest\//, /^\/preview$/, /^\/mcp$/];

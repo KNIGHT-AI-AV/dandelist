@@ -2,7 +2,7 @@ import { PGlite } from "@electric-sql/pglite";
 import { beforeEach, describe, expect, it } from "vitest";
 import { accepted } from "./consent-helper";
 import { MAX_CLIP_BYTES, TRANSCRIBES_PER_USER_PER_DAY, cleanTranscript, clipProblem, readWav } from "../src/agent/transcribe";
-import { createApp } from "../src/app";
+import { createApp } from "./fixture-app";
 import { migrate, type Db } from "../src/db";
 
 /** A mono 16-bit PCM WAV of `ms` of quiet tone at `rate`, with an extra LIST chunk first when asked. */
@@ -104,61 +104,28 @@ async function signIn(email: string) {
 
 const say = (token: string, body: Uint8Array, type = "audio/wav") => app.request("/agent/transcribe", { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": type }, body });
 
-describe("POST /agent/transcribe", () => {
-  it("sends Meta the request part and the clip, records the cost, and returns the words", async () => {
+describe("POST /agent/transcribe during no-Meta cutover", () => {
+  it("refuses signed-in clips without dispatch or a spend row", async () => {
     const t = await signIn("ada@example.com");
     const res = await say(t, wav(2400));
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ text: "A week at Amanzoe with my wife in May." });
-    expect(metaRequests).toHaveLength(1);
-    expect(metaRequests[0]!.url).toMatch(/\/asr\/transcribe$/);
-    expect(metaRequests[0]!.request).toMatchObject({ model: "muse-voice-transcribe-1.0", audioEncoding: "WAV", mode: "PUSH_TO_TALK" });
-    expect(metaRequests[0]!.request.keywords).toContain("Amanzoe");
-    expect(metaRequests[0]!.audioBytes).toBe(wav(2400).length);
-    const spend = (await db.query<{ model: string; cost_usd: string }>("select model, cost_usd from spend_ledger where kind = 'transcribe'")).rows;
-    expect(spend).toHaveLength(1);
-    expect(spend[0]!.model).toBe("muse-voice-transcribe-1.0");
-    expect(Number(spend[0]!.cost_usd)).toBeCloseTo((2.4 * 0.18) / 3600, 6);
+    expect(res.status).toBe(503);
+    expect(await res.json()).toEqual({ error: "Voice input is unavailable. Type your wish instead." });
+    expect(metaRequests).toHaveLength(0);
+    expect((await db.query("select * from spend_ledger where kind='transcribe'")).rows).toHaveLength(0);
   });
-
-  it("needs a signed-in person", async () => {
-    const res = await app.request("/agent/transcribe", { method: "POST", headers: { "Content-Type": "audio/wav" }, body: wav(1000) });
-    expect(res.status).toBe(401);
+  it("requires authentication before availability", async () => {
+    expect((await app.request("/agent/transcribe", { method: "POST", body: wav(1000) })).status).toBe(401);
     expect(metaRequests).toHaveLength(0);
   });
-
-  it("refuses other formats and oversized clips before any paid call", async () => {
+  it("refuses other formats without provider dispatch and preserves the byte limit", async () => {
     const t = await signIn("ada@example.com");
-    expect((await say(t, wav(1000), "audio/webm")).status).toBe(415);
-    expect((await say(t, wav(1000, 44_100))).status).toBe(400);
-    expect((await say(t, wav(100))).status).toBe(400);
+    expect((await say(t, wav(1000), "audio/webm")).status).toBe(503);
     expect((await say(t, new Uint8Array(MAX_CLIP_BYTES + 1))).status).toBe(413);
     expect(metaRequests).toHaveLength(0);
   });
-
-  it("says so when nothing was heard, and maps Meta's busy signal", async () => {
-    const t = await signIn("ada@example.com");
-    metaReply = () => new Response(JSON.stringify({ sessionId: "s", transcript: "  ", audioDurationMs: 900, turns: [] }), { status: 200 });
-    expect((await say(t, wav(900))).status).toBe(422);
-    metaReply = () => new Response("slow down", { status: 429 });
-    const busy = await say(t, wav(900));
-    expect(busy.status).toBe(429);
-    expect(((await busy.json()) as { error: string }).error).toMatch(/busy/);
-  });
-
-  it("caps voice wishes per person per day", async () => {
-    const t = await signIn("ada@example.com");
-    const { rows } = await db.query<{ id: string }>("select id from users where email = 'ada@example.com'");
-    for (let i = 0; i < TRANSCRIBES_PER_USER_PER_DAY; i++) {
-      await db.query("insert into spend_ledger (user_id, model, kind, cost_usd, created_at) values ($1, 'muse-voice-transcribe-1.0', 'transcribe', 0, $2)", [rows[0]!.id, clock.toISOString()]);
-    }
-    expect((await say(t, wav(1000))).status).toBe(429);
-    expect(metaRequests).toHaveLength(0);
-  });
-
-  it("answers 503 when no Meta key is configured", async () => {
-    app = makeApp(false);
-    const t = await signIn("ada@example.com");
+  it("remains unavailable without inference configuration", async () => {
+    app = makeApp(false); const t = await signIn("ada@example.com");
     expect((await say(t, wav(1000))).status).toBe(503);
+    expect(metaRequests).toHaveLength(0);
   });
 });

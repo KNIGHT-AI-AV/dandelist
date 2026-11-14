@@ -70,7 +70,7 @@ export function createApp(deps: AppDeps) {
   // Public deployment capability only: no account read, consent requirement or AI work.
   app.get("/config/features", (c) => {
     c.header("Cache-Control", "public, max-age=60");
-    return c.json({ chatContinuity: deps.modelHistory === true });
+    return c.json({ chatContinuity: deps.modelHistory === true, voiceWishes: false, generatedImages: false, webSearch: false });
   });
 
   // Pictures the agent made (SAM cutouts, Muse Image). Public like any image link: names are the sha256 of the bytes.

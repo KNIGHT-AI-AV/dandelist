@@ -1,7 +1,7 @@
 import { PGlite } from "@electric-sql/pglite";
 import { beforeEach, describe, expect, it } from "vitest";
 import { accepted } from "./consent-helper";
-import { createApp } from "../src/app";
+import { createApp } from "./fixture-app";
 import { Jobs } from "../src/dream/jobs";
 import { migrate, type Db } from "../src/db";
 import { isJudge, userCapUsd } from "../src/spend";
@@ -1058,13 +1058,12 @@ describe("dream turn", () => {
     expect(chip.events.find((e) => e.type === "life")!.life).toEqual({ home: { country: "PT", city: "Lisbon", label: "Lisbon" }, currency: "EUR" });
   });
 
-  it("caps tool calls per turn", async () => {
+  it("refuses an oversized tool batch before any application tool runs", async () => {
     const t = await signIn("ada@example.com");
     concierge = [Array.from({ length: 14 }, (_, i) => fc("ask_region", {}, `r${i}`)), [message("")]];
     const { events } = await turn(t, { type: "message", text: "help" });
-    expect(widgets(events, "region_picker")).toHaveLength(MAX_TOOL_CALLS_PER_TURN);
-    const outputs = metaCalls.at(-1)!.input as { output: string }[];
-    expect(outputs.filter((o) => /tool budget/.test(o.output))).toHaveLength(14 - MAX_TOOL_CALLS_PER_TURN);
+    expect(widgets(events, "region_picker")).toHaveLength(0);
+    expect(metaCalls.filter(c => c.text?.format?.name !== "wants")).toHaveLength(1);
   });
 
   it("needs a session, keeps sessions private and stops at the spend caps", async () => {
@@ -1077,7 +1076,7 @@ describe("dream turn", () => {
     expect((await call("GET", `/dream/sessions/${sessionId}`, b)).status).toBe(404);
     expect((await call("POST", "/dream/turn", a, { action: { type: "telepathy" } })).status).toBe(400);
     const { rows } = await db.query<{ id: string }>("select id from users where email = 'ada@example.com'");
-    await db.query("insert into spend_ledger (user_id, model, kind, cost_usd, created_at) values ($1, 'muse-spark-1.3', 'dream', 2, $2)", [rows[0]!.id, clock.toISOString()]);
+    await db.query("insert into spend_ledger (user_id, model, kind, cost_usd, created_at) values ($1, 'claude-haiku-5-5', 'dream', 2, $2)", [rows[0]!.id, clock.toISOString()]);
     const capped = await call("POST", "/dream/turn", a, { action: { type: "message", text: "hi" } });
     expect(capped.status).toBe(429);
     expect(((await capped.json()) as Ev).error).toMatch(/allowance/);

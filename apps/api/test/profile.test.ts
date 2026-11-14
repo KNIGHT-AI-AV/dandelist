@@ -1,7 +1,7 @@
 import { PGlite } from "@electric-sql/pglite";
 import { beforeEach, describe, expect, it } from "vitest";
 import { accepted } from "./consent-helper";
-import { createApp } from "../src/app";
+import { createApp } from "./fixture-app";
 import { migrate, type Db } from "../src/db";
 import { memoryMediaStore } from "../src/media-store";
 import { FACTS_PER_USER_PER_DAY, MAX_AVATAR_BYTES, cleanDisplayName, cleanFact, sniffImage } from "../src/me";
@@ -295,7 +295,7 @@ describe("facts", () => {
     expect(((await (await call("GET", "/me/facts", token)).json()) as Json).facts).toEqual(kept);
 
     metaStatus = 200;
-    await db.query("insert into spend_ledger (user_id, model, kind, cost_usd, created_at) values ($1, 'muse-spark-1.3', 'research', 5, $2)", [id, clock.toISOString()]);
+    await db.query("insert into spend_ledger (user_id, model, kind, cost_usd, created_at) values ($1, 'claude-haiku-5-5', 'research', 5, $2)", [id, clock.toISOString()]);
     const capped = await call("POST", "/me/facts", token);
     expect(capped.status).toBe(429);
     expect(((await capped.json()) as Json).error).not.toMatch(/\bAI\b/);
