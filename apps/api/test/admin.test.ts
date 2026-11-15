@@ -92,13 +92,16 @@ describe("the admin view", () => {
     const body = await res.json() as Json;
     expect(body).toEqual({
       asOf: expect.any(String), utcDayStart: `${body.asOf.slice(0, 10)}T00:00:00.000Z`, currency: "USD",
+      ledgerAudit: { reservationUnlinkedTotalCalls: 0, nonPilotModelTotalCalls: 0, ownerReservationUnlinkedTodayCalls: 0, ownerNonPilotModelTodayCalls: 0 },
       claude: {
         poolTotalUsd: 0, ledgerTotalUsd: 0, ledgerTotalCalls: 0, ledgerTodayUsd: 0, ledgerTodayCalls: 0,
+        ledgerTotalInputTokens: 0, ledgerTotalOutputTokens: 0, ledgerTotalSearches: 0,
         unconfirmedTotalUsd: 0, unconfirmedTotalCalls: 0, unconfirmedTodayUsd: 0, unconfirmedTodayCalls: 0,
         activeHolds: { count: 0, usd: 0 }, expiredHolds: { count: 0, usd: 0 },
       },
       owner: {
         ledgerTodayUsd: 0, ledgerTodayCalls: 0, unconfirmedTodayUsd: 0, unconfirmedTodayCalls: 0,
+        ledgerTodayInputTokens: 0, ledgerTodayOutputTokens: 0, ledgerTodaySearches: 0,
         activeHolds: { count: 0, usd: 0 }, expiredHolds: { count: 0, usd: 0 }, savedNoteCount: 0,
       },
     });
@@ -111,18 +114,18 @@ describe("the admin view", () => {
     await db.exec("set timezone = 'Pacific/Honolulu'");
     const start = (await (await call("/admin/inference-readiness", owner.token)).json() as Json).utcDayStart as string;
     const yesterday = new Date(Date.parse(start) - 1).toISOString();
-    for (const [userId, model, kind, usd, at] of [
-      [owner.id, "claude-haiku-5-5", "facts", .01, start],
-      [owner.id, "claude-haiku-5-5", "facts:unconfirmed", .05, start],
-      [owner.id, "claude-haiku-5-5", "old:unconfirmed", .03, yesterday],
-      [other.id, "claude-haiku-5-5", "photo", .02, start],
-      [other.id, "claude-haiku-5-5", "photo:unconfirmed", .04, start],
-      [null, "claude-opus-5-5", "legacy", .005, start],
-      [null, "claude-opus-5-5", "legacy", .07, yesterday],
-      [owner.id, "muse-spark-1.3", "old-meta", .9, start],
-      [owner.id, "apify:test", "tool", .8, start],
+    for (const [userId, model, kind, usd, at, input, output, searches] of [
+      [owner.id, "claude-haiku-5-5", "facts", .01, start, 11, 2, 1],
+      [owner.id, "claude-haiku-5-5", "facts:unconfirmed", .05, start, 13, 3, 2],
+      [owner.id, "claude-opus-5-5", "old:unconfirmed", .03, yesterday, 17, 5, 3],
+      [other.id, "claude-haiku-5-5", "photo", .02, start, 19, 7, 4],
+      [other.id, "claude-haiku-5-5", "photo:unconfirmed", .04, start, 23, 11, 5],
+      [owner.id, "claude-opus-5-5", "legacy", .005, start, 29, 13, 6],
+      [null, "claude-opus-5-5", "legacy", .07, yesterday, 31, 17, 7],
+      [owner.id, "muse-spark-1.3", "old-meta", .9, start, 1000, 2000, 100],
+      [owner.id, "apify:test", "tool", .8, start, 3000, 4000, 200],
     ]) {
-      await db.query("insert into spend_ledger(user_id, model, kind, cost_usd, created_at) values ($1,$2,$3,$4,$5)", [userId, model, kind, usd, at]);
+      await db.query("insert into spend_ledger(user_id, model, kind, cost_usd, created_at, input_tokens, output_tokens, searches) values ($1,$2,$3,$4,$5,$6,$7,$8)", [userId, model, kind, usd, at, input, output, searches]);
     }
     for (const [userId, pool, usd, mineUsd, state, expired] of [
       [owner.id, "claude", .04, .02, "held", false],
@@ -138,19 +141,25 @@ describe("the admin view", () => {
         values (gen_random_uuid(),$1,$2,$3,$4,$5,$6,statement_timestamp() + ($7::int * interval '1 hour'))`,
         [userId, pool, usd, mineUsd, state, yesterday, expired ? -1 : 1]);
     }
+    await db.query(`update spend_ledger set reservation_id =
+      (select id from spend_reservations where user_id = $1::text and pool = 'claude' and state = 'settled')
+      where user_id = $1::uuid and kind = 'facts'`, [owner.id]);
     for (const [userId, note] of [[owner.id, "private-owner-note"], [owner.id, "second-private-note"], [owner.id, ""], [owner.id, null], [other.id, "private-other-note"]]) {
       await db.query("insert into wishes(user_id,name,kind,tier,note) values ($1,'private-wish-title','buy','nice',$2)", [userId, note]);
     }
     // No query parameter can select another person's ledger or notes.
     const body = await (await call(`/admin/inference-readiness?userId=${other.id}`, owner.token)).json() as Json;
     expect(body.utcDayStart).toBe(start);
+    expect(body.ledgerAudit).toEqual({ reservationUnlinkedTotalCalls: 8, nonPilotModelTotalCalls: 5, ownerReservationUnlinkedTodayCalls: 4, ownerNonPilotModelTodayCalls: 3 });
     expect(body.claude).toEqual({
       poolTotalUsd: .225, ledgerTotalUsd: .225, ledgerTotalCalls: 7, ledgerTodayUsd: .125, ledgerTodayCalls: 5,
+      ledgerTotalInputTokens: 143, ledgerTotalOutputTokens: 58, ledgerTotalSearches: 28,
       unconfirmedTotalUsd: .12, unconfirmedTotalCalls: 3, unconfirmedTodayUsd: .09, unconfirmedTodayCalls: 2,
       activeHolds: { count: 3, usd: .09 }, expiredHolds: { count: 2, usd: .13 },
     });
     expect(body.owner).toEqual({
-      ledgerTodayUsd: .06, ledgerTodayCalls: 2, unconfirmedTodayUsd: .05, unconfirmedTodayCalls: 1,
+      ledgerTodayUsd: .065, ledgerTodayCalls: 3, unconfirmedTodayUsd: .05, unconfirmedTodayCalls: 1,
+      ledgerTodayInputTokens: 53, ledgerTodayOutputTokens: 18, ledgerTodaySearches: 9,
       activeHolds: { count: 1, usd: .02 }, expiredHolds: { count: 1, usd: .03 }, savedNoteCount: 2,
     });
     for (const content of [owner.id, other.id, OWNER, "ada@example.com", "private-", "userId", "note:"]) expect(JSON.stringify(body)).not.toContain(content);
@@ -164,13 +173,24 @@ describe("the admin view", () => {
     expect(before.claude.activeHolds).toEqual({ count: 1, usd: .05 });
     expect(before.claude.ledgerTotalUsd).toBe(0);
     await settle(db, held.id, owner.id, "facts:unconfirmed", { model: "claude-haiku-5-5", inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, searches: 0 }, .05, new Date(before.asOf));
+    const confirmed = await reserve(db, { userId: owner.id, pool: "claude", usd: .05 });
+    if (confirmed === "slots") throw new Error("Unexpected fixture concurrency");
+    await settle(db, confirmed.id, owner.id, "facts", { model: "claude-haiku-5-5", inputTokens: 17, cachedInputTokens: 0, outputTokens: 5, searches: 2 }, .02, new Date(before.asOf));
     await db.exec("begin read only");
     try {
       const res = await call("/admin/inference-readiness", owner.token);
       expect(res.status).toBe(200);
       const body = await res.json() as Json;
-      expect(body.claude).toMatchObject({ poolTotalUsd: .05, ledgerTotalUsd: .05, ledgerTotalCalls: 1, unconfirmedTotalUsd: .05, activeHolds: { count: 0, usd: 0 } });
-      expect(body.owner).toMatchObject({ ledgerTodayUsd: .05, unconfirmedTodayUsd: .05, activeHolds: { count: 0, usd: 0 } });
+      expect(body.claude).toMatchObject({ poolTotalUsd: .07, ledgerTotalUsd: .07, ledgerTotalCalls: 2, unconfirmedTotalUsd: .05, activeHolds: { count: 0, usd: 0 } });
+      expect(body.owner).toMatchObject({ ledgerTodayUsd: .07, unconfirmedTodayUsd: .05, activeHolds: { count: 0, usd: 0 } });
+      expect(body.ledgerAudit).toEqual({ reservationUnlinkedTotalCalls: 0, nonPilotModelTotalCalls: 0, ownerReservationUnlinkedTodayCalls: 0, ownerNonPilotModelTodayCalls: 0 });
+      // Compare before/after counters without any model, credential or customer-content path.
+      for (const [section, window] of [["claude", "Total"], ["owner", "Today"]] as const) {
+        for (const [metric, delta] of [["InputTokens", 17], ["OutputTokens", 5], ["Searches", 2]] as const) {
+          const field = `ledger${window}${metric}`;
+          expect(body[section][field] - before[section][field]).toBe(delta);
+        }
+      }
       for (const method of ["POST", "PUT", "PATCH", "DELETE"]) {
         expect((await app.request("/admin/inference-readiness", { method, headers: { Authorization: `Bearer ${owner.token}` } })).status).toBe(404);
       }

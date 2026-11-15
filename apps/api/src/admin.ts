@@ -76,6 +76,9 @@ export function adminRoutes(deps: AdminDeps) {
            date_trunc('day', statement_timestamp() at time zone 'UTC') at time zone 'UTC' as day_start
        ), ledger as (
          select count(*)::int as total_calls, coalesce(sum(cost_usd), 0) as total_usd,
+           coalesce(sum(input_tokens), 0) as total_input_tokens,
+           coalesce(sum(output_tokens), 0) as total_output_tokens,
+           coalesce(sum(searches), 0) as total_searches,
            count(*) filter (where created_at >= b.day_start)::int as today_calls,
            coalesce(sum(cost_usd) filter (where created_at >= b.day_start), 0) as today_usd,
            count(*) filter (where kind like '%:unconfirmed')::int as unknown_calls,
@@ -84,9 +87,18 @@ export function adminRoutes(deps: AdminDeps) {
            coalesce(sum(cost_usd) filter (where kind like '%:unconfirmed' and created_at >= b.day_start), 0) as unknown_today_usd,
            count(*) filter (where user_id = $1 and created_at >= b.day_start)::int as owner_today_calls,
            coalesce(sum(cost_usd) filter (where user_id = $1 and created_at >= b.day_start), 0) as owner_today_usd,
+           coalesce(sum(input_tokens) filter (where user_id = $1 and created_at >= b.day_start), 0) as owner_today_input_tokens,
+           coalesce(sum(output_tokens) filter (where user_id = $1 and created_at >= b.day_start), 0) as owner_today_output_tokens,
+           coalesce(sum(searches) filter (where user_id = $1 and created_at >= b.day_start), 0) as owner_today_searches,
            count(*) filter (where user_id = $1 and kind like '%:unconfirmed' and created_at >= b.day_start)::int as owner_unknown_today_calls,
            coalesce(sum(cost_usd) filter (where user_id = $1 and kind like '%:unconfirmed' and created_at >= b.day_start), 0) as owner_unknown_today_usd
          from spend_ledger cross join bounds b where model like 'claude-%'
+       ), audit as (
+         select count(*) filter (where reservation_id is null)::int as unlinked_total_calls,
+           count(*) filter (where model <> 'claude-haiku-5-5')::int as non_pilot_total_calls,
+           count(*) filter (where user_id = $1 and created_at >= b.day_start and reservation_id is null)::int as owner_unlinked_today_calls,
+           count(*) filter (where user_id = $1 and created_at >= b.day_start and model <> 'claude-haiku-5-5')::int as owner_non_pilot_today_calls
+         from spend_ledger cross join bounds b
        ), holds as (
          select count(*) filter (where state = 'held' and expires_at > b.at)::int as held_count,
            coalesce(sum(usd) filter (where state = 'held' and expires_at > b.at), 0) as held_usd,
@@ -98,19 +110,25 @@ export function adminRoutes(deps: AdminDeps) {
            coalesce(sum(mine_usd) filter (where (state = 'expired' or (state = 'held' and expires_at <= b.at)) and user_id = $1::text), 0) as owner_expired_usd
          from spend_reservations cross join bounds b where pool = 'claude'
        )
-       select b.at, b.day_start, p.usd as pool_usd, l.*, h.*,
+       select b.at, b.day_start, p.usd as pool_usd, l.*, a.*, h.*,
          (select count(*)::int from wishes where user_id = $1 and note is not null and note <> '') as saved_notes
-       from bounds b cross join ledger l cross join holds h left join spend_pool_totals p on p.pool = 'claude'`,
+       from bounds b cross join ledger l cross join audit a cross join holds h left join spend_pool_totals p on p.pool = 'claude'`,
       [c.get("userId")],
     )).rows[0]!;
     return c.json({
       asOf: iso(r.at),
       utcDayStart: iso(r.day_start),
       currency: "USD",
+      // Audit ALL models, so a newly routed Meta/tool row cannot disappear behind the Claude filter.
+      ledgerAudit: {
+        reservationUnlinkedTotalCalls: num(r.unlinked_total_calls), nonPilotModelTotalCalls: num(r.non_pilot_total_calls),
+        ownerReservationUnlinkedTodayCalls: num(r.owner_unlinked_today_calls), ownerNonPilotModelTodayCalls: num(r.owner_non_pilot_today_calls),
+      },
       claude: {
         // Missing accounting state is unknown, never a fabricated zero baseline.
         poolTotalUsd: r.pool_usd == null ? null : num(r.pool_usd),
         ledgerTotalUsd: num(r.total_usd), ledgerTotalCalls: num(r.total_calls),
+        ledgerTotalInputTokens: num(r.total_input_tokens), ledgerTotalOutputTokens: num(r.total_output_tokens), ledgerTotalSearches: num(r.total_searches),
         ledgerTodayUsd: num(r.today_usd), ledgerTodayCalls: num(r.today_calls),
         unconfirmedTotalUsd: num(r.unknown_usd), unconfirmedTotalCalls: num(r.unknown_calls),
         unconfirmedTodayUsd: num(r.unknown_today_usd), unconfirmedTodayCalls: num(r.unknown_today_calls),
@@ -119,6 +137,7 @@ export function adminRoutes(deps: AdminDeps) {
       },
       owner: {
         ledgerTodayUsd: num(r.owner_today_usd), ledgerTodayCalls: num(r.owner_today_calls),
+        ledgerTodayInputTokens: num(r.owner_today_input_tokens), ledgerTodayOutputTokens: num(r.owner_today_output_tokens), ledgerTodaySearches: num(r.owner_today_searches),
         unconfirmedTodayUsd: num(r.owner_unknown_today_usd), unconfirmedTodayCalls: num(r.owner_unknown_today_calls),
         activeHolds: { count: num(r.owner_held_count), usd: num(r.owner_held_usd) },
         expiredHolds: { count: num(r.owner_expired_count), usd: num(r.owner_expired_usd) },
