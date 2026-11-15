@@ -180,6 +180,47 @@ describe("selected Haiku application boundary", () => {
     expect(Number(rows[0].cost_usd)).toBe(Number((await db.query<any>("select usd from spend_reservations")).rows[0].usd));
     expect(Number(rows[0].cost_usd)).toBeLessThanOrEqual(0.05);
   });
+  it("logs only fixed sanitized preflight metadata for a locally rejected photo", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const image_url = "https://images.example.com/PRIVATE_PHOTO_NAME.heic?secret=PRIVATE_QUERY";
+    setup.apiKey = "PRIVATE_DIAGNOSTIC_KEY";
+    try {
+      await expect(inferenceFor({ db, now: () => clock, inference: setup }, userId, "photo").responses({
+        instructions: "PRIVATE_WISH_AND_NOTE", input: [{ role: "user", content: [{ type: "input_text", text: "PRIVATE_USER_TEXT" }, { type: "input_image", image_url }] }],
+      })).rejects.toThrow();
+      expect(warn.mock.calls).toEqual([["inference attempt failed", JSON.stringify({ kind: "photo", phase: "preflight", category: "image_rejected" })]]);
+      const logged = JSON.stringify(warn.mock.calls);
+      for (const privateValue of ["PRIVATE_", image_url, setup.apiKey, userId, token, "stack", "message"]) expect(logged).not.toContain(privateValue);
+      expect(requests).toHaveLength(0); expect((await db.query("select * from spend_ledger")).rows).toHaveLength(0);
+      expect((await db.query("select state from spend_reservations")).rows).toEqual([{ state: "released" }]);
+    } finally { warn.mockRestore(); }
+  });
+  it("logs only sanitized attempted/status metadata and never a caller kind or provider error body", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const privateKind = "PRIVATE_KIND_owner@example.invalid";
+    responseStatus = 503; setup.apiKey = "PRIVATE_DIAGNOSTIC_KEY";
+    try {
+      await expect(inferenceFor({ db, now: () => clock, inference: setup }, userId, privateKind).responses({ input: "PRIVATE_WISH https://private.example.com/note", instructions: "PRIVATE_NOTE" })).rejects.toThrow();
+      expect(warn.mock.calls).toEqual([["inference attempt failed", JSON.stringify({ kind: "other", phase: "http-attempted", category: "provider_error", httpStatus: 503 })]]);
+      const logged = JSON.stringify(warn.mock.calls);
+      for (const privateValue of ["PRIVATE", privateKind, "private.example.com", setup.apiKey, userId, token, "headers", "stack", "message"]) expect(logged).not.toContain(privateValue);
+      expect(requests).toHaveLength(1);
+      const rows = (await db.query<any>("select l.kind,l.cost_usd,r.usd,r.state from spend_ledger l join spend_reservations r on r.id=l.reservation_id")).rows;
+      expect(rows).toHaveLength(1); expect(rows[0]).toMatchObject({ kind: `${privateKind}:unconfirmed`, state: "settled" });
+      expect(Number(rows[0].cost_usd)).toBe(Number(rows[0].usd));
+    } finally { warn.mockRestore(); }
+  });
+  it("preserves conservative settlement even when the diagnostic logger itself fails", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => { throw new Error("PRIVATE_LOGGER_FAILURE"); });
+    responseStatus = 503;
+    try {
+      await expect(inferenceFor({ db, now: () => clock, inference: setup }, userId, "photo").responses({ input: "A failed synthetic photo" })).rejects.toThrow();
+      expect(warn).toHaveBeenCalledTimes(1);
+      const rows = (await db.query<any>("select l.kind,l.cost_usd,r.usd,r.state from spend_ledger l join spend_reservations r on r.id=l.reservation_id")).rows;
+      expect(rows).toHaveLength(1); expect(rows[0]).toMatchObject({ kind: "photo:unconfirmed", state: "settled" });
+      expect(Number(rows[0].cost_usd)).toBe(Number(rows[0].usd));
+    } finally { warn.mockRestore(); }
+  });
   it.each(["data:image/avif;base64,AAAA", "https://images.example.com/photo.heic"])("does not record unknown spend for an image rejected by the real adapter before HTTP: %s", async image_url => {
     const brain = inferenceFor({ db, now: () => clock, inference: setup }, userId, "photo");
     await expect(brain.responses({ input: [{ role: "user", content: [{ type: "input_text", text: "Check this photo" }, { type: "input_image", image_url }] }] })).rejects.toThrow();

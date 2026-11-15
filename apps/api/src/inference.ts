@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { ClaudeClient, HAIKU_MODEL, MetaApiError, type Usage } from "@dandelist/meta";
+import { ClaudeClient, ClaudeImageError, HAIKU_MODEL, MetaApiError, type Usage } from "@dandelist/meta";
 import type { Db } from "./db";
 import { assertAiConsent } from "./consent";
 import { createNoMetaDispatcher, readNoMetaPolicy, type NoMetaPolicy } from "./inference-policy";
@@ -69,6 +69,18 @@ function memoryHistory(owner: string): HistoryStore {
     },
   };
 }
+const FAILURE_KINDS = new Set(["describe", "search", "pick", "facts", "pairs", "dream", "suggest", "interpret", "photo", "research"]);
+/** Fixed metadata only: never serialize an error, request, identity or caller-supplied kind. */
+function reportFailure(kind: string, error: unknown, attempted: boolean, cancelled: boolean): void {
+  const category = error instanceof ClaudeImageError ? "image_rejected" : cancelled ? "cancelled" : error instanceof MetaApiError ? "provider_error" : "other";
+  const status = error instanceof MetaApiError && Number.isInteger(error.status) && error.status >= 100 && error.status <= 599 ? error.status : undefined;
+  try {
+    console.warn("inference attempt failed", JSON.stringify({
+      kind: FAILURE_KINDS.has(kind) ? kind : "other", phase: attempted ? "http-attempted" : "preflight", category,
+      ...(status === undefined ? {} : { httpStatus: status }),
+    }));
+  } catch { /* Diagnostic failure must never change settlement or the original error. */ }
+}
 /** All application inference uses this one Haiku path; Meta keys and provider-sticky cursors are never used. */
 export function inferenceFor(deps: InferenceDeps, userId: string, kind: string, opts: { personUsd?: number; signal?: AbortSignal; onCost?: (usd: number) => Promise<void>; sessionId?: string } = {}): { responses: Responder } {
   const p = policyFor(deps), setup = deps.inference!, scope = `run:${randomUUID()}`;
@@ -94,6 +106,7 @@ export function inferenceFor(deps: InferenceDeps, userId: string, kind: string, 
     let result;
     try { result = await send(d.body); }
     catch (error) {
+      reportFailure(kind, error, attempted, opts.signal?.aborted === true);
       if (attempted) {
         // Once fetch is attempted, even a disconnect/abort remains uncertain and consumes the full reservation.
         const usage: Usage = { model: HAIKU_MODEL, inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, searches: 0 };
