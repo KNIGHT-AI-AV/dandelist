@@ -10,6 +10,10 @@ import { reserve, SpendLimitError, type BudgetPolicy } from "../src/spend-reserv
 import { recordSpend } from "../src/spend";
 import { accepted } from "./consent-helper";
 import { AI_CONSENT_VERSION } from "../src/consent";
+import { findPhoto, type PhotoPlan } from "../src/agent/photos";
+import { pngHeader } from "./images";
+
+vi.mock("node:dns/promises", async (original) => ({ ...(await original<object>()), lookup: async () => [{ address: "93.184.215.14", family: 4 }] }));
 
 // Real application + real Messages adapter. Every HTTP request is intercepted; no legacy fixture-app transport.
 let pg: PGlite, db: Db, app: ReturnType<typeof createApp>, clock: Date, setup: InferenceSetup, policy: NoMetaPolicy;
@@ -175,6 +179,91 @@ describe("selected Haiku application boundary", () => {
     expect(rows[0].kind).toBe("facts:unconfirmed");
     expect(Number(rows[0].cost_usd)).toBe(Number((await db.query<any>("select usd from spend_reservations")).rows[0].usd));
     expect(Number(rows[0].cost_usd)).toBeLessThanOrEqual(0.05);
+  });
+  it.each(["data:image/avif;base64,AAAA", "https://images.example.com/photo.heic"])("does not record unknown spend for an image rejected by the real adapter before HTTP: %s", async image_url => {
+    const brain = inferenceFor({ db, now: () => clock, inference: setup }, userId, "photo");
+    await expect(brain.responses({ input: [{ role: "user", content: [{ type: "input_text", text: "Check this photo" }, { type: "input_image", image_url }] }] })).rejects.toThrow();
+    expect(requests).toHaveLength(0);
+    expect((await db.query("select * from spend_ledger")).rows).toHaveLength(0);
+    expect((await db.query("select state from spend_reservations")).rows).toEqual([{ state: "released" }]);
+  });
+  it("does not claim a charge when cancellation is proven before the fetch boundary", async () => {
+    const stop = new AbortController(); let reserved = false;
+    const guarded: Db = { exec: db.exec, query: async <T>(q: string, p?: unknown[]) => {
+      const r = await db.query<T>(q, p);
+      if (q.startsWith("select spend_reserve(")) reserved = true;
+      else if (reserved && q === "select ai_consent_version from users where id = $1") stop.abort();
+      return r;
+    } };
+    setup.fetch = vi.fn(async (_input, init) => { init?.signal?.throwIfAborted(); throw new Error("Must never dispatch"); }) as typeof fetch;
+    await expect(inferenceFor({ db: guarded, now: () => clock, inference: setup }, userId, "photo", { signal: stop.signal }).responses({ input: "A cancelled photo" })).rejects.toThrow();
+    expect(reserved).toBe(true); expect(setup.fetch).not.toHaveBeenCalled();
+    expect((await db.query("select * from spend_ledger")).rows).toHaveLength(0);
+    expect((await db.query("select state from spend_reservations")).rows).toEqual([{ state: "released" }]);
+  });
+  it("retains the maximum unconfirmed charge after cancellation of an actually dispatched request", async () => {
+    const stop = new AbortController();
+    setup.fetch = vi.fn(async (input, init) => {
+      requests.push({ url: String(input), body: JSON.parse(String(init?.body)) });
+      return new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(new DOMException("Synthetic disconnect", "AbortError")), { once: true });
+        stop.abort();
+      });
+    }) as typeof fetch;
+    await expect(inferenceFor({ db, now: () => clock, inference: setup }, userId, "photo", { signal: stop.signal }).responses({ input: "A dispatched photo" })).rejects.toThrow();
+    expect(requests).toHaveLength(1);
+    const rows = (await db.query<any>("select l.kind,l.cost_usd,r.usd,r.state from spend_ledger l join spend_reservations r on r.id=l.reservation_id")).rows;
+    expect(rows).toHaveLength(1); expect(rows[0]).toMatchObject({ kind: "photo:unconfirmed", state: "settled" });
+    expect(Number(rows[0].cost_usd)).toBe(Number(rows[0].usd));
+  });
+  it("keeps dispatch evidence isolated between concurrent successful and locally rejected photo calls", async () => {
+    let release!: () => void;
+    providerGate = new Promise<void>(done => { release = done; });
+    const brain = inferenceFor({ db, now: () => clock, inference: setup }, userId, "photo");
+    const sent = brain.responses({ input: "A supported photo check" });
+    try {
+      await vi.waitFor(() => expect(requests).toHaveLength(1));
+      await expect(brain.responses({ input: [{ role: "user", content: [{ type: "input_image", image_url: "data:image/avif;base64,AAAA" }] }] })).rejects.toThrow();
+      expect((await db.query("select * from spend_ledger")).rows).toHaveLength(0);
+    } finally { release(); await sent; }
+    expect((await db.query("select kind from spend_ledger")).rows).toEqual([{ kind: "photo" }]);
+    expect((await db.query<any>("select state from spend_reservations order by created_at")).rows).toEqual([{ state: "settled" }, { state: "released" }]);
+  });
+  it("lets dispatched photo work settle within the existing deadline before route cleanup aborts it", async () => {
+    const stop = new AbortController(); let slowFinished = false;
+    setup.fetch = vi.fn(async (input, init) => {
+      const body = JSON.parse(String(init?.body)); requests.push({ url: String(input), body });
+      const text = body.messages.flatMap((m: any) => m.content).filter((p: any) => p.type === "text").map((p: any) => p.text).join("\n");
+      const vision = text.includes("Options:");
+      if (!vision) await new Promise<void>((resolve, reject) => {
+        const done = () => { init?.signal?.removeEventListener("abort", abort); slowFinished = true; resolve(); };
+        const timer = setTimeout(done, 500);
+        const abort = () => { clearTimeout(timer); reject(new DOMException("Route cleanup", "AbortError")); };
+        init?.signal?.addEventListener("abort", abort, { once: true });
+      });
+      const letter = /^([A-G])\. A camera$/m.exec(text)?.[1];
+      return Response.json({ id: "msg_photo", type: "message", role: "assistant", model: HAIKU_MODEL,
+        content: [{ type: "text", text: vision ? JSON.stringify({ seen: "A camera", fits: [letter], quality: "studio", clean: true, subject: true }) : "" }],
+        stop_reason: "end_turn", usage: { input_tokens: 1000, output_tokens: 100 } });
+    }) as typeof fetch;
+    const brain = inferenceFor({ db, now: () => clock, inference: setup }, userId, "photo", { signal: stop.signal });
+    const pending: Promise<unknown>[] = [];
+    const meta = { responses: (body: Record<string, unknown>) => { const p = brain.responses(body); pending.push(p); return p; } };
+    const image = "https://images.example.com/camera.png";
+    const web = (async (input: any) => {
+      const url = String(input);
+      if (url.startsWith("https://en.wikipedia.org/w/api.php")) return Response.json({ query: { pages: { 1: { title: "A camera", original: { source: image, width: 1600, height: 1200 } } } } });
+      if (url === image) return new Response(pngHeader(1600, 1200), { headers: { "Content-Type": "image/png" } });
+      return Response.json({ query: { pages: {} }, results: [] });
+    }) as typeof fetch;
+    const plan: PhotoPlan = { identity: "A camera", broad: "", lookalikes: ["A bicycle"], exact: true, official: "", articles: ["A camera"], commons: "", web: "A camera", kind: "product" };
+    let found;
+    try { found = await findPhoto(meta, { title: "A camera", kind: "buy" }, { fetcher: web, plan: Promise.resolve(plan), by: Date.now() + 4300 }); }
+    finally { stop.abort(); await Promise.allSettled(pending); }
+    expect(found?.image.url).toBe(image); expect(slowFinished).toBe(true);
+    expect(requests).toHaveLength(3);
+    expect((await db.query<any>("select kind from spend_ledger order by id")).rows).toEqual([{ kind: "photo" }, { kind: "photo" }, { kind: "photo" }]);
+    expect((await db.query<any>("select state from spend_reservations")).rows.every(r => r.state === "settled")).toBe(true);
   });
   it("enforces a run's 32-call ceiling through the actual SQL admission function", async () => {
     const brain = inferenceFor({ db, now: () => clock, inference: setup }, userId, "bounded-run");

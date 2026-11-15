@@ -5,7 +5,7 @@ vi.mock("node:dns/promises", async (importOriginal) => ({ ...(await importOrigin
 import type { Draft, Meta, PriceOption } from "../src/agent/agent";
 import { mergeFast } from "../src/agent/find";
 import { wikimediaRendering } from "../src/agent/media";
-import { checkPhoto, findPhoto, gradeOf, openversePhotos, verifyPhoto, wikipediaLeadPhotos, type FoundPhoto, type PhotoPlan, type PhotoVerdict } from "../src/agent/photos";
+import { checkPhoto, findPhoto, gradeOf, openversePhotos, verifyPhoto, webPhotoUrls, wikipediaLeadPhotos, type FoundPhoto, type PhotoPlan, type PhotoVerdict } from "../src/agent/photos";
 import { imageResponse, jpegHeader, pngHeader } from "./images";
 
 /**
@@ -97,6 +97,41 @@ const passing = (good: string[], asked: string[] = []) => async (url: string) =>
 };
 
 describe("the photo search (owner, 2026-10-29: 'Not any photo will do!!', 'right 99% of time')", () => {
+  it("does not dispatch a web model call when its reserved response window is already gone", async () => {
+    const calls: Record<string, unknown>[] = [];
+    expect(await webPhotoUrls(planMeta(leicaPlan(), calls), "Leica Q3", leica, imagesAt({}), Date.now() + 3000)).toEqual([]);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("does not start paid vision when image preparation finishes after the photo deadline", async () => {
+    let release!: () => void, checked!: () => void;
+    const data = new Promise<void>(done => { release = done; });
+    const completed = new Promise<void>(done => { checked = done; });
+    const base = imagesAt({ [MAKER]: [2400, 1600] }, wikipedia({ "Leica Q3": { source: MAKER, width: 2400, height: 1600 } }));
+    const fetcher = (async (input: any, init?: RequestInit) => {
+      if (String(input) === MAKER && !new Headers(init?.headers).has("Range")) await data;
+      return base(input, init);
+    }) as typeof fetch;
+    const calls: Record<string, unknown>[] = [];
+    const found = await findPhoto(planMeta(leicaPlan(), calls), leica, { fetcher, webPhotos: async () => [], plan: Promise.resolve(leicaPlan()), by: Date.now() + 100,
+      trace: t => { if (t.step === "checked") checked(); } });
+    expect(found).toBeNull();
+    release(); await completed;
+    expect(calls).toHaveLength(0);
+  });
+
+  it("does not extend the original deadline while draining unresponsive vision calls", async () => {
+    vi.useFakeTimers();
+    try {
+      const responses = vi.fn(() => new Promise<never>(() => undefined));
+      const start = Date.now();
+      const pending = findPhoto({ responses } as Meta, leica, { fetcher: imagesAt({ [BIG]: [2400, 1600] }, wikipedia(leads)), webPhotos: async () => [], plan: Promise.resolve(leicaPlan()), by: start + 100 });
+      await vi.advanceTimersByTimeAsync(101);
+      expect(await pending).toBeNull();
+      expect(Date.now() - start).toBe(101); expect(responses).toHaveBeenCalledTimes(2);
+    } finally { vi.useRealTimers(); }
+  });
+
   const leads = { "Leica Q3": { source: BIG, width: 5184, height: 3456 } };
 
   it("shows a photo only when the vision checks pass it, and no photo rather than a wrong one", async () => {

@@ -433,6 +433,29 @@ export type PhotoTrace =
  */
 export async function findPhoto(meta: Meta, subject: PhotoSubject, ctx: PhotoSearchContext): Promise<FoundPhoto | null> {
   const by = ctx.by ?? Date.now() + 30_000;
+  const pending = new Set<Promise<unknown>>();
+  let closed = false;
+  const tracked: Meta = { ...meta, responses: (body) => {
+    // within() stops waiting, not the underlying work. A late image read/search must
+    // not start another paid call after selection or the original deadline.
+    if (closed || Date.now() >= by) return Promise.reject(new Error("Photo search finished"));
+    const p = (async () => meta.responses(body))();
+    pending.add(p);
+    void p.then(() => pending.delete(p), () => pending.delete(p));
+    return p;
+  } };
+  try {
+    return await searchPhoto(tracked, subject, { ...ctx, by });
+  } finally {
+    closed = true;
+    // Do not turn an early result/failed sibling into a gratuitous abort of paid I/O.
+    // Drain only within the existing deadline; its genuine expiry can still be uncertain.
+    await within(Promise.allSettled([...pending]), Math.max(0, by - Date.now()));
+  }
+}
+
+async function searchPhoto(meta: Meta, subject: PhotoSubject, ctx: PhotoSearchContext): Promise<FoundPhoto | null> {
+  const by = ctx.by ?? Date.now() + 30_000;
   const left = () => Math.max(0, by - Date.now());
   const api = ctx.api ?? ctx.fetcher;
   const exclude = ctx.exclude ?? [];
@@ -583,6 +606,8 @@ const webPrompt = (official: string) =>
  * pictures of the pages it found (read by our server, public hosts only). Checked by the caller before use.
  */
 export async function webPhotoUrls(meta: Meta, query: string, subject: PhotoSubject, fetcher: Fetcher, by: number, opts: { identity?: string; official?: string; model?: string; effort?: Effort; trace?: (t: PhotoTrace) => void } = {}): Promise<string[]> {
+  const searchMs = by - Date.now() - 4_000;
+  if (searchMs <= 0) return [];
   const res = await within(
     meta.responses({
       ...(opts.model ? { model: opts.model } : {}),
@@ -593,7 +618,7 @@ export async function webPhotoUrls(meta: Meta, query: string, subject: PhotoSubj
       max_tool_calls: 1,
       include: SEARCH_INCLUDE,
     }),
-    Math.max(0, by - Date.now() - 4_000),
+    searchMs,
   );
   if (!res) return [];
   const { images, pages } = addresses(res);

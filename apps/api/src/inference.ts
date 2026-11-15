@@ -72,26 +72,35 @@ function memoryHistory(owner: string): HistoryStore {
 /** All application inference uses this one Haiku path; Meta keys and provider-sticky cursors are never used. */
 export function inferenceFor(deps: InferenceDeps, userId: string, kind: string, opts: { personUsd?: number; signal?: AbortSignal; onCost?: (usd: number) => Promise<void>; sessionId?: string } = {}): { responses: Responder } {
   const p = policyFor(deps), setup = deps.inference!, scope = `run:${randomUUID()}`;
-  const directFetch: typeof fetch = (input, init) => {
-    const url = new URL(input instanceof Request ? input.url : String(input));
-    if (url.origin !== "https://api.anthropic.com" || url.pathname !== "/v1/messages") throw new InferenceUnavailableError();
-    return (setup.fetch ?? fetch)(input, { ...init, redirect: "error" });
-  };
-  const send: Responder = setup.transport?.respond ?? (body => new ClaudeClient({ apiKey: setup.apiKey!, model: HAIKU_MODEL, fast: false,
-    maxTokens: p.limits.outputTokens, maxRetries: 0, maxResumes: 0, maxSearchUses: 1,
-    fetch: reservedFetch(stoppable(directFetch, opts.signal ?? new AbortController().signal)),
-  }).responses(body));
   const quote = setup.transport?.quote ?? haikuMaximumCharge;
   const dispatch = createNoMetaDispatcher(p, async d => {
     // A queued hold or background job may outlive its initial consent read. Check again immediately before I/O.
     await assertAiConsent(deps.db, userId);
+    // Local adapter/preparation failures are not provider charges. Keep this per dispatch,
+    // not per client: sibling vision calls may be running concurrently. Opaque test transports
+    // cannot prove a pre-HTTP boundary, so their errors remain conservatively unconfirmed.
+    let attempted = !!setup.transport;
+    const directFetch: typeof fetch = (input, init) => {
+      const url = new URL(input instanceof Request ? input.url : String(input));
+      if (url.origin !== "https://api.anthropic.com" || url.pathname !== "/v1/messages") throw new InferenceUnavailableError();
+      init?.signal?.throwIfAborted();
+      attempted = true;
+      return (setup.fetch ?? fetch)(input, { ...init, redirect: "error" });
+    };
+    const send: Responder = setup.transport?.respond ?? (body => new ClaudeClient({ apiKey: setup.apiKey!, model: HAIKU_MODEL, fast: false,
+      maxTokens: p.limits.outputTokens, maxRetries: 0, maxResumes: 0, maxSearchUses: 1,
+      fetch: reservedFetch(stoppable(directFetch, opts.signal ?? new AbortController().signal)),
+    }).responses(body));
     let result;
     try { result = await send(d.body); }
     catch (error) {
-      // Unknown/interrupted usage is conservatively charged against our allowance, not silently treated as free.
-      const usage: Usage = { model: HAIKU_MODEL, inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, searches: 0 };
-      await recordSpend(deps.db, userId, `${kind}:unconfirmed`, usage, d.maximumChargeUsd, deps.now());
-      await opts.onCost?.(d.maximumChargeUsd); throw error;
+      if (attempted) {
+        // Once fetch is attempted, even a disconnect/abort remains uncertain and consumes the full reservation.
+        const usage: Usage = { model: HAIKU_MODEL, inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, searches: 0 };
+        await recordSpend(deps.db, userId, `${kind}:unconfirmed`, usage, d.maximumChargeUsd, deps.now());
+        await opts.onCost?.(d.maximumChargeUsd);
+      }
+      throw error;
     }
     const valid = result.usage.model === HAIKU_MODEL && Number.isFinite(result.costUsd) && result.costUsd >= 0;
     const cost = valid ? result.costUsd : d.maximumChargeUsd;
