@@ -60,7 +60,7 @@ export function requireAuth(deps: Pick<AuthDeps, "db" | "jwtSecret" | "now">): M
       [claims.sessionId, claims.userId, deps.now().toISOString()],
     );
     if (!open.rows.length) return c.json({ error: "Sign in again to continue." }, 401);
-    if (!accepted(open.rows[0]!.ai_consent_version) && !openBeforeConsent(c.req.method, c.req.path)) return c.json(CONSENT_REQUIRED, 403);
+    if (!accepted(open.rows[0]!.ai_consent_version) && !openBeforeConsent(c.req.method, c.req.path, open.rows[0]!.ai_consent_version)) return c.json(CONSENT_REQUIRED, 403);
     c.set("userId", claims.userId);
     c.set("sessionId", claims.sessionId);
     await next();

@@ -77,12 +77,13 @@ export async function assertClaudeBudget(db: Db, dailyUsd: number, now: Date, ex
   if (spent >= dailyUsd || spent + await heldInPool(db,"claude") > dailyUsd) throw new SpendLimitError("daily");
 }
 
-/** One person's Claude spend in any 24 hours against their share of Claude's cap, as assertUserBudget is for Meta's. */
-export async function assertUserClaudeBudget(db: Db, userId: string, capUsd: number, now: Date, extraUsd = 0): Promise<void> {
-  collectPolicy(db,{pool:"claude",type:"user",userId,since:new Date(now.getTime()-24*60*60*1000).toISOString(),cap:capUsd,exclusive:true,extra:extraUsd});
-  const { rows } = await db.query<{ spent: string | null }>("select coalesce(sum(cost_usd), 0) as spent from spend_ledger where user_id = $1 and created_at > $2 and model like $3", [
+/** The selected pilot uses UTC days; the retired adapter's rolling-window fixtures keep their original boundary. */
+export async function assertUserClaudeBudget(db: Db, userId: string, capUsd: number, now: Date, extraUsd = 0, utcDay = false): Promise<void> {
+  const since = utcDay ? dayStart(now) : new Date(now.getTime()-24*60*60*1000);
+  collectPolicy(db,{pool:"claude",type:"user",userId,since:since.toISOString(),cap:capUsd,exclusive:!utcDay,extra:extraUsd});
+  const { rows } = await db.query<{ spent: string | null }>(`select coalesce(sum(cost_usd), 0) as spent from spend_ledger where user_id = $1 and created_at ${utcDay ? ">=" : ">"} $2 and model like $3`, [
     userId,
-    new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString(),
+    since.toISOString(),
     `${CLAUDE_MODEL_PREFIX}%`,
   ]);
   const spent = Number(rows[0]?.spent ?? 0) + extraUsd;

@@ -1,4 +1,4 @@
-import { inferenceFor, inferenceReady, inferenceAvailable, INFERENCE_UNAVAILABLE, VOICE_UNAVAILABLE, type InferenceSetup } from "../inference";
+import { inferenceFor, inferenceReady, inferenceAvailable, ALLOWANCE_LIMIT_MESSAGE, INFERENCE_UNAVAILABLE, VOICE_UNAVAILABLE, type InferenceSetup } from "../inference";
 import { reservedFetch } from "../spend";
 import type { DreamEvent } from "@dandelist/catalogue/dream";
 import { MetaApiError } from "@dandelist/meta";
@@ -91,11 +91,7 @@ const parse = (v: unknown) => (typeof v === "string" ? JSON.parse(v) : v);
 
 /** What the person reads in the chat when a turn can't run, in the Dandy's own voice: no model, no "AI". */
 function friendly(e: unknown): string {
-  if (e instanceof SpendLimitError) {
-    if (e.scope === "user") return "That's all I can look into for you today. Your allowance comes back tomorrow.";
-    if (e.scope === "daily") return "I've done all I can for today. Let's pick this up tomorrow.";
-    return "I'm not taking new requests just now. Try again later.";
-  }
+  if (e instanceof SpendLimitError) return ALLOWANCE_LIMIT_MESSAGE;
   if (e instanceof TurnLimitError) return e.message;
   if (e instanceof MetaApiError) return e.status === 429 ? "I'm a little busy right now. Try again in a minute." : "I couldn't answer just now. Try again.";
   return "Something went wrong. Try again.";

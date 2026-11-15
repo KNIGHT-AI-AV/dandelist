@@ -69,6 +69,8 @@ it.each([false,true])("renders the direct-Claude pilot disclosure with history=%
   const visible=JSON.stringify(root?.toJSON());
   expect(visible).toContain("Claude Haiku 5.5");expect(visible).toContain("real photos it checks");
   expect(visible).toContain("no Meta AI fallback");expect(visible).toContain("cutouts are unavailable");
+  expect(visible).toContain("$0.05 per request");expect(visible).toContain("$0.25 per person per UTC day");
+  expect(visible).not.toContain("$0.05 per wish");
   expect(visible).toContain("Facebook sign-in is only for accounts already linked");
   expect(visible).not.toContain("When Meta can't take more");expect(visible).not.toContain("recording goes to Meta");
   expect(visible).not.toContain("when a different AI service answers");

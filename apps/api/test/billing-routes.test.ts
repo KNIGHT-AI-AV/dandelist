@@ -2,6 +2,7 @@ import { PGlite } from "@electric-sql/pglite";
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from "vitest";
 import { createApp } from "../src/app";
+import { AI_CONSENT_VERSION } from "../src/consent";
 import { migrate, type Db } from "../src/db";
 import { EntitlementService, PRODUCTS, googleAccountId } from "../src/entitlements";
 import { AppleVerifier, Environment } from "../src/billing/apple";
@@ -33,7 +34,7 @@ async function account(accept = true) {
   await call("POST", "/auth/email/start", undefined, { email });
   const response = await call("POST", "/auth/email/verify", undefined, { email, code: mail.at(-1)!.code });
   const result = await response.json() as { accessToken: string; user: { id: string } };
-  if (accept) expect((await call("POST", "/me/consent", result.accessToken, { version: 1 })).status).toBe(200);
+  if (accept) expect((await call("POST", "/me/consent", result.accessToken, { version: AI_CONSENT_VERSION })).status).toBe(200);
   return { token: result.accessToken, id: result.user.id };
 }
 function transaction(userId: string, patch: Record<string, unknown> = {}) {

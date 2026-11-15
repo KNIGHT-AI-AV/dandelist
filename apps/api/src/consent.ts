@@ -10,7 +10,8 @@ import type { Db } from "./db";
  * account (sql/029), so it holds across devices; until it is saved, requireAuth refuses everything but the paths below.
  * Bump the version when what is sent, or to whom, changes: every account is then asked again.
  */
-export const AI_CONSENT_VERSION = 1;
+/** Version 2 is the direct-Claude notice; a former Meta notice never admits Claude inference. */
+export const AI_CONSENT_VERSION = 2;
 
 /** What a refused request gets: a new app shows the consent screen on the code, an older one shows the words. */
 export const CONSENT_REQUIRED = {
@@ -25,10 +26,24 @@ export const CONSENT_REQUIRED = {
  */
 const OPEN_BEFORE_CONSENT = new Set(["GET /me", "DELETE /me", "GET /me/consent", "POST /me/consent", "POST /auth/logout"]);
 
-export const openBeforeConsent = (method: string, path: string) => OPEN_BEFORE_CONSENT.has(`${method.toUpperCase()} ${path.replace(/\/+$/, "") || "/"}`);
+export function openBeforeConsent(method: string, path: string, previousVersion?: number | null): boolean {
+  const verb = method.toUpperCase(), route = path.replace(/\/+$/, "") || "/";
+  if (OPEN_BEFORE_CONSENT.has(`${verb} ${route}`)) return true;
+  // Renewing an AI notice must not take away a returning account's manual list. No model-producing route qualifies.
+  if (previousVersion !== 1) return false;
+  return ((verb === "GET" || verb === "POST") && route === "/wishes") ||
+    (verb === "PUT" && route === "/wishes/order") ||
+    ((verb === "PATCH" || verb === "DELETE") && /^\/wishes\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(route));
+}
 
 /** Whether a stored version is the current acceptance. */
-export const accepted = (version: number | null | undefined) => typeof version === "number" && version >= AI_CONSENT_VERSION;
+export const accepted = (version: number | null | undefined) => version === AI_CONSENT_VERSION;
+
+/** Rechecked at model admission too: an already-running job cannot rely on an earlier HTTP consent read. */
+export async function assertAiConsent(db: Db, userId: string): Promise<void> {
+  const row = (await db.query<{ ai_consent_version: number | null }>("select ai_consent_version from users where id = $1", [userId])).rows[0];
+  if (!accepted(row?.ai_consent_version)) throw new Error(CONSENT_REQUIRED.error);
+}
 
 type Row = { ai_consent_version: number | null; ai_consent_at: string | Date | null };
 const view = (r: Row) => ({

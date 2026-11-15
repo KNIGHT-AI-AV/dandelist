@@ -19,6 +19,7 @@ const h = vi.hoisted(() => ({
   /** Accounts' saved answers on the server. */
   server: new Map<string, boolean>(),
   calls: [] as string[],
+  postedVersions: [] as unknown[],
   /** Holds the next POST until released, to stand for a slow save. */
   hold: null as null | { release: () => void; wait: Promise<void> },
   /** What the next GET or POST returns instead of the server's answer. */
@@ -40,15 +41,16 @@ vi.mock("./auth", () => {
       const r = h.nextRead;
       h.nextRead = null;
       if (r === "offline") throw new TypeError("Network request failed");
-      return reply(r ?? { status: 200, body: { consent: { accepted: h.server.get(who) ?? false } } });
+      return reply(r ?? { status: 200, body: { consent: { accepted: h.server.get(who) ?? false, version: h.server.get(who) ? 2 : null, current: 2 } } });
     }
+    h.postedVersions.push(JSON.parse(String(init.body)).version);
     if (h.hold) await h.hold.wait;
     const r = h.nextSave;
     h.nextSave = null;
     if (r === "offline") throw new TypeError("Network request failed");
     if (r) return reply(r);
     h.server.set(who, true);
-    return reply({ status: 200, body: { consent: { accepted: true } } });
+    return reply({ status: 200, body: { consent: { accepted: true, version: 2, current: 2 } } });
   };
   return {
     SignInChanged,
@@ -65,7 +67,7 @@ vi.mock("./auth", () => {
   };
 });
 
-const { AccountConsentProvider, useAccountConsent } = await import("./account-consent");
+const { AI_CONSENT_VERSION, AccountConsentProvider, useAccountConsent } = await import("./account-consent");
 
 let root: ReactTestRenderer | null = null;
 let seen: ReturnType<typeof useAccountConsent> | null = null;
@@ -95,7 +97,7 @@ const signIn = (id: string) => {
 };
 
 beforeEach(() => {
-  Object.assign(h, { status: "signedOut", user: null, at: 0, calls: [], hold: null, nextRead: null, nextSave: null });
+  Object.assign(h, { status: "signedOut", user: null, at: 0, calls: [], postedVersions: [], hold: null, nextRead: null, nextSave: null });
   h.server.clear();
   h.local.clear();
   h.refusal.clear();
@@ -243,5 +245,24 @@ describe("the account's AI consent", () => {
     expect(seen!.state).toBe("accepted");
     await act(async () => h.refusal.forEach((l) => l(h.at)));
     expect(seen!.state).toBe("required");
+  });
+});
+
+
+describe("Claude notice renewal", () => {
+  it.each([
+    { accepted: true, version: 1, current: 1 },
+    { accepted: true, version: 1, current: 2 },
+    { accepted: true, version: 3, current: 3 },
+    { accepted: true },
+  ])("does not open the app for a stale or incomplete server acceptance: %j",async consent=>{
+    expect(AI_CONSENT_VERSION).toBe(2);signIn("ada");h.nextRead={status:200,body:{consent}};await mount();
+    expect(seen!.state).toBe("required");
+  });
+  it("keeps renewal closed if a save returns an old-server yes, then accepts the current notice",async()=>{
+    signIn("ada");await mount();
+    h.nextSave={status:200,body:{consent:{accepted:true,version:1,current:1}}};
+    await act(async()=>seen!.accept());expect(seen!.state).toBe("required");expect(seen!.error).toBeTruthy();
+    await act(async()=>seen!.accept());expect(seen!.state).toBe("accepted");expect(h.postedVersions).toEqual([2,2]);
   });
 });

@@ -387,7 +387,8 @@ describe("wish agent", () => {
     await db.query("insert into spend_ledger (model, kind, cost_usd, created_at) values ('claude-haiku-5-5', 'test', 120, $1)", [clock.toISOString()]);
     const res = await call("POST", "/agent/interpret", t, { text: "a peloton bike plus" });
     expect(res.status).toBe(429);
-    expect(((await res.json()) as { error: string }).error).toMatch(/budget/);
+    const error = ((await res.json()) as { error: string }).error;
+    expect(error).toMatch(/allowance/); expect(error).toContain("manually");
   });
 
   it("stops one person at their own daily allowance", async () => {

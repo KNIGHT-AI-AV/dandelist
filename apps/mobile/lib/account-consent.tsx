@@ -7,7 +7,8 @@ import { bindToSignIn, currentSignIn, onConsentRequired, SignInChanged, useAuth 
  * Read from the account at every sign-in, never from the device: a yes on one device holds on the others, and another
  * account on the same device is asked for its own. Only the server's saved yes opens the app (components/consent-gate).
  */
-export const AI_CONSENT_VERSION = 1;
+/** The direct-Claude notice, kept in step with the API. */
+export const AI_CONSENT_VERSION = 2;
 
 /**
  * `none`: signed out, or the session still being restored: nothing to gate. `checking`: signed in, the answer not read
@@ -29,7 +30,9 @@ interface AccountConsent {
 
 const Ctx = createContext<AccountConsent | null>(null);
 
-type ConsentBody = { consent?: { accepted?: boolean }; error?: string; code?: string };
+type ConsentBody = { consent?: { accepted?: boolean; version?: number | null; current?: number }; error?: string; code?: string };
+const currentConsent = (body: ConsentBody | null) => body?.consent?.accepted === true &&
+  body.consent.version === AI_CONSENT_VERSION && body.consent.current === AI_CONSENT_VERSION;
 const OFFLINE = "Couldn't reach Dandelist just now. Check your connection and try again.";
 
 export function AccountConsentProvider({ children }: { children: ReactNode }) {
@@ -61,7 +64,7 @@ export function AccountConsentProvider({ children }: { children: ReactNode }) {
       .then(async (res) => {
         const body = (await res.json().catch(() => null)) as ConsentBody | null;
         if (!mine()) return;
-        if (res.ok && body?.consent) setState(body.consent.accepted ? "accepted" : "required");
+        if (res.ok && body?.consent) setState(currentConsent(body) ? "accepted" : "required");
         else {
           setError(body?.error ?? OFFLINE);
           setState("failed");
@@ -103,7 +106,7 @@ export function AccountConsentProvider({ children }: { children: ReactNode }) {
       });
       const body = (await res.json().catch(() => null)) as ConsentBody | null;
       if (!mine()) return;
-      if (res.ok && body?.consent?.accepted) setState("accepted");
+      if (res.ok && currentConsent(body)) setState("accepted");
       else setError(body?.error ?? "Couldn't save that. Try again.");
     } catch (e) {
       if (!(e instanceof SignInChanged) && mine()) setError(OFFLINE);

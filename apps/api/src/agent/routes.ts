@@ -208,6 +208,7 @@ export function agentRoutes(deps: AgentDeps) {
     const used = await db.query<{ n: string | number }>("select count(*) as n from spend_ledger where user_id = $1 and kind = 'photo' and created_at > $2", [userId, new Date(deps.now().getTime() - CACHE_MS).toISOString()]);
     if (Number(used.rows[0]?.n ?? 0) >= RETAKES_PER_USER_PER_DAY * CALLS_PER_RETAKE) return c.json({ error: `That's today's ${RETAKES_PER_USER_PER_DAY} new photos.` }, 429);
     try {
+      await inferenceReady(deps, userId, USER_DAILY_USD);
       // A retake means the person turned the last photo down (owner, 2026-10-29: "human clicked retake so that means I
       // stupidly picked this photo for 1 of 1000 reasons like not the right watch"): every new photo is held up against
       // the one turned down, and the hunt looks wider.

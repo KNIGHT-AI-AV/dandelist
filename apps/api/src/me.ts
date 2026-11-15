@@ -1,4 +1,4 @@
-import { inferenceFor, inferenceReady, inferenceAvailable, INFERENCE_UNAVAILABLE, VOICE_UNAVAILABLE, type InferenceSetup } from "./inference";
+import { inferenceFor, inferenceReady, inferenceAvailable, ALLOWANCE_LIMIT_MESSAGE, INFERENCE_UNAVAILABLE, VOICE_UNAVAILABLE, type InferenceSetup } from "./inference";
 import { reservedFetch } from "./spend";
 import { MetaApiError } from "@dandelist/meta";
 import { Hono } from "hono";
@@ -261,7 +261,7 @@ export function meRoutes(deps: AgentDeps) {
     try {
       await guard();
     } catch (e) {
-      if (e instanceof SpendLimitError) return c.json({ error: "That's all for today. Try again tomorrow." }, 429);
+      if (e instanceof SpendLimitError) return c.json({ error: ALLOWANCE_LIMIT_MESSAGE }, 429);
       throw e;
     }
 
@@ -305,7 +305,7 @@ export function meRoutes(deps: AgentDeps) {
       lines = out.facts.map(cleanFact);
       if (lines.some((l) => l.length < 4)) throw new Error("a fact came back empty");
     } catch (e) {
-      if (e instanceof SpendLimitError) return c.json({ error: "That's all for today. Try again tomorrow." }, 429);
+      if (e instanceof SpendLimitError) return c.json({ error: ALLOWANCE_LIMIT_MESSAGE }, 429);
       if (e instanceof MetaApiError && e.status === 429) return c.json({ error: "Busy for a moment. Try again in a minute." }, 429);
       console.warn("facts failed", e instanceof MetaApiError ? `${e.status} ${e.body.slice(0, 200)}` : e instanceof Error ? e.message : e);
       return c.json({ error: "Nothing came to mind just now. Try again." }, 502);

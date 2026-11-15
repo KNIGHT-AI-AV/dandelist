@@ -143,7 +143,7 @@ describe("one account, many devices; many accounts, one device", () => {
     expect((await call("GET", "/wishes", refreshed.accessToken)).status).toBe(200);
     // What a bump of AI_CONSENT_VERSION does to an account that accepted the one before.
     await db.query("update users set ai_consent_version = $2 where id = $1", [ada.id, AI_CONSENT_VERSION - 1]);
-    expect((await call("GET", "/wishes", refreshed.accessToken)).status).toBe(403);
+    expect((await call("GET", "/wishes", refreshed.accessToken)).status).toBe(200);
     expect((await consentOf(refreshed.accessToken)).accepted).toBe(false);
   });
 });

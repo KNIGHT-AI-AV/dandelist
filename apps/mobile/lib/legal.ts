@@ -30,11 +30,11 @@ export const PRIVACY: LegalSection[] = [
     heading: "How the agent uses your words",
     body: [
       "To help price a wish, we send what you type, your answers and relevant saved wishes, chat context and memory to Anthropic's Claude API, using Claude Haiku 5.5. Page content the agent reads and real photos it checks may also be sent to Claude.",
-      "This pilot has no Meta AI fallback. Live web search, voice input, image generation, upscaling and cutouts are unavailable. The agent can still read pages to check prices.",
+      "This pilot has no Meta AI fallback. Live web search, voice input, image generation, upscaling and cutouts are unavailable. The agent can still read pages to check prices. AI spending is limited to $0.05 per request and $0.25 per person per UTC day. These are service limits, not fees charged to you.",
       "When you ask for facts about your list in Settings, we send your wishes and the place you would like to live, so the agent can write them.",
       "In the chat, your Dandy keeps a few short lines about you for next time, such as who your gifts are for or what you love, read from what you tell it. It is told to leave out your health, beliefs, income, debts and contact details, and lines that look like an address, a phone number, an email or a money figure are dropped. You can see and remove each line in Settings, and they are deleted with your account.",
       "Anything you include in messages, photos or page content may be sent to Claude. Anthropic's default policy is not to train models on API inputs or outputs.",
-      "The first time you sign in, we ask you to agree to this and to confirm that you are 18 or older. No AI request is sent before you agree. We keep your answer, and when you gave it, with your account, so you are asked once and not on every device.",
+      "Before you use AI, we ask you to agree to the current notice and confirm that you are 18 or older. A change to the AI provider or how your data is used can require a new agreement. No AI request is sent before you agree. We keep the notice version and when you agreed with your account, so your current agreement works across devices.",
     ],
   },
   {

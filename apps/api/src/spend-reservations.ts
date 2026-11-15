@@ -14,7 +14,7 @@ const RENEW_RETRY_MS = 15_000;
 const LEASE_MARGIN_MS = 30_000;
 export class SpendLimitError extends Error {
   constructor(readonly scope: "daily" | "total" | "user") {
-    super(scope === "daily" ? "Today's AI budget is used up. Try again tomorrow." : scope === "user" ? "You've used today's research allowance. Try again tomorrow." : "The AI budget for this event is used up.");
+    super(scope === "daily" ? "This AI request reached its current limit. You can still add and edit wishes manually." : scope === "user" ? "Your AI allowance can't cover this request right now. You can still add and edit wishes manually." : "AI is unavailable within the current allowance. You can still add and edit wishes manually.");
   }
 }
 export interface BudgetPolicy { pool: Pool; type: "global" | "user" | "scope" | "run"; since: string; cap: number; total?: number; userId?: string; scope?: string; exclusive?: boolean; extra?: number; calls?: number }

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { ClaudeClient, HAIKU_MODEL, MetaApiError, type Usage } from "@dandelist/meta";
 import type { Db } from "./db";
+import { assertAiConsent } from "./consent";
 import { createNoMetaDispatcher, readNoMetaPolicy, type NoMetaPolicy } from "./inference-policy";
 import { modelRouter, postgresHistory, ModelHistoryError, type Envelope, type HistoryStore, type Responder } from "./model-adapter";
 import { SpendLimitError, assertUserClaudeBudget, collectInferencePolicy, recordSpend, withHold, reservedFetch } from "./spend";
@@ -8,6 +9,9 @@ import { stoppable } from "./sse";
 
 export const INFERENCE_UNAVAILABLE = "The helper is unavailable right now. Your saved wishes are still here.";
 export const VOICE_UNAVAILABLE = "Voice input is unavailable. Type your wish instead.";
+export const ALLOWANCE_LIMIT_MESSAGE = "I can't look into that within the current allowance. You can still add and edit wishes manually.";
+/** MG0132: every selected inference flow shares this account's UTC-day allowance. Never supplied by a client. */
+export const PILOT_USER_UTC_DAY_USD = 0.25;
 export class InferenceUnavailableError extends Error { constructor() { super(INFERENCE_UNAVAILABLE); } }
 export interface InferenceSetup {
   apiKey?: string; policy?: unknown;
@@ -18,6 +22,10 @@ export interface InferenceSetup {
   transport?: { respond: Responder; quote: (body: Record<string, unknown>, policy: NoMetaPolicy) => number };
 }
 export interface InferenceDeps { db: Db; now: () => Date; modelHistory?: boolean; inference?: InferenceSetup }
+function personLimit(personUsd: number, dailyUsd: number): number {
+  if (!Number.isFinite(personUsd) || personUsd < 0) throw new InferenceUnavailableError();
+  return Math.min(personUsd, dailyUsd, PILOT_USER_UTC_DAY_USD);
+}
 function policyFor(deps: InferenceDeps) {
   const setup = deps.inference;
   if (!setup?.apiKey || !setup.keyOrganizationVerified) throw new InferenceUnavailableError();
@@ -31,8 +39,9 @@ function policyFor(deps: InferenceDeps) {
 export function inferenceAvailable(deps: InferenceDeps): boolean { try { policyFor(deps); return true; } catch { return false; } }
 export async function inferenceReady(deps: InferenceDeps, userId: string, personUsd = 2): Promise<void> {
   const p = policyFor(deps);
+  await assertAiConsent(deps.db, userId);
   await collectInferencePolicy(deps.db, p.limits.dailyUsd, p.limits.totalUsd, deps.now());
-  await assertUserClaudeBudget(deps.db, userId, Math.min(personUsd, p.limits.dailyUsd), deps.now());
+  await assertUserClaudeBudget(deps.db, userId, personLimit(personUsd, p.limits.dailyUsd), deps.now(), 0, true);
 }
 /** Bytes bound text tokens; native images have a documented 4,784-token ceiling. Include schema/tool overhead.
  * Hosted search's returned context is unknown, so its full-context bound cannot fit the approved pilot cap.
@@ -74,6 +83,8 @@ export function inferenceFor(deps: InferenceDeps, userId: string, kind: string, 
   }).responses(body));
   const quote = setup.transport?.quote ?? haikuMaximumCharge;
   const dispatch = createNoMetaDispatcher(p, async d => {
+    // A queued hold or background job may outlive its initial consent read. Check again immediately before I/O.
+    await assertAiConsent(deps.db, userId);
     let result;
     try { result = await send(d.body); }
     catch (error) {
@@ -91,12 +102,13 @@ export function inferenceFor(deps: InferenceDeps, userId: string, kind: string, 
     return result;
   }, async (d, run) => withHold(deps.db, async () => {
     const current = policyFor(deps);
+    await assertAiConsent(deps.db, userId);
     await collectInferencePolicy(deps.db, current.limits.dailyUsd, current.limits.totalUsd, deps.now(), scope, current.limits.callUsd, 32);
-    await assertUserClaudeBudget(deps.db, userId, Math.min(opts.personUsd ?? 2, current.limits.dailyUsd), deps.now());
+    await assertUserClaudeBudget(deps.db, userId, personLimit(opts.personUsd ?? 2, current.limits.dailyUsd), deps.now(), 0, true);
   }, run, userId, d.maximumChargeUsd, opts.signal, "claude", d.maximumChargeUsd, { scope }), () => deps.now().getTime());
   const respond: Responder = async body => {
     policyFor(deps);
-    // Pilot: page-reading app tools remain; hosted search cannot fit the approved $0.05/wish bound.
+    // Pilot: page-reading app tools remain; hosted search cannot fit the approved $0.05/request bound.
     if (!setup.transport && Array.isArray(body.tools) && body.tools.some(t => t?.type === "web_search")) {
       body = { ...body, tools: body.tools.filter(t => t?.type !== "web_search"), instructions: [body.instructions,
         "Live web search is unavailable. Use provided URLs with the page-reading tools when available. Never invent current prices, sellers, availability or source evidence. Say when information cannot be verified."].filter(Boolean).join("\n") };

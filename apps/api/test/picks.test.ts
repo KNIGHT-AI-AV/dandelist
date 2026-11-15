@@ -249,7 +249,7 @@ describe("today's pick", () => {
     expect(pickCalls()).toHaveLength(1);
   });
 
-  it("holds its own share of the caps for each call, a look at a photo a fifth of one", async () => {
+  it("holds independent bounded request and photo shares for the selected pilot", async () => {
     const { token, id } = await signIn();
     await addWish(token, "Riva boat");
     watch = id;
@@ -264,12 +264,12 @@ describe("today's pick", () => {
     // Each look runs under its own small hold (one or two in flight), never one shared hold for the whole search; the
     // web search's own full hold is beside it, since the lead photo is looked at while that search still runs.
     for (const { usd } of looks) {
-      const fifths = usd / (HOLD_USD / 5) - 5;
+      const fifths = (usd - 0.05) / 0.02;
       expect(Math.abs(fifths - Math.round(fifths))).toBeLessThan(1e-9);
       expect(Math.round(fifths)).toBeGreaterThanOrEqual(1);
       expect(Math.round(fifths)).toBeLessThanOrEqual(2);
     }
-    for (const h of held.filter((x) => x.format === "daily_pick" || x.format === "photo_plan")) expect(h.usd).toBeGreaterThanOrEqual(HOLD_USD);
+    for (const h of held.filter((x) => x.format === "daily_pick" || x.format === "photo_plan")) expect(h.usd).toBeGreaterThanOrEqual(0.05);
     // Everything is released once the pick is made.
     expect(await heldFor(db, id, "claude")).toBe(0);
     expect(holdFor({ text: { format: { name: "photo_check" } } })).toBeCloseTo(HOLD_USD / 5);

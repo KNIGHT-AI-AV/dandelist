@@ -24,7 +24,8 @@ export function createApp(deps: FixtureAppDeps) {
   return actualApp({ ...deps, inference: {
     apiKey: "synthetic-fixture-only", keyOrganizationVerified: true, get policy() { return fixturePolicy(deps.now(), deps.spendCaps); },
     transport: {
-      quote: body => ((body.text as { format?: { name?: string } } | undefined)?.format?.name === "photo_check" ? 0.02 : 0.1),
+      // Historical protocol fixtures still share the real account cap; their synthetic request hold fits this pilot.
+      quote: body => ((body.text as { format?: { name?: string } } | undefined)?.format?.name === "photo_check" ? 0.02 : 0.05),
       respond: async body => {
         if (!fixture.fetch) throw Error("Offline route fixture requires its fake fetch");
         const response = await fixture.fetch("https://responses-fixture.invalid/responses", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
