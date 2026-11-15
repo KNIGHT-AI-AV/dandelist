@@ -67,6 +67,67 @@ export function adminRoutes(deps: AdminDeps) {
     c.res.headers.set("X-Robots-Tag", "noindex");
   });
 
+  // A single read snapshot for the pilot's preflight. The pool includes every Claude model,
+  // including legacy usage and unconfirmed maximum charges; these are not fresh/reset budgets.
+  app.get("/inference-readiness", async (c) => {
+    const r = (await deps.db.query<Record<string, unknown>>(
+      `with bounds as (
+         select statement_timestamp() as at,
+           date_trunc('day', statement_timestamp() at time zone 'UTC') at time zone 'UTC' as day_start
+       ), ledger as (
+         select count(*)::int as total_calls, coalesce(sum(cost_usd), 0) as total_usd,
+           count(*) filter (where created_at >= b.day_start)::int as today_calls,
+           coalesce(sum(cost_usd) filter (where created_at >= b.day_start), 0) as today_usd,
+           count(*) filter (where kind like '%:unconfirmed')::int as unknown_calls,
+           coalesce(sum(cost_usd) filter (where kind like '%:unconfirmed'), 0) as unknown_usd,
+           count(*) filter (where kind like '%:unconfirmed' and created_at >= b.day_start)::int as unknown_today_calls,
+           coalesce(sum(cost_usd) filter (where kind like '%:unconfirmed' and created_at >= b.day_start), 0) as unknown_today_usd,
+           count(*) filter (where user_id = $1 and created_at >= b.day_start)::int as owner_today_calls,
+           coalesce(sum(cost_usd) filter (where user_id = $1 and created_at >= b.day_start), 0) as owner_today_usd,
+           count(*) filter (where user_id = $1 and kind like '%:unconfirmed' and created_at >= b.day_start)::int as owner_unknown_today_calls,
+           coalesce(sum(cost_usd) filter (where user_id = $1 and kind like '%:unconfirmed' and created_at >= b.day_start), 0) as owner_unknown_today_usd
+         from spend_ledger cross join bounds b where model like 'claude-%'
+       ), holds as (
+         select count(*) filter (where state = 'held' and expires_at > b.at)::int as held_count,
+           coalesce(sum(usd) filter (where state = 'held' and expires_at > b.at), 0) as held_usd,
+           count(*) filter (where state = 'held' and expires_at > b.at and user_id = $1::text)::int as owner_held_count,
+           coalesce(sum(mine_usd) filter (where state = 'held' and expires_at > b.at and user_id = $1::text), 0) as owner_held_usd,
+           count(*) filter (where state = 'expired' or (state = 'held' and expires_at <= b.at))::int as expired_count,
+           coalesce(sum(usd) filter (where state = 'expired' or (state = 'held' and expires_at <= b.at)), 0) as expired_usd,
+           count(*) filter (where (state = 'expired' or (state = 'held' and expires_at <= b.at)) and user_id = $1::text)::int as owner_expired_count,
+           coalesce(sum(mine_usd) filter (where (state = 'expired' or (state = 'held' and expires_at <= b.at)) and user_id = $1::text), 0) as owner_expired_usd
+         from spend_reservations cross join bounds b where pool = 'claude'
+       )
+       select b.at, b.day_start, p.usd as pool_usd, l.*, h.*,
+         (select count(*)::int from wishes where user_id = $1 and note is not null and note <> '') as saved_notes
+       from bounds b cross join ledger l cross join holds h left join spend_pool_totals p on p.pool = 'claude'`,
+      [c.get("userId")],
+    )).rows[0]!;
+    return c.json({
+      asOf: iso(r.at),
+      utcDayStart: iso(r.day_start),
+      currency: "USD",
+      claude: {
+        // Missing accounting state is unknown, never a fabricated zero baseline.
+        poolTotalUsd: r.pool_usd == null ? null : num(r.pool_usd),
+        ledgerTotalUsd: num(r.total_usd), ledgerTotalCalls: num(r.total_calls),
+        ledgerTodayUsd: num(r.today_usd), ledgerTodayCalls: num(r.today_calls),
+        unconfirmedTotalUsd: num(r.unknown_usd), unconfirmedTotalCalls: num(r.unknown_calls),
+        unconfirmedTodayUsd: num(r.unknown_today_usd), unconfirmedTodayCalls: num(r.unknown_today_calls),
+        activeHolds: { count: num(r.held_count), usd: num(r.held_usd) },
+        expiredHolds: { count: num(r.expired_count), usd: num(r.expired_usd) },
+      },
+      owner: {
+        ledgerTodayUsd: num(r.owner_today_usd), ledgerTodayCalls: num(r.owner_today_calls),
+        unconfirmedTodayUsd: num(r.owner_unknown_today_usd), unconfirmedTodayCalls: num(r.owner_unknown_today_calls),
+        activeHolds: { count: num(r.owner_held_count), usd: num(r.owner_held_usd) },
+        expiredHolds: { count: num(r.owner_expired_count), usd: num(r.owner_expired_usd) },
+        // Same saved-note predicate as readNotes; no note/name/id/content leaves this route.
+        savedNoteCount: num(r.saved_notes),
+      },
+    });
+  });
+
   // Model use by day and kind (spend_ledger), with today's and all-time totals against the caps.
   app.get("/usage", async (c) => {
     const days = Math.min(ADMIN_MAX_DAYS, Math.max(1, Math.floor(Number(c.req.query("days") ?? 14)) || 14));

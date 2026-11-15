@@ -5,6 +5,7 @@ import { ADMIN_DIGESTS, adminDigest, issueOf } from "../src/admin";
 import { createApp } from "../src/app";
 import { migrate, type Db } from "../src/db";
 import { memoryMediaStore } from "../src/media-store";
+import { reserve, settle } from "../src/spend-reservations";
 
 /** GET /admin/*: the owner's read-only view of use, accounts and issues (src/admin.ts); a 404 to anyone else. */
 let db: Db;
@@ -55,7 +56,7 @@ describe("the admin view", () => {
   it("is the plain 404 of a missing path to everyone but the owner: signed out, a bad token, or any other account", async () => {
     const other = await signIn("ada@example.com");
     const missing = await app.request("/no-such-path");
-    for (const path of ["/admin/usage", "/admin/accounts", "/admin/issues"]) {
+    for (const path of ["/admin/usage", "/admin/accounts", "/admin/issues", "/admin/inference-readiness"]) {
       for (const res of [await call(path, null), await call(path, "not-a-token"), await call(path, other.token)]) {
         expect(res.status).toBe(404);
         expect(await res.text()).toBe(await missing.clone().text());
@@ -80,6 +81,131 @@ describe("the admin view", () => {
     const res = await call("/admin/usage", owner.token);
     expect(res.headers.get("cache-control")).toBe("no-store");
     expect(res.headers.get("x-robots-tag")).toBe("noindex");
+  });
+
+  it("reads a real empty readiness baseline without granting permission to infer", async () => {
+    const owner = await signIn(OWNER);
+    const res = await call("/admin/inference-readiness", owner.token);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(res.headers.get("x-robots-tag")).toBe("noindex");
+    const body = await res.json() as Json;
+    expect(body).toEqual({
+      asOf: expect.any(String), utcDayStart: `${body.asOf.slice(0, 10)}T00:00:00.000Z`, currency: "USD",
+      claude: {
+        poolTotalUsd: 0, ledgerTotalUsd: 0, ledgerTotalCalls: 0, ledgerTodayUsd: 0, ledgerTodayCalls: 0,
+        unconfirmedTotalUsd: 0, unconfirmedTotalCalls: 0, unconfirmedTodayUsd: 0, unconfirmedTodayCalls: 0,
+        activeHolds: { count: 0, usd: 0 }, expiredHolds: { count: 0, usd: 0 },
+      },
+      owner: {
+        ledgerTodayUsd: 0, ledgerTodayCalls: 0, unconfirmedTodayUsd: 0, unconfirmedTodayCalls: 0,
+        activeHolds: { count: 0, usd: 0 }, expiredHolds: { count: 0, usd: 0 }, savedNoteCount: 0,
+      },
+    });
+  });
+
+  it("counts the shared Claude pool, UTC-inclusive spend, unknown charges and holds without disclosing account content", async () => {
+    const other = await signIn("ada@example.com");
+    const owner = await signIn(OWNER);
+    // Database UTC, independent of the connection timezone or the test auth clock.
+    await db.exec("set timezone = 'Pacific/Honolulu'");
+    const start = (await (await call("/admin/inference-readiness", owner.token)).json() as Json).utcDayStart as string;
+    const yesterday = new Date(Date.parse(start) - 1).toISOString();
+    for (const [userId, model, kind, usd, at] of [
+      [owner.id, "claude-haiku-5-5", "facts", .01, start],
+      [owner.id, "claude-haiku-5-5", "facts:unconfirmed", .05, start],
+      [owner.id, "claude-haiku-5-5", "old:unconfirmed", .03, yesterday],
+      [other.id, "claude-haiku-5-5", "photo", .02, start],
+      [other.id, "claude-haiku-5-5", "photo:unconfirmed", .04, start],
+      [null, "claude-opus-5-5", "legacy", .005, start],
+      [null, "claude-opus-5-5", "legacy", .07, yesterday],
+      [owner.id, "muse-spark-1.3", "old-meta", .9, start],
+      [owner.id, "apify:test", "tool", .8, start],
+    ]) {
+      await db.query("insert into spend_ledger(user_id, model, kind, cost_usd, created_at) values ($1,$2,$3,$4,$5)", [userId, model, kind, usd, at]);
+    }
+    for (const [userId, pool, usd, mineUsd, state, expired] of [
+      [owner.id, "claude", .04, .02, "held", false],
+      [other.id, "claude", .03, .01, "held", false],
+      [null, "claude", .02, .005, "held", false],
+      [owner.id, "claude", .06, .03, "held", true],
+      [other.id, "claude", .07, .04, "expired", true],
+      [owner.id, "claude", .08, .05, "released", false],
+      [owner.id, "claude", .09, .06, "settled", false],
+      [owner.id, "meta", .4, .2, "held", false],
+    ]) {
+      await db.query(`insert into spend_reservations(id, user_id, pool, usd, mine_usd, state, created_at, expires_at)
+        values (gen_random_uuid(),$1,$2,$3,$4,$5,$6,statement_timestamp() + ($7::int * interval '1 hour'))`,
+        [userId, pool, usd, mineUsd, state, yesterday, expired ? -1 : 1]);
+    }
+    for (const [userId, note] of [[owner.id, "private-owner-note"], [owner.id, "second-private-note"], [owner.id, ""], [owner.id, null], [other.id, "private-other-note"]]) {
+      await db.query("insert into wishes(user_id,name,kind,tier,note) values ($1,'private-wish-title','buy','nice',$2)", [userId, note]);
+    }
+    // No query parameter can select another person's ledger or notes.
+    const body = await (await call(`/admin/inference-readiness?userId=${other.id}`, owner.token)).json() as Json;
+    expect(body.utcDayStart).toBe(start);
+    expect(body.claude).toEqual({
+      poolTotalUsd: .225, ledgerTotalUsd: .225, ledgerTotalCalls: 7, ledgerTodayUsd: .125, ledgerTodayCalls: 5,
+      unconfirmedTotalUsd: .12, unconfirmedTotalCalls: 3, unconfirmedTodayUsd: .09, unconfirmedTodayCalls: 2,
+      activeHolds: { count: 3, usd: .09 }, expiredHolds: { count: 2, usd: .13 },
+    });
+    expect(body.owner).toEqual({
+      ledgerTodayUsd: .06, ledgerTodayCalls: 2, unconfirmedTodayUsd: .05, unconfirmedTodayCalls: 1,
+      activeHolds: { count: 1, usd: .02 }, expiredHolds: { count: 1, usd: .03 }, savedNoteCount: 2,
+    });
+    for (const content of [owner.id, other.id, OWNER, "ada@example.com", "private-", "userId", "note:"]) expect(JSON.stringify(body)).not.toContain(content);
+  });
+
+  it("observes real reservation settlement once, includes unknown charges in spend, and cannot write even in a read-only transaction", async () => {
+    const owner = await signIn(OWNER);
+    const held = await reserve(db, { userId: owner.id, pool: "claude", usd: .05 });
+    if (held === "slots") throw new Error("Unexpected fixture concurrency");
+    const before = await (await call("/admin/inference-readiness", owner.token)).json() as Json;
+    expect(before.claude.activeHolds).toEqual({ count: 1, usd: .05 });
+    expect(before.claude.ledgerTotalUsd).toBe(0);
+    await settle(db, held.id, owner.id, "facts:unconfirmed", { model: "claude-haiku-5-5", inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, searches: 0 }, .05, new Date(before.asOf));
+    await db.exec("begin read only");
+    try {
+      const res = await call("/admin/inference-readiness", owner.token);
+      expect(res.status).toBe(200);
+      const body = await res.json() as Json;
+      expect(body.claude).toMatchObject({ poolTotalUsd: .05, ledgerTotalUsd: .05, ledgerTotalCalls: 1, unconfirmedTotalUsd: .05, activeHolds: { count: 0, usd: 0 } });
+      expect(body.owner).toMatchObject({ ledgerTodayUsd: .05, unconfirmedTodayUsd: .05, activeHolds: { count: 0, usd: 0 } });
+      for (const method of ["POST", "PUT", "PATCH", "DELETE"]) {
+        expect((await app.request("/admin/inference-readiness", { method, headers: { Authorization: `Bearer ${owner.token}` } })).status).toBe(404);
+      }
+    } finally {
+      await db.exec("rollback");
+    }
+  });
+
+  it("retains current-consent and live-session checks for the owner and the default admin allowlist", async () => {
+    const owner = await signIn(OWNER);
+    const path = "/admin/inference-readiness";
+    for (const version of [null, 1, 3]) {
+      await db.query("update users set ai_consent_version = $1 where id = $2", [version, owner.id]);
+      const res = await call(path, owner.token);
+      expect(res.status).toBe(404);
+      expect(await res.text()).toBe("404 Not Found");
+    }
+    await accepted(app, owner.token);
+    expect((await call(path, owner.token)).status).toBe(200);
+    await db.query("update sessions set revoked_at = $1 where user_id = $2", [now.toISOString(), owner.id]);
+    expect((await call(path, owner.token)).status).toBe(404);
+    await db.query("update sessions set revoked_at = null, expires_at = $1 where user_id = $2", [new Date(now.getTime() - 1).toISOString(), owner.id]);
+    expect((await call(path, owner.token)).status).toBe(404);
+    const fresh = await signIn(OWNER);
+    app = make();
+    expect((await call(path, fresh.token)).status).toBe(404);
+  });
+
+  it("reports a missing pool total as unknown rather than inventing a zero baseline", async () => {
+    const owner = await signIn(OWNER);
+    await db.query("delete from spend_pool_totals where pool = 'claude'");
+    const res = await call("/admin/inference-readiness", owner.token);
+    expect(res.status).toBe(200);
+    expect((await res.json() as Json).claude.poolTotalUsd).toBeNull();
+    expect((await db.query("select 1 from spend_pool_totals where pool = 'claude'")).rows).toEqual([]);
   });
 
   it("shows model use by day and kind, with today's and all-time totals against the caps", async () => {
